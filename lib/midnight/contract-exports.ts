@@ -26,11 +26,20 @@ export const witnesses: Witnesses<VaultPrivateState> = {
   ],
 };
 
-/** The vault declares its signet request index as ledger field 0. */
-export const VAULT_REQUESTS_INDEX_FIELD = 0;
+// The Aave vault chunks its ledger past 15 fields, so every event map sits at a depth-2 tree
+// path. These are the read-paths the reader locates requests by, matching the Vector<4> the
+// circuits pass in constructSignBidirectionalEventNotificationV1.
 
-/** Swaps register in a separate map (swapEventMap) at field 11, so the swap flow reads
- * MPC responses from this position. Must match the `11 as Uint<8>` the swap circuit passes. */
-export const VAULT_SWAP_REQUESTS_INDEX_FIELD = 11;
+/** signBidirectionalEventMap: deposit / withdraw / transfer / approveRouter / approveStata. */
+export const VAULT_REQUESTS_PATH: readonly number[] = [0, 0];
+
+/** swapEventMap: the swap flow reads MPC responses from here. */
+export const VAULT_SWAP_REQUESTS_PATH: readonly number[] = [1, 7];
+
+/** supplyEventMap: the supply (Aave lend) flow. */
+export const VAULT_SUPPLY_REQUESTS_PATH: readonly number[] = [1, 11];
+
+/** redeemEventMap: the redeem (Aave withdraw) flow. */
+export const VAULT_REDEEM_REQUESTS_PATH: readonly number[] = [1, 13];
 
 export { Contract, pureCircuits, ledger };

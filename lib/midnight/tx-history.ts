@@ -5,7 +5,7 @@
 // record, so this in-memory observable log lets the Activity list show them alongside the other
 // chains. It resets on reload — the vault's authoritative state is the shielded balance, not this.
 
-export type MidnightTxType = 'Deposit' | 'Withdraw' | 'Swap';
+export type MidnightTxType = 'Deposit' | 'Withdraw' | 'Swap' | 'Supply' | 'Redeem';
 export type MidnightTxStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 
 export interface MidnightTxRecord {

@@ -21,6 +21,7 @@ import {
 } from '@/lib/midnight/tx-history';
 import { ERC20_TRANSFER_GAS_LIMIT } from '@/lib/midnight/evm-envelope';
 import { SWAP_GAS_LIMIT } from '@/lib/midnight/evm-swap';
+import { STATA_GAS_LIMIT } from '@/lib/midnight/evm-stata';
 import type { MidnightBalances } from '@/lib/midnight/vault-balances';
 
 export type { MidnightBalances, MidnightTokenBalance } from '@/lib/midnight/vault-balances';
@@ -39,6 +40,8 @@ interface MidnightContextValue {
   deposit: (erc20Address: string, amountUnits: bigint) => Promise<void>;
   withdraw: (erc20Address: string, amountUnits: bigint, receiver?: string) => Promise<void>;
   swap: (tokenInErc20: string, tokenOutErc20: string, amountUnits: bigint, fee?: bigint, slippageBps?: bigint) => Promise<void>;
+  supply: (amountUnits: bigint) => Promise<void>;
+  redeem: (shares: bigint) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -394,6 +397,104 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Aave supply: lend USDC into stataUSDC. Signed + paid by the vault account, so top up the
+  // vault for the deposit gas plus a possible one-time stataToken approval.
+  const runSupplyFlow = async (amountUnits: bigint) => {
+    const providers = providersRef.current;
+    const vault = vaultRef.current;
+    const identity = identityRef.current;
+    if (!providers || !vault || !identity) throw new Error('Connect the Midnight wallet first.');
+    const { runSupply } = await import('@/lib/midnight/vault');
+    const { flow } = await import('@/lib/midnight/flow');
+    flow.start('supply');
+    let recordId: string | null = null;
+    const record = (rid: string, evmTxHash?: string) => {
+      if (recordId === rid) {
+        if (evmTxHash) midnightTxHistory.update(rid, { txHash: evmTxHash });
+        return;
+      }
+      recordId = rid;
+      midnightTxHistory.add({
+        id: rid,
+        type: 'Supply',
+        fromSymbol: 'USDC',
+        fromAmount: String(amountUnits),
+        toSymbol: 'stataUSDC',
+        toAmount: '',
+        txHash: evmTxHash,
+        status: 'pending',
+        timestampRaw: nowSec(),
+      });
+    };
+    try {
+      append('Requesting gas top-up from relayer...');
+      await topUpGas(vaultAddress, STATA_GAS_LIMIT + ERC20_TRANSFER_GAS_LIMIT);
+      await withStaleStateRecovery(() =>
+        runSupply(providersRef.current, vaultRef.current, midnightEnv, identityRef.current, amountUnits, append,
+          () => topUpGas(vaultAddress, STATA_GAS_LIMIT + ERC20_TRANSFER_GAS_LIMIT),
+          (rid, hash) => record(rid, hash),
+        ),
+      );
+      if (recordId)
+        midnightTxHistory.update(recordId, { status: flow.refunded ? 'refunded' : 'completed' });
+      await refresh();
+      await walletRef.current?.recheckpoint?.();
+    } catch (e) {
+      if (recordId) midnightTxHistory.update(recordId, { status: 'failed' });
+      flow.fail((e as Error).message);
+      throw e;
+    }
+  };
+
+  // Aave redeem: burn stataUSDC shares back to USDC. No approval needed (the vault redeems its own
+  // shares), so only the redeem gas is topped up.
+  const runRedeemFlow = async (shares: bigint) => {
+    const providers = providersRef.current;
+    const vault = vaultRef.current;
+    const identity = identityRef.current;
+    if (!providers || !vault || !identity) throw new Error('Connect the Midnight wallet first.');
+    const { runRedeem } = await import('@/lib/midnight/vault');
+    const { flow } = await import('@/lib/midnight/flow');
+    flow.start('redeem');
+    let recordId: string | null = null;
+    const record = (rid: string, evmTxHash?: string) => {
+      if (recordId === rid) {
+        if (evmTxHash) midnightTxHistory.update(rid, { txHash: evmTxHash });
+        return;
+      }
+      recordId = rid;
+      midnightTxHistory.add({
+        id: rid,
+        type: 'Redeem',
+        fromSymbol: 'stataUSDC',
+        fromAmount: String(shares),
+        toSymbol: 'USDC',
+        toAmount: '',
+        txHash: evmTxHash,
+        status: 'pending',
+        timestampRaw: nowSec(),
+      });
+    };
+    try {
+      append('Requesting gas top-up from relayer...');
+      await topUpGas(vaultAddress, STATA_GAS_LIMIT);
+      await withStaleStateRecovery(() =>
+        runRedeem(providersRef.current, vaultRef.current, midnightEnv, identityRef.current, shares, append,
+          () => topUpGas(vaultAddress, STATA_GAS_LIMIT),
+          (rid, hash) => record(rid, hash),
+        ),
+      );
+      if (recordId)
+        midnightTxHistory.update(recordId, { status: flow.refunded ? 'refunded' : 'completed' });
+      await refresh();
+      await walletRef.current?.recheckpoint?.();
+    } catch (e) {
+      if (recordId) midnightTxHistory.update(recordId, { status: 'failed' });
+      flow.fail((e as Error).message);
+      throw e;
+    }
+  };
+
   return (
     <MidnightContext.Provider
       value={{
@@ -411,6 +512,8 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
         withdraw: (erc20, amount, receiver) => runFlow('withdraw', erc20, amount, receiver),
         swap: (tokenIn, tokenOut, amount, fee, slippageBps) =>
           runSwapFlow(tokenIn, tokenOut, amount, fee, slippageBps),
+        supply: amount => runSupplyFlow(amount),
+        redeem: shares => runRedeemFlow(shares),
         refresh,
       }}
     >

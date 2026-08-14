@@ -8,6 +8,8 @@ export type ImpureCircuits<PS> = {
   initialize(context: __compactRuntime.CircuitContext<PS>,
              vaultEvm_0: Uint8Array,
              swapRouter_0: Uint8Array,
+             stataUnderlyingAddr_0: Uint8Array,
+             stataTokenAddr_0: Uint8Array,
              chainId_0: bigint,
              chainCaip2Id_0: Uint8Array,
              responseKey_0: __compactRuntime.Secp256k1Point): Promise<__compactRuntime.CircuitResults<PS, []>>;
@@ -90,12 +92,49 @@ export type ImpureCircuits<PS> = {
                                             },
                serializedOutput_0: Uint8Array,
                mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  approveStata(context: __compactRuntime.CircuitContext<PS>,
+               evmNonce_0: bigint,
+               keyVersion_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  supply(context: __compactRuntime.CircuitContext<PS>,
+         evmNonce_0: bigint,
+         keyVersion_0: bigint,
+         amount_0: bigint,
+         coin_0: { nonce: Uint8Array, color: Uint8Array, value: bigint }): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  completeSupply(context: __compactRuntime.CircuitContext<PS>,
+                 requestId_0: Uint8Array,
+                 respondBidirectionalEvent_0: { signature: { bigR: { x: Uint8Array,
+                                                                     y: Uint8Array
+                                                                   },
+                                                             s: Uint8Array,
+                                                             recoveryId: bigint
+                                                           }
+                                              },
+                 serializedOutput_0: Uint8Array,
+                 mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  redeem(context: __compactRuntime.CircuitContext<PS>,
+         evmNonce_0: bigint,
+         keyVersion_0: bigint,
+         shares_0: bigint,
+         coin_0: { nonce: Uint8Array, color: Uint8Array, value: bigint }): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  completeRedeem(context: __compactRuntime.CircuitContext<PS>,
+                 requestId_0: Uint8Array,
+                 respondBidirectionalEvent_0: { signature: { bigR: { x: Uint8Array,
+                                                                     y: Uint8Array
+                                                                   },
+                                                             s: Uint8Array,
+                                                             recoveryId: bigint
+                                                           }
+                                              },
+                 serializedOutput_0: Uint8Array,
+                 mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
 }
 
 export type ProvableCircuits<PS> = {
   initialize(context: __compactRuntime.CircuitContext<PS>,
              vaultEvm_0: Uint8Array,
              swapRouter_0: Uint8Array,
+             stataUnderlyingAddr_0: Uint8Array,
+             stataTokenAddr_0: Uint8Array,
              chainId_0: bigint,
              chainCaip2Id_0: Uint8Array,
              responseKey_0: __compactRuntime.Secp256k1Point): Promise<__compactRuntime.CircuitResults<PS, []>>;
@@ -178,6 +217,41 @@ export type ProvableCircuits<PS> = {
                                             },
                serializedOutput_0: Uint8Array,
                mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  approveStata(context: __compactRuntime.CircuitContext<PS>,
+               evmNonce_0: bigint,
+               keyVersion_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  supply(context: __compactRuntime.CircuitContext<PS>,
+         evmNonce_0: bigint,
+         keyVersion_0: bigint,
+         amount_0: bigint,
+         coin_0: { nonce: Uint8Array, color: Uint8Array, value: bigint }): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  completeSupply(context: __compactRuntime.CircuitContext<PS>,
+                 requestId_0: Uint8Array,
+                 respondBidirectionalEvent_0: { signature: { bigR: { x: Uint8Array,
+                                                                     y: Uint8Array
+                                                                   },
+                                                             s: Uint8Array,
+                                                             recoveryId: bigint
+                                                           }
+                                              },
+                 serializedOutput_0: Uint8Array,
+                 mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  redeem(context: __compactRuntime.CircuitContext<PS>,
+         evmNonce_0: bigint,
+         keyVersion_0: bigint,
+         shares_0: bigint,
+         coin_0: { nonce: Uint8Array, color: Uint8Array, value: bigint }): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  completeRedeem(context: __compactRuntime.CircuitContext<PS>,
+                 requestId_0: Uint8Array,
+                 respondBidirectionalEvent_0: { signature: { bigR: { x: Uint8Array,
+                                                                     y: Uint8Array
+                                                                   },
+                                                             s: Uint8Array,
+                                                             recoveryId: bigint
+                                                           }
+                                              },
+                 serializedOutput_0: Uint8Array,
+                 mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
 }
 
 export type PureCircuits = {
@@ -198,6 +272,8 @@ export type Circuits<PS> = {
   initialize(context: __compactRuntime.CircuitContext<PS>,
              vaultEvm_0: Uint8Array,
              swapRouter_0: Uint8Array,
+             stataUnderlyingAddr_0: Uint8Array,
+             stataTokenAddr_0: Uint8Array,
              chainId_0: bigint,
              chainCaip2Id_0: Uint8Array,
              responseKey_0: __compactRuntime.Secp256k1Point): Promise<__compactRuntime.CircuitResults<PS, []>>;
@@ -280,6 +356,41 @@ export type Circuits<PS> = {
                                             },
                serializedOutput_0: Uint8Array,
                mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  approveStata(context: __compactRuntime.CircuitContext<PS>,
+               evmNonce_0: bigint,
+               keyVersion_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  supply(context: __compactRuntime.CircuitContext<PS>,
+         evmNonce_0: bigint,
+         keyVersion_0: bigint,
+         amount_0: bigint,
+         coin_0: { nonce: Uint8Array, color: Uint8Array, value: bigint }): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  completeSupply(context: __compactRuntime.CircuitContext<PS>,
+                 requestId_0: Uint8Array,
+                 respondBidirectionalEvent_0: { signature: { bigR: { x: Uint8Array,
+                                                                     y: Uint8Array
+                                                                   },
+                                                             s: Uint8Array,
+                                                             recoveryId: bigint
+                                                           }
+                                              },
+                 serializedOutput_0: Uint8Array,
+                 mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  redeem(context: __compactRuntime.CircuitContext<PS>,
+         evmNonce_0: bigint,
+         keyVersion_0: bigint,
+         shares_0: bigint,
+         coin_0: { nonce: Uint8Array, color: Uint8Array, value: bigint }): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  completeRedeem(context: __compactRuntime.CircuitContext<PS>,
+                 requestId_0: Uint8Array,
+                 respondBidirectionalEvent_0: { signature: { bigR: { x: Uint8Array,
+                                                                     y: Uint8Array
+                                                                   },
+                                                             s: Uint8Array,
+                                                             recoveryId: bigint
+                                                           }
+                                              },
+                 serializedOutput_0: Uint8Array,
+                 mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
 }
 
 export type Ledger = {
@@ -432,6 +543,156 @@ export type Ledger = {
 }]>
   };
   swapRefundCommitment: {
+    isEmpty(): boolean;
+    size(): bigint;
+    member(key_0: Uint8Array): boolean;
+    lookup(key_0: Uint8Array): Uint8Array;
+    [Symbol.iterator](): Iterator<[Uint8Array, Uint8Array]>
+  };
+  readonly stataUnderlying: Uint8Array;
+  readonly stataToken: Uint8Array;
+  supplyEventMap: {
+    isEmpty(): boolean;
+    size(): bigint;
+    member(key_0: Uint8Array): boolean;
+    lookup(key_0: Uint8Array): { sender: { bytes: Uint8Array },
+                                 requestNonce: bigint,
+                                 keyVersion: bigint,
+                                 path: Uint8Array,
+                                 algo: number,
+                                 dest: number,
+                                 params: Uint8Array,
+                                 txParamType: number,
+                                 txParams: { chainId: bigint,
+                                             nonce: bigint,
+                                             maxPriorityFeePerGas: bigint,
+                                             maxFeePerGas: bigint,
+                                             gasLimit: bigint,
+                                             to: Uint8Array,
+                                             value: bigint,
+                                             calldata: { is_some: boolean,
+                                                         value: { selector: Uint8Array,
+                                                                  noWords: bigint,
+                                                                  words: Uint8Array[]
+                                                                }
+                                                       },
+                                             accessListEntryCount: bigint,
+                                             accessList: { address: Uint8Array,
+                                                           storageKeyCount: bigint,
+                                                           storageKeys: Uint8Array[]
+                                                         }[]
+                                           },
+                                 caip2Id: Uint8Array,
+                                 outputDeserializationSchema: Uint8Array,
+                                 respondSerializationSchema: Uint8Array
+                               };
+    [Symbol.iterator](): Iterator<[Uint8Array, { sender: { bytes: Uint8Array },
+  requestNonce: bigint,
+  keyVersion: bigint,
+  path: Uint8Array,
+  algo: number,
+  dest: number,
+  params: Uint8Array,
+  txParamType: number,
+  txParams: { chainId: bigint,
+              nonce: bigint,
+              maxPriorityFeePerGas: bigint,
+              maxFeePerGas: bigint,
+              gasLimit: bigint,
+              to: Uint8Array,
+              value: bigint,
+              calldata: { is_some: boolean,
+                          value: { selector: Uint8Array,
+                                   noWords: bigint,
+                                   words: Uint8Array[]
+                                 }
+                        },
+              accessListEntryCount: bigint,
+              accessList: { address: Uint8Array,
+                            storageKeyCount: bigint,
+                            storageKeys: Uint8Array[]
+                          }[]
+            },
+  caip2Id: Uint8Array,
+  outputDeserializationSchema: Uint8Array,
+  respondSerializationSchema: Uint8Array
+}]>
+  };
+  supplyRefundCommitment: {
+    isEmpty(): boolean;
+    size(): bigint;
+    member(key_0: Uint8Array): boolean;
+    lookup(key_0: Uint8Array): Uint8Array;
+    [Symbol.iterator](): Iterator<[Uint8Array, Uint8Array]>
+  };
+  redeemEventMap: {
+    isEmpty(): boolean;
+    size(): bigint;
+    member(key_0: Uint8Array): boolean;
+    lookup(key_0: Uint8Array): { sender: { bytes: Uint8Array },
+                                 requestNonce: bigint,
+                                 keyVersion: bigint,
+                                 path: Uint8Array,
+                                 algo: number,
+                                 dest: number,
+                                 params: Uint8Array,
+                                 txParamType: number,
+                                 txParams: { chainId: bigint,
+                                             nonce: bigint,
+                                             maxPriorityFeePerGas: bigint,
+                                             maxFeePerGas: bigint,
+                                             gasLimit: bigint,
+                                             to: Uint8Array,
+                                             value: bigint,
+                                             calldata: { is_some: boolean,
+                                                         value: { selector: Uint8Array,
+                                                                  noWords: bigint,
+                                                                  words: Uint8Array[]
+                                                                }
+                                                       },
+                                             accessListEntryCount: bigint,
+                                             accessList: { address: Uint8Array,
+                                                           storageKeyCount: bigint,
+                                                           storageKeys: Uint8Array[]
+                                                         }[]
+                                           },
+                                 caip2Id: Uint8Array,
+                                 outputDeserializationSchema: Uint8Array,
+                                 respondSerializationSchema: Uint8Array
+                               };
+    [Symbol.iterator](): Iterator<[Uint8Array, { sender: { bytes: Uint8Array },
+  requestNonce: bigint,
+  keyVersion: bigint,
+  path: Uint8Array,
+  algo: number,
+  dest: number,
+  params: Uint8Array,
+  txParamType: number,
+  txParams: { chainId: bigint,
+              nonce: bigint,
+              maxPriorityFeePerGas: bigint,
+              maxFeePerGas: bigint,
+              gasLimit: bigint,
+              to: Uint8Array,
+              value: bigint,
+              calldata: { is_some: boolean,
+                          value: { selector: Uint8Array,
+                                   noWords: bigint,
+                                   words: Uint8Array[]
+                                 }
+                        },
+              accessListEntryCount: bigint,
+              accessList: { address: Uint8Array,
+                            storageKeyCount: bigint,
+                            storageKeys: Uint8Array[]
+                          }[]
+            },
+  caip2Id: Uint8Array,
+  outputDeserializationSchema: Uint8Array,
+  respondSerializationSchema: Uint8Array
+}]>
+  };
+  redeemRefundCommitment: {
     isEmpty(): boolean;
     size(): bigint;
     member(key_0: Uint8Array): boolean;
