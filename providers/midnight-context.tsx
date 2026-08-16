@@ -80,6 +80,37 @@ function isStaleStateError(error: unknown): boolean {
   return false;
 }
 
+// The message a user (and the console) should see for a failed flow. Submission errors wrap the
+// node's verdict several `cause` levels deep (SubmissionError -> SubmissionError -> RpcError
+// "1010: Invalid Transaction: Custom error: 170"); the outer message is a stack trace that hides
+// it. Prefer the innermost cause that names a node error, else the outermost message.
+function describeFlowError(error: unknown): string {
+  const seen = new Set<unknown>();
+  let cur: any = error;
+  let deepest = String((error as any)?.message ?? error);
+  while (cur && !seen.has(cur)) {
+    seen.add(cur);
+    const msg = String(cur.message ?? cur);
+    if (/Custom error: \d+|Invalid Transaction/.test(msg)) return msg;
+    deepest = msg;
+    cur = cur.cause;
+  }
+  return deepest;
+}
+
+// Route a failed flow to every channel a user or developer might look at: the console (with the
+// full cause chain, so the node's error code is greppable), the flow toast, and the Activity row.
+function reportFlowFailure(
+  flow: { kind: string | null; fail: (message: string) => void },
+  error: unknown,
+  recordId: string | null,
+): void {
+  const reason = describeFlowError(error);
+  console.error(`[midnight] ${flow.kind ?? 'flow'} failed: ${reason}`, error);
+  if (recordId) midnightTxHistory.update(recordId, { status: 'failed', failureReason: reason });
+  flow.fail(reason);
+}
+
 // Relayer funds the gas of the address sending the MPC-signed transfer (parity with the
 // Solana bridge's top-up), so the user never hand-funds ETH.
 async function topUpGas(fromAddress: string, gasLimit?: bigint): Promise<void> {
@@ -335,8 +366,7 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
       await refresh();
       await walletRef.current?.recheckpoint?.();
     } catch (e) {
-      if (recordId) midnightTxHistory.update(recordId, { status: 'failed' });
-      flow.fail((e as Error).message);
+      reportFlowFailure(flow, e, recordId);
       throw e;
     }
   };
@@ -391,8 +421,7 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
       await refresh();
       await walletRef.current?.recheckpoint?.();
     } catch (e) {
-      if (recordId) midnightTxHistory.update(recordId, { status: 'failed' });
-      flow.fail((e as Error).message);
+      reportFlowFailure(flow, e, recordId);
       throw e;
     }
   };
@@ -440,8 +469,7 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
       await refresh();
       await walletRef.current?.recheckpoint?.();
     } catch (e) {
-      if (recordId) midnightTxHistory.update(recordId, { status: 'failed' });
-      flow.fail((e as Error).message);
+      reportFlowFailure(flow, e, recordId);
       throw e;
     }
   };
@@ -489,8 +517,7 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
       await refresh();
       await walletRef.current?.recheckpoint?.();
     } catch (e) {
-      if (recordId) midnightTxHistory.update(recordId, { status: 'failed' });
-      flow.fail((e as Error).message);
+      reportFlowFailure(flow, e, recordId);
       throw e;
     }
   };

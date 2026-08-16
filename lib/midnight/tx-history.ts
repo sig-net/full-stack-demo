@@ -19,6 +19,9 @@ export interface MidnightTxRecord {
   status: MidnightTxStatus;
   timestampRaw: number; // unix seconds
   txHash?: string; // Sepolia tx hash, when known
+  // Why a 'failed' record failed — the node's verdict where there is one (e.g. "Custom error:
+  // 170"). Persists past the (auto-dismissing) failure toast so the reason stays inspectable.
+  failureReason?: string;
 }
 
 type Listener = (txs: MidnightTxRecord[]) => void;

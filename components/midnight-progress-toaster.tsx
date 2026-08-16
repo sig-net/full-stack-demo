@@ -19,15 +19,29 @@ export function MidnightProgressToaster() {
           ? 'Withdrawal'
           : s.kind === 'swap'
             ? 'Swap'
-            : 'Deposit';
+            : s.kind === 'supply'
+              ? 'Supply'
+              : s.kind === 'redeem'
+                ? 'Redeem'
+                : 'Deposit';
 
       if (s.error) {
         prevPhase.current = null;
-        toast.error(`${kind} failed`, { id: TOAST_ID, description: s.error });
+        // duration: Infinity — sonner's default error lifetime is 4 s, which after a flow that
+        // waited minutes on the MPC is easy to miss entirely. A failure stays until dismissed.
+        toast.error(`${kind} failed`, {
+          id: TOAST_ID,
+          description: s.error,
+          duration: Infinity,
+        });
         return;
       }
       if (!s.phase) {
         prevPhase.current = null;
+        // Cleared state (flow.reset()) must clear the UI too: the toast is keyed by TOAST_ID and
+        // otherwise survives on screen, so the previous run's terminal toast would linger into
+        // the next one and read as a fresh failure.
+        toast.dismiss(TOAST_ID);
         return;
       }
       if (s.phase === 'done') {

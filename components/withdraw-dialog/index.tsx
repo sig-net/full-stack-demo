@@ -10,6 +10,7 @@ import { LoadingState } from '@/components/states/LoadingState';
 import { useWithdrawEvmMutation, useWithdrawSolMutation, useHasActiveTransaction } from '@/hooks';
 import { useMidnightWallet } from '@/providers/midnight-context';
 import { useMidnightProgress } from '@/hooks/use-midnight-progress';
+import { flow } from '@/lib/midnight/flow';
 
 import { AmountInput } from './amount-input';
 
@@ -61,6 +62,10 @@ function WithdrawDialogContent({
     // Midnight: fire-and-close — progress + result surface via MidnightProgressToaster.
     if (data.token.chain === 'midnight') {
       const units = parseUnits(data.amount, data.token.decimals);
+      // Clear any terminal state left by a previous run before closing: the flow singleton keeps
+      // its error until the next start(), and runWithdraw only calls start() once its first await
+      // resolves — so the toaster's re-subscribe would replay the stale failure in between.
+      flow.reset();
       midnightWallet.withdraw(data.token.address, units, data.receiverAddress).catch(() => {
         /* surfaced by MidnightProgressToaster via flow.fail */
       });
