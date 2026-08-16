@@ -8,6 +8,7 @@ const COINGECKO_API = 'https://api.coingecko.com/api/v3';
 // Token symbol to CoinGecko ID mapping
 const TOKEN_ID_MAP: Record<string, string> = {
   USDC: 'usd-coin',
+  'USDC.A': 'usd-coin',
   ETH: 'ethereum',
   SOL: 'solana',
   BTC: 'bitcoin',

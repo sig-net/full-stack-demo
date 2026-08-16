@@ -25,6 +25,16 @@ export const ERC20_TOKENS: TokenConfig[] = [
     faucetUrl: 'https://faucet.circle.com/',
   },
   {
+    // Aave's own Sepolia USDC. The lend flow (supply/redeem) only accepts this one —
+    // Circle USDC above has no Aave reserve, so `supply` reverts on it.
+    erc20Address: '0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8',
+    symbol: 'USDC.a',
+    name: 'USD Coin (Aave)',
+    chain: 'ethereum',
+    acquireHint: 'Get Sepolia USDC from the Aave faucet. Circle USDC does not work for lending.',
+    faucetUrl: 'https://app.aave.com/faucet/',
+  },
+  {
     erc20Address: '0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4',
     symbol: 'EURC',
     name: 'Euro Coin',
