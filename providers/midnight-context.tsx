@@ -305,9 +305,15 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
     const providers = providersRef.current;
     const vault = vaultRef.current;
     const identity = identityRef.current;
-    if (!providers || !vault || !identity) throw new Error('Connect the Midnight wallet first.');
     const { runDeposit, runWithdraw } = await import('@/lib/midnight/vault');
     const { flow } = await import('@/lib/midnight/flow');
+    if (!providers || !vault || !identity) {
+      // Thrown before flow.start, this would vanish in the dialog's fire-and-forget catch
+      // (the toaster only surfaces flow failures). Route it through the flow instead.
+      flow.start(kind);
+      flow.fail('Wallet is still initializing — wait a moment and try again.');
+      throw new Error('Wallet is still initializing');
+    }
     flow.start(kind);
     const amountStr = fmtAmount(amountUnits, erc20Address);
     const { symbol } = tokenMeta(erc20Address);
