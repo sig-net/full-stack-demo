@@ -12,6 +12,8 @@ export interface TokenConfig {
   acquireHint?: string;
   /** Direct URL to get this token (faucet, swap page, etc.) */
   faucetUrl?: string;
+  /** Hide from the swap widget (e.g. a pool exists but only with dust liquidity) */
+  noSwap?: boolean;
 }
 
 // ERC20 tokens on Sepolia
@@ -33,6 +35,10 @@ export const ERC20_TOKENS: TokenConfig[] = [
     chain: 'ethereum',
     acquireHint: 'Get Sepolia USDC from the Aave faucet. Circle USDC does not work for lending.',
     faucetUrl: 'https://app.aave.com/faucet/',
+    // A USDC.a/USDC pool exists on Sepolia but holds dust liquidity, so swaps through it
+    // fail or get destroyed by slippage. Testnet-only concern: this entry has no mainnet
+    // counterpart (Aave mainnet lends Circle USDC directly).
+    noSwap: true,
   },
   {
     erc20Address: '0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4',

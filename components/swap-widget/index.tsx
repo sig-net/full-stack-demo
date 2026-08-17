@@ -66,10 +66,11 @@ export function SwapWidget({ className }: SwapWidgetProps) {
 
   const enabled = midnight.connected;
 
-  // One entry per Midnight token: shielded vault balance (spendable) + on-chain decimals.
+  // One entry per swappable Midnight token: shielded vault balance (spendable) + on-chain
+  // decimals. noSwap tokens (USDC.a) are excluded before pool discovery ever sees them.
   const tokens: TokenWithBalance[] = useMemo(() => {
     const perToken = midnight.balances?.perToken;
-    return MIDNIGHT_TOKENS.map(t => {
+    return MIDNIGHT_TOKENS.filter(t => !t.noSwap).map(t => {
       const b = perToken?.[t.erc20Address.toLowerCase()];
       const decimals = b?.decimals ?? 6;
       const units = b?.vaultUnits ?? 0n;
@@ -92,7 +93,7 @@ export function SwapWidget({ className }: SwapWidgetProps) {
     let cancelled = false;
     discoverSwappablePairs(
       midnightEnv.evmRpcUrl,
-      MIDNIGHT_TOKENS.map(t => t.erc20Address),
+      MIDNIGHT_TOKENS.filter(t => !t.noSwap).map(t => t.erc20Address),
     )
       .then(pairs => !cancelled && setSwappablePairs(pairs))
       .catch(() => !cancelled && setSwappablePairs(new Set()));
