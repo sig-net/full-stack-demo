@@ -14,6 +14,10 @@ export function CryptoIcon({
   token: string;
   className?: string;
 }) {
+  // Display symbols may carry a variant suffix to disambiguate same-symbol tokens
+  // (USDC.a = Aave Sepolia USDC). Icon sets only know the base symbol, so strip it.
+  const iconSymbol = token.split('.')[0] || token;
+
   // Extract size number from className or default to 7
   const sizeNumber = parseInt(className?.match(/size-(\d+)/)?.[1] || '7');
 
@@ -29,7 +33,7 @@ export function CryptoIcon({
       )}
     >
       <TokenIcon
-        symbol={token}
+        symbol={iconSymbol}
         size={tokenSize}
         variant='background'
         className='rounded-full'
