@@ -96,9 +96,12 @@ export function BalanceSection() {
             variant='outline'
             size='lg'
             className='gap-1.5 font-semibold'
+            // The vault contract is joined during connect. A deposit started before that
+            // finishes fails, so the button waits instead of looking ready.
+            disabled={midnight.connecting}
           >
             <Download className='h-4 w-4' />
-            Deposit
+            {midnight.connecting ? 'Connecting…' : 'Deposit'}
           </Button>
         </div>
         <EmptyState

@@ -41,6 +41,18 @@ export const ERC20_TOKENS: TokenConfig[] = [
     noSwap: true,
   },
   {
+    // The ERC-4626 wrapper the lend flow supplies into. A successful supply mints shielded
+    // stataUSDC for the shares the wrapper returns, so the vault token needs an entry here
+    // or the balance is held but never shown.
+    erc20Address: '0x8A88124522dbBF1E56352ba3DE1d9F78C143751e',
+    symbol: 'stataUSDC',
+    name: 'Staked Aave USDC',
+    chain: 'ethereum',
+    acquireHint: 'Received by supplying USDC.a through the Lend widget, not from a faucet.',
+    // Shares are minted by the wrapper, not traded on a pool.
+    noSwap: true,
+  },
+  {
     erc20Address: '0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4',
     symbol: 'EURC',
     name: 'Euro Coin',

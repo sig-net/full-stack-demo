@@ -1,7 +1,9 @@
 // Aave ERC-4626 (stataToken) constants for the supply/redeem flows: the pinned Aave USDC
 // pair on Sepolia, the deposit/redeem/approve ABI shapes, the supply/redeem schemas, and the
 // contract-fixed routing. Mirrors evm-swap.ts for the lending leg.
-import { JsonRpcProvider } from 'ethers';
+import { Contract } from 'ethers';
+
+import { evmProvider } from './vault';
 import {
   asciiPadded,
   MPC_PARAMS_BYTES,
@@ -45,9 +47,56 @@ export const REDEEM_OUTPUT_SCHEMA = '[{"name":"assets","type":"uint256"}]';
 /** MPC re-packs the decoded assets into a uint64 (byte-matches redeemRespondSchema, 35). */
 export const REDEEM_RESPOND_SCHEMA = '[{"name":"assets","type":"uint64"}]';
 
+/**
+ * Assets (Aave USDC) that one stataUSDC share is currently worth, as a decimal number.
+ *
+ * The wrapper is non-rebasing: share balances never move and their value grows with accrued
+ * interest, so a share is not one USDC and must not be priced as one. Both tokens use 6
+ * decimals, so the ratio is unit-free.
+ */
+export async function stataAssetsPerShare(evmRpcUrl: string): Promise<number> {
+  const wrapper = new Contract(
+    STATA_USDC,
+    ['function convertToAssets(uint256 shares) view returns (uint256)'],
+    evmProvider(evmRpcUrl),
+  );
+  const ONE_SHARE = 1_000_000n; // 1 share at 6 decimals
+  const assets: bigint = await wrapper.getFunction('convertToAssets')(ONE_SHARE);
+  return Number(assets) / Number(ONE_SHARE);
+}
+
+/**
+ * Current Aave supply APY for the underlying, as a decimal fraction (0.05 = 5%).
+ *
+ * Read from the pool the wrapper itself points at, so it stays correct if the deployment
+ * moves. Aave stores the rate per second in ray (1e27); compounding it over a year gives the
+ * APY their own UI shows.
+ */
+const RAY = 10n ** 27n;
+const SECONDS_PER_YEAR = 31_536_000;
+export async function stataSupplyApy(evmRpcUrl: string): Promise<number> {
+  const provider = evmProvider(evmRpcUrl);
+  const wrapper = new Contract(
+    STATA_USDC,
+    ['function POOL() view returns (address)'],
+    provider,
+  );
+  const poolAddress: string = await wrapper.getFunction('POOL')();
+  const pool = new Contract(
+    poolAddress,
+    [
+      'function getReserveData(address asset) view returns (tuple(tuple(uint256 data) configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))',
+    ],
+    provider,
+  );
+  const data = await pool.getFunction('getReserveData')(AAVE_USDC);
+  const apr = Number(data.currentLiquidityRate) / Number(RAY);
+  return (1 + apr / SECONDS_PER_YEAR) ** SECONDS_PER_YEAR - 1;
+}
+
 /** Whether the stataToken wrapper is deployed at `evmRpcUrl` (present on Sepolia + a fork of it). */
 export async function stataAvailable(evmRpcUrl: string): Promise<boolean> {
-  const code = await new JsonRpcProvider(evmRpcUrl).getCode(STATA_USDC);
+  const code = await evmProvider(evmRpcUrl).getCode(STATA_USDC);
   return code !== '0x';
 }
 

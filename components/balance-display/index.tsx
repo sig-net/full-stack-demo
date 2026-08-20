@@ -12,6 +12,7 @@ import { formatTokenBalanceSync } from '@/lib/utils/balance-formatter';
 import { DepositDialog } from '@/components/deposit-dialog';
 import { WithdrawDialog, WithdrawToken } from '@/components/withdraw-dialog';
 import { useTokenPrices } from '@/hooks/use-token-prices';
+import { useMidnightWallet } from '@/providers/midnight-context';
 import type { TokenWithBalance } from '@/lib/types/token.types';
 
 import { BalanceBox } from './balance-box';
@@ -26,6 +27,7 @@ export function BalanceDisplay({
   tokens,
   className = '',
 }: BalanceDisplayProps) {
+  const midnight = useMidnightWallet();
   const [isDepositDialogOpen, setIsDepositDialogOpen] = useState(false);
   const [isWithdrawDialogOpen, setIsWithdrawDialogOpen] = useState(false);
   const [selectedTokenForWithdraw, setSelectedTokenForWithdraw] =
@@ -64,9 +66,11 @@ export function BalanceDisplay({
           variant='outline'
           size='lg'
           className='gap-1.5 font-semibold'
+          // Same guard as the empty-state button: the vault join finishes during connect.
+          disabled={midnight.connecting}
         >
           <Download className='h-4 w-4' />
-          Deposit
+          {midnight.connecting ? 'Connecting…' : 'Deposit'}
         </Button>
       </div>
       <div

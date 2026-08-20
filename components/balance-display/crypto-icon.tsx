@@ -15,8 +15,11 @@ export function CryptoIcon({
   className?: string;
 }) {
   // Display symbols may carry a variant suffix to disambiguate same-symbol tokens
-  // (USDC.a = Aave Sepolia USDC). Icon sets only know the base symbol, so strip it.
-  const iconSymbol = token.split('.')[0] || token;
+  // (USDC.a = Aave Sepolia USDC) or a wrapper prefix (stataUSDC = the ERC-4626 wrapper over
+  // Aave USDC). Icon sets only know the base symbol, so reduce to it: the label keeps the
+  // full name, the icon shows the underlying asset.
+  const iconSymbol =
+    (token.split('.')[0] || token).replace(/^stata/i, '') || token;
 
   // Extract size number from className or default to 7
   const sizeNumber = parseInt(className?.match(/size-(\d+)/)?.[1] || '7');

@@ -2,6 +2,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 
+import { stataAssetsPerShare } from '@/lib/midnight/evm-stata';
+
 // CoinGecko API for token prices
 const COINGECKO_API = 'https://api.coingecko.com/api/v3';
 
@@ -54,6 +56,28 @@ async function fetchTokenPrices(
       };
     }
   });
+
+  // stataUSDC is not a CoinGecko asset, and it is not worth one dollar either: it is an
+  // ERC-4626 share over Aave USDC whose value grows with accrued interest. Price it as
+  // what it redeems for — assets per share, read on-chain, times the USDC price.
+  if (
+    symbols.some(s => s.toUpperCase() === 'STATAUSDC') &&
+    prices.USDC &&
+    process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL
+  ) {
+    try {
+      const rate = await stataAssetsPerShare(
+        process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL,
+      );
+      prices.STATAUSDC = {
+        symbol: 'stataUSDC',
+        usd: prices.USDC.usd * rate,
+        change24h: prices.USDC.change24h,
+      };
+    } catch {
+      /* leave it unpriced rather than showing a wrong number */
+    }
+  }
 
   return prices;
 }
