@@ -949,10 +949,13 @@ export async function runSwap(
   }
   flow.set('claim-proving');
   log('Settling completeSwap (minting shielded tokenOut + change)...');
+  // Two coins are minted (the swapped output and the unspent change), each under its own
+  // random nonce. A derived second nonce would leave the change coin no entropy of its own.
   await vault.callTx.completeSwap(
     requestIdBytes(rid),
     outcome.event,
     outcome.serializedOutput,
+    rand32(),
     rand32(),
   );
   flow.set('done');

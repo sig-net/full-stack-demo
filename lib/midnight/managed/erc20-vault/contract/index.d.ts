@@ -91,7 +91,8 @@ export type ImpureCircuits<PS> = {
                                                          }
                                             },
                serializedOutput_0: Uint8Array,
-               mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
+               mintNonce_0: Uint8Array,
+               changeNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
   approveStata(context: __compactRuntime.CircuitContext<PS>,
                evmNonce_0: bigint,
                keyVersion_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
@@ -216,7 +217,8 @@ export type ProvableCircuits<PS> = {
                                                          }
                                             },
                serializedOutput_0: Uint8Array,
-               mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
+               mintNonce_0: Uint8Array,
+               changeNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
   approveStata(context: __compactRuntime.CircuitContext<PS>,
                evmNonce_0: bigint,
                keyVersion_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
@@ -256,6 +258,7 @@ export type ProvableCircuits<PS> = {
 
 export type PureCircuits = {
   vaultResponseSchema(): Uint8Array;
+  unlimitedAllowance(): bigint;
   vaultTokenDomainSeparator(erc20Address_0: Uint8Array): Uint8Array;
   userCommitment(sk_0: Uint8Array): Uint8Array;
   withdrawRefundCommitment(sk_0: Uint8Array, requestId_0: Uint8Array): Uint8Array;
@@ -263,6 +266,7 @@ export type PureCircuits = {
 
 export type Circuits<PS> = {
   vaultResponseSchema(context: __compactRuntime.CircuitContext<PS>): Promise<__compactRuntime.CircuitResults<PS, Uint8Array>>;
+  unlimitedAllowance(context: __compactRuntime.CircuitContext<PS>): Promise<__compactRuntime.CircuitResults<PS, bigint>>;
   vaultTokenDomainSeparator(context: __compactRuntime.CircuitContext<PS>,
                             erc20Address_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, Uint8Array>>;
   userCommitment(context: __compactRuntime.CircuitContext<PS>, sk_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, Uint8Array>>;
@@ -355,7 +359,8 @@ export type Circuits<PS> = {
                                                          }
                                             },
                serializedOutput_0: Uint8Array,
-               mintNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
+               mintNonce_0: Uint8Array,
+               changeNonce_0: Uint8Array): Promise<__compactRuntime.CircuitResults<PS, []>>;
   approveStata(context: __compactRuntime.CircuitContext<PS>,
                evmNonce_0: bigint,
                keyVersion_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
