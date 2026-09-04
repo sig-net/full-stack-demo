@@ -37,7 +37,8 @@ function toActivity(r: MidnightTxRecord): ActivityTransaction {
         };
   return {
     id: r.id,
-    type: r.type,
+    // The Activity row type union predates Aave; supply/redeem are token-to-token like a swap.
+    type: r.type === 'Supply' || r.type === 'Redeem' ? 'Swap' : r.type,
     fromToken,
     toToken,
     address: r.counterparty,

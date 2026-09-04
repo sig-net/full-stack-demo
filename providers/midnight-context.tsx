@@ -13,6 +13,8 @@ import {
 
 import { formatUnits } from 'viem';
 
+import { flow } from '@/lib/midnight/flow';
+
 import { midnightEnv, midnightNetworkId } from '@/lib/midnight/env';
 import { MIDNIGHT_TOKENS } from '@/lib/constants/token-metadata';
 import {
@@ -21,6 +23,7 @@ import {
 } from '@/lib/midnight/tx-history';
 import { ERC20_TRANSFER_GAS_LIMIT } from '@/lib/midnight/evm-envelope';
 import { SWAP_GAS_LIMIT } from '@/lib/midnight/evm-swap';
+import { AAVE_USDC, STATA_GAS_LIMIT, STATA_USDC } from '@/lib/midnight/evm-stata';
 import type { MidnightBalances } from '@/lib/midnight/vault-balances';
 
 export type { MidnightBalances, MidnightTokenBalance } from '@/lib/midnight/vault-balances';
@@ -39,6 +42,8 @@ interface MidnightContextValue {
   deposit: (erc20Address: string, amountUnits: bigint) => Promise<void>;
   withdraw: (erc20Address: string, amountUnits: bigint, receiver?: string) => Promise<void>;
   swap: (tokenInErc20: string, tokenOutErc20: string, amountUnits: bigint, fee?: bigint, slippageBps?: bigint) => Promise<void>;
+  supply: (amountUnits: bigint) => Promise<void>;
+  redeem: (shares: bigint) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -62,9 +67,15 @@ const DEAD_ADDRESS = '0x000000000000000000000000000000000000dEaD';
 const MIDNIGHT_ERC20S = MIDNIGHT_TOKENS.map(t => t.erc20Address);
 
 // Node rejection codes that mean the wallet's local view is behind the chain: 196 DustDoubleSpend,
-// 195 InputNotInUtxos, 171 OutOfDustValidityWindow. They surface as `Custom error: <code>` deep in
-// the submission error's cause chain. Recovery is a full resync, not a code fix.
-const STALE_STATE_ERROR_CODES = ['196', '195', '171'];
+// 195 InputNotInUtxos, 171 OutOfDustValidityWindow, 170 InvalidDustSpendProof. They surface as
+// `Custom error: <code>` deep in the submission error's cause chain. Recovery is a full resync,
+// not a code fix.
+//
+// 170 means the node rejected the dust fee proof, which happens when the wallet proves against
+// tree roots the node no longer agrees with — the state a cached checkpoint holds after the
+// chain moves on. A resync rebuilds it. When 170 is chain-wide instead, as during an outage,
+// the retry fails the same way and costs one extra resync.
+const STALE_STATE_ERROR_CODES = ['196', '195', '171', '170'];
 function isStaleStateError(error: unknown): boolean {
   const seen = new Set<unknown>();
   let cur: any = error;
@@ -75,6 +86,37 @@ function isStaleStateError(error: unknown): boolean {
     cur = cur.cause;
   }
   return false;
+}
+
+// The message a user (and the console) should see for a failed flow. Submission errors wrap the
+// node's verdict several `cause` levels deep (SubmissionError -> SubmissionError -> RpcError
+// "1010: Invalid Transaction: Custom error: 170"); the outer message is a stack trace that hides
+// it. Prefer the innermost cause that names a node error, else the outermost message.
+function describeFlowError(error: unknown): string {
+  const seen = new Set<unknown>();
+  let cur: any = error;
+  let deepest = String((error as any)?.message ?? error);
+  while (cur && !seen.has(cur)) {
+    seen.add(cur);
+    const msg = String(cur.message ?? cur);
+    if (/Custom error: \d+|Invalid Transaction/.test(msg)) return msg;
+    deepest = msg;
+    cur = cur.cause;
+  }
+  return deepest;
+}
+
+// Route a failed flow to every channel a user or developer might look at: the console (with the
+// full cause chain, so the node's error code is greppable), the flow toast, and the Activity row.
+function reportFlowFailure(
+  flow: { kind: string | null; fail: (message: string) => void },
+  error: unknown,
+  recordId: string | null,
+): void {
+  const reason = describeFlowError(error);
+  console.error(`[midnight] ${flow.kind ?? 'flow'} failed: ${reason}`, error);
+  if (recordId) midnightTxHistory.update(recordId, { status: 'failed', failureReason: reason });
+  flow.fail(reason);
 }
 
 // Relayer funds the gas of the address sending the MPC-signed transfer (parity with the
@@ -183,7 +225,7 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
   // state, derived identity, and the joined vault contract. Shared by connect and rebuildWallet.
   const bindWallet = async (handle: any) => {
     const { joinVault, VAULT_PRIVATE_STATE_ID } = await import('@/lib/midnight/wallet');
-    const { deriveIdentity } = await import('@/lib/midnight/vault');
+    const { deriveIdentity, syncPathRendering } = await import('@/lib/midnight/vault');
     providersRef.current = handle.providers;
     walletRef.current = handle;
     await handle.providers.privateStateProvider.setContractAddress(midnightEnv.contractAddress);
@@ -193,6 +235,9 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
     const identity = deriveIdentity(handle.identitySecret);
     identityRef.current = identity;
     vaultRef.current = await joinVault(handle.providers, midnightEnv.contractAddress, handle.identitySecret);
+    // Read the derivation-path convention off the deployed contract before any address is
+    // derived from this identity.
+    await syncPathRendering(handle.providers, midnightEnv);
     return identity;
   };
 
@@ -245,6 +290,10 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
         readBalances(handle.providers, midnightEnv, MIDNIGHT_ERC20S, dAddr, vaddr);
       setBalances(await read());
       pollRef.current = setInterval(async () => {
+        // Each poll issues two EVM reads per token. Running that against a remote RPC while a
+        // flow is proving, broadcasting and waiting for a receipt competes with the flow's own
+        // calls, so hold off until the flow reaches a terminal state.
+        if (flow.kind !== null && flow.phase !== 'done' && flow.error === null) return;
         try {
           setBalances(await read());
         } catch {
@@ -271,9 +320,15 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
     const providers = providersRef.current;
     const vault = vaultRef.current;
     const identity = identityRef.current;
-    if (!providers || !vault || !identity) throw new Error('Connect the Midnight wallet first.');
     const { runDeposit, runWithdraw } = await import('@/lib/midnight/vault');
     const { flow } = await import('@/lib/midnight/flow');
+    if (!providers || !vault || !identity) {
+      // Thrown before flow.start, this would vanish in the dialog's fire-and-forget catch
+      // (the toaster only surfaces flow failures). Route it through the flow instead.
+      flow.start(kind);
+      flow.fail('Wallet is still initializing — wait a moment and try again.');
+      throw new Error('Wallet is still initializing');
+    }
     flow.start(kind);
     const amountStr = fmtAmount(amountUnits, erc20Address);
     const { symbol } = tokenMeta(erc20Address);
@@ -332,8 +387,7 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
       await refresh();
       await walletRef.current?.recheckpoint?.();
     } catch (e) {
-      if (recordId) midnightTxHistory.update(recordId, { status: 'failed' });
-      flow.fail((e as Error).message);
+      reportFlowFailure(flow, e, recordId);
       throw e;
     }
   };
@@ -388,8 +442,119 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
       await refresh();
       await walletRef.current?.recheckpoint?.();
     } catch (e) {
-      if (recordId) midnightTxHistory.update(recordId, { status: 'failed' });
-      flow.fail((e as Error).message);
+      reportFlowFailure(flow, e, recordId);
+      throw e;
+    }
+  };
+
+  // Aave supply: lend USDC into stataUSDC. Signed + paid by the vault account, so top up the
+  // vault for the deposit gas plus a possible one-time stataToken approval.
+  const runSupplyFlow = async (amountUnits: bigint) => {
+    const providers = providersRef.current;
+    const vault = vaultRef.current;
+    const identity = identityRef.current;
+    if (!providers || !vault || !identity) throw new Error('Connect the Midnight wallet first.');
+    const { runSupply } = await import('@/lib/midnight/vault');
+    const { flow } = await import('@/lib/midnight/flow');
+    flow.start('supply');
+    let recordId: string | null = null;
+    const record = (rid: string, evmTxHash?: string) => {
+      if (recordId === rid) {
+        if (evmTxHash) midnightTxHistory.update(rid, { txHash: evmTxHash });
+        return;
+      }
+      recordId = rid;
+      midnightTxHistory.add({
+        id: rid,
+        type: 'Supply',
+        fromSymbol: 'USDC.a',
+        fromAmount: fmtAmount(amountUnits, AAVE_USDC),
+        basisAssets: formatUnits(amountUnits, 6),
+        toSymbol: 'stataUSDC',
+        toAmount: '',
+        txHash: evmTxHash,
+        status: 'pending',
+        timestampRaw: nowSec(),
+      });
+    };
+    try {
+      append('Requesting gas top-up from relayer...');
+      await topUpGas(vaultAddress, STATA_GAS_LIMIT + ERC20_TRANSFER_GAS_LIMIT);
+      const mintedShares = await withStaleStateRecovery(() =>
+        runSupply(providersRef.current, vaultRef.current, midnightEnv, identityRef.current, amountUnits, append,
+          () => topUpGas(vaultAddress, STATA_GAS_LIMIT + ERC20_TRANSFER_GAS_LIMIT),
+          (rid, hash) => record(rid, hash),
+        ),
+      );
+      if (recordId)
+        midnightTxHistory.update(recordId, {
+          status: flow.refunded ? 'refunded' : 'completed',
+          // The wrapper decides the share count; record what it actually returned.
+          toAmount:
+            mintedShares == null ? '' : `${formatUnits(mintedShares, 6)} stataUSDC`,
+          sharesReceived:
+            mintedShares == null ? undefined : formatUnits(mintedShares, 6),
+        });
+      await refresh();
+      await walletRef.current?.recheckpoint?.();
+    } catch (e) {
+      reportFlowFailure(flow, e, recordId);
+      throw e;
+    }
+  };
+
+  // Aave redeem: burn stataUSDC shares back to USDC. No approval needed (the vault redeems its own
+  // shares), so only the redeem gas is topped up.
+  const runRedeemFlow = async (shares: bigint) => {
+    const providers = providersRef.current;
+    const vault = vaultRef.current;
+    const identity = identityRef.current;
+    if (!providers || !vault || !identity) throw new Error('Connect the Midnight wallet first.');
+    const { runRedeem } = await import('@/lib/midnight/vault');
+    const { flow } = await import('@/lib/midnight/flow');
+    flow.start('redeem');
+    let recordId: string | null = null;
+    const record = (rid: string, evmTxHash?: string) => {
+      if (recordId === rid) {
+        if (evmTxHash) midnightTxHistory.update(rid, { txHash: evmTxHash });
+        return;
+      }
+      recordId = rid;
+      midnightTxHistory.add({
+        id: rid,
+        type: 'Redeem',
+        fromSymbol: 'stataUSDC',
+        fromAmount: fmtAmount(shares, STATA_USDC),
+        sharesBurned: formatUnits(shares, 6),
+        toSymbol: 'USDC',
+        toAmount: '',
+        txHash: evmTxHash,
+        status: 'pending',
+        timestampRaw: nowSec(),
+      });
+    };
+    try {
+      append('Requesting gas top-up from relayer...');
+      await topUpGas(vaultAddress, STATA_GAS_LIMIT);
+      const redeemedAssets = await withStaleStateRecovery(() =>
+        runRedeem(providersRef.current, vaultRef.current, midnightEnv, identityRef.current, shares, append,
+          () => topUpGas(vaultAddress, STATA_GAS_LIMIT),
+          (rid, hash) => record(rid, hash),
+        ),
+      );
+      if (recordId)
+        midnightTxHistory.update(recordId, {
+          status: flow.refunded ? 'refunded' : 'completed',
+          // Proceeds are the attested assets the wrapper returned, principal plus interest.
+          toAmount:
+            redeemedAssets == null ? '' : `${formatUnits(redeemedAssets, 6)} USDC.a`,
+          proceedsAssets:
+            redeemedAssets == null ? undefined : formatUnits(redeemedAssets, 6),
+        });
+      await refresh();
+      await walletRef.current?.recheckpoint?.();
+    } catch (e) {
+      reportFlowFailure(flow, e, recordId);
       throw e;
     }
   };
@@ -411,6 +576,8 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
         withdraw: (erc20, amount, receiver) => runFlow('withdraw', erc20, amount, receiver),
         swap: (tokenIn, tokenOut, amount, fee, slippageBps) =>
           runSwapFlow(tokenIn, tokenOut, amount, fee, slippageBps),
+        supply: amount => runSupplyFlow(amount),
+        redeem: shares => runRedeemFlow(shares),
         refresh,
       }}
     >

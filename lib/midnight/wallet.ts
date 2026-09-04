@@ -111,6 +111,28 @@ const vaultCompiledContract: any = (CompiledContract.withCompiledFileAssets as a
   ZK_ORIGIN,
 );
 
+// FetchZkConfigProvider does not cache. During a single proof both the zkConfigProvider and
+// the proof provider ask for the same prover key, so the tab holds two copies of an artifact
+// that runs 100-280 MB and the renderer aborts (observed on claim, 273 MB). Keep only the most
+// recent key: that removes the duplicate without retaining every circuit's key for the session.
+class CachingZkConfigProvider<K extends string> extends FetchZkConfigProvider<K> {
+  private lastCircuitId?: string;
+  private lastProverKey?: Promise<Awaited<ReturnType<FetchZkConfigProvider<K>['getProverKey']>>>;
+
+  override getProverKey(circuitId: K) {
+    if (this.lastCircuitId !== circuitId || !this.lastProverKey) {
+      this.lastCircuitId = circuitId;
+      this.lastProverKey = super.getProverKey(circuitId).catch(e => {
+        // Never cache a failure: the next attempt must re-fetch.
+        this.lastCircuitId = undefined;
+        this.lastProverKey = undefined;
+        throw e;
+      });
+    }
+    return this.lastProverKey;
+  }
+}
+
 // Proving spans BOTH zk roots (vault + signet) — deposit/withdraw cross-call.
 function buildProviders(
   wallet: unknown,
@@ -118,8 +140,8 @@ function buildProviders(
   accountId: string,
 ) {
   const zkOpts = { fetchFunc: fetch.bind(window) };
-  const vaultZk = new FetchZkConfigProvider<string>(ZK_ORIGIN, zkOpts);
-  const signetZk = new FetchZkConfigProvider<string>(`${ZK_ORIGIN}/signet`, zkOpts);
+  const vaultZk = new CachingZkConfigProvider<string>(ZK_ORIGIN, zkOpts);
+  const signetZk = new CachingZkConfigProvider<string>(`${ZK_ORIGIN}/signet`, zkOpts);
 
   return {
     privateStateProvider: levelPrivateStateProvider({

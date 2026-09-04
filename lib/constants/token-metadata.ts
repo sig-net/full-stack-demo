@@ -12,6 +12,8 @@ export interface TokenConfig {
   acquireHint?: string;
   /** Direct URL to get this token (faucet, swap page, etc.) */
   faucetUrl?: string;
+  /** Hide from the swap widget (e.g. a pool exists but only with dust liquidity) */
+  noSwap?: boolean;
 }
 
 // ERC20 tokens on Sepolia
@@ -23,6 +25,32 @@ export const ERC20_TOKENS: TokenConfig[] = [
     chain: 'ethereum',
     acquireHint: 'Get testnet USDC from the Circle faucet.',
     faucetUrl: 'https://faucet.circle.com/',
+  },
+  {
+    // Aave's own Sepolia USDC. The lend flow (supply/redeem) only accepts this one —
+    // Circle USDC above has no Aave reserve, so `supply` reverts on it.
+    erc20Address: '0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8',
+    symbol: 'USDC.a',
+    name: 'USD Coin (Aave)',
+    chain: 'ethereum',
+    acquireHint: 'Get Sepolia USDC from the Aave faucet. Circle USDC does not work for lending.',
+    faucetUrl: 'https://app.aave.com/faucet/',
+    // A USDC.a/USDC pool exists on Sepolia but holds dust liquidity, so swaps through it
+    // fail or get destroyed by slippage. Testnet-only concern: this entry has no mainnet
+    // counterpart (Aave mainnet lends Circle USDC directly).
+    noSwap: true,
+  },
+  {
+    // The ERC-4626 wrapper the lend flow supplies into. A successful supply mints shielded
+    // stataUSDC for the shares the wrapper returns, so the vault token needs an entry here
+    // or the balance is held but never shown.
+    erc20Address: '0x8A88124522dbBF1E56352ba3DE1d9F78C143751e',
+    symbol: 'stataUSDC',
+    name: 'Staked Aave USDC',
+    chain: 'ethereum',
+    acquireHint: 'Received by supplying USDC.a through the Lend widget, not from a faucet.',
+    // Shares are minted by the wrapper, not traded on a pool.
+    noSwap: true,
   },
   {
     erc20Address: '0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4',

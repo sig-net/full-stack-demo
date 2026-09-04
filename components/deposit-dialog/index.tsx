@@ -21,6 +21,7 @@ import { useDepositAddress, useHasActiveTransaction } from '@/hooks';
 import { useDepositEvmMutation } from '@/hooks/use-deposit-evm-mutation';
 import { useMidnightWallet } from '@/providers/midnight-context';
 import { useMidnightProgress } from '@/hooks/use-midnight-progress';
+import { flow } from '@/lib/midnight/flow';
 
 import { TokenSelection } from './token-selection';
 import { DepositAddress } from './deposit-address';
@@ -107,6 +108,10 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
         });
         return;
       }
+      // Clear any terminal state left by a previous run before closing: the flow singleton keeps
+      // its error until the next start(), and runDeposit only calls start() once its first await
+      // resolves — so the toaster's re-subscribe would replay the stale failure in between.
+      flow.reset();
       // Fire-and-close: progress + result surface via MidnightProgressToaster.
       midnight.deposit(erc20, units).catch(() => {
         /* surfaced by MidnightProgressToaster via flow.fail */

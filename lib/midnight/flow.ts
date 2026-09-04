@@ -1,6 +1,6 @@
 // Deposit/withdraw/swap lifecycle state; vault.ts pushes phases, the UI subscribes.
 
-export type FlowKind = 'deposit' | 'withdraw' | 'swap';
+export type FlowKind = 'deposit' | 'withdraw' | 'swap' | 'supply' | 'redeem';
 
 export type FlowPhase =
   | 'preparing'
