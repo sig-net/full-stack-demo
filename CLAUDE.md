@@ -5,14 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Development Commands
 
 ```bash
-pnpm dev          # Start dev server with Turbopack
-pnpm build        # Production build
-pnpm lint         # ESLint check
-pnpm lint:fix     # ESLint auto-fix
-pnpm typecheck    # TypeScript type checking
-pnpm format       # Prettier check
-pnpm format:fix   # Prettier format
-pnpm generate:idl # Regenerate Anchor IDL types from ../contract
+yarn dev          # Start dev server with Turbopack
+yarn build        # Production build
+yarn lint         # ESLint check
+yarn lint:fix     # ESLint auto-fix
+yarn typecheck    # TypeScript type checking
+yarn format       # Prettier check
+yarn format:fix   # Prettier format
+yarn generate:idl # Regenerate Anchor IDL types from ../contract
 ```
 
 ## Architecture Overview
@@ -128,7 +128,7 @@ All routes use `runtime: 'nodejs'` with `maxDuration: 300` for long-running rela
 ## Before Completing Any Task
 
 ```bash
-pnpm lint && pnpm typecheck
+yarn lint && yarn typecheck
 ```
 
-Only run `pnpm build` if explicitly asked.
+Only run `yarn build` if explicitly asked.

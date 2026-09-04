@@ -8,4 +8,4 @@ coverage/
 *.log
 .git/
 public/
-pnpm-lock.yaml
+yarn.lock

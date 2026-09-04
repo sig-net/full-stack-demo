@@ -20,7 +20,7 @@ plus your own **local Midnight proof server**.
 
 ## Prerequisites
 
-- Node 20+ and [pnpm](https://pnpm.io)
+- Node 20+ and [Yarn](https://yarnpkg.com) (enabled via `corepack enable`)
 - Docker (for the local proof server)
 - A Sepolia RPC key (free from [Infura](https://infura.io) or [Alchemy](https://alchemy.com))
 - A little Sepolia ETH in a relayer wallet (it pays users' gas)
@@ -28,7 +28,7 @@ plus your own **local Midnight proof server**.
 ## Setup
 
 ```bash
-pnpm install
+yarn install
 cp .env.example .env.local
 # fill in the secrets at the bottom of .env.local (Sepolia RPC key, relayer key, wallet seed)
 ```
@@ -43,7 +43,7 @@ docker run -p 6300:6300 midnightntwrk/proof-server:9.0.0-rc.5_experimental \
 Run the app:
 
 ```bash
-pnpm dev
+yarn dev
 ```
 
 Open http://localhost:3000, connect the **Developer (Midnight)** wallet, and deposit / swap.
