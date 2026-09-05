@@ -5,14 +5,7 @@ import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
   {
-    ignores: [
-      '.next/**',
-      'node_modules/**',
-      'out/**',
-      'build/**',
-      // Vendored Midnight compiled-contract output (generated).
-      'lib/midnight/managed/**',
-    ],
+    ignores: ['.next/**', 'node_modules/**', 'out/**', 'build/**'],
   },
   ...tseslint.configs.recommended,
   reactHooks.configs.flat.recommended,

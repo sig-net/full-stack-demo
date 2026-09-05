@@ -13,6 +13,7 @@ yarn typecheck    # TypeScript type checking
 yarn format       # Prettier check
 yarn format:fix   # Prettier format
 yarn generate:idl # Regenerate Anchor IDL types from ../contract
+yarn zk-assets    # Regenerate + verify the Midnight zk assets under public/zk (needs the Compact toolchain)
 ```
 
 ## Architecture Overview
@@ -96,6 +97,18 @@ Centralized in `lib/constants/addresses.ts`:
 React Query keys in `lib/query-client.ts` via `queryKeys` object. Use `invalidateBalanceQueries()` helper for balance refreshes.
 
 Real-time updates via `useBridgeAutoRefetch` hook which subscribes to Solana program logs and invalidates queries on relevant instructions.
+
+## Midnight Vault
+
+The shielded ERC-20 vault flows live in `lib/midnight/`. The compiled vault contract, its witnesses and
+ledger paths come from `@sig-net/midnight-examples-erc20-vault-contract`, the signet protocol SDK from
+`@sig-net/midnight`. Contract addresses resolve from `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID` through those
+packages in `lib/midnight/env.ts` (the two address env vars are overrides for a local undeployed stack).
+
+Proving fetches two zk asset trees from `NEXT_PUBLIC_ZK_CONFIG_ORIGIN` (the app's own `/zk` path when unset):
+the vault at `/{keys,zkir,compiler}` and the signet contract at `/signet/{keys,zkir,compiler}`.
+`yarn zk-assets` lays both out under `public/zk` and prints the manifest hashes pinned in
+`lib/midnight/zk-manifest-hashes.ts`.
 
 ## Environment Configuration
 

@@ -44,10 +44,11 @@ import {
   pureCircuits,
   ledger,
   VAULT_REQUESTS_PATH,
+  VAULT_DEPOSIT_REQUESTS_PATH,
   VAULT_SWAP_REQUESTS_PATH,
   VAULT_SUPPLY_REQUESTS_PATH,
   VAULT_REDEEM_REQUESTS_PATH,
-} from './contract-exports';
+} from '@sig-net/midnight-examples-erc20-vault-contract';
 import {
   AAVE_USDC,
   STATA_USDC,
@@ -256,7 +257,7 @@ function responseReader(
   return new SignetRequestResponseReader({
     requesterContractAddress: env.contractAddress,
     // The reader locates the request by ledger-tree path. The Aave vault chunks its state past
-    // 15 fields, so every event map is depth-2: signBidirectional [0,0], swap [1,7], supply
+    // 15 fields, so every event map is depth-2: signBidirectional [0,0], deposit [1,3], swap [1,7], supply
     // [1,11], redeem [1,13].
     requesterRequestsPath: [...requestsPath],
     signetContractAddress: env.signetContractAddress,
@@ -322,7 +323,19 @@ async function assertRequestOnLedger(
   }
 }
 
-// Swaps register in swapEventMap (field 11), a separate map from the transfer map above.
+// Deposits register in depositEventMap, a separate map from the transfer map above.
+async function assertDepositRequestOnLedger(
+  providers: any,
+  env: Env,
+  rid: RequestIdHex,
+) {
+  const after = await readVaultLedger(providers, env);
+  if (!toSignBidirectionalEventIndex(after.depositEventMap).has(rid)) {
+    throw new Error(`deposit request ${rid} not on the ledger after startDeposit()`);
+  }
+}
+
+// Swaps register in swapEventMap, a separate map from the transfer map above.
 async function assertSwapRequestOnLedger(
   providers: any,
   env: Env,
@@ -330,7 +343,7 @@ async function assertSwapRequestOnLedger(
 ) {
   const after = await readVaultLedger(providers, env);
   if (!toSignBidirectionalEventIndex(after.swapEventMap).has(rid)) {
-    throw new Error(`swap request ${rid} not on the ledger after swap()`);
+    throw new Error(`swap request ${rid} not on the ledger after startSwap()`);
   }
 }
 
@@ -611,7 +624,7 @@ async function settleViaMpc(
   );
 }
 
-// deposit() -> MPC round trip -> claim() mints the shielded token.
+// startDeposit() -> MPC round trip -> completeDeposit() mints the shielded token.
 export async function runDeposit(
   providers: any,
   vault: any,
@@ -642,8 +655,8 @@ export async function runDeposit(
   log(`Predicted requestId 0x${rid}`);
 
   flow.set('proving');
-  log('Submitting deposit() on Midnight...');
-  await vault.callTx.deposit(
+  log('Submitting startDeposit() on Midnight...');
+  await vault.callTx.startDeposit(
     nonce,
     GAS_LIMIT,
     MAX_FEE,
@@ -654,16 +667,23 @@ export async function runDeposit(
       amount,
     },
   );
-  await assertRequestOnLedger(providers, env, rid, 'deposit');
+  await assertDepositRequestOnLedger(providers, env, rid);
   onRecord?.(rid);
 
-  const outcome = await settleViaMpc(providers, env, rid, userEvm, log);
+  const outcome = await settleViaMpc(
+    providers,
+    env,
+    rid,
+    userEvm,
+    log,
+    VAULT_DEPOSIT_REQUESTS_PATH,
+  );
   onRecord?.(rid, outcome.evmTxHash);
   if (!outcome.succeeded)
     throw new Error(`MPC attested deposit ${rid} as FAILED`);
 
   flow.set('claim-proving');
-  log('Submitting claim() to mint shielded token...');
+  log('Submitting completeDeposit() to mint shielded token...');
   const selfRecipient = {
     is_some: false,
     value: {
@@ -672,7 +692,7 @@ export async function runDeposit(
       right: { bytes: new Uint8Array(32) },
     },
   };
-  await vault.callTx.claim(
+  await vault.callTx.completeDeposit(
     requestIdBytes(rid),
     outcome.event,
     outcome.serializedOutput,
@@ -683,7 +703,7 @@ export async function runDeposit(
   log('Deposit complete — shielded token minted.');
 }
 
-// withdraw() -> MPC round trip -> completeWithdraw() (or refundWithdraw on failure).
+// startWithdraw() -> MPC round trip -> completeWithdraw() (or refundWithdraw on failure).
 export async function runWithdraw(
   providers: any,
   vault: any,
@@ -722,8 +742,8 @@ export async function runWithdraw(
   };
 
   flow.set('proving');
-  log('Submitting withdraw() (surrendering the vault coin)...');
-  await vault.callTx.withdraw(
+  log('Submitting startWithdraw() (surrendering the vault coin)...');
+  await vault.callTx.startWithdraw(
     nonce,
     SIGNET_DEFAULT_KEY_VERSION,
     { erc20Address: erc20, amount, destEvmAddress: dest },
@@ -748,9 +768,7 @@ export async function runWithdraw(
   if (outcome.matchedFailureOutput) {
     flow.set('refunding');
     log('EVM transfer never executed — refunding...');
-    // refundWithdraw + refundSwap are merged into one `refund` circuit; it routes on which
-    // pending-marker map holds the id (refundCommitment here).
-    await vault.callTx.refund(
+    await vault.callTx.refundWithdraw(
       requestIdBytes(rid),
       outcome.event,
       outcome.serializedOutput,
@@ -831,7 +849,7 @@ async function ensureRouterApproved(
   log('Router approved.');
 }
 
-// approveRouter (once) -> quote -> swap() (burns tokenIn coin, records in swapEventMap) ->
+// approveRouter (once) -> quote -> startSwap() (burns tokenIn coin, records in swapEventMap) ->
 // MPC round trip (field 11) -> completeSwap() mints shielded tokenOut (or refund on EVM
 // failure). The vault account holds the pooled funds and both signs + pays for the swap.
 // `fee` is the Uniswap V3 pool tier the UI discovered for this pair (default 0.05%).
@@ -874,7 +892,7 @@ export async function runSwap(
     `Quote: ${amountInMaximum} in -> ~${expectedOut} out (min ${amountOut}, fee ${fee})`,
   );
 
-  // 3. swap(): surrender (burn) amountInMaximum of the tokenIn vault coin, record the
+  // 3. startSwap(): surrender (burn) amountInMaximum of the tokenIn vault coin, record the
   // exactOutputSingle request. completeSwap returns the unspent remainder as change.
   const nonce = await evmNonce(env, vaultEvm);
   const before = await readVaultLedger(providers, env);
@@ -907,8 +925,8 @@ export async function runSwap(
   };
 
   flow.set('proving');
-  log('Submitting swap() (surrendering the tokenIn vault coin)...');
-  await vault.callTx.swap(
+  log('Submitting startSwap() (surrendering the tokenIn vault coin)...');
+  await vault.callTx.startSwap(
     nonce,
     SIGNET_DEFAULT_KEY_VERSION,
     { tokenIn, tokenOut, fee, amountOut, amountInMaximum },
@@ -937,7 +955,7 @@ export async function runSwap(
   if (outcome.matchedFailureOutput) {
     flow.set('refunding');
     log('Swap did not execute on EVM — refunding tokenIn...');
-    await vault.callTx.refund(
+    await vault.callTx.refundSwap(
       requestIdBytes(rid),
       outcome.event,
       outcome.serializedOutput,
@@ -979,14 +997,14 @@ async function stataAllowance(env: Env, vaultEvm: string): Promise<bigint> {
 async function assertSupplyRequestOnLedger(providers: any, env: Env, rid: RequestIdHex) {
   const after = await readVaultLedger(providers, env);
   if (!toSignBidirectionalEventIndex(after.supplyEventMap).has(rid)) {
-    throw new Error(`supply request ${rid} not on the ledger after supply()`);
+    throw new Error(`supply request ${rid} not on the ledger after startSupply()`);
   }
 }
 
 async function assertRedeemRequestOnLedger(providers: any, env: Env, rid: RequestIdHex) {
   const after = await readVaultLedger(providers, env);
   if (!toSignBidirectionalEventIndex(after.redeemEventMap).has(rid)) {
-    throw new Error(`redeem request ${rid} not on the ledger after redeem()`);
+    throw new Error(`redeem request ${rid} not on the ledger after startRedeem()`);
   }
 }
 
@@ -1036,7 +1054,7 @@ async function ensureStataApproved(
   log('stataUSDC wrapper approved.');
 }
 
-// approveStata (once) -> supply() burns the USDC coin, records in supplyEventMap -> MPC round trip
+// approveStata (once) -> startSupply() burns the USDC coin, records in supplyEventMap -> MPC round trip
 // (supply path + supply schemas) -> completeSupply mints shielded stataUSDC (or refund on EVM
 // failure). The vault account holds the pooled funds and both signs + pays for the deposit.
 export async function runSupply(
@@ -1079,8 +1097,8 @@ export async function runSupply(
   };
 
   flow.set('proving');
-  log('Submitting supply() (surrendering USDC to lend)...');
-  await vault.callTx.supply(nonce, SIGNET_DEFAULT_KEY_VERSION, amount, coin);
+  log('Submitting startSupply() (surrendering USDC to lend)...');
+  await vault.callTx.startSupply(nonce, SIGNET_DEFAULT_KEY_VERSION, amount, coin);
   await assertSupplyRequestOnLedger(providers, env, rid);
   onRecord?.(rid);
 
@@ -1100,7 +1118,7 @@ export async function runSupply(
   if (outcome.matchedFailureOutput) {
     flow.set('refunding');
     log('Supply did not execute on EVM — refunding USDC...');
-    await vault.callTx.refund(
+    await vault.callTx.refundSupply(
       requestIdBytes(rid),
       outcome.event,
       outcome.serializedOutput,
@@ -1123,7 +1141,7 @@ export async function runSupply(
   return (outcome.decoded?.shares ?? null) as bigint | null;
 }
 
-// redeem() burns the stataUSDC coin, records in redeemEventMap -> MPC round trip (redeem path +
+// startRedeem() burns the stataUSDC coin, records in redeemEventMap -> MPC round trip (redeem path +
 // redeem schemas) -> completeRedeem mints shielded USDC (or refund on EVM failure). No approve:
 // the vault redeems its OWN shares (owner = vault).
 export async function runRedeem(
@@ -1167,8 +1185,8 @@ export async function runRedeem(
     value: shares,
   };
 
-  log('Submitting redeem() (surrendering stataUSDC shares)...');
-  await vault.callTx.redeem(nonce, SIGNET_DEFAULT_KEY_VERSION, shares, coin);
+  log('Submitting startRedeem() (surrendering stataUSDC shares)...');
+  await vault.callTx.startRedeem(nonce, SIGNET_DEFAULT_KEY_VERSION, shares, coin);
   await assertRedeemRequestOnLedger(providers, env, rid);
   onRecord?.(rid);
 
@@ -1188,7 +1206,7 @@ export async function runRedeem(
   if (outcome.matchedFailureOutput) {
     flow.set('refunding');
     log('Redeem did not execute on EVM — refunding stataUSDC...');
-    await vault.callTx.refund(
+    await vault.callTx.refundRedeem(
       requestIdBytes(rid),
       outcome.event,
       outcome.serializedOutput,

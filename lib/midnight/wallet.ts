@@ -16,9 +16,15 @@ import {
   type SerializedWalletState,
   type WalletFacade,
 } from './seedlib';
-import { Contract, witnesses, createVaultPrivateState } from './contract-exports';
+import {
+  Contract,
+  witnesses,
+  createVaultPrivateState,
+  VAULT_PRIVATE_STATE_ID,
+} from '@sig-net/midnight-examples-erc20-vault-contract';
+import { SIGNET_ZK_MANIFEST_SHA256, VAULT_ZK_MANIFEST_SHA256 } from './zk-manifest-hashes';
 
-export const VAULT_PRIVATE_STATE_ID = 'erc20-vault';
+export { VAULT_PRIVATE_STATE_ID };
 
 // Genesis dev seed: endowed on every fresh local chain, so addresses are stable.
 export const GENESIS_SEED =
@@ -94,13 +100,13 @@ async function idbDelete(key: string): Promise<void> {
   });
 }
 
-// Where the ZK assets (keys/zkir/compiler) are served from. Defaults to the app origin (the
-// public/ folder in local dev), but the vault provers are 100-280 MB each — over Vercel's 100 MB
-// file cap — so in production they're hosted on object storage and NEXT_PUBLIC_ZK_CONFIG_ORIGIN
-// points the fetch there. The `/signet` assets live under the same origin.
+// Where the zk asset trees are served from: the vault at `<origin>/{keys,zkir,compiler}` and the
+// signet contract at `<origin>/signet/...`. Local development serves the tree `yarn zk-assets` lays
+// out under public/zk. The vault provers are 100-280 MB each, over Vercel's 100 MB file cap, so a
+// deployment hosts the same tree on object storage and points NEXT_PUBLIC_ZK_CONFIG_ORIGIN at it.
 const ZK_ORIGIN =
   process.env.NEXT_PUBLIC_ZK_CONFIG_ORIGIN ||
-  (typeof window !== 'undefined' ? window.location.origin : '');
+  (typeof window !== 'undefined' ? `${window.location.origin}/zk` : '');
 
 // Compiled-contract binding: generated Contract + witnesses + zk assets at the origin.
 const vaultCompiledContract: any = (CompiledContract.withCompiledFileAssets as any)(
@@ -139,9 +145,22 @@ function buildProviders(
   cfg: MidnightNodeConfig,
   accountId: string,
 ) {
-  const zkOpts = { fetchFunc: fetch.bind(window) };
-  const vaultZk = new CachingZkConfigProvider<string>(ZK_ORIGIN, zkOpts);
-  const signetZk = new CachingZkConfigProvider<string>(`${ZK_ORIGIN}/signet`, zkOpts);
+  // Each origin's manifest is pinned to the hash `yarn zk-assets` printed, so a tampered origin
+  // cannot certify its own artefacts by rewriting the manifest it serves beside them.
+  type ZkOptions = ConstructorParameters<typeof FetchZkConfigProvider<string>>[1];
+  const zkOpts = (expectedManifestHash: string): ZkOptions => ({
+    fetchFunc: fetch.bind(window),
+    verify: 'require',
+    expectedManifestHash,
+  });
+  const vaultZk = new CachingZkConfigProvider<string>(
+    ZK_ORIGIN,
+    zkOpts(VAULT_ZK_MANIFEST_SHA256),
+  );
+  const signetZk = new CachingZkConfigProvider<string>(
+    `${ZK_ORIGIN}/signet`,
+    zkOpts(SIGNET_ZK_MANIFEST_SHA256),
+  );
 
   return {
     privateStateProvider: levelPrivateStateProvider({
