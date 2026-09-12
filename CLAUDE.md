@@ -29,10 +29,13 @@ the vault at `/{keys,zkir,compiler}` and the signet contract at `/signet/{keys,z
 
 ## Environment Configuration
 
-Validated via Zod in `src/lib/config/env.config.ts`:
+- `src/lib/config/evm.ts` owns public Sepolia configuration and RPC validation.
+- `src/lib/config/midnight.ts` owns public Midnight endpoints, network types and ZK origin.
+- `src/lib/midnight/env.ts` resolves captured vault deployment inputs lazily.
+- `src/lib/config/relayer.ts` exports server-only `getRelayerPrivateKey()`.
 
-- `getClientEnv()` - Client-safe vars (NEXT_PUBLIC_*)
-- `getFullEnv()` - Server-side only (includes secrets)
+Pass validated configuration into resource constructors. Keep public configuration independent
+of the relayer key and browser wallet assembly.
 
 ## Code Conventions
 

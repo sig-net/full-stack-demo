@@ -1,22 +1,17 @@
 import { createPublicClient, http, type PublicClient } from 'viem';
-import { sepolia } from 'viem/chains';
+import { sepolia } from '@/lib/config/evm';
+import type { EvmChainConfig } from '@/lib/config/evm';
 
-import { getClientEnv } from '@/lib/config/env.config';
+const ethereumProviders = new Map<string, PublicClient>();
 
-let cachedEthereumProvider: PublicClient | null = null;
-
-export function getEthereumProvider(): PublicClient {
-  if (cachedEthereumProvider) {
-    return cachedEthereumProvider;
-  }
-  cachedEthereumProvider = createPublicClient({
+export function getEthereumProvider(config: EvmChainConfig): PublicClient {
+  const key = `${config.chainId}:${config.rpcUrl}`;
+  const cached = ethereumProviders.get(key);
+  if (cached) return cached;
+  const client = createPublicClient({
     chain: sepolia,
-    transport: http(getEthSepoliaRpcUrl()),
+    transport: http(config.rpcUrl),
   });
-  return cachedEthereumProvider;
-}
-
-// The single Sepolia JSON-RPC endpoint (any provider) used by all EVM paths.
-export function getEthSepoliaRpcUrl(): string {
-  return getClientEnv().NEXT_PUBLIC_SEPOLIA_RPC_URL;
+  ethereumProviders.set(key, client);
+  return client;
 }

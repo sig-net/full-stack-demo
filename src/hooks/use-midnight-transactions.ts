@@ -1,5 +1,6 @@
 'use client';
 
+import { getEvmChainConfig } from '@/lib/config/evm';
 import { useEffect, useState } from 'react';
 
 import {
@@ -12,6 +13,7 @@ import type { ActivityTransaction } from '@/components/activity-list-table';
 const CHAIN = 'midnight';
 
 function toActivity(r: MidnightTxRecord): ActivityTransaction {
+  const explorer = getEvmChainConfig().explorerUrl;
   const fromToken =
     r.type === 'Deposit'
       ? { symbol: 'WALLET', chain: CHAIN, amount: r.fromAmount, usdValue: '' }
@@ -41,9 +43,8 @@ function toActivity(r: MidnightTxRecord): ActivityTransaction {
     status: r.status,
     transactionHash: r.txHash,
     failureReason: r.failureReason,
-    explorerUrl: r.txHash
-      ? `https://sepolia.etherscan.io/tx/${r.txHash}`
-      : undefined,
+    explorerUrl:
+      r.txHash && explorer ? `${explorer}/tx/${r.txHash}` : undefined,
   };
 }
 

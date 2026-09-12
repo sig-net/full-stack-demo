@@ -4,7 +4,8 @@ import { useState } from 'react';
 
 import type { NetworkData, TokenConfig } from '@/lib/constants/token-metadata';
 import { NETWORKS_WITH_TOKENS } from '@/lib/constants/token-metadata';
-import { useMidnightWallet } from '@/providers/midnight-context';
+import { useVault } from '@/providers/vault-context';
+import { useMidnightConnection } from '@/providers/midnight-wallet-context';
 
 import { NetworkAccordionItem } from './network-accordion-item';
 
@@ -16,9 +17,12 @@ export function TokenSelection({ onTokenSelect }: TokenSelectionProps) {
   const [expandedNetworkId, setExpandedNetworkId] = useState<string | null>(
     null,
   );
-  const midnight = useMidnightWallet();
+  const vault = useVault();
+  const connection = useMidnightConnection();
 
-  const networks = midnight.connected ? NETWORKS_WITH_TOKENS : [];
+  const networks = NETWORKS_WITH_TOKENS.filter(network =>
+    network.chain === 'midnight' ? !!connection.wallet : !!vault.binding,
+  );
 
   const handleNetworkClick = (networkId: string) => {
     setExpandedNetworkId(expandedNetworkId === networkId ? null : networkId);

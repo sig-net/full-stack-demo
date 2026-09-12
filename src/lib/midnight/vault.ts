@@ -3,6 +3,7 @@ import {
   resolvePathRendering,
   type PathRendering,
 } from './evm-addresses';
+import type { VaultProviders } from '@sig-net/midnight-examples-erc20-vault-contract';
 import { rawTokenType } from '@midnight-ntwrk/compact-runtime';
 import {
   Contract as EthersContract,
@@ -21,7 +22,6 @@ import {
   bytesToHex,
   stripHexPrefix,
   toSignBidirectionalEventIndex,
-  deriveMidnightResponseKey,
   deserializeEvmOutput,
   serializeRespondOutput,
   signBidirectionalEventToSignedEvmTransaction,
@@ -34,11 +34,13 @@ import {
   MPCSignatureAlgorithm,
   MPCDestination,
   TxParamType,
+  pureCircuits as signetPureCircuits,
   type RequestIdHex,
   type SignBidirectionalEvent,
 } from '@sig-net/midnight';
 
 import { flow } from './flow';
+import { observeExecution } from './observed-execution';
 import {
   ERC20_TRANSFER_GAS_LIMIT as GAS_LIMIT,
   ERC20_TRANSFER_MAX_FEE_PER_GAS as MAX_FEE,
@@ -51,7 +53,7 @@ import {
   STATA_MAX_PRIORITY_FEE_PER_GAS,
 } from './evm-envelope';
 import {
-  pureCircuits,
+  pureCircuits as vaultPureCircuits,
   VAULT_PATH_HEX,
   ledger,
   VAULT_REQUESTS_PATH,
@@ -104,8 +106,7 @@ export type Env = {
   contractAddress: string; // Midnight vault contract
   signetContractAddress: string; // Midnight central signet contract
   mpcSecpPub: string; // MPC root secp256k1 pubkey (0x hex)
-  evmRpcUrl: string; // Sepolia JSON-RPC
-  fakenetResponsesUrl: string; // fakenet /responses cache
+  evmRpcUrl: string;
 };
 
 const addrBytes = (hex: string) => hexToBytes(stripHexPrefix(hex));
@@ -127,9 +128,7 @@ export function evmProvider(rpcUrl: string): JsonRpcProvider {
   return provider;
 }
 
-// A single RPC round trip over a remote link can time out even when the chain is healthy.
-// Retry the transient classes and label the step, so a failure names the call that failed
-// instead of surfacing a bare `timeout (code=TIMEOUT)`.
+// Retry transient RPC failures with a step name for diagnosing settlement failures.
 const TRANSIENT_RPC = /timeout|network error|failed to fetch|connection|econn|socket/i;
 async function rpcStep<T>(
   step: string,
@@ -167,29 +166,34 @@ export interface Identity {
 }
 
 export function deriveIdentity(secretKey: Uint8Array): Identity {
-  const commitment = pureCircuits.userCommitment(secretKey);
+  const commitment = vaultPureCircuits.userCommitment(secretKey);
   const pathString = new TextDecoder('utf-8')
     .decode(commitment)
     .replace(/\0/g, '');
   return { secretKey, commitment, pathString, pathHex: bytesToHex(commitment) };
 }
 
-let pathRendering: PathRendering = 'utf8';
+export type VaultSessionEnvironment = Env & {
+  readonly pathRendering: PathRendering;
+  assertActive: () => void;
+};
 
 export async function syncPathRendering(
-  providers: any,
+  providers: VaultProviders,
   env: Env,
 ): Promise<PathRendering> {
   const state = await readVaultLedger(providers, env);
-  pathRendering = resolvePathRendering(env, bytesToHex(state.vaultEvmAddress));
-  return pathRendering;
-}
-export function depositAddress(env: Env, identity: Identity): string {
-  return derivePathAddress(env, identity.pathHex, pathRendering);
+  return resolvePathRendering(env, bytesToHex(state.vaultEvmAddress));
 }
 
-export function vaultAddress(env: Env): string {
-  return derivePathAddress(env, VAULT_PATH_HEX, pathRendering);
+export function depositAddress(env: VaultSessionEnvironment, identity: Identity): string {
+  env.assertActive();
+  return derivePathAddress(env, identity.pathHex, env.pathRendering);
+}
+
+export function vaultAddress(env: VaultSessionEnvironment): string {
+  env.assertActive();
+  return derivePathAddress(env, VAULT_PATH_HEX, env.pathRendering);
 }
 
 // Shielded vault-token color for an ERC-20 under this vault.
@@ -198,7 +202,7 @@ export function vaultTokenType(
   vaultContractAddress: string,
 ): string {
   const raw: any = rawTokenType(
-    (pureCircuits as any).vaultTokenDomainSeparator(addrBytes(erc20Hex)),
+    vaultPureCircuits.vaultTokenDomainSeparator(addrBytes(erc20Hex)),
     vaultContractAddress as any,
   );
   return (typeof raw === 'string' ? raw : bytesToHex(raw))
@@ -219,17 +223,17 @@ export async function erc20Balance(
   return BigInt(await token.getFunction('balanceOf')(address));
 }
 
-async function readVaultLedger(providers: any, env: Env): Promise<any> {
+async function readVaultLedger(providers: VaultProviders, env: Env): Promise<ReturnType<typeof ledger>> {
   const cs = await providers.publicDataProvider.queryContractState(
     env.contractAddress,
   );
   if (!cs) throw new Error(`no contract state at ${env.contractAddress}`);
-  return (ledger as any)(cs.data);
+  return ledger(cs.data);
 }
 
 function responseReader(
   providers: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   requestsPath: readonly number[] = VAULT_REQUESTS_PATH,
 ): SignetRequestResponseReader {
   return new SignetRequestResponseReader({
@@ -246,10 +250,9 @@ function responseReader(
   } as any);
 }
 
-// Predict the request id the vault will record: the full request record, hashed.
 function predictRequestId(
-  env: Env,
-  before: any,
+  env: VaultSessionEnvironment,
+  before: ReturnType<typeof ledger>,
   path: Uint8Array,
   nonce: bigint,
   erc20: Uint8Array,
@@ -263,7 +266,7 @@ function predictRequestId(
     path,
     ...MPC_ROUTING,
     txParamType: TxParamType.evmType2,
-    caip2Id: before.caip2Id,
+    caip2Id: signetPureCircuits.ethereumCaip2Id(),
     txParams: {
       to: erc20,
       chainId: before.evmChainId,
@@ -283,13 +286,13 @@ function predictRequestId(
         },
       },
     },
-  } as any;
+  };
   return requestIdHex(calculateRequestId(expected)) as RequestIdHex;
 }
 
 async function assertRequestOnLedger(
   providers: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   rid: RequestIdHex,
   circuit: string,
 ) {
@@ -304,7 +307,7 @@ async function assertRequestOnLedger(
 // Deposits register in depositEventMap, a separate map from the transfer map above.
 async function assertDepositRequestOnLedger(
   providers: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   rid: RequestIdHex,
 ) {
   const after = await readVaultLedger(providers, env);
@@ -316,7 +319,7 @@ async function assertDepositRequestOnLedger(
 // Swaps register in swapEventMap, a separate map from the transfer map above.
 async function assertSwapRequestOnLedger(
   providers: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   rid: RequestIdHex,
 ) {
   const after = await readVaultLedger(providers, env);
@@ -325,17 +328,16 @@ async function assertSwapRequestOnLedger(
   }
 }
 
-// Predict the request id for any EVM call the vault records: the full request record hashed.
-// Generalises predictRequestId over the calldata (selector + ABI words), the gas envelope
-// and the MPC routing, so approve (2-word transfer schema) and swap (7-word amountOut
-// schema) share one builder.
 function predictCallRequestId(
-  env: Env,
-  before: any,
+  env: VaultSessionEnvironment,
+  before: ReturnType<typeof ledger>,
   path: Uint8Array,
   nonce: bigint,
   to: Uint8Array,
-  routing: any,
+  routing: Pick<
+    SignBidirectionalEvent,
+    'algo' | 'dest' | 'params' | 'outputDeserializationSchema' | 'respondSerializationSchema'
+  >,
   gasLimit: bigint,
   maxFee: bigint,
   priorityFee: bigint,
@@ -349,7 +351,7 @@ function predictCallRequestId(
     path,
     ...routing,
     txParamType: TxParamType.evmType2,
-    caip2Id: before.caip2Id,
+    caip2Id: signetPureCircuits.ethereumCaip2Id(),
     txParams: {
       to,
       chainId: before.evmChainId,
@@ -365,35 +367,14 @@ function predictCallRequestId(
         value: { selector, noWords: BigInt(words.length), words },
       },
     },
-  } as any;
+  };
   return requestIdHex(calculateRequestId(expected)) as RequestIdHex;
-}
-
-async function fetchFakenetResponse(
-  env: Env,
-  requestId: string,
-  timeoutMs = 8000,
-): Promise<any> {
-  const url = `${env.fakenetResponsesUrl}/responses/${requestId}`;
-  const deadline = Date.now() + timeoutMs;
-  let last = 'not attempted';
-  do {
-    try {
-      const r = await fetch(url);
-      if (r.ok) return await r.json();
-      last = `HTTP ${r.status}`;
-    } catch (e) {
-      last = `fetch failed: ${String(e)}`;
-    }
-    await sleep(1000);
-  } while (Date.now() < deadline);
-  throw new Error(`no fakenet response for ${requestId} (${last})`);
 }
 
 // Stage 1: poll the signet contract until the MPC's signature over the EVM tx appears.
 async function pollSignatureResponse(
   providers: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   requestId: RequestIdHex,
   expectedSigner: string,
   log: (m: string) => void,
@@ -404,6 +385,7 @@ async function pollSignatureResponse(
   const end = Date.now() + timeoutMs;
   const warned = new Set<bigint>();
   while (Date.now() < end) {
+    env.assertActive();
     const { verified, verdicts } =
       await reader.getVerifiedSignatureRespondedEvent(
         requestId,
@@ -428,8 +410,8 @@ async function pollSignatureResponse(
 }
 
 // Broadcast the MPC-signed EVM tx (idempotent across retries). In a settle flow a revert is a
-// valid outcome — the MPC attests the failure and the caller refunds (swap/withdraw) or surfaces
-// it (deposit) — so `throwOnRevert` is false there. Sign-only flows (router approval) have no
+// valid outcome. the MPC attests the failure and the caller refunds (swap/withdraw) or surfaces
+// it (deposit). so `throwOnRevert` is false there. Sign-only flows (router approval) have no
 // attestation to fall back on, so a revert there is fatal.
 //
 // The signed tx is deterministic, so broadcasting is idempotent and retryable. A settle flow has
@@ -438,7 +420,7 @@ async function pollSignatureResponse(
 // recovery is to land THIS tx. `ensureGas` re-runs the gas top-up between attempts, so an
 // under-funded account ("insufficient funds") is refilled and the same signed tx re-broadcast.
 async function broadcastEvm(
-  env: Env,
+  env: VaultSessionEnvironment,
   tx: Transaction,
   opts: { throwOnRevert?: boolean; ensureGas?: () => Promise<void> } = {},
 ): Promise<void> {
@@ -457,13 +439,15 @@ async function broadcastEvm(
   const MAX_ATTEMPTS = 5;
   for (let attempt = 1; ; attempt++) {
     try {
-      await rpcStep('broadcast', 3, () =>
-        provider.broadcastTransaction(tx.serialized),
-      );
+      await rpcStep('broadcast', 3, () => {
+        env.assertActive();
+        return provider.broadcastTransaction(tx.serialized);
+      });
       break;
     } catch (e: any) {
+      env.assertActive();
       const msg = String(e?.message ?? '').toLowerCase();
-      // Already in the mempool (or mined by a prior attempt) — proceed to await the receipt.
+      // Already in the mempool (or mined by a prior attempt). Proceed to await the receipt.
       if (
         e?.code === 'NONCE_EXPIRED' ||
         msg.includes('already known') ||
@@ -488,39 +472,30 @@ async function broadcastEvm(
     throw new Error(`sweep ${hash} reverted`);
 }
 
-// Stage 2: match the MPC's attestation digest against the recomputed serialized output.
-// The log is unauthenticated — the settle circuits re-verify digest + signature in-circuit.
 async function fetchAttestedRespondOutcome(
-  providers: any,
-  env: Env,
+  providers: VaultProviders,
+  env: VaultSessionEnvironment,
   requestId: RequestIdHex,
   requestsPath: readonly number[] = VAULT_REQUESTS_PATH,
   schema: string = RESULT_SCHEMA,
   respondSchema: string = schema,
 ): Promise<any | undefined> {
   const reader = responseReader(providers, env, requestsPath);
-  // The MPC response key the vault pinned at deploy (sender-scoped: derived from
-  // the MPC root pubkey + this vault's address). getVerifiedRespondBidirectionalEvent
-  // authenticates each candidate's signature against it — the 0.19 event carries only
-  // the signature, not a digest, so matching is by verifying, not by comparing digests.
-  const mpcResponseKey = deriveMidnightResponseKey(
-    env.mpcSecpPub,
-    env.contractAddress,
+  if ((await reader.getRespondBidirectionalEvents(requestId)).length === 0)
+    return undefined;
+  const { mpcResponseKey } = await readVaultLedger(providers, env);
+  const observed = await observeExecution(
+    reader,
+    evmProvider(env.evmRpcUrl),
+    requestId,
+    env.assertActive,
   );
-  let cached: any;
-  try {
-    cached = await fetchFakenetResponse(env, requestId);
-  } catch {
-    cached = undefined;
-  }
+  if (!observed) return undefined;
   const candidates: { serializedOutput: Uint8Array; isFailure: boolean }[] = [];
-  // The transfer schema decodes a bool; the swap OUTPUT schema a uint256 amountIn. The MPC
-  // re-packs against `respondSchema` (equal to `schema` for the symmetric transfer case, but a
-  // narrower uint64 for swap). decodedValue is what a success settle reads (the bool, or amountIn).
   let decodedValue: any;
-  if (cached?.success && cached.output != null) {
+  if (observed.success && observed.output !== null) {
     try {
-      const decoded: any = deserializeEvmOutput(schema as any, cached.output);
+      const decoded: any = deserializeEvmOutput(schema as any, observed.output);
       decodedValue = decoded;
       candidates.push({
         serializedOutput: serializeRespondOutput(respondSchema as any, decoded),
@@ -531,9 +506,6 @@ async function fetchAttestedRespondOutcome(
     }
   }
   candidates.push({ serializedOutput: MPC_FAILURE_OUTPUT, isFailure: true });
-  // Only the candidate the MPC actually attested has a signature that verifies, so the
-  // first verifying candidate is the genuine outcome. An undefined return means the post
-  // is not up yet (or attests neither candidate) — the caller polls again.
   for (const c of candidates) {
     const event = await reader.getVerifiedRespondBidirectionalEvent(
       requestId,
@@ -545,8 +517,6 @@ async function fetchAttestedRespondOutcome(
         event,
         serializedOutput: c.serializedOutput,
         decoded: c.isFailure ? undefined : decodedValue,
-        // Transfer schema only: a decoded bool `success`. Swaps read `decoded.amountOut`
-        // and treat any non-failure match as success (matchedFailureOutput === false).
         succeeded: !c.isFailure && decodedValue?.success === true,
         matchedFailureOutput: c.isFailure,
       };
@@ -556,11 +526,11 @@ async function fetchAttestedRespondOutcome(
 }
 
 // MPC round trip shared by deposit/withdraw/swap: signature -> broadcast -> attestation.
-// indexField/schema default to the transfer map (field 0, bool); swaps pass field 11 + the
+// indexField/schema default to the transfer map (field 0, bool). Swaps pass field 11 + the
 // uint256 amountOut schema.
 async function settleViaMpc(
   providers: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   rid: RequestIdHex,
   expectedSigner: string,
   log: (m: string) => void,
@@ -569,8 +539,9 @@ async function settleViaMpc(
   respondSchema: string = schema,
   ensureGas?: () => Promise<void>,
 ): Promise<any> {
+  env.assertActive();
   flow.set('settling');
-  log('Waiting for MPC signature + settling on Sepolia...');
+  log('Waiting for MPC signature and EVM settlement...');
   const signed = await pollSignatureResponse(
     providers,
     env,
@@ -586,6 +557,7 @@ async function settleViaMpc(
   await broadcastEvm(env, signed, { throwOnRevert: false, ensureGas });
   const end = Date.now() + 6 * MINUTE;
   while (Date.now() < end) {
+    env.assertActive();
     const outcome = await fetchAttestedRespondOutcome(
       providers,
       env,
@@ -606,13 +578,14 @@ async function settleViaMpc(
 export async function runDeposit(
   providers: any,
   vault: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   identity: Identity,
   erc20Hex: string,
   amount: bigint,
   log: (m: string) => void,
   onRecord?: (rid: RequestIdHex, evmTxHash?: string) => void,
 ) {
+  env.assertActive();
   flow.start('deposit');
   const erc20 = addrBytes(erc20Hex);
   const userEvm = depositAddress(env, identity);
@@ -620,7 +593,7 @@ export async function runDeposit(
   log(`Deposit sender ${userEvm} (evm nonce ${nonce})`);
 
   const before = await readVaultLedger(providers, env);
-  if (!before.initialized) throw new Error('vault not initialized');
+  if (!before.initialised) throw new Error('vault not initialised');
   const rid = predictRequestId(
     env,
     before,
@@ -631,6 +604,8 @@ export async function runDeposit(
     amount,
   );
   log(`Predicted requestId 0x${rid}`);
+
+  env.assertActive();
 
   flow.set('proving');
   log('Submitting startDeposit() on Midnight...');
@@ -660,6 +635,8 @@ export async function runDeposit(
   if (!outcome.succeeded)
     throw new Error(`MPC attested deposit ${rid} as FAILED`);
 
+  env.assertActive();
+
   flow.set('claim-proving');
   log('Submitting completeDeposit() to mint shielded token...');
   const selfRecipient = {
@@ -677,15 +654,16 @@ export async function runDeposit(
     rand32(),
     selfRecipient,
   );
+  env.assertActive();
   flow.set('done');
-  log('Deposit complete — shielded token minted.');
+  log('Deposit complete. Shielded token minted.');
 }
 
 // startWithdraw() -> MPC round trip -> completeWithdraw() (or refundWithdraw on failure).
 export async function runWithdraw(
   providers: any,
   vault: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   identity: Identity,
   erc20Hex: string,
   amount: bigint,
@@ -694,6 +672,7 @@ export async function runWithdraw(
   ensureGas?: () => Promise<void>,
   onRecord?: (rid: RequestIdHex, evmTxHash?: string) => void,
 ) {
+  env.assertActive();
   flow.start('withdraw');
   const erc20 = addrBytes(erc20Hex);
   const dest = addrBytes(destHex);
@@ -702,7 +681,7 @@ export async function runWithdraw(
   log(`Withdraw sender (vault) ${vaultEvm} (evm nonce ${nonce})`);
 
   const before = await readVaultLedger(providers, env);
-  if (!before.initialized) throw new Error('vault not initialized');
+  if (!before.initialised) throw new Error('vault not initialised');
   const rid = predictRequestId(
     env,
     before,
@@ -718,6 +697,8 @@ export async function runWithdraw(
     color: hexToBytes(vaultTokenType(erc20Hex, env.contractAddress)),
     value: amount,
   };
+
+  env.assertActive();
 
   flow.set('proving');
   log('Submitting startWithdraw() (surrendering the vault coin)...');
@@ -744,18 +725,21 @@ export async function runWithdraw(
   onRecord?.(rid, outcome.evmTxHash);
 
   if (outcome.matchedFailureOutput) {
+    env.assertActive();
     flow.set('refunding');
-    log('EVM transfer never executed — refunding...');
+    log('EVM transfer never executed. Refunding...');
     await vault.callTx.refundWithdraw(
       requestIdBytes(rid),
       outcome.event,
       outcome.serializedOutput,
       rand32(),
     );
+    env.assertActive();
     flow.finishRefunded();
     log('Withdraw settled (refunded).');
     return;
   }
+  env.assertActive();
   flow.set('claim-proving');
   log('Settling completeWithdraw...');
   await vault.callTx.completeWithdraw(
@@ -764,24 +748,25 @@ export async function runWithdraw(
     outcome.serializedOutput,
     rand32(),
   );
+  env.assertActive();
   flow.set('done');
   log('Withdraw finalized (success).');
 }
 
-async function evmNonce(env: Env, address: string): Promise<bigint> {
+async function evmNonce(env: VaultSessionEnvironment, address: string): Promise<bigint> {
   return BigInt(
     await evmProvider(env.evmRpcUrl).getTransactionCount(address),
   );
 }
 
 // Ensure the vault account has approved the router for `erc20Hex`: read the live allowance,
-// and if zero run the approve leg (approveRouter -> MPC sign (field 0) -> broadcast; NO
+// and if zero run the approve leg (approveRouter -> MPC sign (field 0) -> broadcast, NO
 // settle). Idempotent and global (one pooled vault account), so a nonzero allowance
 // short-circuits and the first swapper readies a token for everyone.
 async function ensureRouterApproved(
   providers: any,
   vault: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   erc20Hex: string,
   log: (m: string) => void,
 ) {
@@ -793,7 +778,7 @@ async function ensureRouterApproved(
   const erc20 = addrBytes(erc20Hex);
   const nonce = await evmNonce(env, vaultEvm);
   const before = await readVaultLedger(providers, env);
-  if (!before.initialized) throw new Error('vault not initialized');
+  if (!before.initialised) throw new Error('vault not initialised');
   const rid = predictCallRequestId(
     env,
     before,
@@ -834,7 +819,7 @@ async function ensureRouterApproved(
 export async function runSwap(
   providers: any,
   vault: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   identity: Identity,
   tokenInHex: string,
   tokenOutHex: string,
@@ -845,12 +830,14 @@ export async function runSwap(
   ensureGas?: () => Promise<void>,
   onRecord?: (rid: RequestIdHex, evmTxHash?: string) => void,
 ) {
+  env.assertActive();
   flow.start('swap');
   const tokenIn = addrBytes(tokenInHex);
   const tokenOut = addrBytes(tokenOutHex);
   const vaultEvm = vaultAddress(env);
 
   // 1. Ready the router allowance for tokenIn (idempotent, global).
+  env.assertActive();
   flow.set('preparing');
   await ensureRouterApproved(providers, vault, env, tokenInHex, log);
 
@@ -874,7 +861,7 @@ export async function runSwap(
   // exactOutputSingle request. completeSwap returns the unspent remainder as change.
   const nonce = await evmNonce(env, vaultEvm);
   const before = await readVaultLedger(providers, env);
-  if (!before.initialized) throw new Error('vault not initialized');
+  if (!before.initialised) throw new Error('vault not initialised');
   const rid = predictCallRequestId(
     env,
     before,
@@ -901,6 +888,8 @@ export async function runSwap(
     color: hexToBytes(vaultTokenType(tokenInHex, env.contractAddress)),
     value: amountInMaximum,
   };
+
+  env.assertActive();
 
   flow.set('proving');
   log('Submitting startSwap() (surrendering the tokenIn vault coin)...');
@@ -931,18 +920,21 @@ export async function runSwap(
   // 5. Settle: completeSwap mints the exact amountOut of tokenOut plus the unspent tokenIn as
   // change, or refund re-mints amountInMaximum if the EVM swap never executed.
   if (outcome.matchedFailureOutput) {
+    env.assertActive();
     flow.set('refunding');
-    log('Swap did not execute on EVM — refunding tokenIn...');
+    log('Swap did not execute on EVM. Refunding tokenIn...');
     await vault.callTx.refundSwap(
       requestIdBytes(rid),
       outcome.event,
       outcome.serializedOutput,
       rand32(),
     );
+    env.assertActive();
     flow.finishRefunded();
     log('Swap refunded (did not execute).');
     return;
   }
+  env.assertActive();
   flow.set('claim-proving');
   log('Settling completeSwap (minting shielded tokenOut + change)...');
   // Two coins are minted (the swapped output and the unspent change), each under its own
@@ -954,16 +946,17 @@ export async function runSwap(
     rand32(),
     rand32(),
   );
+  env.assertActive();
   flow.set('done');
   log(
-    `Swap complete — minted ${amountOut} tokenOut (spent ~${outcome.decoded?.amountIn ?? '?'} tokenIn).`,
+    `Swap complete. Minted ${amountOut} tokenOut (spent ~${outcome.decoded?.amountIn ?? '?'} tokenIn).`,
   );
 }
 
 // ===================== Aave lending (supply / redeem) =====================
 
 // The USDC allowance the vault granted the stataToken wrapper (owner = vault, spender = stataToken).
-async function stataAllowance(env: Env, vaultEvm: string): Promise<bigint> {
+async function stataAllowance(env: VaultSessionEnvironment, vaultEvm: string): Promise<bigint> {
   const token = new EthersContract(
     AAVE_USDC,
     ['function allowance(address,address) view returns (uint256)'],
@@ -972,14 +965,14 @@ async function stataAllowance(env: Env, vaultEvm: string): Promise<bigint> {
   return BigInt(await token.getFunction('allowance')(vaultEvm, STATA_USDC));
 }
 
-async function assertSupplyRequestOnLedger(providers: any, env: Env, rid: RequestIdHex) {
+async function assertSupplyRequestOnLedger(providers: any, env: VaultSessionEnvironment, rid: RequestIdHex) {
   const after = await readVaultLedger(providers, env);
   if (!toSignBidirectionalEventIndex(after.supplyEventMap).has(rid)) {
     throw new Error(`supply request ${rid} not on the ledger after startSupply()`);
   }
 }
 
-async function assertRedeemRequestOnLedger(providers: any, env: Env, rid: RequestIdHex) {
+async function assertRedeemRequestOnLedger(providers: any, env: VaultSessionEnvironment, rid: RequestIdHex) {
   const after = await readVaultLedger(providers, env);
   if (!toSignBidirectionalEventIndex(after.redeemEventMap).has(rid)) {
     throw new Error(`redeem request ${rid} not on the ledger after startRedeem()`);
@@ -991,7 +984,7 @@ async function assertRedeemRequestOnLedger(providers: any, env: Env, rid: Reques
 async function ensureStataApproved(
   providers: any,
   vault: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   log: (m: string) => void,
 ) {
   const vaultEvm = vaultAddress(env);
@@ -1001,7 +994,7 @@ async function ensureStataApproved(
   log('Approving the Aave stataUSDC wrapper for USDC (one-time)...');
   const nonce = await evmNonce(env, vaultEvm);
   const before = await readVaultLedger(providers, env);
-  if (!before.initialized) throw new Error('vault not initialized');
+  if (!before.initialised) throw new Error('vault not initialised');
   const rid = predictCallRequestId(
     env,
     before,
@@ -1038,7 +1031,7 @@ async function ensureStataApproved(
 export async function runSupply(
   providers: any,
   vault: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   identity: Identity,
   amount: bigint,
   log: (m: string) => void,
@@ -1046,15 +1039,18 @@ export async function runSupply(
   onRecord?: (rid: RequestIdHex, evmTxHash?: string) => void,
 ) {
   void identity;
+  env.assertActive();
   flow.start('supply');
   const vaultEvm = vaultAddress(env);
+
+  env.assertActive();
 
   flow.set('preparing');
   await ensureStataApproved(providers, vault, env, log);
 
   const nonce = await evmNonce(env, vaultEvm);
   const before = await readVaultLedger(providers, env);
-  if (!before.initialized) throw new Error('vault not initialized');
+  if (!before.initialised) throw new Error('vault not initialised');
   const rid = predictCallRequestId(
     env,
     before,
@@ -1073,6 +1069,8 @@ export async function runSupply(
     color: hexToBytes(vaultTokenType(AAVE_USDC, env.contractAddress)),
     value: amount,
   };
+
+  env.assertActive();
 
   flow.set('proving');
   log('Submitting startSupply() (surrendering USDC to lend)...');
@@ -1094,18 +1092,21 @@ export async function runSupply(
   onRecord?.(rid, outcome.evmTxHash);
 
   if (outcome.matchedFailureOutput) {
+    env.assertActive();
     flow.set('refunding');
-    log('Supply did not execute on EVM — refunding USDC...');
+    log('Supply did not execute on EVM. Refunding USDC...');
     await vault.callTx.refundSupply(
       requestIdBytes(rid),
       outcome.event,
       outcome.serializedOutput,
       rand32(),
     );
+    env.assertActive();
     flow.finishRefunded();
     log('Supply refunded (did not execute).');
     return;
   }
+  env.assertActive();
   flow.set('claim-proving');
   log('Settling completeSupply (minting shielded stataUSDC)...');
   await vault.callTx.completeSupply(
@@ -1114,8 +1115,9 @@ export async function runSupply(
     outcome.serializedOutput,
     rand32(),
   );
+  env.assertActive();
   flow.set('done');
-  log(`Supply complete — minted ${outcome.decoded?.shares ?? '?'} stataUSDC shares.`);
+  log(`Supply complete. Minted ${outcome.decoded?.shares ?? '?'} stataUSDC shares.`);
   return (outcome.decoded?.shares ?? null) as bigint | null;
 }
 
@@ -1125,7 +1127,7 @@ export async function runSupply(
 export async function runRedeem(
   providers: any,
   vault: any,
-  env: Env,
+  env: VaultSessionEnvironment,
   identity: Identity,
   shares: bigint,
   log: (m: string) => void,
@@ -1133,13 +1135,16 @@ export async function runRedeem(
   onRecord?: (rid: RequestIdHex, evmTxHash?: string) => void,
 ) {
   void identity;
+  env.assertActive();
   flow.start('redeem');
   const vaultEvm = vaultAddress(env);
+
+  env.assertActive();
 
   flow.set('proving');
   const nonce = await evmNonce(env, vaultEvm);
   const before = await readVaultLedger(providers, env);
-  if (!before.initialized) throw new Error('vault not initialized');
+  if (!before.initialised) throw new Error('vault not initialised');
   const rid = predictCallRequestId(
     env,
     before,
@@ -1182,18 +1187,21 @@ export async function runRedeem(
   onRecord?.(rid, outcome.evmTxHash);
 
   if (outcome.matchedFailureOutput) {
+    env.assertActive();
     flow.set('refunding');
-    log('Redeem did not execute on EVM — refunding stataUSDC...');
+    log('Redeem did not execute on EVM. Refunding stataUSDC...');
     await vault.callTx.refundRedeem(
       requestIdBytes(rid),
       outcome.event,
       outcome.serializedOutput,
       rand32(),
     );
+    env.assertActive();
     flow.finishRefunded();
     log('Redeem refunded (did not execute).');
     return;
   }
+  env.assertActive();
   flow.set('claim-proving');
   log('Settling completeRedeem (minting shielded USDC)...');
   await vault.callTx.completeRedeem(
@@ -1202,7 +1210,8 @@ export async function runRedeem(
     outcome.serializedOutput,
     rand32(),
   );
+  env.assertActive();
   flow.set('done');
-  log(`Redeem complete — minted ${outcome.decoded?.assets ?? '?'} USDC.`);
+  log(`Redeem complete. Minted ${outcome.decoded?.assets ?? '?'} USDC.`);
   return (outcome.decoded?.assets ?? null) as bigint | null;
 }

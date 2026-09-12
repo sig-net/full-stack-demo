@@ -1,73 +1,66 @@
 import { erc20Balance, vaultTokenType, type Env } from './vault';
 import { fetchErc20Decimals } from '@/lib/constants/token-metadata';
+import type { AppVaultProviders } from './vault-providers';
 
-export interface MidnightTokenBalance {
-  vaultUnits: bigint; // shielded vault-token balance (Midnight side)
-  depositUnits: bigint; // ERC-20 at the deposit address (Sepolia)
-  vaultPoolUnits: bigint; // ERC-20 pool at the vault payout address
-  decimals: number;
+export interface VaultTokenBalance {
+  vaultUnits: bigint | null;
+  depositUnits: bigint | null;
+  vaultPoolUnits: bigint | null;
+  decimals: number | null;
 }
 
-export interface MidnightBalances {
-  night: bigint;
-  dust: bigint; // pays Midnight fees
-  perToken: Record<string, MidnightTokenBalance>; // key: erc20 address (lowercase)
+export interface VaultBalances {
+  night: bigint | null;
+  dust: bigint | null;
+  perToken: Record<string, VaultTokenBalance>;
 }
 
-// Per supported ERC-20: the shielded vault-token balance (Midnight) plus the real Sepolia
-// balances at the derived deposit/vault addresses. NIGHT + dust are wallet-wide.
 export async function readBalances(
-  providers: any,
+  providers: AppVaultProviders,
   env: Env,
   tokens: string[],
   depAddr: string,
   vAddr: string,
-): Promise<MidnightBalances> {
+): Promise<VaultBalances> {
   const src = providers.balancesSource;
-  let night = 0n;
-  let dust = 0n;
-  let shielded: Record<string, any> = {};
-  try {
-    const [d, unsh, sh] = await Promise.all([src.dust(), src.unshielded(), src.shielded()]);
-    dust = d;
-    night = Object.values(unsh ?? {}).reduce((a: bigint, b: any) => a + BigInt(b ?? 0), 0n);
-    shielded = sh ?? {};
-  } catch {
-    /* leave zero */
-  }
-  const shieldedByType = Object.fromEntries(
-    Object.entries(shielded).map(([k, v]) => [k.toLowerCase().replace(/^0x/, ''), v]),
-  );
-
-  const perToken: MidnightBalances['perToken'] = {};
-  for (const erc20 of tokens) {
-    let vaultUnits = 0n;
-    try {
-      vaultUnits = BigInt(shieldedByType[vaultTokenType(erc20, env.contractAddress)] ?? 0);
-    } catch {
-      /* leave zero */
-    }
-
-    let depositUnits = 0n;
-    let vaultPoolUnits = 0n;
-    try {
-      [depositUnits, vaultPoolUnits] = await Promise.all([
-        depAddr ? erc20Balance(env.evmRpcUrl, erc20, depAddr) : Promise.resolve(0n),
-        vAddr ? erc20Balance(env.evmRpcUrl, erc20, vAddr) : Promise.resolve(0n),
+  const [dust, unshielded, shielded] = await Promise.all([
+    src.dust().catch(() => null),
+    src.unshielded().catch(() => null),
+    src.shielded().catch(() => null),
+  ]);
+  const night =
+    unshielded === null
+      ? null
+      : Object.values(unshielded).reduce((a, b) => a + b, 0n);
+  const shieldedByType =
+    shielded === null
+      ? null
+      : Object.fromEntries(
+          Object.entries(shielded).map(([key, value]) => [
+            key.toLowerCase().replace(/^0x/, ''),
+            value,
+          ]),
+        );
+  const entries = await Promise.all(
+    tokens.map(async erc20 => {
+      const [depositUnits, vaultPoolUnits, decimals] = await Promise.all([
+        depAddr
+          ? erc20Balance(env.evmRpcUrl, erc20, depAddr).catch(() => null)
+          : null,
+        vAddr
+          ? erc20Balance(env.evmRpcUrl, erc20, vAddr).catch(() => null)
+          : null,
+        fetchErc20Decimals(erc20).catch(() => null),
       ]);
-    } catch {
-      /* keep zero */
-    }
-
-    // Decimals fetched on-chain (cached), never hardcoded.
-    let decimals = 18;
-    try {
-      decimals = await fetchErc20Decimals(erc20);
-    } catch {
-      /* fall back */
-    }
-    perToken[erc20.toLowerCase()] = { vaultUnits, depositUnits, vaultPoolUnits, decimals };
-  }
-
-  return { night, dust, perToken };
+      const vaultUnits =
+        shieldedByType === null
+          ? null
+          : (shieldedByType[vaultTokenType(erc20, env.contractAddress)] ?? 0n);
+      return [
+        erc20.toLowerCase(),
+        { vaultUnits, depositUnits, vaultPoolUnits, decimals },
+      ] as const;
+    }),
+  );
+  return { night, dust, perToken: Object.fromEntries(entries) };
 }

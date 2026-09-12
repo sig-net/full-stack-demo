@@ -1,6 +1,3 @@
-// Seed-wallet plumbing, trimmed from midnight-examples packages/lib (the
-// wallet-sdk-only pieces): key derivation, WalletFacade construction, and the
-// midnight-js provider adapters.
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { HDWallet, Roles } from '@midnightntwrk/wallet-sdk-hd';
 import {
@@ -8,6 +5,10 @@ import {
   WalletEntrySchema,
   WalletFacade,
 } from '@midnightntwrk/wallet-sdk-facade';
+import { ApiPromise, WsProvider } from '@polkadot/api';
+import { Effect } from 'effect';
+import { makeConfig, NodeClient, PolkadotNodeClient } from '@midnightntwrk/wallet-sdk-node-client/effect';
+import { SerializedTransaction } from '@midnightntwrk/wallet-sdk-abstractions';
 import { ShieldedWallet } from '@midnightntwrk/wallet-sdk-shielded';
 import { DustWallet } from '@midnightntwrk/wallet-sdk-dust-wallet';
 import {
@@ -32,15 +33,7 @@ import type { ProvingKeyMaterial, ProvingProvider } from '@midnightntwrk/ledger-
 
 export type { WalletFacade } from '@midnightntwrk/wallet-sdk-facade';
 
-export type NetworkId = 'undeployed' | 'stagenet' | 'preview' | 'preprod' | 'mainnet';
-
-export interface MidnightNodeConfig {
-  readonly networkId: NetworkId;
-  readonly indexerUrl: string;
-  readonly indexerWsUrl: string;
-  readonly nodeUrl: string;
-  readonly proofServerUrl: string;
-}
+import type { NetworkId, MidnightNodeConfig } from '../config/midnight';
 
 /** The live key material for one account. Reused for signing / balancing. */
 export interface AccountKeys {
@@ -50,7 +43,7 @@ export interface AccountKeys {
 }
 
 // Fee overhead: the wallet sdk prices a proof-erased tx while the node prices
-// real proof bytes; without this the node rejects with BalanceCheckOverspend.
+// real proof bytes. The overhead prevents BalanceCheckOverspend.
 // Mirrors @sig-net/midnight-contract-deploy's wallet plumbing.
 const COST_PARAMETERS = {
   additionalFeeOverhead: 50_000_000_000_000n,
@@ -87,18 +80,9 @@ export function deriveAccountKeys(seed: string, networkId: NetworkId): AccountKe
   };
 }
 
-/** Serialized per-wallet checkpoints for fast resume. */
-export interface SerializedWalletState {
-  shielded: string;
-  unshielded: string;
-  dust: string;
-}
-
-/** Construct (not start) the WalletFacade; resume from `restore` when given. */
 export function initialiseWalletFacade(
   keys: AccountKeys,
   config: MidnightNodeConfig,
-  restore?: SerializedWalletState,
 ): Promise<WalletFacade> {
   return WalletFacade.init({
     configuration: {
@@ -113,18 +97,67 @@ export function initialiseWalletFacade(
       costParameters: COST_PARAMETERS,
       txHistoryStorage: new InMemoryTransactionHistoryStorage(WalletEntrySchema, mergeWalletEntries),
     },
+    // Node-client beta.2 disconnects after metadata and races its first submission.
+    // Remove this transport ownership when its factory waits for a completed close.
+    submissionService: cfg => {
+      let closed = false;
+      let closing: Promise<void> | undefined;
+      const pending = new Map<AbortController, () => Promise<void>>();
+      return {
+        submitTransaction: (async (
+          transaction: Parameters<WalletFacade['submissionService']['submitTransaction']>[0],
+          waitForStatus: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
+        ) => {
+          if (closed) throw new Error('Wallet disconnected.');
+          const abort = new AbortController();
+          const provider = new WsProvider(cfg.relayURL.toString(), false);
+          const api = new ApiPromise({ provider, noInitWarn: true, throwOnConnect: true });
+          let disconnecting: Promise<void> | undefined;
+          const disconnect = () => disconnecting ??= api.disconnect();
+          pending.set(abort, disconnect);
+          const timer = setTimeout(() => abort.abort(), 120_000);
+          try {
+            await Effect.runPromise(Effect.tryPromise(async () => {
+              await provider.connect();
+              await api.isReadyOrError;
+            }), { signal: abort.signal });
+            clearTimeout(timer);
+            if (closed) throw new Error('Wallet disconnected.');
+            const client = new PolkadotNodeClient(makeConfig({ nodeURL: cfg.relayURL }), api);
+            return await Effect.runPromise(
+              NodeClient.sendMidnightTransactionAndWait(
+                SerializedTransaction.from(transaction), waitForStatus,
+              ).pipe(Effect.provideService(NodeClient.NodeClient, client)),
+              { signal: abort.signal },
+            );
+          } catch (error) {
+            if (abort.signal.aborted)
+              throw new Error(closed
+                ? 'Wallet disconnected.'
+                : 'Midnight node connection timed out. Check local services and retry.');
+            throw error;
+          } finally {
+            clearTimeout(timer);
+            await disconnect();
+            pending.delete(abort);
+          }
+        }) as WalletFacade['submissionService']['submitTransaction'],
+        close: () => {
+          closed = true;
+          closing ??= Promise.all([...pending].map(async ([abort, disconnect]) => {
+            abort.abort();
+            await disconnect();
+          })).then(() => {});
+          return closing;
+        },
+      };
+    },
     shielded: cfg =>
-      restore
-        ? ShieldedWallet(cfg).restore(restore.shielded)
-        : ShieldedWallet(cfg).startWithSecretKeys(keys.shieldedSecretKeys),
+      ShieldedWallet(cfg).startWithSecretKeys(keys.shieldedSecretKeys),
     unshielded: cfg =>
-      restore
-        ? UnshieldedWallet(cfg).restore(restore.unshielded)
-        : UnshieldedWallet(cfg).startWithPublicKey(UnshieldedPublicKey.fromKeyStore(keys.unshieldedKeystore)),
+      UnshieldedWallet(cfg).startWithPublicKey(UnshieldedPublicKey.fromKeyStore(keys.unshieldedKeystore)),
     dust: cfg =>
-      restore
-        ? DustWallet(cfg).restore(restore.dust)
-        : DustWallet(cfg).startWithSecretKey(keys.dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
+      DustWallet(cfg).startWithSecretKey(keys.dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
   });
 }
 
@@ -153,11 +186,11 @@ export function createWalletAndMidnightProvider(
 }
 
 /**
- * Proof provider whose key resolution spans a SET of compiled contracts — a
+ * Proof provider whose key resolution spans a SET of compiled contracts: a
  * cross-contract call (vault -> signet) proves the whole call tree, so both zk
  * roots must resolve. Also grafts on the `lookupKey` that ledger-v9 1.0.0-rc.3
  * requires but midnight-js 5.0.0-beta.4's httpClientProofProvider (built
- * against rc.2) lacks; drop once midnight-js catches up.
+ * against rc.2) lacks. Drop once midnight-js catches up.
  */
 export function createCrossContractProofServerProvider(
   proofServerUrl: string,
@@ -174,7 +207,7 @@ export function createCrossContractProofServerProvider(
   const lookupKey = async (keyLocation: string): Promise<ProvingKeyMaterial | undefined> => {
     const resolved = await registry.resolveKeyLocation(keyLocation);
     if (resolved !== undefined) return zkConfigToProvingKeyMaterial(resolved);
-    // Bare circuit names: try each provider; protocol builtins resolve undefined.
+    // Bare circuit names: try each provider. Protocol builtins resolve undefined.
     for (const provider of zkConfigProviders) {
       try {
         return zkConfigToProvingKeyMaterial(await provider.get(keyLocation));

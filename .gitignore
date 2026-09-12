@@ -47,5 +47,8 @@ next-env.d.ts
 
 # Midnight zk assets laid out by `yarn zk-assets` (prover keys are 100-280 MB each)
 public/zk/
+public/zk.stage-*/
+public/zk.previous/
+public/zk.prepare.lock
 
 *scratch*

@@ -21,6 +21,8 @@ interface DepositAddressProps {
   network: NetworkData;
   depositAddress: string;
   isSubmitting: boolean;
+  showContinue?: boolean;
+  canContinue: boolean;
   onContinue: () => void;
 }
 
@@ -29,6 +31,8 @@ export function DepositAddress({
   network,
   depositAddress,
   isSubmitting,
+  showContinue = true,
+  canContinue,
   onContinue,
 }: DepositAddressProps) {
   const { isCopied, copyToClipboard } = useCopyToClipboard();
@@ -134,23 +138,27 @@ export function DepositAddress({
         </Popover>
       </div>
 
-      <div className='flex w-full justify-center'>
-        <Button
-          onClick={onContinue}
-          variant='secondary'
-          disabled={isSubmitting}
-          className={cn(isSubmitting ? 'cursor-not-allowed' : 'cursor-pointer')}
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className='h-4 w-4 animate-spin' />
-              Notifying...
-            </>
-          ) : (
-            "I've sent the tokens"
-          )}
-        </Button>
-      </div>
+      {showContinue && (
+        <div className='flex w-full justify-center'>
+          <Button
+            onClick={onContinue}
+            variant='secondary'
+            disabled={isSubmitting || !canContinue}
+            className={cn(
+              isSubmitting ? 'cursor-not-allowed' : 'cursor-pointer',
+            )}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className='h-4 w-4 animate-spin' />
+                Notifying...
+              </>
+            ) : (
+              "I've sent the tokens"
+            )}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

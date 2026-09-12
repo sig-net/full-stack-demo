@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Wallet, LogOut } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -13,92 +13,119 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { formatAddress } from '@/lib/address-utils';
-import { useMidnightWallet } from '@/providers/midnight-context';
+import { useVault } from '@/providers/vault-context';
+import { EvmWalletButton } from './evm-wallet-button';
+import { VaultIdentityButton } from './vault-identity-button';
+import { useMidnightConnection } from '@/providers/midnight-wallet-context';
 
 export function WalletButton() {
   const [modalOpen, setModalOpen] = useState(false);
-  const midnight = useMidnightWallet();
-
-  const openModal = () => setModalOpen(true);
-
-  const connectMidnight = () => {
-    midnight.connect().catch((e: unknown) => {
-      toast.error(
-        e instanceof Error ? e.message : 'Failed to start developer wallet',
-      );
-    });
-    setModalOpen(false);
+  const [seed, setSeed] = useState('');
+  const attempt = useRef(0);
+  useEffect(
+    () => () => {
+      attempt.current += 1;
+    },
+    [],
+  );
+  const vault = useVault();
+  const connection = useMidnightConnection();
+  const openChanged = (open: boolean) => {
+    setModalOpen(open);
+    if (!open) setSeed('');
   };
 
-  if (midnight.connecting) {
-    return (
-      <Button disabled>
-        <Wallet className='mr-2 h-4 w-4' />
-        {midnight.connecting && midnight.syncStatus
-          ? `Connecting… ${midnight.syncStatus}`
-          : 'Connecting...'}
-      </Button>
-    );
-  }
-
-  if (midnight.connected) {
-    const label = `Dev · ${formatAddress(midnight.shieldedAddress, 4, 4)}`;
-    return (
-      <div className='flex items-center gap-2'>
-        <Button variant='outline' className='gap-2 font-medium'>
-          <Wallet className='h-4 w-4' />
-          {label}
-        </Button>
-        <Button
-          variant='outline'
-          onClick={() => midnight.disconnect()}
-          className='border-red-200 bg-red-50 font-medium text-red-600'
-          title='Disconnect wallet'
-        >
-          <LogOut className='h-4 w-4' />
-        </Button>
-      </div>
-    );
-  }
+  const connectMidnight = () => {
+    const current = ++attempt.current;
+    void connection.installSeedWallet(seed).catch((error: unknown) => {
+      if (current !== attempt.current) return;
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to connect Midnight wallet',
+      );
+    });
+    openChanged(false);
+  };
 
   return (
     <>
-      <Button onClick={openModal} className='font-medium'>
-        <Wallet className='mr-2 h-4 w-4' />
-        Connect Wallet
-      </Button>
-
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+      <div className='flex items-center gap-2'>
+        <VaultIdentityButton />
+        <EvmWalletButton />
+        <Button onClick={() => openChanged(true)} className='font-medium'>
+          <Wallet className='mr-2 h-4 w-4' />
+          {connection.connecting
+            ? `Connecting… ${connection.syncStatus}`
+            : connection.wallet
+              ? `Midnight · ${formatAddress(connection.wallet.shieldedAddress, 4, 4)}`
+              : 'Connect Wallet'}
+        </Button>
+        {(connection.wallet || connection.connecting) && (
+          <Button
+            variant='outline'
+            onClick={() => {
+              attempt.current += 1;
+              vault.disconnect();
+            }}
+            title='Disconnect wallet'
+            aria-label='Disconnect wallet'
+          >
+            <LogOut className='h-4 w-4' />
+          </Button>
+        )}
+      </div>
+      {connection.wallet && vault.status === 'missing-identity' && (
+        <p role='status'>
+          Midnight connected. Set a vault identity to load the vault.
+        </p>
+      )}
+      {vault.status === 'loading' && <p role='status'>Loading vault…</p>}
+      {vault.error && (
+        <div
+          role='alert'
+          className='text-destructive flex items-center gap-2 text-sm'
+        >
+          <span>{vault.error}</span>
+          <Button variant='outline' onClick={vault.retry}>
+            Retry vault
+          </Button>
+        </div>
+      )}
+      <Dialog open={modalOpen} onOpenChange={openChanged}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Connect a Wallet</DialogTitle>
+            <DialogTitle>
+              {connection.wallet || connection.connecting
+                ? 'Replace Midnight wallet'
+                : 'Connect Midnight wallet'}
+            </DialogTitle>
             <DialogDescription>
-              Select a wallet to connect to this app.
+              Paste your hexadecimal seed (16–64 bytes). It stays in this page’s
+              memory. Refreshing requires you to enter it again.
             </DialogDescription>
           </DialogHeader>
-
-          <ul className='flex flex-col gap-1.5'>
-            <li key='dev-seed-wallet'>
-              <button
-                type='button'
-                onClick={connectMidnight}
-                disabled={midnight.connecting}
-                className='flex w-full cursor-pointer items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50'
-              >
-                <div className='flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-bold text-white'>
-                  D
-                </div>
-                <span className='flex flex-col'>
-                  <span className='text-sm font-medium text-gray-900'>
-                    Developer wallet (Midnight)
-                  </span>
-                  <span className='text-xs text-gray-500'>
-                    In-app seed wallet · ledger-9 · Sepolia
-                  </span>
-                </span>
-              </button>
-            </li>
-          </ul>
+          <form
+            onSubmit={event => {
+              event.preventDefault();
+              connectMidnight();
+            }}
+            className='flex flex-col gap-3'
+          >
+            <label htmlFor='midnight-seed'>Midnight seed</label>
+            <Input
+              id='midnight-seed'
+              type='password'
+              autoComplete='off'
+              spellCheck={false}
+              value={seed}
+              onChange={event => setSeed(event.target.value)}
+              placeholder='Hexadecimal seed'
+            />
+            <Button type='submit' disabled={!seed.trim()}>
+              Connect seed wallet
+            </Button>
+          </form>
         </DialogContent>
       </Dialog>
     </>

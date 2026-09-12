@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 
+import { getEvmChainConfig } from '@/lib/config/evm';
 import { stataAssetsPerShare } from '@/lib/midnight/evm-stata';
 
 // CoinGecko API for token prices
@@ -61,12 +62,11 @@ async function fetchTokenPrices(
   // what it redeems for — assets per share, read on-chain, times the USDC price.
   if (
     symbols.some(s => s.toUpperCase() === 'STATAUSDC') &&
-    prices.USDC &&
-    process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL
+    prices.USDC
   ) {
     try {
       const rate = await stataAssetsPerShare(
-        process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL,
+        getEvmChainConfig().rpcUrl,
       );
       prices.STATAUSDC = {
         symbol: 'stataUSDC',

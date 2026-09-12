@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { TruncatedText } from '@/components/ui/truncated-text';
 import { useMidnightTransactions } from '@/hooks/use-midnight-transactions';
-import { useMidnightWallet } from '@/providers/midnight-context';
+import { useVault } from '@/providers/vault-context';
 import type { MidnightTxRecord } from '@/lib/midnight/tx-history';
 
 import { CryptoIcon } from '../balance-display/crypto-icon';
@@ -184,7 +184,7 @@ function StatusBadge({ status }: StatusBadgeProps) {
 }
 
 export function ActivityListTable({ className }: ActivityListTableProps) {
-  const midnight = useMidnightWallet();
+  const vault = useVault();
   const [selectedTransaction, setSelectedTransaction] =
     useState<ActivityTransaction | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -270,7 +270,7 @@ export function ActivityListTable({ className }: ActivityListTableProps) {
           ) : (
             <TableRow>
               <TableCell colSpan={5} className='py-8 text-center text-gray-500'>
-                {midnight.connected
+                {vault.binding !== null
                   ? 'No transactions found. Deposit, withdraw, or swap to see activity.'
                   : 'Connect your wallet to view transaction activity.'}
               </TableCell>

@@ -20,6 +20,7 @@ interface FormData {
 
 interface AmountInputProps {
   availableTokens: WithdrawToken[];
+  transactionReady: boolean;
   onSubmit: (data: {
     token: WithdrawToken;
     amount: string;
@@ -30,6 +31,7 @@ interface AmountInputProps {
 
 export function AmountInput({
   availableTokens,
+  transactionReady,
   onSubmit,
   preSelectedToken,
 }: AmountInputProps) {
@@ -160,7 +162,11 @@ export function AmountInput({
         type='submit'
         variant='secondary'
         disabled={
-          isSubmitting || !selectedToken || !watchedAmount || !watchedAddress
+          !transactionReady ||
+          isSubmitting ||
+          !selectedToken ||
+          !watchedAmount ||
+          !watchedAddress
         }
         className={cn(
           'h-12 w-full text-base font-semibold',

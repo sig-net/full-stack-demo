@@ -12,7 +12,12 @@ import {
   gasTopUpRequestSchema,
 } from '@/lib/evm/gas-topup-request';
 import { getEthereumProvider } from '@/lib/rpc';
-import { midnightEnv, midnightIndexerConfig } from '@/lib/midnight/env';
+import { createVaultEnvironment } from '@/lib/midnight/env';
+import { getEvmChainConfig } from '@/lib/config/evm';
+import {
+  getMidnightChainConfig,
+  midnightIndexerConfig,
+} from '@/lib/config/midnight';
 import {
   derivePathAddress,
   resolvePathRendering,
@@ -34,31 +39,37 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const midnightConfig = getMidnightChainConfig();
+    const evmConfig = getEvmChainConfig();
+    const vaultEnvironment = createVaultEnvironment(midnightConfig, evmConfig);
+    void vaultEnvironment.contractAddress;
+    void vaultEnvironment.mpcSecpPub;
     const publicDataProvider = indexerPublicDataProvider(
-      midnightIndexerConfig(),
+      midnightIndexerConfig(midnightConfig),
     );
     let recipientAddress;
     try {
       const state = await readVaultLedger(
         publicDataProvider,
-        midnightEnv.contractAddress,
+        vaultEnvironment.contractAddress,
       );
       const rendering = resolvePathRendering(
-        midnightEnv,
+        vaultEnvironment,
         bytesToHex(state.vaultEvmAddress),
       );
       const path =
         parsed.data.recipient.kind === 'vault'
           ? VAULT_PATH_HEX
           : parsed.data.recipient.path;
-      recipientAddress = derivePathAddress(midnightEnv, path, rendering);
+      recipientAddress = derivePathAddress(vaultEnvironment, path, rendering);
     } finally {
       await publicDataProvider.dispose();
     }
 
     const allowance = GAS_TOPUP_ALLOWANCES[parsed.data.operation];
-    const client = getEthereumProvider();
+    const client = getEthereumProvider(evmConfig);
     const { topUpTxHash, topUpAmount } = await ensureGasForTransaction(
+      evmConfig,
       client,
       recipientAddress,
       allowance.gasLimit,

@@ -1,6 +1,6 @@
 import type { Hex } from 'viem';
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
-import { getFullEnv } from '@/lib/config/env.config';
+import { getRelayerPrivateKey } from '@/lib/config/relayer';
 
 let cachedEthAccount: PrivateKeyAccount | null = null;
 
@@ -8,7 +8,7 @@ export function getRelayerEthAccount(): PrivateKeyAccount {
   if (cachedEthAccount) return cachedEthAccount;
 
   cachedEthAccount = privateKeyToAccount(
-    getFullEnv().RELAYER_PRIVATE_KEY as Hex,
+    getRelayerPrivateKey() as Hex,
   );
   return cachedEthAccount;
 }

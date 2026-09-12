@@ -1,5 +1,7 @@
+import { queryClient } from '@/lib/query-client';
 import { erc20Abi, type Hex } from 'viem';
 
+import { getEvmChainConfig } from '@/lib/config/evm';
 import { getEthereumProvider } from '@/lib/rpc';
 
 // Token display info - decimals come from on-chain fetching
@@ -128,30 +130,29 @@ export function getErc20Token(address: string): TokenConfig | undefined {
   return ERC20_TOKEN_MAP.get(address.toLowerCase());
 }
 
-// In-memory cache for token decimals (immutable, never expires)
-const decimalsCache = new Map<string, number>();
-
-// Fetch ERC20 decimals from chain
-export async function fetchErc20Decimals(address: string): Promise<number> {
+export async function fetchErc20Decimals(
+  address: string,
+  config = getEvmChainConfig(),
+): Promise<number> {
   if (!isErc20Allowed(address)) {
     throw new Error(`Token not supported: ${address}`);
   }
 
   const normalizedAddress = address.toLowerCase();
 
-  const cached = decimalsCache.get(normalizedAddress);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const client = getEthereumProvider();
-  const decimals = await client.readContract({
-    address: address as Hex,
-    abi: erc20Abi,
-    functionName: 'decimals',
+  return queryClient.fetchQuery({
+    queryKey: [
+      'erc20-decimals',
+      config.chainId,
+      config.rpcUrl,
+      normalizedAddress,
+    ],
+    staleTime: Infinity,
+    queryFn: () =>
+      getEthereumProvider(config).readContract({
+        address: address as Hex,
+        abi: erc20Abi,
+        functionName: 'decimals',
+      }),
   });
-
-  decimalsCache.set(normalizedAddress, decimals);
-
-  return decimals;
 }

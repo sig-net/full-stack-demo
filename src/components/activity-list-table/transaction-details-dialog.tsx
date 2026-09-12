@@ -41,6 +41,11 @@ export function TransactionDetailsDialog({
               {transaction.failureReason}
             </p>
           )}
+          {transaction.transactionHash && (
+            <p className='break-all'>
+              Transaction: {transaction.transactionHash}
+            </p>
+          )}
           {transaction.explorerUrl && (
             <a
               href={transaction.explorerUrl}

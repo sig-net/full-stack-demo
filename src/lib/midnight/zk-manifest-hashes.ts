@@ -4,7 +4,7 @@
 
 /** `<origin>/compiler/contract-manifest.json`: the vault's 17 circuits. */
 export const VAULT_ZK_MANIFEST_SHA256 =
-  'f97e17f47e5c1e8443c4d28ef3b7f593f349dde2ac511fcb7558c010a5a2ce8f';
+  '7be79e00f140aeed029f46535b0b30a983d7eae6d279ae3f123aebc566942c6b';
 
 /** `<origin>/signet/compiler/contract-manifest.json`: the signet contract the vault calls. */
 export const SIGNET_ZK_MANIFEST_SHA256 =

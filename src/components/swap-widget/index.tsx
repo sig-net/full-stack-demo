@@ -1,16 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowDown, Settings2 } from 'lucide-react';
-import { formatUnits, parseUnits } from 'viem';
+import { formatUnits } from 'viem';
+import { parseTokenAmount } from '@/lib/utils/token-amount';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/utils';
 import { TokenAmountDisplay } from '@/components/ui/token-amount-display';
 import { MIDNIGHT_TOKENS } from '@/lib/constants/token-metadata';
-import { useMidnightWallet } from '@/providers/midnight-context';
+import { useVault } from '@/providers/vault-context';
+import { useVaultBalances } from '@/providers/vault-balances-context';
+import { useVaultOperations } from '@/providers/vault-operations-context';
 import { useMidnightProgress } from '@/hooks/use-midnight-progress';
-import { midnightEnv } from '@/lib/midnight/env';
+import { getEvmChainConfig } from '@/lib/config/evm';
 import {
   discoverSwappablePairs,
   pairKey,
@@ -31,106 +35,73 @@ interface SwapWidgetProps {
   className?: string;
 }
 
-// Slippage presets in bps (0.1% / 0.5% / 1%). The UI is a normal spend-in swap; on-chain it is
-// exactOutput, so slippage sets the guaranteed receive: amountOut = quotedOut * (1 - bps), bought
-// for up to the spend (amountInMaximum), with any unspent input refunded as change.
 const SLIPPAGE_PRESETS = [10n, 50n, 100n];
 const DEFAULT_SLIPPAGE_BPS = 100n;
 
 type TokenWithBalance = Token & { balance: string; units: bigint };
 
-// Swap uses the shielded vault-token balance (vaultUnits) as the spendable source, and
-// mints the swapped-to token back as a shielded coin. Midnight-only: the UI stays disabled
-// until the Midnight (Developer) wallet is connected, then draws from MIDNIGHT_TOKENS.
 export function SwapWidget({ className }: SwapWidgetProps) {
-  const midnight = useMidnightWallet();
+  const vault = useVault();
+  const { balances } = useVaultBalances();
+  const operations = useVaultOperations();
   const progress = useMidnightProgress();
 
   const [fromAmount, setFromAmount] = useState('');
   const [toAmount, setToAmount] = useState('');
   const [fromToken, setFromToken] = useState<TokenWithBalance | undefined>();
   const [toToken, setToToken] = useState<TokenWithBalance | undefined>();
-  // Local: whether THIS widget kicked off a swap. progress.active is the shared flow state
-  // (deposit/withdraw/swap all use one flow), so it can't distinguish a swap from a deposit.
   const [swapping, setSwapping] = useState(false);
-  // The Uniswap V3 fee tier discovered for the current pair (null = no pool at any tier).
-  const [fee, setFee] = useState<bigint | null>(null);
-  const [quoting, setQuoting] = useState(false);
   const [slippageBps, setSlippageBps] = useState<bigint>(DEFAULT_SLIPPAGE_BPS);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Which token pairs have a Uniswap pool (pairKey set; null while still discovering). Only
-  // tokens that pair with something are offered — a token with no pool anywhere is hidden.
-  const [swappablePairs, setSwappablePairs] = useState<Set<string> | null>(
-    null,
-  );
-
-  const enabled = midnight.connected;
-
-  // One entry per swappable Midnight token: shielded vault balance (spendable) + on-chain
-  // decimals. noSwap tokens (USDC.a) are excluded before pool discovery ever sees them.
-  const tokens: TokenWithBalance[] = useMemo(() => {
-    const perToken = midnight.balances?.perToken;
-    return MIDNIGHT_TOKENS.filter(t => !t.noSwap).map(t => {
-      const b = perToken?.[t.erc20Address.toLowerCase()];
-      const decimals = b?.decimals ?? 6;
-      const units = b?.vaultUnits ?? 0n;
-      return {
-        erc20Address: t.erc20Address,
-        symbol: t.symbol,
-        name: t.name,
-        decimals,
+  const enabled = vault.binding !== null;
+  const rpc = enabled ? getEvmChainConfig().rpcUrl : null;
+  const pairs = useQuery({
+    queryKey: ['vault-swap-pairs', rpc],
+    enabled: rpc !== null,
+    queryFn: () =>
+      discoverSwappablePairs(
+        rpc!,
+        MIDNIGHT_TOKENS.filter(token => !token.noSwap).map(
+          token => token.erc20Address,
+        ),
+      ),
+  });
+  const swappablePairs = pairs.isError ? null : (pairs.data ?? null);
+  const tokens: TokenWithBalance[] = MIDNIGHT_TOKENS.filter(
+    token => !token.noSwap,
+  ).flatMap(token => {
+    const balance = balances?.perToken[token.erc20Address.toLowerCase()];
+    if (balance?.decimals == null || balance.vaultUnits == null) return [];
+    return [
+      {
+        ...token,
         chain: 'midnight' as const,
-        units,
-        balance: formatUnits(units, decimals),
-      };
-    });
-  }, [midnight.balances]);
-
-  // Discover which pairs actually have a pool (once, on connect). Token addresses are static,
-  // so this doesn't depend on balances.
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    discoverSwappablePairs(
-      midnightEnv.evmRpcUrl,
-      MIDNIGHT_TOKENS.filter(t => !t.noSwap).map(t => t.erc20Address),
-    )
-      .then(pairs => !cancelled && setSwappablePairs(pairs))
-      .catch(() => !cancelled && setSwappablePairs(new Set()));
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled]);
-
-  // From = any token with a pool to something; To = tokens that pair with the current From.
-  const fromTokens = useMemo(
-    () =>
-      swappablePairs
-        ? tokens.filter(t =>
-            tokens.some(
-              o =>
-                o.erc20Address !== t.erc20Address &&
-                swappablePairs.has(pairKey(t.erc20Address, o.erc20Address)),
+        decimals: balance.decimals,
+        units: balance.vaultUnits,
+        balance: formatUnits(balance.vaultUnits, balance.decimals),
+      },
+    ];
+  });
+  const fromTokens = swappablePairs
+    ? tokens.filter(token =>
+        tokens.some(
+          other =>
+            other.erc20Address !== token.erc20Address &&
+            swappablePairs.has(pairKey(token.erc20Address, other.erc20Address)),
+        ),
+      )
+    : [];
+  const toTokens =
+    swappablePairs && fromToken
+      ? tokens.filter(
+          token =>
+            token.erc20Address !== fromToken.erc20Address &&
+            swappablePairs.has(
+              pairKey(fromToken.erc20Address, token.erc20Address),
             ),
-          )
-        : [],
-    [tokens, swappablePairs],
-  );
-  const toTokens = useMemo(
-    () =>
-      swappablePairs && fromToken
-        ? tokens.filter(
-            t =>
-              t.erc20Address !== fromToken.erc20Address &&
-              swappablePairs.has(
-                pairKey(fromToken.erc20Address, t.erc20Address),
-              ),
-          )
-        : [],
-    [tokens, swappablePairs, fromToken],
-  );
+        )
+      : [];
 
-  // Default the from/to selections to a valid swappable pair, preferring a From the user holds.
   useEffect(() => {
     if (!enabled || fromTokens.length === 0) return;
     setFromToken(prev =>
@@ -140,7 +111,6 @@ export function SwapWidget({ className }: SwapWidgetProps) {
     );
   }, [enabled, fromTokens]);
 
-  // Keep To a valid partner of the current From.
   useEffect(() => {
     if (toTokens.length === 0) return;
     setToToken(prev =>
@@ -150,85 +120,65 @@ export function SwapWidget({ className }: SwapWidgetProps) {
     );
   }, [toTokens]);
 
-  // Keep the from/to selections in sync with refreshed balances (same token id, new balance).
   const fromSel =
     fromToken && tokens.find(t => t.erc20Address === fromToken.erc20Address);
   const toSel =
     toToken && tokens.find(t => t.erc20Address === toToken.erc20Address);
 
-  // Normal swap UX: the user enters the SPEND (fromAmount); we quote across fee tiers (discovering
-  // the tier that actually has a pool — USDC/EURC is 0.05% but USDC/DAI may only exist at another
-  // tier) to show the expected receive in the to field. On-chain the swap is exactOutput; the min
-  // received is derived from slippage in runSwap. Best-effort estimate. Debounced, cancelled on change.
+  let quoteUnits: bigint | null = null;
+  try {
+    if (fromSel) quoteUnits = parseTokenAmount(fromAmount, fromSel.decimals);
+  } catch {
+    /* Invalid input disables the quote. */
+  }
+  const quote = useQuery({
+    queryKey: [
+      'vault-swap-quote',
+      vault.binding?.sessionId,
+      rpc,
+      fromSel?.erc20Address,
+      toSel?.erc20Address,
+      quoteUnits?.toString(),
+    ],
+    enabled:
+      enabled &&
+      !!fromSel &&
+      !!toSel &&
+      quoteUnits !== null &&
+      fromSel.erc20Address !== toSel.erc20Address,
+    staleTime: 10_000,
+    queryFn: () =>
+      quoteBestFeeExactInput(
+        rpc!,
+        fromSel!.erc20Address,
+        toSel!.erc20Address,
+        quoteUnits!,
+      ),
+  });
+  const fee = quote.isError ? null : (quote.data?.fee ?? null);
+  const quoting = quote.isFetching;
   useEffect(() => {
-    setFee(null);
-    if (
-      !enabled ||
-      !fromSel ||
-      !toSel ||
-      fromSel.erc20Address === toSel.erc20Address
-    ) {
-      setToAmount('');
-      return;
-    }
-    let amountIn: bigint;
-    try {
-      amountIn = parseUnits(fromAmount || '0', fromSel.decimals);
-    } catch {
-      setToAmount('');
-      return;
-    }
-    if (amountIn <= 0n) {
-      setToAmount('');
-      return;
-    }
-    let cancelled = false;
-    setQuoting(true);
-    const id = setTimeout(async () => {
-      try {
-        const best = await quoteBestFeeExactInput(
-          midnightEnv.evmRpcUrl,
-          fromSel.erc20Address,
-          toSel.erc20Address,
-          amountIn,
-        );
-        if (cancelled) return;
-        setFee(best?.fee ?? null);
-        setToAmount(
-          best ? formatUnits(best.amountOut, toSel.decimals) : '',
-        );
-      } catch {
-        if (!cancelled) {
-          setFee(null);
-          setToAmount('');
-        }
-      } finally {
-        if (!cancelled) setQuoting(false);
-      }
-    }, 400);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
-  }, [enabled, fromAmount, fromSel, toSel]);
+    setToAmount(
+      quote.data && !quote.isError && toSel
+        ? formatUnits(quote.data.amountOut, toSel.decimals)
+        : '',
+    );
+  }, [quote.data, quote.isError, toSel]);
 
-  // The user spends fromAmount of tokenIn (the swap burns it up front), so they must hold it.
   const amountValid = (() => {
     if (!fromSel || !toSel) return false;
     try {
-      const spend = parseUnits(fromAmount || '0', fromSel.decimals);
+      const spend = parseTokenAmount(fromAmount || '0', fromSel.decimals);
       return spend > 0n && spend <= fromSel.units;
     } catch {
       return false;
     }
   })();
 
-  // Whether a positive spend has been entered (for the "no pool" hint, which fires when a valid
-  // spend yields no tier — amountValid requires a successful quote so can't express it).
   const inEntered = (() => {
     if (!fromSel) return false;
     try {
-      return parseUnits(fromAmount || '0', fromSel.decimals) > 0n;
+      return parseTokenAmount(fromAmount || '0', fromSel.decimals) > 0n;
     } catch {
       return false;
     }
@@ -242,13 +192,15 @@ export function SwapWidget({ className }: SwapWidgetProps) {
     amountValid &&
     fee !== null &&
     !quoting &&
-    !progress.active;
+    !progress.active &&
+    !operations.busy &&
+    operations.ready;
 
   const handleSwap = () => {
     if (!canSwap || !fromSel || !toSel || fee === null) return;
-    const amountIn = parseUnits(fromAmount, fromSel.decimals);
+    const amountIn = parseTokenAmount(fromAmount, fromSel.decimals);
     setSwapping(true);
-    midnight
+    operations
       .swap(
         fromSel.erc20Address,
         toSel.erc20Address,
@@ -268,16 +220,26 @@ export function SwapWidget({ className }: SwapWidgetProps) {
 
   const noPool = inEntered && !quoting && fee === null;
   const buttonLabel = !enabled
-    ? 'Connect Midnight to swap'
-    : swappablePairs === null
-      ? 'Loading pools…'
-      : swapping
-        ? 'Swapping…'
-        : quoting
-          ? 'Fetching quote…'
-          : noPool
-            ? 'No pool for this pair'
-            : 'Swap';
+    ? vault.status === 'disconnected'
+      ? 'Connect Midnight to swap'
+      : vault.status === 'missing-identity'
+        ? 'Set a vault identity'
+        : vault.status === 'loading'
+          ? 'Loading vault…'
+          : 'Retry vault loading'
+    : pairs.isError
+      ? 'Pools unavailable'
+      : tokens.length === 0
+        ? 'Balances unavailable'
+        : swappablePairs === null
+          ? 'Loading pools…'
+          : swapping
+            ? 'Swapping…'
+            : quoting
+              ? 'Fetching quote…'
+              : noPool
+                ? 'No pool for this pair'
+                : 'Swap';
 
   return (
     <div
@@ -304,9 +266,9 @@ export function SwapWidget({ className }: SwapWidgetProps) {
           <DialogHeader>
             <DialogTitle>Swap settings</DialogTitle>
             <DialogDescription>
-              Max slippage — sets the minimum you receive for your spend. The
-              swap reverts on-chain if the output would fall more than this
-              below the quote.
+              Max slippage sets the minimum you receive for your spend. The swap
+              reverts on-chain if the output would fall more than this below the
+              quote.
             </DialogDescription>
           </DialogHeader>
           <div className='flex flex-wrap gap-2'>

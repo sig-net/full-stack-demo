@@ -1,20 +1,22 @@
 'use client';
 
+import { LocalWalletFunding } from '@/components/local-wallet-funding';
 import { NavigationHeader } from '@/components/navigation-header';
 import { BalanceSection } from '@/components/balance-section';
 import { SwapWidget } from '@/components/swap-widget';
 import { LendWidget } from '@/components/lend-widget';
 import { ActivityListTable } from '@/components/activity-list-table';
 import { EmptyStateWallet } from '@/components/empty-state-wallet';
-import { useMidnightWallet } from '@/providers/midnight-context';
+import { useVault } from '@/providers/vault-context';
 
 export default function Home() {
-  const midnight = useMidnightWallet();
-  const isConnected = midnight.connected;
+  const vault = useVault();
+  const isConnected = vault.binding !== null;
 
   return (
     <div className='gradient-bg-main min-h-screen w-full overflow-x-hidden'>
       <NavigationHeader />
+      <LocalWalletFunding />
 
       {!isConnected ? (
         <div className='mx-auto mt-16 max-w-full p-4 xl:container'>

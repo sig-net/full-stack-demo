@@ -1,3 +1,6 @@
+import { formatUnits } from 'viem';
+import { getEvmChainConfig } from '@/lib/config/evm';
+import { fetchErc20Decimals } from '@/lib/constants/token-metadata';
 // Aave ERC-4626 (stataToken) constants for the supply/redeem flows: the pinned Aave USDC
 // pair on Sepolia, the deposit/redeem/approve ABI shapes, the supply/redeem schemas, and the
 // contract-fixed routing. Mirrors evm-swap.ts for the lending leg.
@@ -38,31 +41,23 @@ export const REDEEM_OUTPUT_SCHEMA = '[{"name":"assets","type":"uint256"}]';
 /** MPC re-packs the decoded assets into a uint64 (byte-matches redeemRespondSchema, 35). */
 export const REDEEM_RESPOND_SCHEMA = '[{"name":"assets","type":"uint64"}]';
 
-/**
- * Assets (Aave USDC) that one stataUSDC share is currently worth, as a decimal number.
- *
- * The wrapper is non-rebasing: share balances never move and their value grows with accrued
- * interest, so a share is not one USDC and must not be priced as one. Both tokens use 6
- * decimals, so the ratio is unit-free.
- */
 export async function stataAssetsPerShare(evmRpcUrl: string): Promise<number> {
   const wrapper = new Contract(
     STATA_USDC,
     ['function convertToAssets(uint256 shares) view returns (uint256)'],
     evmProvider(evmRpcUrl),
   );
-  const ONE_SHARE = 1_000_000n; // 1 share at 6 decimals
-  const assets: bigint = await wrapper.getFunction('convertToAssets')(ONE_SHARE);
-  return Number(assets) / Number(ONE_SHARE);
+  const config = { ...getEvmChainConfig(), rpcUrl: evmRpcUrl };
+  const [shareDecimals, assetDecimals] = await Promise.all([
+    fetchErc20Decimals(STATA_USDC, config),
+    fetchErc20Decimals(AAVE_USDC, config),
+  ]);
+  const assets: bigint = await wrapper.getFunction('convertToAssets')(
+    10n ** BigInt(shareDecimals),
+  );
+  return Number(formatUnits(assets, assetDecimals));
 }
 
-/**
- * Current Aave supply APY for the underlying, as a decimal fraction (0.05 = 5%).
- *
- * Read from the pool the wrapper itself points at, so it stays correct if the deployment
- * moves. Aave stores the rate per second in ray (1e27); compounding it over a year gives the
- * APY their own UI shows.
- */
 const RAY = 10n ** 27n;
 const SECONDS_PER_YEAR = 31_536_000;
 export async function stataSupplyApy(evmRpcUrl: string): Promise<number> {

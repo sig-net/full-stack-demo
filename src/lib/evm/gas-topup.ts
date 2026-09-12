@@ -5,9 +5,9 @@ import {
   type Hex,
   type PublicClient,
 } from 'viem';
-import { sepolia } from 'viem/chains';
+import { sepolia } from '@/lib/config/evm';
 
-import { getEthSepoliaRpcUrl } from '@/lib/rpc';
+import type { EvmChainConfig } from '@/lib/config/evm';
 import { estimateFees } from '@/lib/evm/fees';
 import { getRelayerEthAccount } from '@/lib/utils/relayer-setup';
 
@@ -16,6 +16,7 @@ const MAX_TOPUP_ETH = parseEther('0.05');
 const ETH_TRANSFER_GAS = 21000n;
 
 async function sendGasTopUp(
+  config: EvmChainConfig,
   client: PublicClient,
   recipientAddress: Hex,
   deficit: bigint,
@@ -40,7 +41,7 @@ async function sendGasTopUp(
   const walletClient = createWalletClient({
     account,
     chain: sepolia,
-    transport: http(getEthSepoliaRpcUrl()),
+    transport: http(config.rpcUrl),
   });
 
   const txHash = await walletClient.sendTransaction({
@@ -71,6 +72,7 @@ function calculateTopUpAmount(deficit: bigint): bigint {
 }
 
 async function checkAndTopUp(
+  config: EvmChainConfig,
   client: PublicClient,
   targetAddress: Hex,
   gasLimit: bigint,
@@ -84,15 +86,21 @@ async function checkAndTopUp(
   }
 
   const deficit = totalCost - balance;
-  const { txHash, amount } = await sendGasTopUp(client, targetAddress, deficit);
+  const { txHash, amount } = await sendGasTopUp(
+    config,
+    client,
+    targetAddress,
+    deficit,
+  );
   return { topUpTxHash: txHash, topUpAmount: amount };
 }
 
 export async function ensureGasForTransaction(
+  config: EvmChainConfig,
   client: PublicClient,
   fromAddress: Hex,
   gasLimit: bigint,
   maxFeePerGas: bigint,
 ): Promise<{ topUpTxHash: Hex | null; topUpAmount: bigint }> {
-  return checkAndTopUp(client, fromAddress, gasLimit, maxFeePerGas);
+  return checkAndTopUp(config, client, fromAddress, gasLimit, maxFeePerGas);
 }
