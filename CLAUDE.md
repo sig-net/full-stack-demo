@@ -12,91 +12,8 @@ yarn lint:fix     # ESLint auto-fix
 yarn typecheck    # TypeScript type checking
 yarn format       # Prettier check
 yarn format:fix   # Prettier format
-yarn generate:idl # Regenerate Anchor IDL types from ../contract
 yarn zk-assets    # Regenerate + verify the Midnight zk assets under public/zk (needs the Compact toolchain)
 ```
-
-## Architecture Overview
-
-Cross-chain bridge frontend enabling ERC20 transfers between Solana and EVM chains using MPC signatures via Chain Signatures protocol.
-
-### Provider Hierarchy
-
-```text
-QueryClientProvider (TanStack Query)
-  └── WagmiProvider (EVM wallets)
-       └── ConnectionProvider (Solana RPC)
-            └── AppProvider (@solana/connector headless wallet)
-                 └── PendingTransactionsProvider
-                      └── App
-```
-
-### Key Layers
-
-**Service Layer** (`src/lib/services/`):
-
-- `CrossChainOrchestrator` - Coordinates MPC signature events with timeouts and backfill
-- `DepositService` / `WithdrawalService` - Build Solana instructions for bridge operations
-- `TokenBalanceService` - On-chain balance queries
-
-**Contract Clients** (`src/lib/contracts/`):
-
-- `DexContract` - Wraps Anchor program (deposit, claim, withdraw instructions)
-- `ChainSignaturesContract` - Listens for MPC `Signature` and `RespondBidirectional` events
-
-**Relayer** (`src/lib/relayer/`):
-
-- `handlers.ts` - Server-side `handleDeposit`/`handleWithdrawal` flows
-- `tx-registry.ts` - Redis-backed transaction tracking (7-day TTL)
-- `embedded-signer.ts` - MPC signer setup
-
-**EVM Layer** (`src/lib/evm/`):
-
-- `tx-builder.ts` - Builds ERC20 transfer transactions
-- `tx-submitter.ts` - Submits with retry logic
-- `gas-topup.ts` - Automatic gas funding when needed
-
-### Transaction Status Flow
-
-```text
-pending → balance_polling → gas_topup_pending → solana_pending →
-signature_pending → ethereum_pending → completing → completed|failed
-```
-
-Status tracked in Redis via `tx:{trackingId}` keys, polled by frontend every 2s.
-
-### Cross-Chain Flows
-
-**Deposit (EVM → Solana):**
-
-1. User sends ERC20 to derived deposit address
-2. `/api/notify-deposit` spawns background handler via `after()`
-3. Relayer polls for token arrival → gas topup if needed → builds EVM tx
-4. Waits for MPC signature event (30s backfill at timeout)
-5. Submits to Ethereum → calls `claimErc20` on Solana
-
-**Withdrawal (Solana → EVM):**
-
-1. Frontend submits `withdrawErc20` instruction
-2. `/api/notify-withdrawal` processes with pre-built EVM tx params
-3. Waits for MPC signature → submits to Ethereum
-4. Calls `completeWithdrawErc20` on Solana
-
-### PDA Derivation
-
-Centralized in `src/lib/constants/addresses.ts`:
-
-- `deriveVaultAuthorityPda(userPublicKey)` - Per-user vault
-- `derivePendingDepositPda(requestIdBytes)` - Pending deposit accounts
-- `derivePendingWithdrawalPda(requestIdBytes)` - Pending withdrawal accounts
-- `deriveUserBalancePda(userPublicKey, erc20AddressBytes)` - User token balances
-- `deriveEthereumAddress(path, requesterAddress, basePublicKey)` - Derives EVM address from MPC key
-
-### Query Keys & Cache Invalidation
-
-React Query keys in `src/lib/query-client.ts` via `queryKeys` object. Use `invalidateBalanceQueries()` helper for balance refreshes.
-
-Real-time updates via `useBridgeAutoRefetch` hook which subscribes to Solana program logs and invalidates queries on relevant instructions.
 
 ## Midnight Vault
 
@@ -117,20 +34,9 @@ Validated via Zod in `src/lib/config/env.config.ts`:
 - `getClientEnv()` - Client-safe vars (NEXT_PUBLIC_*)
 - `getFullEnv()` - Server-side only (includes secrets)
 
-Server-side requires: `RELAYER_PRIVATE_KEY` (JSON array), `REDIS_URL`, `REDIS_TOKEN`
-
-## API Routes
-
-All routes use `runtime: 'nodejs'` with `maxDuration: 300` for long-running relayer operations:
-
-- `/api/notify-deposit` - Trigger deposit monitoring
-- `/api/notify-withdrawal` - Process withdrawal
-- `/api/tx-status/[id]` - Poll transaction status
-- `/api/tx-list` - List user transactions
-
 ## Code Conventions
 
-- Path alias: `@/*` maps to project root
+- Path alias: `@/*` maps to `./src/*`
 - Unused variables must be prefixed with `_`
 - TypeScript strict mode with `noUncheckedIndexedAccess`
 - All pages are client components (`'use client'`) with `export const dynamic = 'force-dynamic'`

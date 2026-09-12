@@ -119,8 +119,6 @@ function reportFlowFailure(
   flow.fail(reason);
 }
 
-// Relayer funds the gas of the address sending the MPC-signed transfer (parity with the
-// Solana bridge's top-up), so the user never hand-funds ETH.
 async function topUpGas(fromAddress: string, gasLimit?: bigint): Promise<void> {
   const res = await fetch('/api/midnight/gas-topup', {
     method: 'POST',

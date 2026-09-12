@@ -1,11 +1,7 @@
-import { useWallet } from '@solana/connector/react';
 import { useState } from 'react';
 import { ArrowRight, ExternalLink, WalletIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { useTxList } from '@/hooks/use-tx-list';
-import { formatTokenBalanceSync } from '@/lib/utils/balance-formatter';
-import { formatActivityDate } from '@/lib/utils/date-formatting';
 import {
   Table,
   TableHeader,
@@ -15,17 +11,16 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import { TruncatedText } from '@/components/ui/truncated-text';
-import { useSolanaTransactions } from '@/hooks/use-solana-transactions';
 import { useMidnightTransactions } from '@/hooks/use-midnight-transactions';
 import { useMidnightWallet } from '@/providers/midnight-context';
-import type { TxEntry, TxStatus } from '@/lib/relayer/tx-registry';
+import type { MidnightTxRecord } from '@/lib/midnight/tx-history';
 
 import { CryptoIcon } from '../balance-display/crypto-icon';
 import { TransactionDetailsDialog } from './transaction-details-dialog';
 
 export interface ActivityTransaction {
   id: string;
-  type: 'Send' | 'Swap' | 'Deposit' | 'Withdraw';
+  type: MidnightTxRecord['type'];
   fromToken?: {
     symbol: string;
     chain: string;
@@ -41,9 +36,10 @@ export interface ActivityTransaction {
   address?: string;
   timestamp: string;
   timestampRaw?: number;
-  status: 'pending' | 'completed' | 'failed';
+  status: MidnightTxRecord['status'];
   transactionHash?: string;
   explorerUrl?: string;
+  failureReason?: string;
 }
 
 interface ActivityListTableProps {
@@ -64,7 +60,7 @@ interface DetailsCellProps {
 }
 
 interface StatusBadgeProps {
-  status: 'pending' | 'completed' | 'failed';
+  status: MidnightTxRecord['status'];
 }
 
 function TokenDisplay({ token }: TokenDisplayProps) {
@@ -108,8 +104,7 @@ function TokenDisplay({ token }: TokenDisplayProps) {
 }
 
 function DetailsCell({ transaction }: DetailsCellProps) {
-  const isSwap = transaction.type === 'Swap';
-  const isDeposit = transaction.type === 'Deposit';
+  const showsTokenDestination = transaction.type !== 'Withdraw';
 
   return (
     <div className='flex max-w-full min-w-0 items-center gap-2 sm:gap-4'>
@@ -119,7 +114,7 @@ function DetailsCell({ transaction }: DetailsCellProps) {
 
       <ArrowRight className='text-tundora-50 h-4 w-4 shrink-0 sm:h-5 sm:w-5' />
 
-      {isSwap || isDeposit ? (
+      {showsTokenDestination ? (
         <div className='flex-shrink-0'>
           <TokenDisplay token={transaction.toToken} />
         </div>
@@ -151,12 +146,15 @@ function StatusBadge({ status }: StatusBadgeProps) {
       ? 'Completed'
       : status === 'failed'
         ? 'Failed'
-        : 'Pending';
+        : status === 'refunded'
+          ? 'Refunded'
+          : 'Pending';
 
   const variants = {
     pending: 'bg-colors-pastels-polar-100 border-colors-dark-neutral-50',
     completed: 'bg-colors-pastels-polar-100 border-colors-dark-neutral-50',
     failed: 'bg-red-50 border-red-200',
+    refunded: 'bg-amber-50 border-amber-200',
   } as const;
 
   return (
@@ -169,11 +167,13 @@ function StatusBadge({ status }: StatusBadgeProps) {
       <div
         className={cn(
           'h-2 w-2 rounded-full',
-          status === 'failed'
-            ? 'bg-red-500'
-            : status === 'pending'
-              ? 'animate-pulse bg-blue-500'
-              : 'bg-success-500',
+          status === 'refunded'
+            ? 'bg-amber-500'
+            : status === 'failed'
+              ? 'bg-red-500'
+              : status === 'pending'
+                ? 'animate-pulse bg-blue-500'
+                : 'bg-success-500',
         )}
       />
       <span className='text-colors-dark-neutral-500 text-xs font-medium'>
@@ -183,128 +183,15 @@ function StatusBadge({ status }: StatusBadgeProps) {
   );
 }
 
-function mapTxStatus(status: TxStatus): 'pending' | 'completed' | 'failed' {
-  if (status === 'completed') return 'completed';
-  if (status === 'failed') return 'failed';
-  return 'pending';
-}
-
-function buildTransactionsFromRedis(
-  txList: TxEntry[],
-): ActivityTransaction[] {
-  return txList.map(tx => {
-    const tokenSymbol = tx.tokenSymbol ?? 'ERC20';
-    const formattedAmount =
-      tx.tokenAmount && tx.tokenDecimals !== undefined
-        ? formatTokenBalanceSync(tx.tokenAmount, tx.tokenDecimals, tokenSymbol, {
-            showSymbol: true,
-          })
-        : tokenSymbol;
-
-    return {
-      id: tx.id,
-      type: tx.type === 'deposit' ? 'Deposit' : 'Withdraw',
-      fromToken: {
-        symbol: tx.type === 'deposit' ? 'WALLET' : tokenSymbol,
-        chain: 'ethereum',
-        amount: tx.type === 'deposit' ? (tx.ethereumAddress ?? '') : formattedAmount,
-        usdValue: '',
-      },
-      toToken: {
-        symbol: tx.type === 'deposit' ? tokenSymbol : 'WALLET',
-        chain: 'ethereum',
-        amount: tx.type === 'deposit' ? formattedAmount : (tx.ethereumAddress ?? ''),
-        usdValue: '',
-      },
-      address: tx.ethereumAddress,
-      timestamp: formatActivityDate(Math.floor(tx.createdAt / 1000)),
-      timestampRaw: Math.floor(tx.createdAt / 1000),
-      status: mapTxStatus(tx.status),
-      transactionHash: tx.ethereumTxHash,
-      explorerUrl: tx.ethereumTxHash
-        ? `https://sepolia.etherscan.io/tx/${tx.ethereumTxHash}`
-        : undefined,
-    };
-  });
-}
-
-function buildSolanaTransactions(
-  solanaTxs: ReturnType<typeof useSolanaTransactions>['data'],
-  account: string | null,
-): ActivityTransaction[] {
-  if (!solanaTxs || solanaTxs.length === 0) return [];
-
-  const solanaAddress = account ?? '';
-  return solanaTxs.map(tx => {
-    const formattedAmount = formatTokenBalanceSync(
-      tx.amount,
-      tx.decimals,
-      tx.symbol,
-      { showSymbol: true },
-    );
-
-    const isIncoming = tx.direction === 'in';
-
-    return {
-      id: `${tx.signature}-${tx.mint ?? 'SOL'}`,
-      type: (isIncoming ? 'Deposit' : 'Withdraw') as ActivityTransaction['type'],
-      fromToken: isIncoming
-        ? {
-            symbol: 'WALLET',
-            chain: 'solana',
-            amount: solanaAddress,
-            usdValue: '',
-          }
-        : {
-            symbol: tx.symbol,
-            chain: 'solana',
-            amount: formattedAmount,
-            usdValue: '$0.00',
-          },
-      toToken: isIncoming
-        ? {
-            symbol: tx.symbol,
-            chain: 'solana',
-            amount: formattedAmount,
-            usdValue: '$0.00',
-          }
-        : {
-            symbol: 'WALLET',
-            chain: 'solana',
-            amount: solanaAddress,
-            usdValue: '',
-          },
-      address: solanaAddress,
-      timestamp: formatActivityDate(tx.timestamp),
-      timestampRaw: tx.timestamp,
-      status: 'completed',
-      transactionHash: tx.signature,
-      explorerUrl: `https://solscan.io/tx/${tx.signature}?cluster=devnet`,
-    };
-  });
-}
-
 export function ActivityListTable({ className }: ActivityListTableProps) {
-  const { isConnected, account } = useWallet();
   const midnight = useMidnightWallet();
   const [selectedTransaction, setSelectedTransaction] =
     useState<ActivityTransaction | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const { data: txList, isLoading: isLoadingTxList } = useTxList();
-
-  const {
-    data: solanaTxs,
-    isLoading: isLoadingSolanaTxs,
-  } = useSolanaTransactions(25);
-
-  const isLoading = isLoadingTxList || isLoadingSolanaTxs;
-
-  const redisTxs = buildTransactionsFromRedis(txList ?? []);
-  const solanaTxsFormatted = buildSolanaTransactions(solanaTxs, account);
   const midnightTxs = useMidnightTransactions();
 
-  const allTransactions = [...redisTxs, ...solanaTxsFormatted, ...midnightTxs]
+  const allTransactions = [...midnightTxs]
     .filter((tx, index, self) => self.findIndex(t => t.id === tx.id) === index)
     .sort((a, b) => {
       const aTime = a.timestampRaw || 0;
@@ -342,33 +229,7 @@ export function ActivityListTable({ className }: ActivityListTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading ? (
-            Array.from({ length: 3 }).map((_, index) => (
-              <TableRow key={`loading-${index}`}>
-                <TableCell>
-                  <div className='h-4 w-12 animate-pulse rounded bg-gray-200'></div>
-                </TableCell>
-                <TableCell>
-                  <div className='flex items-center gap-2'>
-                    <div className='h-8 w-8 animate-pulse rounded-full bg-gray-200'></div>
-                    <div className='space-y-1'>
-                      <div className='h-3 w-16 animate-pulse rounded bg-gray-200'></div>
-                      <div className='h-3 w-20 animate-pulse rounded bg-gray-200'></div>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className='hidden sm:table-cell'>
-                  <div className='h-4 w-12 animate-pulse rounded bg-gray-200'></div>
-                </TableCell>
-                <TableCell>
-                  <div className='h-6 w-16 animate-pulse rounded-full bg-gray-200'></div>
-                </TableCell>
-                <TableCell className='hidden sm:table-cell'>
-                  <div className='h-4 w-4 animate-pulse rounded bg-gray-200'></div>
-                </TableCell>
-              </TableRow>
-            ))
-          ) : displayTransactions.length > 0 ? (
+          {displayTransactions.length > 0 ? (
             displayTransactions.map(transaction => (
               <TableRow
                 key={transaction.id}
@@ -409,7 +270,7 @@ export function ActivityListTable({ className }: ActivityListTableProps) {
           ) : (
             <TableRow>
               <TableCell colSpan={5} className='py-8 text-center text-gray-500'>
-                {isConnected || midnight.connected
+                {midnight.connected
                   ? 'No transactions found. Deposit, withdraw, or swap to see activity.'
                   : 'Connect your wallet to view transaction activity.'}
               </TableCell>
@@ -419,7 +280,9 @@ export function ActivityListTable({ className }: ActivityListTableProps) {
       </Table>
 
       <TransactionDetailsDialog
-        transaction={selectedTransaction}
+        transaction={
+          midnightTxs.find(tx => tx.id === selectedTransaction?.id) ?? null
+        }
         open={dialogOpen}
         onOpenChange={setDialogOpen}
       />

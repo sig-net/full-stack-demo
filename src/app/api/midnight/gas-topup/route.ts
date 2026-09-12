@@ -13,13 +13,10 @@ export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 // EIP-1559 requires the sender's balance to cover the full upfront reservation
-// gasLimit * maxFeePerGas of the vault's fixed envelope; 10% margin on top.
-const TOPUP_MAX_FEE_WITH_MARGIN = (ERC20_TRANSFER_MAX_FEE_PER_GAS * 110n) / 100n;
+// gasLimit * maxFeePerGas of the vault's fixed envelope, with a 10% margin.
+const TOPUP_MAX_FEE_WITH_MARGIN =
+  (ERC20_TRANSFER_MAX_FEE_PER_GAS * 110n) / 100n;
 
-// Fee delegation for the Midnight vault flow: the relayer's funding wallet tops up the
-// address that will send the MPC-signed ERC-20 transfer (the deposit address on deposit,
-// the vault address on withdraw), so Lace users never hand-fund ETH — same as the Solana
-// bridge's automatic gas top-up. The Midnight-chain txs (deposit/claim) stay client-side.
 export async function POST(request: NextRequest) {
   try {
     const { fromAddress, gasLimit } = await request.json();
@@ -31,7 +28,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // A transfer/approve reserves the fixed envelope; a swap needs more (a V3 swap is
+    // A transfer/approve reserves the fixed envelope. A swap needs more (a V3 swap is
     // ~300k), so the caller may request a larger gasLimit. Defaults to the transfer envelope.
     const limit = gasLimit ? BigInt(gasLimit) : ERC20_TRANSFER_GAS_LIMIT;
 

@@ -1,12 +1,13 @@
 'use client';
 
-// History of Midnight vault operations (deposit / withdraw / swap / supply / redeem) for the
-// Activity table. Unlike the Ethereum (Redis) and Solana sources, the vault flows leave no
-// server-side record, so this observable log lets the Activity list show them alongside the other
-// chains. It persists to localStorage, because the lend widget derives its cost basis from it and
-// a shielded vault keeps no per-user position on chain to rebuild that basis from.
+// Persist operation history so the lend widget can reconstruct its cost basis.
 
-export type MidnightTxType = 'Deposit' | 'Withdraw' | 'Swap' | 'Supply' | 'Redeem';
+export type MidnightTxType =
+  | 'Deposit'
+  | 'Withdraw'
+  | 'Swap'
+  | 'Supply'
+  | 'Redeem';
 export type MidnightTxStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 
 export interface MidnightTxRecord {
@@ -20,8 +21,7 @@ export interface MidnightTxRecord {
   status: MidnightTxStatus;
   timestampRaw: number; // unix seconds
   txHash?: string; // Sepolia tx hash, when known
-  // Why a 'failed' record failed — the node's verdict where there is one (e.g. "Custom error:
-  // 170"). Persists past the (auto-dismissing) failure toast so the reason stays inspectable.
+  // Keep the node's failure verdict inspectable after the toast dismisses.
   failureReason?: string;
   // Cost basis for the lend position, recorded per leg so the widget can show earnings. Assets are
   // in underlying units (Aave USDC), shares in stataUSDC units. The widget needs BOTH sides: the
@@ -67,7 +67,12 @@ function load(): MidnightTxRecord[] {
       .slice(0, MAX_RECORDS)
       .map(rec =>
         rec.status === 'pending'
-          ? { ...rec, status: 'failed' as const, failureReason: rec.failureReason ?? 'Interrupted by a page reload' }
+          ? {
+              ...rec,
+              status: 'failed' as const,
+              failureReason:
+                rec.failureReason ?? 'Interrupted by a page reload',
+            }
           : rec,
       );
   } catch {
@@ -90,7 +95,10 @@ class MidnightTxHistory {
 
   /** Insert (or replace by id) a record, newest first. */
   add(rec: MidnightTxRecord) {
-    this.txs = [rec, ...this.txs.filter(t => t.id !== rec.id)].slice(0, MAX_RECORDS);
+    this.txs = [rec, ...this.txs.filter(t => t.id !== rec.id)].slice(
+      0,
+      MAX_RECORDS,
+    );
     this.emit();
   }
 

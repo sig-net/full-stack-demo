@@ -1,21 +1,16 @@
 'use client';
 
-import { useWallet } from '@solana/connector/react';
-
 import { NavigationHeader } from '@/components/navigation-header';
 import { BalanceSection } from '@/components/balance-section';
 import { SwapWidget } from '@/components/swap-widget';
 import { LendWidget } from '@/components/lend-widget';
 import { ActivityListTable } from '@/components/activity-list-table';
 import { EmptyStateWallet } from '@/components/empty-state-wallet';
-import { useBridgeAutoRefetch } from '@/hooks/use-bridge-auto-refetch';
 import { useMidnightWallet } from '@/providers/midnight-context';
 
 export default function Home() {
-  const { isConnected: solanaConnected } = useWallet();
   const midnight = useMidnightWallet();
-  const isConnected = solanaConnected || midnight.connected;
-  useBridgeAutoRefetch();
+  const isConnected = midnight.connected;
 
   return (
     <div className='gradient-bg-main min-h-screen w-full overflow-x-hidden'>

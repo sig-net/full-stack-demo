@@ -8,15 +8,12 @@ import {
 import { sepolia } from 'viem/chains';
 
 import { getEthSepoliaRpcUrl } from '@/lib/rpc';
-import { encodeErc20Transfer, estimateFees } from '@/lib/evm/tx-builder';
+import { estimateFees } from '@/lib/evm/fees';
 import { getRelayerEthAccount } from '@/lib/utils/relayer-setup';
 
 const GAS_BUFFER_MULTIPLIER = 1.5;
-// Per-call cap on a single top-up. Must cover the largest single vault tx's upfront reservation:
-// the swap's 700k gas * 30 gwei = 0.021 ETH (plus the route's fee margin + buffer). The old 0.01
-// cap silently under-funded the swap after its gas envelope was raised.
+// Cover the swap's 700k gas reservation at 30 gwei, including the route margin and buffer.
 const MAX_TOPUP_ETH = parseEther('0.05');
-const GAS_LIMIT_BUFFER_PERCENT = 120n;
 const ETH_TRANSFER_GAS = 21000n;
 
 async function sendGasTopUp(
@@ -66,9 +63,7 @@ async function sendGasTopUp(
 }
 
 function calculateTopUpAmount(deficit: bigint): bigint {
-  const withBuffer = BigInt(
-    Math.ceil(Number(deficit) * GAS_BUFFER_MULTIPLIER),
-  );
+  const withBuffer = BigInt(Math.ceil(Number(deficit) * GAS_BUFFER_MULTIPLIER));
   return withBuffer > MAX_TOPUP_ETH ? MAX_TOPUP_ETH : withBuffer;
 }
 
@@ -88,34 +83,6 @@ async function checkAndTopUp(
   const deficit = totalCost - balance;
   const { txHash, amount } = await sendGasTopUp(client, targetAddress, deficit);
   return { topUpTxHash: txHash, topUpAmount: amount };
-}
-
-export async function ensureGasForErc20Transfer(
-  client: PublicClient,
-  targetAddress: Hex,
-  erc20Address: Hex,
-  recipient: Hex,
-  amount: bigint,
-): Promise<{
-  topUpTxHash: Hex | null;
-  topUpAmount: bigint;
-  fees: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint };
-}> {
-  const data = encodeErc20Transfer(recipient, amount);
-
-  const [estimatedGas, fees] = await Promise.all([
-    client.estimateGas({
-      account: targetAddress,
-      to: erc20Address,
-      data,
-      value: 0n,
-    }),
-    estimateFees(client),
-  ]);
-
-  const gasLimit = (estimatedGas * GAS_LIMIT_BUFFER_PERCENT) / 100n;
-  const topUpResult = await checkAndTopUp(client, targetAddress, gasLimit, fees.maxFeePerGas);
-  return { ...topUpResult, fees };
 }
 
 export async function ensureGasForTransaction(

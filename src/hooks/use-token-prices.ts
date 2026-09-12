@@ -12,7 +12,6 @@ const TOKEN_ID_MAP: Record<string, string> = {
   USDC: 'usd-coin',
   'USDC.A': 'usd-coin',
   ETH: 'ethereum',
-  SOL: 'solana',
   BTC: 'bitcoin',
   DAI: 'dai',
   COW: 'cow-protocol',

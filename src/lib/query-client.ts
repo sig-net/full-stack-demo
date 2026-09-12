@@ -18,24 +18,3 @@ export const queryClient = new QueryClient({
     },
   },
 });
-
-export const queryKeys = {
-  solana: {
-    all: ['solana'] as const,
-    depositAddress: (publicKey: string) =>
-      [...queryKeys.solana.all, 'depositAddress', publicKey] as const,
-    userBalances: (publicKey: string) =>
-      [...queryKeys.solana.all, 'userBalances', publicKey] as const,
-    txList: (publicKey: string) =>
-      [...queryKeys.solana.all, 'txList', publicKey] as const,
-  },
-} as const;
-
-export function invalidateBalanceQueries(
-  queryClient: QueryClient,
-  account: string,
-) {
-  queryClient.invalidateQueries({
-    queryKey: queryKeys.solana.userBalances(account),
-  });
-}

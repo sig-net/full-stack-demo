@@ -7,7 +7,7 @@ export interface TokenConfig {
   erc20Address: string;
   symbol: string;
   name: string;
-  chain: 'ethereum' | 'solana' | 'midnight';
+  chain: 'ethereum' | 'midnight';
   /** How to acquire this token on testnet */
   acquireHint?: string;
   /** Direct URL to get this token (faucet, swap page, etc.) */
@@ -27,13 +27,14 @@ export const ERC20_TOKENS: TokenConfig[] = [
     faucetUrl: 'https://faucet.circle.com/',
   },
   {
-    // Aave's own Sepolia USDC. The lend flow (supply/redeem) only accepts this one —
+    // The lend flow accepts Aave Sepolia USDC.
     // Circle USDC above has no Aave reserve, so `supply` reverts on it.
     erc20Address: '0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8',
     symbol: 'USDC.a',
     name: 'USD Coin (Aave)',
     chain: 'ethereum',
-    acquireHint: 'Get Sepolia USDC from the Aave faucet. Circle USDC does not work for lending.',
+    acquireHint:
+      'Get Sepolia USDC from the Aave faucet. Circle USDC does not work for lending.',
     faucetUrl: 'https://app.aave.com/faucet/',
     // A USDC.a/USDC pool exists on Sepolia but holds dust liquidity, so swaps through it
     // fail or get destroyed by slippage. Testnet-only concern: this entry has no mainnet
@@ -48,7 +49,8 @@ export const ERC20_TOKENS: TokenConfig[] = [
     symbol: 'stataUSDC',
     name: 'Staked Aave USDC',
     chain: 'ethereum',
-    acquireHint: 'Received by supplying USDC.a through the Lend widget, not from a faucet.',
+    acquireHint:
+      'Received by supplying USDC.a through the Lend widget, not from a faucet.',
     // Shares are minted by the wrapper, not traded on a pool.
     noSwap: true,
   },
@@ -82,35 +84,13 @@ export const ERC20_TOKENS: TokenConfig[] = [
   },
 ];
 
-// Solana tokens
-export const SOLANA_TOKENS: TokenConfig[] = [
-  {
-    erc20Address: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
-    symbol: 'USDC',
-    name: 'USD Coin',
-    chain: 'solana',
-    acquireHint: 'Get devnet USDC from the Circle faucet.',
-    faucetUrl: 'https://faucet.circle.com/',
-  },
-  {
-    erc20Address: 'HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr',
-    symbol: 'EURC',
-    name: 'Euro Coin',
-    chain: 'solana',
-    acquireHint: 'Get devnet EURC from the Circle faucet.',
-    faucetUrl: 'https://faucet.circle.com/',
-  },
-];
-
-// Midnight (Lace) — the vault supports any ERC-20 (deposit/withdraw take the token
-// address), so expose the same Sepolia tokens as the Ethereum side, as shielded tokens.
 export const MIDNIGHT_TOKENS: TokenConfig[] = ERC20_TOKENS.map(t => ({
   ...t,
   chain: 'midnight' as const,
 }));
 
 export interface NetworkData {
-  chain: 'ethereum' | 'solana' | 'midnight';
+  chain: 'ethereum' | 'midnight';
   chainName: string;
   symbol: string;
   tokens: TokenConfig[];
@@ -122,12 +102,6 @@ export const NETWORKS_WITH_TOKENS: NetworkData[] = [
     chainName: 'Ethereum',
     symbol: 'ethereum',
     tokens: ERC20_TOKENS,
-  },
-  {
-    chain: 'solana',
-    chainName: 'Solana',
-    symbol: 'solana',
-    tokens: SOLANA_TOKENS,
   },
   {
     chain: 'midnight',

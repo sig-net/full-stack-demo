@@ -5,8 +5,6 @@ import { toast } from 'sonner';
 
 import { flow, PHASE_MESSAGE, type FlowState } from '@/lib/midnight/flow';
 
-// Midnight deposit/withdraw progress as a single updating toast (mirrors the base app's
-// transaction-status-tracker), so flows are dismissible and progress shows like EVM/Solana.
 const TOAST_ID = 'midnight-flow-progress';
 
 export function MidnightProgressToaster() {

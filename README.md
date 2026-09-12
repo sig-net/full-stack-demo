@@ -1,8 +1,8 @@
 # full-stack-demo
 
 A demo web app for a **shielded ERC-20 vault**: deposit, withdraw, and swap ERC-20 tokens through
-a Midnight contract, with the EVM side executed on Sepolia and signed by an MPC responder. The UI
-is chain-agnostic — connect the **Developer (Midnight)** wallet, or a Solana wallet.
+a Midnight contract, with the EVM side executed on Sepolia and signed by an MPC responder.
+Connect the **Developer (Midnight)** wallet to use the vault.
 
 It's a Next.js app. The heavy pieces (the MPC responder + its proof server) are already deployed,
 and the ZK prover keys are hosted on object storage, so you only need to run the web app locally
@@ -10,17 +10,17 @@ plus your own **local Midnight proof server**.
 
 ## How it fits together
 
-- **This app (Next.js)** — the UI + a few serverless routes (gas top-up relayer, tx tracking).
-- **Local proof server** — you run it; it proves the vault circuits for your session. The circuits
+- **This app (Next.js)**: the UI and the Sepolia gas top-up route.
+- **Local proof server**: you run it to prove the vault circuits for your session. The circuits
   are large, which is why each user runs their own rather than sharing a hosted one.
 - **ZK prover keys**: fetched at runtime from `NEXT_PUBLIC_ZK_CONFIG_ORIGIN` (object storage), or
   from this app's own `public/zk` folder in local development (see [ZK assets](#zk-assets)).
 - **Contracts**: the vault and signet contract addresses of the selected network come from the
   npm packages `@sig-net/midnight-examples-erc20-vault-contract` and `@sig-net/midnight`, keyed by
   `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID`.
-- **MPC responder (fakenet) + its proof server** — deployed; signs the Sepolia txs and posts the
+- **MPC responder (fakenet) + its proof server**: deployed to sign the Sepolia txs and post the
   attestations the app reads back. Configured via `NEXT_PUBLIC_FAKENET_RESPONSES_URL`.
-- **Networks** — Midnight **stagenet** and Ethereum **Sepolia** (both public testnets).
+- **Networks**: Midnight **stagenet** and Ethereum **Sepolia** (both public testnets).
 
 ## Prerequisites
 
@@ -86,8 +86,8 @@ vault or signet release: the manifest hashes change with the contract.
 
 ## Notes
 
-- **Proving is heavy** — the first deposit/swap downloads the prover keys (hundreds of MB) and
-  proves locally; give it a minute. Subsequent ops reuse the cached keys.
+- **Proving is heavy**: the first deposit/swap downloads the prover keys (hundreds of MB) and
+  proves locally. Give it a minute. Subsequent ops reuse the cached keys.
 - **Swap** is exact-output on-chain: you enter what you want to spend, receive at least the quoted
   output, and any unspent input is refunded as change.
-- The `.env.local` you create is git-ignored — never commit secrets.
+- The `.env.local` you create is git-ignored: never commit secrets.

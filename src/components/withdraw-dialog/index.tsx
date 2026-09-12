@@ -1,13 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { parseUnits } from 'viem';
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { LoadingState } from '@/components/states/LoadingState';
-import { useWithdrawEvmMutation, useWithdrawSolMutation, useHasActiveTransaction } from '@/hooks';
 import { useMidnightWallet } from '@/providers/midnight-context';
 import { useMidnightProgress } from '@/hooks/use-midnight-progress';
 import { flow } from '@/lib/midnight/flow';
@@ -17,7 +14,7 @@ import { AmountInput } from './amount-input';
 export interface WithdrawToken {
   symbol: string;
   name: string;
-  chain: 'ethereum' | 'solana' | 'midnight';
+  chain: 'ethereum' | 'midnight';
   chainName: string;
   address: string;
   balance: string;
@@ -40,11 +37,6 @@ function WithdrawDialogContent({
   preSelectedToken?: WithdrawToken | null;
   onClose: () => void;
 }) {
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  const withdrawEvmMutation = useWithdrawEvmMutation();
-  const withdrawSolMutation = useWithdrawSolMutation();
-  const hasActiveTransaction = useHasActiveTransaction();
   const midnightWallet = useMidnightWallet();
   const midnight = useMidnightProgress();
 
@@ -53,50 +45,23 @@ function WithdrawDialogContent({
     amount: string;
     receiverAddress: string;
   }) => {
-    if (hasActiveTransaction) {
+    if (midnight.active) {
       toast.error('Transaction in progress', {
         description: 'Please wait for the current transaction to complete',
       });
       return;
     }
-    // Midnight: fire-and-close — progress + result surface via MidnightProgressToaster.
     if (data.token.chain === 'midnight') {
       const units = parseUnits(data.amount, data.token.decimals);
-      // Clear any terminal state left by a previous run before closing: the flow singleton keeps
-      // its error until the next start(), and runWithdraw only calls start() once its first await
-      // resolves — so the toaster's re-subscribe would replay the stale failure in between.
+      // Reset before closing so the toaster cannot replay a terminal failure during startup.
       flow.reset();
-      midnightWallet.withdraw(data.token.address, units, data.receiverAddress).catch(() => {
-        /* surfaced by MidnightProgressToaster via flow.fail */
-      });
+      midnightWallet
+        .withdraw(data.token.address, units, data.receiverAddress)
+        .catch(() => {
+          /* surfaced by MidnightProgressToaster via flow.fail */
+        });
       onClose();
       return;
-    }
-
-    setIsProcessing(true);
-
-    try {
-      if (data.token.chain === 'solana') {
-        await withdrawSolMutation.mutateAsync({
-          mintAddress: data.token.address,
-          amount: data.amount,
-          recipientAddress: data.receiverAddress,
-          decimals: data.token.decimals,
-        });
-      } else {
-        await withdrawEvmMutation.mutateAsync({
-          erc20Address: data.token.address,
-          amount: data.amount,
-          recipientAddress: data.receiverAddress,
-        });
-      }
-
-      onClose();
-    } catch (err) {
-      toast.error('Withdrawal failed', {
-        description: err instanceof Error ? err.message : 'Unknown error',
-      });
-      setIsProcessing(false);
     }
   };
 
@@ -104,20 +69,11 @@ function WithdrawDialogContent({
     <>
       <DialogTitle>Send</DialogTitle>
       <div className='min-h-0 flex-1 overflow-y-auto'>
-        {!isProcessing && (
-          <AmountInput
-            availableTokens={availableTokens}
-            onSubmit={handleAmountSubmit}
-            preSelectedToken={preSelectedToken}
-          />
-        )}
-        {isProcessing && (
-          <LoadingState
-            message={
-              midnight.active ? midnight.message : 'Awaiting wallet confirmation…'
-            }
-          />
-        )}
+        <AmountInput
+          availableTokens={availableTokens}
+          onSubmit={handleAmountSubmit}
+          preSelectedToken={preSelectedToken}
+        />
       </div>
     </>
   );

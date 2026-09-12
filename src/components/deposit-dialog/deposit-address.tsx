@@ -115,13 +115,9 @@ export function DepositAddress({
               </a>
             )}
             <div className='mt-2 rounded bg-stone-100 px-2 py-1.5'>
-              <p className='text-xs text-stone-500'>
-                {network.chain === 'solana'
-                  ? 'Mint Address'
-                  : 'Contract Address'}
-              </p>
+              <p className='text-xs text-stone-500'>Contract Address</p>
               <div className='flex items-center gap-1'>
-                <code className='break-all text-xs text-stone-700'>
+                <code className='text-xs break-all text-stone-700'>
                   {token.erc20Address}
                 </code>
                 <Button
@@ -143,9 +139,7 @@ export function DepositAddress({
           onClick={onContinue}
           variant='secondary'
           disabled={isSubmitting}
-          className={cn(
-            isSubmitting ? 'cursor-not-allowed' : 'cursor-pointer',
-          )}
+          className={cn(isSubmitting ? 'cursor-not-allowed' : 'cursor-pointer')}
         >
           {isSubmitting ? (
             <>

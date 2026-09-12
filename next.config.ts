@@ -11,14 +11,9 @@ const nextConfig: NextConfig = {
 
   reactStrictMode: true,
 
-  // Server-only packages excluded from bundling (avoid Turbopack conflicts)
-  serverExternalPackages: ['fakenet-signer', 'bitcoin-core'],
-
   // Optimize package imports
   experimental: {
     optimizePackageImports: [
-      '@solana/web3.js',
-      '@coral-xyz/anchor',
       'lucide-react',
       '@radix-ui/react-dialog',
       '@radix-ui/react-dropdown-menu',
@@ -29,7 +24,7 @@ const nextConfig: NextConfig = {
 
   turbopack: {
     resolveAlias: {
-      // Midnight packages import a named `WebSocket`; the browser build of
+      // Midnight packages import a named `WebSocket`. The browser build of
       // isomorphic-ws only default-exports. The shim provides both.
       'isomorphic-ws': './src/lib/midnight/shims/isomorphic-ws.ts',
     },

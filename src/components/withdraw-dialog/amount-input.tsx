@@ -110,11 +110,9 @@ export function AmountInput({
             const mapped: WithdrawToken = {
               symbol: token.symbol,
               name: token.name,
-              chain: token.chain as 'ethereum' | 'solana',
+              chain: token.chain,
               chainName:
-                token.chain === 'ethereum'
-                  ? 'Ethereum Sepolia'
-                  : 'Solana Devnet',
+                token.chain === 'ethereum' ? 'Ethereum Sepolia' : 'Midnight',
               address: token.erc20Address,
               balance: token.balance,
               decimals: token.decimals,
@@ -134,7 +132,7 @@ export function AmountInput({
 
       {/* Receiver Address */}
       <div className='space-y-2'>
-        <label className='text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-tundora-300'>
+        <label className='text-tundora-300 text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70'>
           Receiver Address
         </label>
         <Input
