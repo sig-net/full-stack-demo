@@ -77,7 +77,7 @@ public/zk/signet/{keys,zkir,compiler}/...                the signet contract, co
 A rerun verifies what is there against the packages' manifests and skips a tree that already
 matches. `--force` rebuilds, `--signet-only` skips the compiler, `--vault-only` skips the copy.
 The run ends by printing each tree's `compiler/contract-manifest.json` sha256. Those two values
-are pinned in `lib/midnight/zk-manifest-hashes.ts`, so update that file whenever they change.
+are pinned in `src/lib/midnight/zk-manifest-hashes.ts`, so update that file whenever they change.
 
 With `NEXT_PUBLIC_ZK_CONFIG_ORIGIN` unset the app fetches these files from its own `/zk` path. For a
 deployment, upload the contents of `public/zk` to the object store, point

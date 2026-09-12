@@ -31,7 +31,7 @@ const nextConfig: NextConfig = {
     resolveAlias: {
       // Midnight packages import a named `WebSocket`; the browser build of
       // isomorphic-ws only default-exports. The shim provides both.
-      'isomorphic-ws': './lib/midnight/shims/isomorphic-ws.ts',
+      'isomorphic-ws': './src/lib/midnight/shims/isomorphic-ws.ts',
     },
   },
 };

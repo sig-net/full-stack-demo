@@ -33,24 +33,24 @@ QueryClientProvider (TanStack Query)
 
 ### Key Layers
 
-**Service Layer** (`lib/services/`):
+**Service Layer** (`src/lib/services/`):
 
 - `CrossChainOrchestrator` - Coordinates MPC signature events with timeouts and backfill
 - `DepositService` / `WithdrawalService` - Build Solana instructions for bridge operations
 - `TokenBalanceService` - On-chain balance queries
 
-**Contract Clients** (`lib/contracts/`):
+**Contract Clients** (`src/lib/contracts/`):
 
 - `DexContract` - Wraps Anchor program (deposit, claim, withdraw instructions)
 - `ChainSignaturesContract` - Listens for MPC `Signature` and `RespondBidirectional` events
 
-**Relayer** (`lib/relayer/`):
+**Relayer** (`src/lib/relayer/`):
 
 - `handlers.ts` - Server-side `handleDeposit`/`handleWithdrawal` flows
 - `tx-registry.ts` - Redis-backed transaction tracking (7-day TTL)
 - `embedded-signer.ts` - MPC signer setup
 
-**EVM Layer** (`lib/evm/`):
+**EVM Layer** (`src/lib/evm/`):
 
 - `tx-builder.ts` - Builds ERC20 transfer transactions
 - `tx-submitter.ts` - Submits with retry logic
@@ -84,7 +84,7 @@ Status tracked in Redis via `tx:{trackingId}` keys, polled by frontend every 2s.
 
 ### PDA Derivation
 
-Centralized in `lib/constants/addresses.ts`:
+Centralized in `src/lib/constants/addresses.ts`:
 
 - `deriveVaultAuthorityPda(userPublicKey)` - Per-user vault
 - `derivePendingDepositPda(requestIdBytes)` - Pending deposit accounts
@@ -94,25 +94,25 @@ Centralized in `lib/constants/addresses.ts`:
 
 ### Query Keys & Cache Invalidation
 
-React Query keys in `lib/query-client.ts` via `queryKeys` object. Use `invalidateBalanceQueries()` helper for balance refreshes.
+React Query keys in `src/lib/query-client.ts` via `queryKeys` object. Use `invalidateBalanceQueries()` helper for balance refreshes.
 
 Real-time updates via `useBridgeAutoRefetch` hook which subscribes to Solana program logs and invalidates queries on relevant instructions.
 
 ## Midnight Vault
 
-The shielded ERC-20 vault flows live in `lib/midnight/`. The compiled vault contract, its witnesses and
+The shielded ERC-20 vault flows live in `src/lib/midnight/`. The compiled vault contract, its witnesses and
 ledger paths come from `@sig-net/midnight-examples-erc20-vault-contract`, the signet protocol SDK from
 `@sig-net/midnight`. Contract addresses resolve from `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID` through those
-packages in `lib/midnight/env.ts` (the two address env vars are overrides for a local undeployed stack).
+packages in `src/lib/midnight/env.ts` (the two address env vars are overrides for a local undeployed stack).
 
 Proving fetches two zk asset trees from `NEXT_PUBLIC_ZK_CONFIG_ORIGIN` (the app's own `/zk` path when unset):
 the vault at `/{keys,zkir,compiler}` and the signet contract at `/signet/{keys,zkir,compiler}`.
 `yarn zk-assets` lays both out under `public/zk` and prints the manifest hashes pinned in
-`lib/midnight/zk-manifest-hashes.ts`.
+`src/lib/midnight/zk-manifest-hashes.ts`.
 
 ## Environment Configuration
 
-Validated via Zod in `lib/config/env.config.ts`:
+Validated via Zod in `src/lib/config/env.config.ts`:
 
 - `getClientEnv()` - Client-safe vars (NEXT_PUBLIC_*)
 - `getFullEnv()` - Server-side only (includes secrets)

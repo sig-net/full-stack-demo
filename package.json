@@ -12,7 +12,7 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "zk-assets": "erc20-vault-zk-assets public/zk",
-    "generate:idl": "anchor idl type ../contract/target/idl/solana_core_contracts.json -o lib/program/idl-sol-dex.ts && sed -i '' 's/SolanaCoreContracts/SolanaDexContract/g' lib/program/idl-sol-dex.ts && cp ../contract/target/idl/solana_core_contracts.json lib/program/solana_dex_contract.json && echo \"\\nimport IDL_JSON from './solana_dex_contract.json';\\nexport const IDL = IDL_JSON as SolanaDexContract;\" >> lib/program/idl-sol-dex.ts"
+    "generate:idl": "anchor idl type ../contract/target/idl/solana_core_contracts.json -o src/lib/program/idl-sol-dex.ts && sed -i '' 's/SolanaCoreContracts/SolanaDexContract/g' src/lib/program/idl-sol-dex.ts && cp ../contract/target/idl/solana_core_contracts.json src/lib/program/solana_dex_contract.json && echo \"\\nimport IDL_JSON from './solana_dex_contract.json';\\nexport const IDL = IDL_JSON as SolanaDexContract;\" >> src/lib/program/idl-sol-dex.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
