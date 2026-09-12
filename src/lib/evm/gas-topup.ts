@@ -11,8 +11,7 @@ import { getEthSepoliaRpcUrl } from '@/lib/rpc';
 import { estimateFees } from '@/lib/evm/fees';
 import { getRelayerEthAccount } from '@/lib/utils/relayer-setup';
 
-const GAS_BUFFER_MULTIPLIER = 1.5;
-// Cover the swap's 700k gas reservation at 30 gwei, including the route margin and buffer.
+// The cap must cover every operation reservation after its margin and buffer.
 const MAX_TOPUP_ETH = parseEther('0.05');
 const ETH_TRANSFER_GAS = 21000n;
 
@@ -24,19 +23,19 @@ async function sendGasTopUp(
   const topUpAmount = calculateTopUpAmount(deficit);
   const account = getRelayerEthAccount();
 
-  const relayerBalance = await client.getBalance({ address: account.address });
-  if (relayerBalance < topUpAmount) {
-    throw new Error(
-      `Relayer funding wallet has insufficient ETH. ` +
-        `Has: ${relayerBalance}, needs: ${topUpAmount}. ` +
-        `Please fund address: ${account.address}`,
-    );
-  }
-
-  const [nonce, fees] = await Promise.all([
+  const [relayerBalance, nonce, fees] = await Promise.all([
+    client.getBalance({ address: account.address }),
     client.getTransactionCount({ address: account.address }),
     estimateFees(client),
   ]);
+  const requiredBalance = topUpAmount + ETH_TRANSFER_GAS * fees.maxFeePerGas;
+  if (relayerBalance < requiredBalance) {
+    throw new Error(
+      `Relayer funding wallet has insufficient ETH. ` +
+        `Has: ${relayerBalance}, needs: ${requiredBalance}. ` +
+        `Please fund address: ${account.address}`,
+    );
+  }
 
   const walletClient = createWalletClient({
     account,
@@ -53,17 +52,21 @@ async function sendGasTopUp(
     gas: ETH_TRANSFER_GAS,
   });
 
-  await client.waitForTransactionReceipt({
+  const receipt = await client.waitForTransactionReceipt({
     hash: txHash,
     confirmations: 1,
     timeout: 60_000,
   });
 
+  if (receipt.status !== 'success') {
+    throw new Error('Relayer gas top-up transaction reverted');
+  }
+
   return { txHash, amount: topUpAmount };
 }
 
 function calculateTopUpAmount(deficit: bigint): bigint {
-  const withBuffer = BigInt(Math.ceil(Number(deficit) * GAS_BUFFER_MULTIPLIER));
+  const withBuffer = (deficit * 3n + 1n) / 2n;
   return withBuffer > MAX_TOPUP_ETH ? MAX_TOPUP_ETH : withBuffer;
 }
 

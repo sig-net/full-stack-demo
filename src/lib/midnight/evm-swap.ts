@@ -24,12 +24,6 @@ export const APPROVE_SELECTOR = new Uint8Array([0x09, 0x5e, 0xa7, 0xb3]);
 // Effectively-unlimited allowance (matches the contract's approveRouter, 2^128-1).
 export const MAX_APPROVE = 340282366920938463463374607431768211455n;
 
-// A V3 single-hop swap is ~120-200k gas, but an exact-output swap across a thin/fragmented pool
-// crosses many ticks, so the cap has headroom. Must match the contract's fixed swap gas envelope.
-export const SWAP_GAS_LIMIT = 700_000n;
-export const SWAP_MAX_FEE_PER_GAS = 30_000_000_000n;
-export const SWAP_MAX_PRIORITY_FEE_PER_GAS = 1_000_000_000n;
-
 // exactOutputSingle returns amountIn (uint256); the MPC re-packs it as uint64 for the
 // attestation. Two schemas — must byte-match the contract's swapOutputSchema / swapRespondSchema.
 export const SWAP_OUTPUT_SCHEMA = '[{"name":"amountIn","type":"uint256"}]';

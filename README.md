@@ -40,6 +40,19 @@ cp .env.example .env.local
 # fill in the secrets at the bottom of .env.local (Sepolia RPC key, relayer key, wallet seed)
 ```
 
+`RELAYER_PRIVATE_KEY` is a server-only, 0x-prefixed 32-byte EVM private key.
+Fund that account with Sepolia ETH, and pre-fund and replenish the shared vault account.
+The public gas top-up endpoint derives recipients under the configured vault and MPC key.
+It reads the Midnight indexer to match the deployed vault's path rendering before sending ETH,
+so indexer availability is required for top-ups. Client and server use the same public vault,
+MPC, indexer and Sepolia RPC configuration. Deploy both from the same environment values.
+
+Top-ups reserve 100,000 gas for deposit sweeps and withdrawals, 800,000 for swaps,
+600,000 for supply and 500,000 for redeem, at 33 gwei including the fee margin.
+The swap and supply allowances include approval gas. Sufficient balances skip funding.
+Otherwise the relayer sends 1.5 times the deficit, capped at 0.05 ETH, and waits for a
+successful receipt. This unauthenticated testnet convenience has no aggregate request limit.
+
 Start your local proof server (leave it running):
 
 ```bash

@@ -29,15 +29,6 @@ export const APPROVE_SELECTOR = new Uint8Array([0x09, 0x5e, 0xa7, 0xb3]);
 /** Effectively-unlimited allowance (matches the contract's approveStata, 2^128-1). */
 export const MAX_APPROVE = 340282366920938463463374607431768211455n;
 
-/** Gas ceiling of a supply/redeem through the ERC-4626 wrapper; the contract fixes it (vault pays). */
-export const STATA_GAS_LIMIT = 500_000n;
-
-/** Max total fee per gas, wei (30 gwei). */
-export const STATA_MAX_FEE_PER_GAS = 30_000_000_000n;
-
-/** Max priority fee per gas, wei (1 gwei). */
-export const STATA_MAX_PRIORITY_FEE_PER_GAS = 1_000_000_000n;
-
 /** MPC decodes deposit's uint256 shares return against this (byte-matches supplyOutputSchema, 36). */
 export const SUPPLY_OUTPUT_SCHEMA = '[{"name":"shares","type":"uint256"}]';
 /** MPC re-packs the decoded shares into a uint64 (byte-matches supplyRespondSchema, 35). */

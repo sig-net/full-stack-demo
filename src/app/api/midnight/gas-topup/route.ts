@@ -1,51 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { type Hex } from 'viem';
+import { bytesToHex } from '@sig-net/midnight';
+import {
+  readVaultLedger,
+  VAULT_PATH_HEX,
+} from '@sig-net/midnight-examples-erc20-vault-contract';
+import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 
 import { ensureGasForTransaction } from '@/lib/evm/gas-topup';
-import { getEthereumProvider } from '@/lib/rpc';
 import {
-  ERC20_TRANSFER_GAS_LIMIT,
-  ERC20_TRANSFER_MAX_FEE_PER_GAS,
-} from '@/lib/midnight/evm-envelope';
+  GAS_TOPUP_ALLOWANCES,
+  gasTopUpRequestSchema,
+} from '@/lib/evm/gas-topup-request';
+import { getEthereumProvider } from '@/lib/rpc';
+import { midnightEnv, midnightIndexerConfig } from '@/lib/midnight/env';
+import {
+  derivePathAddress,
+  resolvePathRendering,
+} from '@/lib/midnight/evm-addresses';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-// EIP-1559 requires the sender's balance to cover the full upfront reservation
-// gasLimit * maxFeePerGas of the vault's fixed envelope, with a 10% margin.
-const TOPUP_MAX_FEE_WITH_MARGIN =
-  (ERC20_TRANSFER_MAX_FEE_PER_GAS * 110n) / 100n;
-
 export async function POST(request: NextRequest) {
-  try {
-    const { fromAddress, gasLimit } = await request.json();
+  const parsed = gasTopUpRequestSchema.safeParse(
+    await request.json().catch(() => null),
+  );
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Invalid gas top-up request' },
+      { status: 400 },
+    );
+  }
 
-    if (!fromAddress) {
-      return NextResponse.json(
-        { error: 'Missing fromAddress' },
-        { status: 400 },
+  try {
+    const publicDataProvider = indexerPublicDataProvider(
+      midnightIndexerConfig(),
+    );
+    let recipientAddress;
+    try {
+      const state = await readVaultLedger(
+        publicDataProvider,
+        midnightEnv.contractAddress,
       );
+      const rendering = resolvePathRendering(
+        midnightEnv,
+        bytesToHex(state.vaultEvmAddress),
+      );
+      const path =
+        parsed.data.recipient.kind === 'vault'
+          ? VAULT_PATH_HEX
+          : parsed.data.recipient.path;
+      recipientAddress = derivePathAddress(midnightEnv, path, rendering);
+    } finally {
+      await publicDataProvider.dispose();
     }
 
-    // A transfer/approve reserves the fixed envelope. A swap needs more (a V3 swap is
-    // ~300k), so the caller may request a larger gasLimit. Defaults to the transfer envelope.
-    const limit = gasLimit ? BigInt(gasLimit) : ERC20_TRANSFER_GAS_LIMIT;
-
+    const allowance = GAS_TOPUP_ALLOWANCES[parsed.data.operation];
     const client = getEthereumProvider();
-    // Fund fromAddress so its balance >= gasLimit * maxFeePerGas (the vault tx's upfront
-    // EIP-1559 reservation), with a 10% margin.
     const { topUpTxHash, topUpAmount } = await ensureGasForTransaction(
       client,
-      fromAddress as Hex,
-      limit,
-      TOPUP_MAX_FEE_WITH_MARGIN,
+      recipientAddress,
+      allowance.gasLimit,
+      (allowance.maxFeePerGas * 110n) / 100n,
     );
-
-    // Wait for the top-up to land so the client can broadcast the transfer right after.
-    if (topUpTxHash) {
-      await client.waitForTransactionReceipt({ hash: topUpTxHash });
-    }
 
     return NextResponse.json({
       ok: true,

@@ -1,3 +1,8 @@
+import {
+  derivePathAddress,
+  resolvePathRendering,
+  type PathRendering,
+} from './evm-addresses';
 import { rawTokenType } from '@midnight-ntwrk/compact-runtime';
 import {
   Contract as EthersContract,
@@ -9,7 +14,6 @@ import {
   calculateRequestId,
   requestIdHex,
   requestIdBytes,
-  deriveEvmAddress,
   evmAddressAbiWord,
   numericAbiWord,
   asciiPadded,
@@ -39,9 +43,16 @@ import {
   ERC20_TRANSFER_GAS_LIMIT as GAS_LIMIT,
   ERC20_TRANSFER_MAX_FEE_PER_GAS as MAX_FEE,
   ERC20_TRANSFER_MAX_PRIORITY_FEE_PER_GAS as PRIORITY_FEE,
+  SWAP_GAS_LIMIT,
+  SWAP_MAX_FEE_PER_GAS,
+  SWAP_MAX_PRIORITY_FEE_PER_GAS,
+  STATA_GAS_LIMIT,
+  STATA_MAX_FEE_PER_GAS,
+  STATA_MAX_PRIORITY_FEE_PER_GAS,
 } from './evm-envelope';
 import {
   pureCircuits,
+  VAULT_PATH_HEX,
   ledger,
   VAULT_REQUESTS_PATH,
   VAULT_DEPOSIT_REQUESTS_PATH,
@@ -54,9 +65,6 @@ import {
   STATA_USDC,
   STATA_DEPOSIT_SELECTOR,
   STATA_REDEEM_SELECTOR,
-  STATA_GAS_LIMIT,
-  STATA_MAX_FEE_PER_GAS,
-  STATA_MAX_PRIORITY_FEE_PER_GAS,
   APPROVE_SELECTOR as STATA_APPROVE_SELECTOR,
   MAX_APPROVE as STATA_MAX_APPROVE,
   SUPPLY_MPC_ROUTING,
@@ -70,9 +78,6 @@ import {
   APPROVE_SELECTOR,
   EXACT_OUTPUT_SINGLE_SELECTOR,
   MAX_APPROVE,
-  SWAP_GAS_LIMIT,
-  SWAP_MAX_FEE_PER_GAS,
-  SWAP_MAX_PRIORITY_FEE_PER_GAS,
   SWAP_MPC_ROUTING,
   SWAP_OUTPUT_SCHEMA,
   SWAP_RESPOND_SCHEMA,
@@ -161,13 +166,6 @@ export interface Identity {
   pathHex: string;
 }
 
-/** How a deployment renders a request's 32 path bytes for deriveEvmAddress. */
-export type PathRendering = 'utf8' | 'hex';
-
-// The MPC renders a request's derivation path as the lowercase hex of the full 32 stored
-// bytes, padding included, and deriveEvmAddress takes that same rendering. Passing a UTF-8
-// decode of those bytes instead yields a different address for every path, so the wallet
-// shows a deposit address the MPC never signs from and every signature check fails.
 export function deriveIdentity(secretKey: Uint8Array): Identity {
   const commitment = pureCircuits.userCommitment(secretKey);
   const pathString = new TextDecoder('utf-8')
@@ -176,42 +174,22 @@ export function deriveIdentity(secretKey: Uint8Array): Identity {
   return { secretKey, commitment, pathString, pathHex: bytesToHex(commitment) };
 }
 
-// Deployments disagree on the rendering: the stagenet vault was initialized with the UTF-8
-// form, the test harness deploys with the hex form. Pick by evidence instead of assuming.
-// Only the correct rendering reproduces the vaultEvmAddress the contract stored at
-// initialize, so that stored value identifies the convention. Default to utf8, which
-// leaves the deployed stagenet vault unchanged when the check cannot run.
 let pathRendering: PathRendering = 'utf8';
-export const getPathRendering = (): PathRendering => pathRendering;
-export function resolvePathRendering(env: Env, onChainVaultEvm: string): PathRendering {
-  const norm = (a: string) => a.toLowerCase().replace(/^0x/, '');
-  const hexForm = deriveEvmAddress(env.mpcSecpPub, env.contractAddress, VAULT_PATH_HEX);
-  pathRendering = norm(hexForm) === norm(onChainVaultEvm) ? 'hex' : 'utf8';
-  return pathRendering;
-}
-// Read the deployed vault's own address and set the rendering from it. Call once per connect.
+
 export async function syncPathRendering(
   providers: any,
   env: Env,
 ): Promise<PathRendering> {
   const state = await readVaultLedger(providers, env);
-  return resolvePathRendering(env, bytesToHex(state.vaultEvmAddress));
+  pathRendering = resolvePathRendering(env, bytesToHex(state.vaultEvmAddress));
+  return pathRendering;
 }
 export function depositAddress(env: Env, identity: Identity): string {
-  return deriveEvmAddress(
-    env.mpcSecpPub,
-    env.contractAddress,
-    pathRendering === 'hex' ? identity.pathHex : identity.pathString,
-  );
+  return derivePathAddress(env, identity.pathHex, pathRendering);
 }
-// The withdraw/swap/supply/redeem circuits all set the record path to pad(32, "vault").
-export const VAULT_PATH_HEX = bytesToHex(asciiPadded('vault', PATH_BYTES));
+
 export function vaultAddress(env: Env): string {
-  return deriveEvmAddress(
-    env.mpcSecpPub,
-    env.contractAddress,
-    pathRendering === 'hex' ? VAULT_PATH_HEX : 'vault',
-  );
+  return derivePathAddress(env, VAULT_PATH_HEX, pathRendering);
 }
 
 // Shielded vault-token color for an ERC-20 under this vault.

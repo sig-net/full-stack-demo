@@ -1,5 +1,7 @@
 'use client';
 
+import type { GasTopUpRequest } from '@/lib/evm/gas-topup-request';
+
 import './buffer-shim';
 
 import {
@@ -21,9 +23,7 @@ import {
   midnightTxHistory,
   type MidnightTxRecord,
 } from '@/lib/midnight/tx-history';
-import { ERC20_TRANSFER_GAS_LIMIT } from '@/lib/midnight/evm-envelope';
-import { SWAP_GAS_LIMIT } from '@/lib/midnight/evm-swap';
-import { AAVE_USDC, STATA_GAS_LIMIT, STATA_USDC } from '@/lib/midnight/evm-stata';
+import { AAVE_USDC, STATA_USDC } from '@/lib/midnight/evm-stata';
 import type { MidnightBalances } from '@/lib/midnight/vault-balances';
 
 export type { MidnightBalances, MidnightTokenBalance } from '@/lib/midnight/vault-balances';
@@ -119,11 +119,11 @@ function reportFlowFailure(
   flow.fail(reason);
 }
 
-async function topUpGas(fromAddress: string, gasLimit?: bigint): Promise<void> {
+async function topUpGas(request: GasTopUpRequest): Promise<void> {
   const res = await fetch('/api/midnight/gas-topup', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fromAddress, gasLimit: gasLimit?.toString() }),
+    body: JSON.stringify(request),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -355,7 +355,7 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
     try {
       if (kind === 'deposit') {
         append('Requesting gas top-up from relayer...');
-        await topUpGas(depositAddress); // sweep is sent FROM the deposit address
+        await topUpGas({ operation: 'deposit', recipient: { kind: 'deposit', path: identityRef.current.pathHex } });
         await withStaleStateRecovery(() =>
           runDeposit(providersRef.current, vaultRef.current, midnightEnv, identityRef.current, erc20Address, amountUnits, append, (rid, hash) =>
             record(
@@ -369,9 +369,9 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
         const hex = (receiver ?? '').trim().replace(/^0x/, '');
         const destHex = hex.length === 40 ? `0x${hex}` : DEAD_ADDRESS;
         append('Requesting gas top-up from relayer...');
-        await topUpGas(vaultAddress); // payout is sent FROM the vault address
+        await topUpGas({ operation: 'withdraw', recipient: { kind: 'vault' } });
         await withStaleStateRecovery(() =>
-          runWithdraw(providersRef.current, vaultRef.current, midnightEnv, identityRef.current, erc20Address, amountUnits, destHex, append, () => topUpGas(vaultAddress), (rid, hash) =>
+          runWithdraw(providersRef.current, vaultRef.current, midnightEnv, identityRef.current, erc20Address, amountUnits, destHex, append, () => topUpGas({ operation: 'withdraw', recipient: { kind: 'vault' } }), (rid, hash) =>
             record(
               rid,
               { type: 'Withdraw', fromSymbol: symbol, fromAmount: amountStr, toSymbol: 'WALLET', toAmount: destHex, counterparty: destHex },
@@ -428,10 +428,10 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
     };
     try {
       append('Requesting gas top-up from relayer...');
-      await topUpGas(vaultAddress, SWAP_GAS_LIMIT + ERC20_TRANSFER_GAS_LIMIT);
+      await topUpGas({ operation: 'swap', recipient: { kind: 'vault' } });
       await withStaleStateRecovery(() =>
         runSwap(providersRef.current, vaultRef.current, midnightEnv, identityRef.current, tokenInErc20, tokenOutErc20, amountUnits, append, fee, slippageBps,
-          () => topUpGas(vaultAddress, SWAP_GAS_LIMIT + ERC20_TRANSFER_GAS_LIMIT),
+          () => topUpGas({ operation: 'swap', recipient: { kind: 'vault' } }),
           (rid, hash) => record(rid, hash),
         ),
       );
@@ -477,10 +477,10 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
     };
     try {
       append('Requesting gas top-up from relayer...');
-      await topUpGas(vaultAddress, STATA_GAS_LIMIT + ERC20_TRANSFER_GAS_LIMIT);
+      await topUpGas({ operation: 'supply', recipient: { kind: 'vault' } });
       const mintedShares = await withStaleStateRecovery(() =>
         runSupply(providersRef.current, vaultRef.current, midnightEnv, identityRef.current, amountUnits, append,
-          () => topUpGas(vaultAddress, STATA_GAS_LIMIT + ERC20_TRANSFER_GAS_LIMIT),
+          () => topUpGas({ operation: 'supply', recipient: { kind: 'vault' } }),
           (rid, hash) => record(rid, hash),
         ),
       );
@@ -533,10 +533,10 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
     };
     try {
       append('Requesting gas top-up from relayer...');
-      await topUpGas(vaultAddress, STATA_GAS_LIMIT);
+      await topUpGas({ operation: 'redeem', recipient: { kind: 'vault' } });
       const redeemedAssets = await withStaleStateRecovery(() =>
         runRedeem(providersRef.current, vaultRef.current, midnightEnv, identityRef.current, shares, append,
-          () => topUpGas(vaultAddress, STATA_GAS_LIMIT),
+          () => topUpGas({ operation: 'redeem', recipient: { kind: 'vault' } }),
           (rid, hash) => record(rid, hash),
         ),
       );

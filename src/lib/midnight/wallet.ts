@@ -22,6 +22,7 @@ import {
   createVaultPrivateState,
   VAULT_PRIVATE_STATE_ID,
 } from '@sig-net/midnight-examples-erc20-vault-contract';
+import { midnightIndexerConfig } from './env';
 import { SIGNET_ZK_MANIFEST_SHA256, VAULT_ZK_MANIFEST_SHA256 } from './zk-manifest-hashes';
 
 export { VAULT_PRIVATE_STATE_ID };
@@ -37,12 +38,8 @@ function nodeConfig(networkId: string): MidnightNodeConfig {
   return {
     networkId: networkId as MidnightNodeConfig['networkId'],
     nodeUrl: process.env.NEXT_PUBLIC_MIDNIGHT_NODE_URL ?? 'http://127.0.0.1:9944',
-    indexerUrl:
-      process.env.NEXT_PUBLIC_MIDNIGHT_INDEXER_URL ??
-      'http://127.0.0.1:8088/api/v3/graphql',
-    indexerWsUrl:
-      process.env.NEXT_PUBLIC_MIDNIGHT_INDEXER_WS_URL ??
-      'ws://127.0.0.1:8088/api/v3/graphql/ws',
+    indexerUrl: midnightIndexerConfig().queryURL,
+    indexerWsUrl: midnightIndexerConfig().subscriptionURL,
     proofServerUrl:
       process.env.NEXT_PUBLIC_MIDNIGHT_PROOF_SERVER_URL ?? 'http://127.0.0.1:6300',
   };

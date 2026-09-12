@@ -7,7 +7,12 @@ const clientEnvSchema = z.object({
 });
 
 const serverEnvSchema = z.object({
-  RELAYER_PRIVATE_KEY: z.string().min(1, 'Relayer private key is required'),
+  RELAYER_PRIVATE_KEY: z
+    .string()
+    .regex(
+      /^0x[0-9a-fA-F]{64}$/,
+      'Relayer private key must be 0x-prefixed 32-byte hex',
+    ),
 });
 
 const fullEnvSchema = clientEnvSchema.merge(serverEnvSchema);

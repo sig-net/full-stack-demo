@@ -59,3 +59,14 @@ export const midnightEnv: Env = {
   fakenetResponsesUrl:
     process.env.NEXT_PUBLIC_FAKENET_RESPONSES_URL ?? 'http://localhost:3040',
 };
+
+export function midnightIndexerConfig() {
+  return {
+    queryURL:
+      process.env.NEXT_PUBLIC_MIDNIGHT_INDEXER_URL ??
+      'http://127.0.0.1:8088/api/v3/graphql',
+    subscriptionURL:
+      process.env.NEXT_PUBLIC_MIDNIGHT_INDEXER_WS_URL ??
+      'ws://127.0.0.1:8088/api/v3/graphql/ws',
+  };
+}
