@@ -3,6 +3,7 @@
 | Observation | Next evidence and action |
 | --- | --- |
 | Transport closed during proving upload | Inspect bounded MCP stderr for ERR_STRING_TOO_LONG, verify launcher/version and run the public upload preflight. Do not send another deposit. |
+| Server-assisted action unavailable | Inspect /api/runtime-config and the applied snapshot. Distinguish failed compatibility reads from named field differences. Reconcile intended configuration before retrying, preserving independent wallet actions. |
 | MetaMask chooser stays open | Inspect connection error and expected fork marker, account/chain events and pending extension approval. Reconnect deliberately after correcting configuration. |
 | Confirmed transfer, no start request | Preserve transfer hash and destination. Inspect deposit funds and current request state before using the existing continuation. |
 | Confirmed sweep, pending claim | Restore the same caller secret, select the token and use Pending deposit request ID / Recover pending deposit. The live request supplies the amount. |

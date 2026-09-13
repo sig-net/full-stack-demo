@@ -52,6 +52,10 @@ export class BrowserWallet implements Wallet {
   private addresses?: Awaited<ReturnType<ConnectedAPI['getShieldedAddresses']>>;
   private unshielded = '';
   private config?: MidnightNodeConfig;
+  private proverUri?: string;
+  get reportedProofServerUrl() {
+    return this.proverUri;
+  }
   private transactionProvider?: WalletTransactions;
   private unsupported?: string;
   constructor(
@@ -114,6 +118,7 @@ export class BrowserWallet implements Wallet {
       throw new Error(
         `Switch ${this.name} to ${this.expected.networkId} and reconnect. The wallet reports ${configuration.networkId}.`,
       );
+    this.proverUri = configuration.proverServerUri;
     this.config = createMidnightChainConfig({
       networkId: configuration.networkId,
       indexerUrl: configuration.indexerUri,
@@ -232,6 +237,7 @@ export class BrowserWallet implements Wallet {
     this.addresses = undefined;
     this.unshielded = '';
     this.config = undefined;
+    this.proverUri = undefined;
     this.transactionProvider = undefined;
   }
 }

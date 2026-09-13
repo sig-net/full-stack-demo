@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useRuntimeConfig } from './runtime-config-context';
 import { useMidnightConnection } from './midnight-wallet-context';
 import {
   hasMidnightFees,
@@ -16,6 +17,7 @@ import {
 } from '@/lib/wallet-funding';
 
 function useReadinessOwner() {
+  const runtime = useRuntimeConfig();
   const connection = useMidnightConnection();
   const wallet = connection.wallet;
   const pending = useRef<Promise<void> | null>(null);
@@ -60,6 +62,7 @@ function useReadinessOwner() {
           throw new Error('Wallet session changed.');
       };
       assertCurrent();
+      runtime.requireServerHeaders();
       if (!wallet.ensureFeeReady || !wallet.unshieldedPublicKey)
         throw new Error(
           wallet.fundingUnavailable ??
@@ -73,7 +76,10 @@ function useReadinessOwner() {
       ) {
         const response = await fetch('/api/local-funding/midnight', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: {
+            'content-type': 'application/json',
+            ...runtime.requireServerHeaders(),
+          },
           body: JSON.stringify({
             address: wallet.unshieldedAddress,
             publicKey: wallet.unshieldedPublicKey,
@@ -116,7 +122,7 @@ function useReadinessOwner() {
     fund,
     ready,
     resourcesReady,
-    fundingUnavailable: wallet?.fundingUnavailable,
+    fundingUnavailable: runtime.serverUnavailable ?? wallet?.fundingUnavailable,
     transactionUnavailable: wallet?.transactionUnavailable,
     requireReady: async () => {
       if (!wallet || !connection.isCurrent(wallet))

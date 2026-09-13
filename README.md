@@ -80,11 +80,39 @@ After an EVM sweep has confirmed, restore the same vault identity, select the de
 
 Each chain offers independent seed and browser wallet choices. EVM seeds accept 16–64 hexadecimal bytes and derive the first Ethereum BIP-44 account. EVM seed wallets sign in the page without an extension approval prompt. Closing a seed form clears its input.
 
-Midnight browser discovery lists injected connector API 4 wallets by their own names. Connection checks the reported network and uses the wallet's reported service endpoints. Connector balancing and submission methods enable vault transactions. If those methods are missing, the UI reports that capability limitation while wallet identity and balance reads remain available. Local Midnight funding and automatic rebuilding require the seed adapter. Browser wallet users fund, register NIGHT and resynchronise through their extension, then reconnect. Browser credentials remain in the extension.
+Midnight browser discovery lists injected connector API 4 wallets by their own names. Connection checks the reported network. The extension owns its balance and submission services, and the app uses the applied endpoints for vault reads and proofs. Connector balancing and submission methods enable vault transactions. If those methods are missing, the UI reports that capability limitation while wallet identity and balance reads remain available. Local Midnight funding and automatic rebuilding require the seed adapter. Browser wallet users fund, register NIGHT and resynchronise through their extension, then reconnect. Browser credentials remain in the extension.
 
 Wallet connection, vault identity, binding and balances have separate readiness states. **Retry vault** retries binding. **Retry balances** or **Refresh balances** retries reads. Disconnect forgets the wallet seed and retains the selected identity in page memory. Refresh clears both. Wallet replacement cannot adopt the result of an older session's funding or transaction.
 
 Withdraw, swap, supply and redeem use the MPC path independently of the EVM extension. One shared operation runs at a time. Activity distinguishes success, refund and failure. A failed balance refresh after settlement does not turn settlement into failure. EVM output is reconstructed from the configured fork's executed transaction and checked against the on-chain response attestation before settlement.
+
+## Runtime configuration
+
+Public configuration starts from the generated environment and package deployment defaults.
+The runtime configuration API keeps draft changes in page memory until Apply validates the
+whole draft. Invalid values remain editable. Reset restores startup defaults, and reloading the
+page discards overrides. Task16 supplies the configuration panel over this API.
+
+The supported selections are Sepolia and the startup Midnight network. Applying EVM RPC changes
+requires EVM reconnection. Applying Midnight endpoint changes requires Midnight reconnection.
+Either change invalidates the vault binding. Vault address and MPC key edits rebind the vault
+while retaining the independent caller identity. Explorer edits preserve signing sessions.
+Submitted transfers and Activity records keep their captured destination and explorer metadata.
+Local fork receipts accept an empty explorer or a local explorer. Records without captured
+explorer metadata display their hash without inventing a destination link.
+
+Server-assisted funding and vault operations require compatibility with the server's public
+configuration. The app shows unavailable compatibility separately from named field differences.
+Independent wallet connection and balance reads remain available. Browser overrides cannot
+change server RPCs, deployment addresses, private keys or funding policy. The server derives
+operation funding recipients from its own vault configuration and ledger.
+
+GET `/api/runtime-config` returns the public fields, Signet address and their fingerprint.
+The app verifies that fingerprint and sends it in the `x-vault-configuration` header to all
+three funding POST routes. The routes reject missing or incompatible fingerprints before
+privileged work. Custom clients must compare their effective configuration with this response
+before using its fingerprint. The fingerprint is a compatibility check, not a secret or an
+authorisation credential. Restart Next.js after changing generated server environment values.
 
 ## Reuse and reset
 

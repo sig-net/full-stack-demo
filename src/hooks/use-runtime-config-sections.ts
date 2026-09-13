@@ -1,0 +1,66 @@
+'use client';
+
+import { runtimeFields, type RuntimeField } from '@/lib/config/runtime';
+import { useRuntimeConfig } from '@/providers/runtime-config-context';
+import { useMidnightConnection } from '@/providers/midnight-wallet-context';
+
+export function useRuntimeConfigSections() {
+  const runtime = useRuntimeConfig();
+  const { wallet, error } = useMidnightConnection();
+  const reported =
+    wallet?.kind === 'browser' ? wallet.configuration : undefined;
+  const reportedKeys = new Set<RuntimeField>([
+    'networkId',
+    'indexerUrl',
+    'indexerWsUrl',
+    'nodeUrl',
+  ]);
+  const fields = runtimeFields.map(field => {
+    const walletValue =
+      field.key === 'proofServerUrl'
+        ? wallet?.reportedProofServerUrl
+        : reported && reportedKeys.has(field.key)
+          ? reported[field.key as keyof typeof reported]
+          : undefined;
+    const difference =
+      walletValue && walletValue !== runtime.applied.fields[field.key]
+        ? {
+            kind:
+              field.key === 'networkId'
+                ? ('network' as const)
+                : ('endpoint' as const),
+            walletValue,
+            message:
+              field.key === 'networkId'
+                ? 'The wallet network differs. Reconnect on the configured network.'
+                : 'The wallet uses a different endpoint. Both endpoints may serve the same network. App vault reads and proofs use the applied configuration.',
+          }
+        : undefined;
+    return {
+      ...field,
+      value: runtime.draft[field.key],
+      appliedValue: runtime.applied.fields[field.key],
+      error: runtime.errors[field.key],
+      difference,
+      options:
+        field.key === 'networkId'
+          ? [
+              {
+                value: runtime.owner.defaults.fields.networkId,
+                label: runtime.owner.defaults.fields.networkId,
+              },
+            ]
+          : field.key === 'chainId'
+            ? [{ value: '11155111', label: 'Sepolia (11155111)' }]
+            : undefined,
+    };
+  });
+  return {
+    ...runtime,
+    walletError: error,
+    sections: (['Vault', 'Midnight', 'EVM'] as const).map(title => ({
+      title,
+      fields: fields.filter(field => field.section === title),
+    })),
+  };
+}

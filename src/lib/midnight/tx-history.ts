@@ -20,7 +20,12 @@ export interface MidnightTxRecord {
   counterparty?: string; // deposit address / withdraw destination
   status: MidnightTxStatus;
   timestampRaw: number; // unix seconds
-  txHash?: string; // Sepolia tx hash, when known
+  txHash?: string;
+  networkId?: string;
+  chainId?: number;
+  rpcUrl?: string;
+  explorerUrl?: string;
+  vaultContractAddress?: string;
   // Keep the node's failure verdict inspectable after the toast dismisses.
   failureReason?: string;
   // Cost basis for the lend position, recorded per leg so the widget can show earnings. Assets are

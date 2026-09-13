@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -11,12 +12,8 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { hexToBytes } from 'viem';
 import { useMidnightConnection } from './midnight-wallet-context';
-import {
-  getMidnightChainConfig,
-  getZkConfigOrigin,
-} from '@/lib/config/midnight';
-import { getEvmChainConfig } from '@/lib/config/evm';
-import { createVaultEnvironment } from '@/lib/midnight/env';
+import { getZkConfigOrigin } from '@/lib/config/midnight';
+import { useRuntimeConfig } from './runtime-config-context';
 import {
   createVaultSession,
   type VaultBinding,
@@ -52,6 +49,7 @@ const VaultContext = createContext<VaultContextValue | null>(null);
 
 export function VaultProvider({ children }: { children: ReactNode }) {
   const connection = useMidnightConnection();
+  const runtime = useRuntimeConfig();
   const queryClient = useQueryClient();
   const [identitySecret, setSecret] = useState('');
   const secretRef = useRef('');
@@ -63,11 +61,6 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
   const [retryRevision, setRetryRevision] = useState(0);
   const recovering = useRef(false);
-  const configuration = useRef<{
-    midnight: ReturnType<typeof getMidnightChainConfig>;
-    environment: ReturnType<typeof createVaultEnvironment>;
-    zkOrigin: string;
-  } | null>(null);
 
   const clearSession = () => {
     const previous = current.current;
@@ -87,18 +80,21 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setDeploymentError(null);
   };
 
+  useLayoutEffect(() =>
+    runtime.owner.onInvalidate(scopes => {
+      if (!scopes.has('vault')) return;
+      revision.current += 1;
+      clearSession();
+      setRetryRevision(value => value + 1);
+    }),
+  );
+
   const startSession = (wallet: Wallet) => {
     clearSession();
     if (!secretRef.current) throw new Error('Enter a vault secret first.');
-    if (!configuration.current) {
-      const midnight = getMidnightChainConfig();
-      configuration.current = {
-        midnight,
-        environment: createVaultEnvironment(midnight, getEvmChainConfig()),
-        zkOrigin: getZkConfigOrigin(window.location.origin),
-      };
-    }
-    const { midnight, environment, zkOrigin } = configuration.current;
+    const captured = runtime.owner.getSnapshot().applied;
+    const { midnight, environment } = captured;
+    const zkOrigin = getZkConfigOrigin(window.location.origin);
     // Force lazy deployment validation before acquiring private state or an indexer.
     void environment.contractAddress;
     void environment.signetContractAddress;
@@ -110,6 +106,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       configuration: midnight,
       environment,
       zkOrigin,
+      configurationRevision: captured.fingerprint,
       isCurrent: () =>
         revision.current === attempt &&
         current.current?.session === next &&

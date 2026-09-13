@@ -1,6 +1,6 @@
 import { SeedWallet } from '@/lib/evm/wallet/SeedWallet';
 import { getAddress, type Address } from 'viem';
-import { getEvmChainConfig, sepolia } from './evm';
+import { getEvmChainConfig, sepolia, type EvmChainConfig } from './evm';
 import { getEthereumProvider } from '@/lib/rpc';
 import {
   BrowserWallet,
@@ -33,11 +33,11 @@ function localForkVerification(
 
 export function browserWalletConnection(
   choice: BrowserWalletChoice,
+  config: EvmChainConfig = getEvmChainConfig(),
 ): WalletConnection {
   return {
     key: choice.provider,
     create: onInvalidated => {
-      const config = getEvmChainConfig();
       const verifyNetwork = localForkVerification(config.rpcUrl, address =>
         choice.provider.request({
           method: 'eth_getCode',
@@ -56,12 +56,14 @@ export function browserWalletConnection(
   };
 }
 
-export function seedWalletConnection(input: string): WalletConnection {
+export function seedWalletConnection(
+  input: string,
+  config: EvmChainConfig = getEvmChainConfig(),
+): WalletConnection {
   let seed = input;
   return {
     key: {},
     create: () => {
-      const config = getEvmChainConfig();
       const publicClient = getEthereumProvider(config);
       const wallet = new SeedWallet(
         sepolia,

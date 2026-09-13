@@ -1,4 +1,5 @@
 'use client';
+import { useRuntimeConfig } from '@/providers/runtime-config-context';
 
 import { useEffect, useState } from 'react';
 import { formatEther, formatUnits } from 'viem';
@@ -23,6 +24,7 @@ import { ERC20_TOKENS } from '@/lib/constants/token-metadata';
 import { useEvmWallet } from '@/providers/evm-wallet-context';
 
 export function EvmWalletButton() {
+  const { applied } = useRuntimeConfig();
   const evm = useEvmWallet();
   const balances = useEvmBalances();
   const [open, setOpen] = useState(false);
@@ -95,7 +97,7 @@ export function EvmWalletButton() {
           <form
             onSubmit={event => {
               event.preventDefault();
-              void evm.connect(seedWalletConnection(seed));
+              void evm.connect(seedWalletConnection(seed, applied.evm));
               setSeed('');
             }}
             className='flex flex-col gap-2'
@@ -122,7 +124,7 @@ export function EvmWalletButton() {
               key={choice.id}
               disabled={evm.connecting}
               onClick={() => {
-                void evm.connect(browserWalletConnection(choice));
+                void evm.connect(browserWalletConnection(choice, applied.evm));
               }}
             >
               {choice.name}

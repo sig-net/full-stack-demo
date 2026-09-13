@@ -1,5 +1,6 @@
 'use client';
 
+import { useRuntimeConfig } from '@/providers/runtime-config-context';
 import { useQuery } from '@tanstack/react-query';
 import { encodeFunctionData, erc20Abi, getAddress } from 'viem';
 import { parseTokenAmount } from '@/lib/utils/token-amount';
@@ -11,6 +12,7 @@ export function useEvmDepositEligibility(
   amount: string,
   destination: string | undefined,
 ) {
+  const runtime = useRuntimeConfig();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
   const observed = balances.data?.tokens.find(
@@ -39,7 +41,12 @@ export function useEvmDepositEligibility(
       destination,
       units?.toString(),
     ],
-    enabled: !!wallet && !!destination && units !== undefined && !error,
+    enabled:
+      !!wallet &&
+      !!destination &&
+      units !== undefined &&
+      !error &&
+      !runtime.serverUnavailable,
     gcTime: 0,
     retry: false,
     refetchInterval: 15_000,
@@ -65,11 +72,13 @@ export function useEvmDepositEligibility(
   return {
     ready:
       !!wallet &&
+      !runtime.serverUnavailable &&
       !error &&
       balances.isSuccess &&
       fee.isSuccess &&
       balances.data.eth >= fee.data,
     error:
+      runtime.serverUnavailable ??
       error ??
       (fee.isError
         ? 'Network fee estimate is unavailable.'

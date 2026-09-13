@@ -1,3 +1,4 @@
+import { requireServerConfiguration } from '@/lib/config/server-runtime';
 import { NextRequest, NextResponse } from 'next/server';
 import { bytesToHex } from '@sig-net/midnight';
 import {
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    requireServerConfiguration(request);
     const midnightConfig = getMidnightChainConfig();
     const evmConfig = getEvmChainConfig();
     const vaultEnvironment = createVaultEnvironment(midnightConfig, evmConfig);

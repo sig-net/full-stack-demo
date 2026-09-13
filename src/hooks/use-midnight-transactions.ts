@@ -1,6 +1,5 @@
 'use client';
 
-import { getEvmChainConfig } from '@/lib/config/evm';
 import { useEffect, useState } from 'react';
 
 import {
@@ -13,7 +12,7 @@ import type { ActivityTransaction } from '@/components/activity-list-table';
 const CHAIN = 'midnight';
 
 function toActivity(r: MidnightTxRecord): ActivityTransaction {
-  const explorer = getEvmChainConfig().explorerUrl;
+  const explorer = r.explorerUrl;
   const fromToken =
     r.type === 'Deposit'
       ? { symbol: 'WALLET', chain: CHAIN, amount: r.fromAmount, usdValue: '' }

@@ -12,6 +12,7 @@ export interface Wallet extends WalletMetadata {
   readonly transactionUnavailable?: string;
   readonly fundingUnavailable?: string;
   readonly recoveryUnavailable?: string;
+  readonly reportedProofServerUrl?: string;
   readonly configuration?: MidnightNodeConfig;
   readonly shieldedAddress: string;
   readonly unshieldedAddress: string;

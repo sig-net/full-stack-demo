@@ -29,7 +29,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
     vault.binding?.depositAddress,
   );
   const transfer = deposit.transfer;
-  const explorer = transfer?.explorerUrl ?? evm.wallet?.explorerUrl;
+  const explorer = transfer ? transfer.explorerUrl : evm.wallet?.explorerUrl;
   const tokenBalance = balances.data?.tokens.find(
     value => value.erc20Address === token.erc20Address,
   );

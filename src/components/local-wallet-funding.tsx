@@ -19,7 +19,8 @@ export function LocalWalletFunding() {
     needsMidnight &&
     midnight.balances.isSuccess &&
     !midnight.fundingUnavailable;
-  const canFundEvm = needsEvm && evmBalances.isSuccess;
+  const canFundEvm =
+    needsEvm && evmBalances.isSuccess && !localEvm.fundingUnavailable;
   return (
     <div className='mx-auto max-w-3xl space-y-2 rounded border bg-white/80 p-4 text-sm'>
       <p role='status'>
@@ -29,6 +30,7 @@ export function LocalWalletFunding() {
           `EVM: ${evmBalances.isPending ? 'checking balances' : localEvm.ready ? 'local funding reserve ready' : evmBalances.isError ? 'balances unavailable' : 'funds below local funding reserve'}.`}
       </p>
       {midnight.fundingUnavailable && <p>{midnight.fundingUnavailable}</p>}
+      {localEvm.fundingUnavailable && <p>{localEvm.fundingUnavailable}</p>}
       {(needsMidnight || needsEvm) && (
         <>
           <p>

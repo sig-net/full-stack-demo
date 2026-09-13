@@ -1,5 +1,6 @@
 'use client';
 
+import { useRuntimeConfig } from './runtime-config-context';
 import type { GasTopUpRequest } from '@/lib/evm/gas-topup-request';
 
 import './buffer-shim';
@@ -79,10 +80,13 @@ function reportFlowFailure(
   flow.fail(reason);
 }
 
-async function topUpGas(request: GasTopUpRequest): Promise<void> {
+async function requestGasTopUp(
+  request: GasTopUpRequest,
+  headers: Record<string, string>,
+): Promise<void> {
   const res = await fetch('/api/midnight/gas-topup', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(request),
   });
   if (!res.ok) {
@@ -93,6 +97,9 @@ async function topUpGas(request: GasTopUpRequest): Promise<void> {
 
 function useVaultOperationOwner() {
   const vaultOwner = useVault();
+  const runtime = useRuntimeConfig();
+  const topUpGas = (request: GasTopUpRequest) =>
+    requestGasTopUp(request, runtime.requireServerHeaders());
   const readiness = useWalletReadiness();
   const { refresh } = useVaultBalances();
   const { binding } = vaultOwner;
@@ -203,6 +210,11 @@ function useVaultOperationOwner() {
       }
       recordId = rid;
       midnightTxHistory.add({
+        networkId: runtime.applied.midnight.networkId,
+        chainId: runtime.applied.evm.chainId,
+        rpcUrl: runtime.applied.evm.rpcUrl,
+        explorerUrl: runtime.applied.evm.explorerUrl,
+        vaultContractAddress: runtime.applied.environment.contractAddress,
         id: rid,
         ...base,
         txHash: evmTxHash,
@@ -333,6 +345,11 @@ function useVaultOperationOwner() {
       }
       recordId = rid;
       midnightTxHistory.add({
+        networkId: runtime.applied.midnight.networkId,
+        chainId: runtime.applied.evm.chainId,
+        rpcUrl: runtime.applied.evm.rpcUrl,
+        explorerUrl: runtime.applied.evm.explorerUrl,
+        vaultContractAddress: runtime.applied.environment.contractAddress,
         id: rid,
         type: 'Swap',
         fromSymbol: tokenMeta(tokenInErc20).symbol,
@@ -415,6 +432,11 @@ function useVaultOperationOwner() {
       }
       recordId = rid;
       midnightTxHistory.add({
+        networkId: runtime.applied.midnight.networkId,
+        chainId: runtime.applied.evm.chainId,
+        rpcUrl: runtime.applied.evm.rpcUrl,
+        explorerUrl: runtime.applied.evm.explorerUrl,
+        vaultContractAddress: runtime.applied.environment.contractAddress,
         id: rid,
         type: 'Supply',
         fromSymbol: 'USDC.a',
@@ -502,6 +524,11 @@ function useVaultOperationOwner() {
       }
       recordId = rid;
       midnightTxHistory.add({
+        networkId: runtime.applied.midnight.networkId,
+        chainId: runtime.applied.evm.chainId,
+        rpcUrl: runtime.applied.evm.rpcUrl,
+        explorerUrl: runtime.applied.evm.explorerUrl,
+        vaultContractAddress: runtime.applied.environment.contractAddress,
         id: rid,
         type: 'Redeem',
         fromSymbol: 'stataUSDC',
@@ -573,6 +600,7 @@ function useVaultOperationOwner() {
   ) => {
     if (locked.current)
       throw new Error('A vault operation is already in progress.');
+    runtime.requireServerHeaders();
     const active = vaultOwner.requireBinding();
     locked.current = true;
     setBusy(true);
@@ -583,7 +611,10 @@ function useVaultOperationOwner() {
       const entries = await Promise.all(
         tokens.map(
           async token =>
-            [token.toLowerCase(), await fetchErc20Decimals(token)] as const,
+            [
+              token.toLowerCase(),
+              await fetchErc20Decimals(token, runtime.applied.evm),
+            ] as const,
         ),
       );
       active.assertActive();
@@ -606,7 +637,8 @@ function useVaultOperationOwner() {
   return {
     log,
     busy,
-    ready: readiness.ready,
+    ready: readiness.ready && !runtime.serverUnavailable,
+    unavailable: runtime.serverUnavailable,
     deposit: (erc20: string, amount: bigint) =>
       execute('deposit', [erc20], () => runFlow('deposit', erc20, amount)),
     recoverDeposit: (erc20: string, requestId: string) =>

@@ -6,7 +6,7 @@ import { parseTokenAmount } from '@/lib/utils/token-amount';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-import { getEvmChainConfig } from '@/lib/config/evm';
+import { useRuntimeConfig } from '@/providers/runtime-config-context';
 import { cn } from '@/lib/utils';
 import { useVault } from '@/providers/vault-context';
 import { useVaultBalances } from '@/providers/vault-balances-context';
@@ -29,6 +29,7 @@ interface LendWidgetProps {
 }
 
 export function LendWidget({ className }: LendWidgetProps) {
+  const { applied } = useRuntimeConfig();
   const vault = useVault();
   const connected = vault.binding !== null;
   const { balances } = useVaultBalances();
@@ -36,7 +37,7 @@ export function LendWidget({ className }: LendWidgetProps) {
   const { supply, redeem } = operations;
   const [history, setHistory] = useState<MidnightTxRecord[]>([]);
   useEffect(() => midnightTxHistory.subscribe(setHistory), []);
-  const rpc = connected ? getEvmChainConfig().rpcUrl : null;
+  const rpc = connected ? applied.evm.rpcUrl : null;
   const rates = useQuery({
     queryKey: ['vault-lending-rates', rpc],
     enabled: rpc !== null,

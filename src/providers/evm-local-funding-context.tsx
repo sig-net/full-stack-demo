@@ -12,6 +12,7 @@ import { useMutation } from '@tanstack/react-query';
 import type { Address } from 'viem';
 import { ERC20_TOKENS } from '@/lib/constants/token-metadata';
 import { hasLocalEvmFunds } from '@/lib/wallet-funding';
+import { useRuntimeConfig } from './runtime-config-context';
 import { useEvmWallet } from './evm-wallet-context';
 import { useEvmBalances } from './evm-balances-context';
 
@@ -19,6 +20,7 @@ export function useAddressFunding(
   address: Address | undefined,
   session: string | undefined,
   refresh: () => Promise<unknown>,
+  requireHeaders: () => Record<string, string> = () => ({}),
 ) {
   const current = useRef({ address, session });
   const pending = useRef<{
@@ -42,7 +44,7 @@ export function useAddressFunding(
       assertRecipient();
       const response = await fetch('/api/local-funding/evm', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...requireHeaders() },
         body: JSON.stringify({ address: recipient.address }),
       });
       const body = await response.json();
@@ -89,10 +91,14 @@ export function useAddressFunding(
 }
 
 function useEvmLocalFundingOwner() {
+  const runtime = useRuntimeConfig();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
-  const funding = useAddressFunding(wallet?.account, wallet?.sessionId, () =>
-    balances.refetch({ throwOnError: true }),
+  const funding = useAddressFunding(
+    wallet?.account,
+    wallet?.sessionId,
+    () => balances.refetch({ throwOnError: true }),
+    runtime.requireServerHeaders,
   );
   const usdc = balances.data?.tokens.find(
     token =>
@@ -103,7 +109,7 @@ function useEvmLocalFundingOwner() {
     !!wallet &&
     balances.isSuccess &&
     hasLocalEvmFunds(balances.data.eth, usdc?.units, usdc?.decimals);
-  return { ...funding, ready };
+  return { ...funding, ready, fundingUnavailable: runtime.serverUnavailable };
 }
 const EvmLocalFundingContext = createContext<ReturnType<
   typeof useEvmLocalFundingOwner

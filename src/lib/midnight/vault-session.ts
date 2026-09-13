@@ -47,6 +47,7 @@ export function createVaultSession(input: {
   configuration: MidnightNodeConfig;
   environment: Env;
   zkOrigin: string;
+  configurationRevision?: string;
   isCurrent: () => boolean;
 }) {
   const { secret: suppliedSecret, ...settings } = input;
@@ -72,7 +73,7 @@ export function createVaultSession(input: {
     resources = null;
   };
   const options = queryOptions({
-    queryKey: ['vault-binding', id],
+    queryKey: ['vault-binding', id, settings.configurationRevision],
     staleTime: Infinity,
     gcTime: 0,
     retry: false,

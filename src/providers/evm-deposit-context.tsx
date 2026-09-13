@@ -13,6 +13,7 @@ import { erc20Abi, getAddress, type Hash } from 'viem';
 import { isErc20Allowed } from '@/lib/constants/token-metadata';
 import { parseTokenAmount } from '@/lib/utils/token-amount';
 import type { VaultBinding } from '@/lib/midnight/vault-session';
+import { useRuntimeConfig } from './runtime-config-context';
 import { useEvmWallet } from './evm-wallet-context';
 import { useEvmBalances } from './evm-balances-context';
 import { useVaultOperations } from './vault-operations-context';
@@ -36,6 +37,7 @@ interface DepositTransfer {
 }
 
 function useEvmDepositOwner() {
+  const runtime = useRuntimeConfig();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
   const queries = useQueryClient();
@@ -53,6 +55,7 @@ function useEvmDepositOwner() {
     amount: string,
   ) => {
     if (busy.current || transferRef.current?.sweep === 'pending') return;
+    runtime.requireServerHeaders();
     const owner = wallet;
     if (!owner) throw new Error('Connect an EVM wallet first.');
     binding.assertActive();
@@ -63,7 +66,7 @@ function useEvmDepositOwner() {
       account: owner.account,
       chainId: owner.chain.id,
       amount,
-      explorerUrl: owner.explorerUrl,
+      explorerUrl: runtime.applied.evm.explorerUrl,
       status: 'approving',
       sweep: 'ready',
     };
@@ -105,6 +108,7 @@ function useEvmDepositOwner() {
         beforeSubmit: () => {
           if (!mounted.current) throw new Error('Deposit workflow closed.');
           binding.assertActive();
+          runtime.requireServerHeaders();
         },
         submitted: hash => {
           record.hash = hash;

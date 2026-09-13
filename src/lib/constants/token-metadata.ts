@@ -1,7 +1,7 @@
 import { queryClient } from '@/lib/query-client';
 import { erc20Abi, type Hex } from 'viem';
 
-import { getEvmChainConfig } from '@/lib/config/evm';
+import type { EvmChainConfig } from '@/lib/config/evm';
 import { getEthereumProvider } from '@/lib/rpc';
 
 // Token display info - decimals come from on-chain fetching
@@ -132,7 +132,7 @@ export function getErc20Token(address: string): TokenConfig | undefined {
 
 export async function fetchErc20Decimals(
   address: string,
-  config = getEvmChainConfig(),
+  config: EvmChainConfig,
 ): Promise<number> {
   if (!isErc20Allowed(address)) {
     throw new Error(`Token not supported: ${address}`);

@@ -14,7 +14,7 @@ import { useVault } from '@/providers/vault-context';
 import { useVaultBalances } from '@/providers/vault-balances-context';
 import { useVaultOperations } from '@/providers/vault-operations-context';
 import { useMidnightProgress } from '@/hooks/use-midnight-progress';
-import { getEvmChainConfig } from '@/lib/config/evm';
+import { useRuntimeConfig } from '@/providers/runtime-config-context';
 import {
   discoverSwappablePairs,
   pairKey,
@@ -41,6 +41,7 @@ const DEFAULT_SLIPPAGE_BPS = 100n;
 type TokenWithBalance = Token & { balance: string; units: bigint };
 
 export function SwapWidget({ className }: SwapWidgetProps) {
+  const { applied } = useRuntimeConfig();
   const vault = useVault();
   const { balances } = useVaultBalances();
   const operations = useVaultOperations();
@@ -54,7 +55,7 @@ export function SwapWidget({ className }: SwapWidgetProps) {
   const [slippageBps, setSlippageBps] = useState<bigint>(DEFAULT_SLIPPAGE_BPS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const enabled = vault.binding !== null;
-  const rpc = enabled ? getEvmChainConfig().rpcUrl : null;
+  const rpc = enabled ? applied.evm.rpcUrl : null;
   const pairs = useQuery({
     queryKey: ['vault-swap-pairs', rpc],
     enabled: rpc !== null,

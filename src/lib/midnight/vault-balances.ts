@@ -1,3 +1,4 @@
+import { createEvmChainConfig } from '@/lib/config/evm';
 import { erc20Balance, vaultTokenType, type Env } from './vault';
 import { fetchErc20Decimals } from '@/lib/constants/token-metadata';
 import type { AppVaultProviders } from './vault-providers';
@@ -50,7 +51,9 @@ export async function readBalances(
         vAddr
           ? erc20Balance(env.evmRpcUrl, erc20, vAddr).catch(() => null)
           : null,
-        fetchErc20Decimals(erc20).catch(() => null),
+        fetchErc20Decimals(erc20, createEvmChainConfig(env.evmRpcUrl)).catch(
+          () => null,
+        ),
       ]);
       const vaultUnits =
         shieldedByType === null

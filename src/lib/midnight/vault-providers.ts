@@ -73,7 +73,6 @@ export function buildVaultProviders(
       wallet.transactionUnavailable ??
         'Vault transactions are unavailable for this wallet.',
     );
-  cfg = wallet.configuration ?? cfg;
   // Each origin's manifest is pinned to the hash `yarn zk-assets` printed, so a tampered origin
   // cannot certify its own artefacts by rewriting the manifest it serves beside them.
   type ZkOptions = ConstructorParameters<

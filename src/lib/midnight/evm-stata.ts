@@ -1,5 +1,5 @@
 import { formatUnits } from 'viem';
-import { getEvmChainConfig } from '@/lib/config/evm';
+import { createEvmChainConfig } from '@/lib/config/evm';
 import { fetchErc20Decimals } from '@/lib/constants/token-metadata';
 // Aave ERC-4626 (stataToken) constants for the supply/redeem flows: the pinned Aave USDC
 // pair on Sepolia, the deposit/redeem/approve ABI shapes, the supply/redeem schemas, and the
@@ -47,7 +47,7 @@ export async function stataAssetsPerShare(evmRpcUrl: string): Promise<number> {
     ['function convertToAssets(uint256 shares) view returns (uint256)'],
     evmProvider(evmRpcUrl),
   );
-  const config = { ...getEvmChainConfig(), rpcUrl: evmRpcUrl };
+  const config = createEvmChainConfig(evmRpcUrl);
   const [shareDecimals, assetDecimals] = await Promise.all([
     fetchErc20Decimals(STATA_USDC, config),
     fetchErc20Decimals(AAVE_USDC, config),
@@ -91,8 +91,14 @@ export const SUPPLY_MPC_ROUTING = {
   algo: MPCSignatureAlgorithm.ecdsa,
   dest: MPCDestination.unused,
   params: new Uint8Array(MPC_PARAMS_BYTES),
-  outputDeserializationSchema: asciiPadded(SUPPLY_OUTPUT_SCHEMA, SUPPLY_OUTPUT_SCHEMA.length),
-  respondSerializationSchema: asciiPadded(SUPPLY_RESPOND_SCHEMA, SUPPLY_RESPOND_SCHEMA.length),
+  outputDeserializationSchema: asciiPadded(
+    SUPPLY_OUTPUT_SCHEMA,
+    SUPPLY_OUTPUT_SCHEMA.length,
+  ),
+  respondSerializationSchema: asciiPadded(
+    SUPPLY_RESPOND_SCHEMA,
+    SUPPLY_RESPOND_SCHEMA.length,
+  ),
 };
 
 /** Contract-fixed routing of a redeem event. */
@@ -100,6 +106,12 @@ export const REDEEM_MPC_ROUTING = {
   algo: MPCSignatureAlgorithm.ecdsa,
   dest: MPCDestination.unused,
   params: new Uint8Array(MPC_PARAMS_BYTES),
-  outputDeserializationSchema: asciiPadded(REDEEM_OUTPUT_SCHEMA, REDEEM_OUTPUT_SCHEMA.length),
-  respondSerializationSchema: asciiPadded(REDEEM_RESPOND_SCHEMA, REDEEM_RESPOND_SCHEMA.length),
+  outputDeserializationSchema: asciiPadded(
+    REDEEM_OUTPUT_SCHEMA,
+    REDEEM_OUTPUT_SCHEMA.length,
+  ),
+  respondSerializationSchema: asciiPadded(
+    REDEEM_RESPOND_SCHEMA,
+    REDEEM_RESPOND_SCHEMA.length,
+  ),
 };

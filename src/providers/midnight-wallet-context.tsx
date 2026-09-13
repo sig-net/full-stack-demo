@@ -9,7 +9,10 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { getMidnightChainConfig } from '@/lib/config/midnight';
+import {
+  getMidnightChainConfig,
+  type MidnightNodeConfig,
+} from '@/lib/config/midnight';
 import type { Wallet } from '@/lib/midnight/wallet/Wallet';
 import type { BrowserWalletChoice } from '@/lib/midnight/wallet/BrowserWallet';
 
@@ -31,7 +34,13 @@ const MidnightWalletContext = createContext<MidnightWalletContextValue | null>(
   null,
 );
 
-export function MidnightWalletProvider({ children }: { children: ReactNode }) {
+export function MidnightWalletProvider({
+  children,
+  configuration: suppliedConfiguration,
+}: {
+  children: ReactNode;
+  configuration?: MidnightNodeConfig;
+}) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +93,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }) {
     setConnecting(true);
     setSyncStatus('starting wallet…');
     const promise = (async () => {
-      configuration.current ??= getMidnightChainConfig();
+      configuration.current = suppliedConfiguration ?? getMidnightChainConfig();
       const { SeedWallet } = await import('@/lib/midnight/wallet/SeedWallet');
       if (attempt !== generation.current)
         throw new Error('Wallet connection superseded.');
@@ -129,7 +138,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }) {
     const attempt = generation.current;
     setConnecting(true);
     const promise = (async () => {
-      configuration.current ??= getMidnightChainConfig();
+      configuration.current = suppliedConfiguration ?? getMidnightChainConfig();
       const { BrowserWallet } = await import(
         '@/lib/midnight/wallet/BrowserWallet'
       );

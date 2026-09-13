@@ -1,3 +1,4 @@
+import { requireServerConfiguration } from '@/lib/config/server-runtime';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   encodeAbiParameters,
@@ -111,6 +112,7 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   try {
+    requireServerConfiguration(request);
     await requireLocalDemo();
     const operation = running
       .catch(() => {})
