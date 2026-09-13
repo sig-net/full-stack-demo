@@ -26,7 +26,7 @@ The [exception register](design-system-exceptions.json) gives exact source locat
 
 Enabled buttons, links and menu actions use a pointer. Inputs use a text cursor. Native disabled controls and Radix disabled items retain their activation constraints and visually reduced states. Focus uses the semantic ring. Button variants own default, hover, expanded, active, invalid and disabled treatment. Reduced motion follows the user's system preference.
 
-A menu action composed with `DropdownMenuItem asChild` uses `Button variant='menu'`. The menu owns that element's appearance, highlight and focus. This variant requires the enclosing menu item and is not a standalone button style. Standalone identity uses the outline variant. Menu item actions participate in Radix keyboard navigation. Dialog and menu owners retain focus return and secret-clearing behaviour.
+A menu action composed with `DropdownMenuItem asChild` uses `Button variant='menu'`. The menu owns that element's appearance, highlight and focus. This variant requires the enclosing menu item and is not a standalone button style. Vault identity uses the outline variant with an anchored shared Popover editor and a textual status accompanying StatusDot. Menu item actions participate in Radix keyboard navigation. Dialog and menu owners retain focus return and secret-clearing behaviour.
 
 Use `Feedback` for inline errors, warnings and operation feedback. `StatusDot` accompanies textual status, and Activity uses semantic Badge variants. The root imports the themed local `Toaster`. Features can call Sonner's toast functions, while the local component and semantic CSS own toast rendering.
 

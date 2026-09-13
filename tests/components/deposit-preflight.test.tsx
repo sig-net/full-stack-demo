@@ -44,9 +44,6 @@ it("serialises EVM deposit preflight and preserves confirmed transfer state", as
   });
 
   vi.mocked(useVault).mockReturnValue({
-    identitySecret: "",
-    setIdentitySecret: vi.fn(),
-    clearIdentity: vi.fn(),
     status: "ready",
     error: null,
     binding,

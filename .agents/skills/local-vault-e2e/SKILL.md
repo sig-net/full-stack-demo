@@ -1,6 +1,6 @@
 ---
 name: local-vault-e2e
-description: Run and diagnose the local ERC-20 vault UI with the examples stack, Playwright and a real MetaMask wallet. Use for browser regression checks, deposit acceptance, local setup, reuse and pending-deposit recovery. Choose verification scope from the requested task.
+description: Run and diagnose the local ERC-20 vault UI with the examples stack, Playwright and seed or browser wallets. Use for browser regression checks, deposit acceptance, local setup, reuse and pending-deposit recovery. Choose verification scope from the requested task.
 ---
 
 # Local vault browser verification
@@ -50,9 +50,12 @@ Do not repeat the upload preflight before every browser click or after an unchan
 
 ## Establish ownership and a session record
 
-One agent owns the prepared browser. If the current session identifies that owner, request its
-relay directly. Otherwise make one tab-list attempt. If another agent owns the profile, keep that
-owner as the relay and send bounded UI steps with expected observations.
+One agent owns the prepared browser. Check callable browser tools in the executing agent's own
+session: a child can lack Playwright even when its parent has it. If tools are missing, ask the
+parent for a browser relay before provisioning tools or another profile. Send bounded steps and
+expected observations, and let the relay return evidence. If the current session identifies the
+browser owner, request its relay directly. Otherwise make one tab-list attempt and keep an existing
+profile owner as the relay.
 Do not terminate its browser or create a replacement wallet to avoid the lock.
 
 Keep current operational state in a private, ignored `.local-vault/` directory at the UI root.

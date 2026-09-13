@@ -18,6 +18,7 @@ import { midnightTxHistory, type MidnightTxRecord } from "@/lib/midnight/tx-hist
 import { MidnightWalletProvider } from "@/providers/midnight-wallet-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { VaultProvider } from "@/providers/vault-context";
+import { VaultIdentityProvider } from "@/providers/vault-identity-context";
 
 afterEach(() => {
   cleanup();
@@ -136,9 +137,11 @@ it("keeps selected details open while the selected row updates", async () => {
     <QueryClientProvider client={queryClient}>
       <RuntimeConfigProvider>
         <MidnightWalletProvider>
-          <VaultProvider>
-            <ActivityListTable />
-          </VaultProvider>
+          <VaultIdentityProvider>
+            <VaultProvider>
+              <ActivityListTable />
+            </VaultProvider>
+          </VaultIdentityProvider>
         </MidnightWalletProvider>
       </RuntimeConfigProvider>
     </QueryClientProvider>,

@@ -21,6 +21,7 @@ import { MidnightWalletProvider } from "./midnight-wallet-context";
 import { RuntimeConfigProvider, useRuntimeConfig } from "./runtime-config-context";
 import { VaultBalancesProvider } from "./vault-balances-context";
 import { VaultProvider } from "./vault-context";
+import { VaultIdentityProvider } from "./vault-identity-context";
 import { VaultOperationsProvider } from "./vault-operations-context";
 
 function RuntimeWallets({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -62,16 +63,18 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
               <RuntimeWallets>
                 <MidnightReadinessProvider>
                   <MidnightLocalFundingProvider>
-                    <VaultProvider>
-                      <VaultBalancesProvider>
-                        <VaultOperationsProvider>
-                          <EvmDepositProvider>
-                            {children}
-                            <MidnightProgressToaster />
-                          </EvmDepositProvider>
-                        </VaultOperationsProvider>
-                      </VaultBalancesProvider>
-                    </VaultProvider>
+                    <VaultIdentityProvider>
+                      <VaultProvider>
+                        <VaultBalancesProvider>
+                          <VaultOperationsProvider>
+                            <EvmDepositProvider>
+                              {children}
+                              <MidnightProgressToaster />
+                            </EvmDepositProvider>
+                          </VaultOperationsProvider>
+                        </VaultBalancesProvider>
+                      </VaultProvider>
+                    </VaultIdentityProvider>
                   </MidnightLocalFundingProvider>
                 </MidnightReadinessProvider>
               </RuntimeWallets>

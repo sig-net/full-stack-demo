@@ -67,9 +67,6 @@ it.each(["error", "confirmed", "fresh-binding", "complete"] as const)(
       .fn<ReturnType<typeof useEvmDeposit>["continueDeposit"]>()
       .mockResolvedValue(undefined);
     vi.mocked(useVault).mockReturnValue({
-      identitySecret: "",
-      setIdentitySecret: vi.fn(),
-      clearIdentity: vi.fn(),
       status: "ready",
       error: null,
       binding: active,

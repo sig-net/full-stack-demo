@@ -1,9 +1,22 @@
 # Application ownership
 
-The React provider tree composes configuration, wallet connections, readiness, vault binding,
+The React provider tree composes configuration, wallet connections, readiness, vault identity, vault binding,
 balances and operations. A connected wallet does not establish balance availability or operation
 eligibility. Remote observations use React Query, with session identity included where a replacement
 instance changes the meaning of a result.
+
+## Vault identity and binding
+
+`VaultIdentityProvider` owns the validated applied secret in page memory and operates independently
+of wallet, configuration and query providers. Home and toolbar editors share that applied value,
+while each panel owns a temporary draft and unique input identifiers. Closing a panel clears its
+draft and feedback. The identity status indicates an applied secret.
+
+`VaultProvider` subscribes to synchronous identity invalidation. Replacing or clearing the secret
+disposes the captured session and removes its query before the identity action returns. Captured
+bindings reject further work immediately. Wallet disconnect retains the applied identity and
+invalidates the binding through the vault owner's disconnect action. Clearing identity retains the
+wallet. Wallet replacement and configuration invalidation continue to guard dependent sessions.
 
 ## Vault execution
 

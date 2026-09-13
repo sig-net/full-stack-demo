@@ -3,8 +3,6 @@
 import type * as React from "react";
 import { useState } from "react";
 
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { Feedback } from "@/components/ui/feedback";
 import {
   type BrowserWalletChoice,
   discoverBrowserWallets,
@@ -13,11 +11,10 @@ import type { Wallet } from "@/lib/midnight/wallet/Wallet";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
 import { useVault } from "@/providers/vault-context";
 
-import { VaultIdentityButton } from "./vault-identity-button";
 import { WalletMenu } from "./wallet-menu";
 
 /**
- * Composes Midnight wallet discovery, connection actions and vault identity controls.
+ * Composes Midnight wallet discovery, connection actions and capability feedback.
  *
  * @returns The Midnight wallet menu.
  */
@@ -56,26 +53,6 @@ export function MidnightWalletButton(): React.JSX.Element {
       disconnect={vault.disconnect}
     >
       <div className="ds-menu-section">
-        <VaultIdentityButton menuItem />
-        {connection.wallet && vault.status === "missing-identity" && (
-          <p role="status">Set a vault identity to load the vault.</p>
-        )}
-        {vault.status === "loading" && <p role="status">Loading vault…</p>}
-        {vault.error && (
-          <>
-            <Feedback tone="error" role="alert">
-              {vault.error}
-            </Feedback>
-            <DropdownMenuItem
-              onSelect={(event) => {
-                event.preventDefault();
-                vault.retry();
-              }}
-            >
-              Retry vault
-            </DropdownMenuItem>
-          </>
-        )}
         {connection.wallet?.transactionUnavailable && (
           <p>{connection.wallet.transactionUnavailable}</p>
         )}

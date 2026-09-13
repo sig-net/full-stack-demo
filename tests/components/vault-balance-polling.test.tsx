@@ -20,9 +20,6 @@ afterEach(() => {
 it("suspends actual balance polling during proving and resumes after settlement", async () => {
   const binding = await createVaultFixture();
   vi.mocked(useVault).mockReturnValue({
-    identitySecret: "",
-    setIdentitySecret: vi.fn(),
-    clearIdentity: vi.fn(),
     status: "ready",
     error: null,
     binding,

@@ -35,9 +35,6 @@ it.each(["missing", "loading", "error"])(
   "distinguishes %s balances from an empty portfolio",
   (mode) => {
     vi.mocked(useVault).mockReturnValue({
-      identitySecret: "",
-      setIdentitySecret: vi.fn(),
-      clearIdentity: vi.fn(),
       status: "missing-identity",
       error: null,
       binding: null,
@@ -86,9 +83,6 @@ it("uses asset decimals, preserves refunds, rejects excess precision and gates u
   vi.mocked(stataAssetsPerShare).mockResolvedValue(1);
   vi.mocked(stataSupplyApy).mockResolvedValue(0.03);
   vi.mocked(useVault).mockReturnValue({
-    identitySecret: "",
-    setIdentitySecret: vi.fn(),
-    clearIdentity: vi.fn(),
     status: "ready",
     error: null,
     binding,

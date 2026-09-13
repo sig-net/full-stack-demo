@@ -20,6 +20,41 @@ the contract authorities. Do not add private wallet-key signing to bypass the pr
 
 ## Correlation and fees
 
+To discover start and claim hashes without reading wallet logs, query recent actions on the
+configured vault address. This bounded query identified both deposit calls during task20:
+
+```graphql
+query ($address: HexEncoded!) {
+  contract(address: $address) {
+    actions(limit: 12) {
+      ... on ContractCall {
+        entryPoint
+      }
+      transaction {
+        hash
+        block {
+          height
+        }
+        ... on RegularTransaction {
+          identifiers
+          fee
+          transactionResult {
+            status
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Correlate the returned startDeposit and completeDeposit calls with the captured operation's
+block window and request evidence, and verify SUCCESS. Recent actions alone cannot distinguish
+concurrent deposits. If the bounded window omits the operation, use its captured block or
+transaction offset. Capture the pending request before claim removes it. The installed public
+data provider's `queryContractState(address, { type: "blockHeight", blockHeight })` also retrieved
+the captured request at its known pending block after settlement for SDK attestation verification.
+
 Query the configured local indexer, using bounded requests. This executed query shape selects
 actual successful transaction fees, including block height:
 

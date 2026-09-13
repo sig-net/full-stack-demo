@@ -1,6 +1,7 @@
 "use client";
 
 import type * as React from "react";
+import { useRef } from "react";
 
 import { ActivityListTable } from "@/components/activity-list-table";
 import { BalanceSection } from "@/components/balance-section";
@@ -18,16 +19,17 @@ import { useVault } from "@/providers/vault-context";
  */
 export default function Home(): React.JSX.Element {
   const vault = useVault();
+  const identityTriggerRef = useRef<HTMLButtonElement>(null);
   const isConnected = vault.binding !== null;
 
   return (
     <div className="ds-page min-h-screen w-full overflow-x-hidden">
-      <NavigationHeader />
+      <NavigationHeader identityTriggerRef={identityTriggerRef} />
       <LocalWalletFunding />
 
       {!isConnected ? (
         <div className="ds-inset-content ds-before-section mx-auto max-w-full xl:container">
-          <EmptyStateWallet />
+          <EmptyStateWallet appliedFocusRef={identityTriggerRef} />
         </div>
       ) : (
         <div className="ds-inset-content ds-before-section ds-bottom-inset-section lg:ds-before-section mx-auto max-w-full xl:container">

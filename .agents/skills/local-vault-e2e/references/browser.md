@@ -4,7 +4,9 @@
 
 The root development dependency pins @playwright/mcp 0.0.80 and its Playwright version through
 Yarn. Install with the README's project-local immutable dependency command. Use the existing
-installed Chrome and prepared disposable MetaMask profile. Do not run a global browser installer.
+installed Chrome and prepared test profile. Select seed or extension wallets according to the task.
+Seed-wallet acceptance does not require installing or unlocking MetaMask.
+Do not run a global browser installer.
 
 Configure the Playwright MCP command as the absolute path to the tested Node executable, with
 arguments containing the absolute UI path to `scripts/local-vault/playwright-launcher.mjs`, then
@@ -28,7 +30,8 @@ messages to recover those bodies. Revalidate any future tool upgrade before wall
 
 ## Browser procedure
 
-Before a relayed smoke check, agree a stable application-file window with the implementing agent.
+Before a relayed browser check or deposit, agree a stable application-file window with the
+implementing agent.
 Wait for their acknowledgement that writes and formatting have stopped before restoring credentials.
 They can continue fixture and documentation work while the browser owner checks the UI. Resume
 application edits after the browser owner releases the window. HMR can
@@ -39,7 +42,10 @@ Discover callable Playwright tool schemas from the current environment. List tab
 observed URL, and capture a fresh snapshot. Use observed role/name locators. Scope repeated
 connection buttons to the banner or active dialog. A click can return before React completes its
 state transition: wait for the expected control rather than interpreting an immediate false
-visibility result as failure.
+visibility result as failure. Seed installation can close its dialog before synchronisation finishes.
+Close any reopened wallet menu before checking the banner, as modal menus hide it from role
+queries. Wait for the connected control and spendable readiness before testing connected-state
+transitions or submitting a deposit.
 
 For wallet-menu presentation changes, traverse every actionable item with the keyboard, including
 identity and balance actions embedded in menu content. Ordinary buttons inside a Radix menu were
@@ -120,11 +126,42 @@ reloading during proving. A small deposit is still a real sequence of transactio
 
 ## Credentials and captures
 
-Do not print credentials in shell results, code echoes, snapshots or logs. In a functions-style
-orchestrator, a private credential read can be parsed into its store without calling text on the
-result. Likewise, forward a browser fill result as a success boolean rather than emitting the
-MCP response, which can echo the code and secret argument. Capture snapshots only after secret
-fields close or clear. Other runtimes need an equivalent private transfer mechanism.
+Do not embed credentials in browser code, even if the caller suppresses the tool response: the
+browser tool records and echoes its code. Do not print credentials in shell results, snapshots
+or logs. The tested Playwright VM has neither `require` nor a dynamic-import callback.
+
+For prepared local credential files, transfer the file with `setInputFiles` through a temporary
+hidden file input, read the selected File into a local variable, remove the input, and fill the
+product's password control. This keeps values out of tool arguments and results. For example:
+
+```javascript
+await page.evaluate(() => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.id = "private-test-credential-transfer";
+  input.hidden = true;
+  document.body.append(input);
+});
+try {
+  const transfer = page.locator("#private-test-credential-transfer");
+  await transfer.setInputFiles(credentialFilePath);
+  const secret = await transfer.evaluate(async (input) =>
+    JSON.parse(await input.files[0].text()).VAULT_CALLER_SECRET,
+  );
+  await transfer.evaluate((input) => input.remove());
+  await page.getByRole("textbox", { name: "Vault secret", exact: true }).fill(secret);
+  await page.getByRole("button", { name: "Use vault secret", exact: true }).click();
+} finally {
+  await page.locator("#private-test-credential-transfer").evaluateAll((inputs) =>
+    inputs.forEach((input) => input.remove()),
+  );
+}
+```
+
+Use the observed field and key for wallet seeds. Keep `credentialFilePath` pointed at the
+prepared ignored file. Return public status only. Capture snapshots and screenshots only after
+credential fields close or clear. This transfer supplies product inputs, it does not inject
+wallet state or a signer.
 
 Store only disposable credentials required for the requested test, in ignored mode-0600 files.
 Their paths may enter the session record, their values may not. A new page, MCP restart or HMR

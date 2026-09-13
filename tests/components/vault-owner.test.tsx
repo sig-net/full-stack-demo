@@ -10,6 +10,7 @@ import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
 import { MidnightWalletProvider, useMidnightConnection } from "@/providers/midnight-wallet-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVault, VaultProvider } from "@/providers/vault-context";
+import { useVaultIdentity, VaultIdentityProvider } from "@/providers/vault-identity-context";
 
 import { createVaultFixture } from "../sdk/vault-fixture";
 
@@ -30,27 +31,36 @@ it("reconciles wallet and identity replacements through the mounted effect event
   vi.mocked(vault.syncPathRendering).mockResolvedValue("utf8");
   vi.spyOn(SeedWallet.prototype, "initialise").mockResolvedValue(undefined);
   const query = new QueryClient();
-  const mounted = renderHook(() => ({ vault: useVault(), connection: useMidnightConnection() }), {
-    wrapper: ({ children }) => (
-      <StrictMode>
-        <QueryClientProvider client={query}>
-          <RuntimeConfigProvider>
-            <MidnightWalletProvider>
-              <VaultProvider>{children}</VaultProvider>
-            </MidnightWalletProvider>
-          </RuntimeConfigProvider>
-        </QueryClientProvider>
-      </StrictMode>
-    ),
-  });
+  const mounted = renderHook(
+    () => ({
+      vault: useVault(),
+      identity: useVaultIdentity(),
+      connection: useMidnightConnection(),
+    }),
+    {
+      wrapper: ({ children }) => (
+        <StrictMode>
+          <QueryClientProvider client={query}>
+            <RuntimeConfigProvider>
+              <MidnightWalletProvider>
+                <VaultIdentityProvider>
+                  <VaultProvider>{children}</VaultProvider>
+                </VaultIdentityProvider>
+              </MidnightWalletProvider>
+            </RuntimeConfigProvider>
+          </QueryClientProvider>
+        </StrictMode>
+      ),
+    },
+  );
   try {
     expect(mounted.result.current.vault.status).toBe("disconnected");
     for (const value of ["", "zz".repeat(32), "01"])
       expect(() => {
-        mounted.result.current.vault.setIdentitySecret(value);
+        mounted.result.current.identity.setIdentitySecret(value);
       }).toThrow("32-byte");
     act(() => {
-      mounted.result.current.vault.setIdentitySecret(` 0X${"06".repeat(32)} `);
+      mounted.result.current.identity.setIdentitySecret(` 0X${"06".repeat(32)} `);
     });
     expect(assembly.joinVault).not.toHaveBeenCalled();
     await act(async () => {
@@ -71,7 +81,9 @@ it("reconciles wallet and identity replacements through the mounted effect event
     ).not.toContain("06".repeat(32));
     const publicDispose = vi.spyOn(first.providers.publicDataProvider, "dispose");
     act(() => {
-      mounted.result.current.vault.setIdentitySecret("08".repeat(32));
+      mounted.result.current.identity.setIdentitySecret("08".repeat(32));
+      expect(first.assertActive).toThrow("superseded");
+      expect(mounted.result.current.vault.requireBinding).toThrow("not ready");
     });
     expect(first.assertActive).toThrow("superseded");
     expect(mounted.result.current.vault.binding).toBeNull();
@@ -97,7 +109,9 @@ it("reconciles wallet and identity replacements through the mounted effect event
     expect(mounted.result.current.connection.wallet).not.toBe(previousWallet);
     const connected = mounted.result.current.connection.wallet;
     act(() => {
-      mounted.result.current.vault.clearIdentity();
+      mounted.result.current.identity.clearIdentity();
+      expect(third.assertActive).toThrow("superseded");
+      expect(mounted.result.current.vault.requireBinding).toThrow("not ready");
     });
     await waitFor(() => {
       expect(mounted.result.current.vault.status).toBe("missing-identity");
@@ -110,6 +124,60 @@ it("reconciles wallet and identity replacements through the mounted effect event
         .findAll({ queryKey: ["vault-binding"] })
         .filter((entry) => entry.queryKey[1] !== "disabled"),
     ).toHaveLength(0);
+    act(() => {
+      mounted.result.current.identity.setIdentitySecret("08".repeat(32));
+    });
+    await waitFor(() => {
+      expect(mounted.result.current.vault.status).toBe("ready");
+    });
+    const beforeDisconnect = mounted.result.current.vault.requireBinding();
+    act(() => {
+      mounted.result.current.vault.disconnect();
+      expect(beforeDisconnect.assertActive).toThrow("superseded");
+    });
+    expect(mounted.result.current.identity.identitySecret).toBe("08".repeat(32));
+    expect(mounted.result.current.connection.wallet).toBeNull();
+    await act(async () => {
+      await mounted.result.current.connection.installSeedWallet("09".repeat(32));
+    });
+    await waitFor(() => {
+      expect(mounted.result.current.vault.status).toBe("ready");
+    });
+    expect(mounted.result.current.vault.requireBinding().identity.secretKey).toEqual(
+      new Uint8Array(32).fill(8),
+    );
+    const pendingJoin = Promise.withResolvers<typeof fixture.contract>();
+    vi.mocked(assembly.joinVault).mockReturnValueOnce(pendingJoin.promise);
+    const beforeDelayedJoin = vi.mocked(assembly.joinVault).mock.calls.length;
+    act(() => {
+      mounted.result.current.identity.setIdentitySecret("05".repeat(32));
+    });
+    await waitFor(() => {
+      expect(assembly.joinVault).toHaveBeenCalledTimes(beforeDelayedJoin + 1);
+    });
+    expect(mounted.result.current.vault.status).toBe("loading");
+    act(() => {
+      mounted.result.current.identity.setIdentitySecret("06".repeat(32));
+    });
+    await waitFor(() => {
+      expect(mounted.result.current.vault.status).toBe("ready");
+    });
+    const currentBinding = mounted.result.current.vault.requireBinding();
+    await act(async () => {
+      pendingJoin.resolve(fixture.contract);
+      await pendingJoin.promise;
+    });
+    expect(mounted.result.current.vault.requireBinding()).toBe(currentBinding);
+    expect(currentBinding.identity.secretKey).toEqual(new Uint8Array(32).fill(6));
+    act(() => {
+      mounted.result.current.identity.setIdentitySecret("07".repeat(32));
+      mounted.result.current.identity.setIdentitySecret("06".repeat(32));
+      expect(currentBinding.assertActive).toThrow("superseded");
+    });
+    await waitFor(() => {
+      expect(mounted.result.current.vault.status).toBe("ready");
+    });
+    expect(mounted.result.current.vault.requireBinding()).not.toBe(currentBinding);
   } finally {
     mounted.unmount();
     query.clear();

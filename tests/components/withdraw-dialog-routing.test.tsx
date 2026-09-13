@@ -75,9 +75,6 @@ describe("withdrawal routing", () => {
     const onOpenChange = vi.fn();
     vi.mocked(useMidnightProgress).mockReturnValue({ active: false, message: "", error: null });
     vi.mocked(useVault).mockReturnValue({
-      identitySecret: "",
-      setIdentitySecret: vi.fn(),
-      clearIdentity: vi.fn(),
       status: "ready",
       error: null,
       binding,
@@ -170,9 +167,6 @@ describe("withdrawal routing", () => {
     const onOpenChange = vi.fn();
     vi.mocked(useMidnightProgress).mockReturnValue({ active: false, message: "", error: null });
     vi.mocked(useVault).mockReturnValue({
-      identitySecret: "",
-      setIdentitySecret: vi.fn(),
-      clearIdentity: vi.fn(),
       status: "ready",
       error: null,
       binding,

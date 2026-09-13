@@ -211,9 +211,6 @@ it.each(["construction", "start", "sync"] as const)(
 
 it("unmounts a pending wallet button without reporting its delayed rejection as a toast", async () => {
   vi.spyOn(vault, "useVault").mockReturnValue({
-    identitySecret: "",
-    setIdentitySecret: () => undefined,
-    clearIdentity: () => undefined,
     status: "disconnected",
     error: null,
     binding: null,

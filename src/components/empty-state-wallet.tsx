@@ -4,14 +4,20 @@ import type * as React from "react";
 import { EvmWalletButton } from "@/components/evm-wallet-button";
 import { MidnightWalletButton } from "@/components/midnight-wallet-button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { VaultIdentityButton } from "@/components/vault-identity-button";
+import { VaultIdentityButton, VaultIdentityHelp } from "@/components/vault-identity-controls";
 
 /**
  * Composes the initial wallet actions and cross-chain explanation for an empty vault.
  *
+ * @param props - Optional focus destination after connected identity activation.
+ * @param props.appliedFocusRef - Persistent identity trigger in the application toolbar.
  * @returns The wallet empty state.
  */
-export function EmptyStateWallet(): React.JSX.Element {
+export function EmptyStateWallet({
+  appliedFocusRef,
+}: {
+  appliedFocusRef?: React.RefObject<HTMLButtonElement | null>;
+}): React.JSX.Element {
   return (
     <EmptyState
       icon={Wallet}
@@ -19,10 +25,18 @@ export function EmptyStateWallet(): React.JSX.Element {
       description="Deposit ERC-20 tokens and your program can call into Ethereum liquidity, markets, and assets"
       action={
         <>
-          <div className="ds-control-gap ds-after-section flex flex-wrap justify-center">
-            <MidnightWalletButton />
-            <EvmWalletButton />
-            <VaultIdentityButton />
+          <div className="ds-stack-control ds-after-section items-center">
+            <h3 className="ds-text ds-heading">To activate the dApp</h3>
+            <p className="ds-text ds-prose">1. Connect a Midnight and EVM wallet</p>
+            <div className="ds-control-gap flex flex-wrap justify-center">
+              <MidnightWalletButton />
+              <EvmWalletButton />
+            </div>
+            <p className="ds-text ds-prose">2. Set a vault identity</p>
+            <div className="ds-control-gap flex items-center justify-center">
+              <VaultIdentityButton appliedFocusRef={appliedFocusRef} />
+              <VaultIdentityHelp />
+            </div>
           </div>
 
           <div className="ds-content-gap sm:ds-section-gap grid grid-cols-2 text-center">

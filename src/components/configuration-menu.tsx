@@ -25,7 +25,7 @@ export function ConfigurationMenu(): React.JSX.Element {
   return (
     <Popover modal open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Configuration" title="Configuration">
+        <Button variant="ghost" size="icon-xs" aria-label="Configuration" title="Configuration">
           <Settings className="size-4" aria-hidden="true" />
         </Button>
       </PopoverTrigger>

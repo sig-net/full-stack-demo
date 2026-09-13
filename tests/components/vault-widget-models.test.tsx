@@ -96,9 +96,6 @@ async function fixture(): Promise<WidgetFixture> {
     refresh: vi.fn(),
   });
   vi.mocked(useVault).mockImplementation(() => ({
-    identitySecret: "",
-    setIdentitySecret: vi.fn(),
-    clearIdentity: vi.fn(),
     status: current ? "ready" : "disconnected",
     error: null,
     binding: current,

@@ -79,9 +79,6 @@ it.each(scenarios)(
       return rebuilding.promise;
     });
     vi.mocked(useVault).mockReturnValue({
-      identitySecret: "",
-      setIdentitySecret: vi.fn(),
-      clearIdentity: vi.fn(),
       status: "ready",
       error: null,
       binding,

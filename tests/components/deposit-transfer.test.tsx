@@ -44,9 +44,6 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
     if (active !== binding) throw new Error("Vault session changed");
   });
   vi.mocked(useVault).mockImplementation(() => ({
-    identitySecret: "",
-    setIdentitySecret: vi.fn(),
-    clearIdentity: vi.fn(),
     status: "ready",
     error: null,
     binding: active,

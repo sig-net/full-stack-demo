@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
@@ -27,9 +27,6 @@ it("renders the non-zero USDC balance using six asset decimals", () => {
   const token = MIDNIGHT_TOKENS.find((entry) => entry.symbol === "USDC");
   if (!token) throw new Error("Expected the USDC Midnight token");
   vi.mocked(useVault).mockReturnValue({
-    identitySecret: "",
-    setIdentitySecret: vi.fn(),
-    clearIdentity: vi.fn(),
     status: "ready",
     error: null,
     binding: null,
@@ -83,9 +80,6 @@ it("renders the connected Home sections and refunded activity on the server", as
   const { createVaultFixture } = await import("../sdk/vault-fixture");
   const binding = await createVaultFixture();
   vi.mocked(useVault).mockReturnValue({
-    identitySecret: "",
-    setIdentitySecret: vi.fn(),
-    clearIdentity: vi.fn(),
     status: "ready",
     error: null,
     binding,
@@ -146,6 +140,90 @@ it("renders the connected Home sections and refunded activity on the server", as
     expect(html).not.toMatch(/Solana|solscan|tx-status|tx-list/);
   } finally {
     queryClient.clear();
+    binding.providers.privateStateProvider.dispose();
+    await binding.providers.publicDataProvider.dispose();
+    await binding.wallet.disconnect();
+  }
+});
+
+it("orders the five activation rows and keeps identity outside the wallet menu", () => {
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  vi.mocked(useVault).mockReturnValue({
+    status: "disconnected",
+    error: null,
+    binding: null,
+    requireBinding: vi.fn(),
+    retry: vi.fn(),
+    rebuild: vi.fn(),
+    disconnect: vi.fn(),
+  });
+  render(
+    <Providers>
+      <Home />
+    </Providers>,
+  );
+  const heading = screen.getByRole("heading", { name: "To activate the dApp" });
+  const rows = Array.from(heading.parentElement?.children ?? []);
+  expect(rows).toHaveLength(5);
+  expect(rows.map((row) => row.textContent)).toEqual([
+    "To activate the dApp",
+    "1. Connect a Midnight and EVM wallet",
+    "MidnightEVM",
+    "2. Set a vault identity",
+    "Vault identity",
+  ]);
+  const toolbar = within(screen.getByRole("banner"));
+  expect(toolbar.getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(
+    [
+      "Vault identity: not set",
+      "Midnight wallet: not connected",
+      "EVM wallet: not connected",
+      "Configuration",
+    ],
+  );
+  fireEvent.pointerDown(toolbar.getByRole("button", { name: "Midnight wallet: not connected" }), {
+    button: 0,
+  });
+  expect(within(screen.getByRole("menu")).queryByText("Vault identity")).toBeNull();
+});
+
+it("returns home activation focus to the persistent identity control as the dashboard replaces it", async () => {
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  const { createVaultFixture } = await import("../sdk/vault-fixture");
+  const binding = await createVaultFixture();
+  const actions = {
+    error: null,
+    requireBinding: vi.fn(),
+    retry: vi.fn(),
+    rebuild: vi.fn(),
+    disconnect: vi.fn(),
+  };
+  vi.mocked(useVault).mockReturnValue({ ...actions, status: "missing-identity", binding: null });
+  const view = render(
+    <Providers>
+      <Home />
+    </Providers>,
+  );
+  try {
+    const homeTrigger = screen.getAllByRole("button", { name: "Vault identity: not set" })[1];
+    if (!homeTrigger) throw new Error("Expected the home identity control");
+    fireEvent.click(homeTrigger);
+    fireEvent.change(screen.getByLabelText("Vault secret"), { target: { value: "03".repeat(32) } });
+    fireEvent.click(screen.getByRole("button", { name: "Use vault secret" }));
+    vi.mocked(useVault).mockReturnValue({ ...actions, status: "ready", binding });
+    view.rerender(
+      <Providers>
+        <Home />
+      </Providers>,
+    );
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        within(screen.getByRole("banner")).getByRole("button", { name: "Vault identity: set" }),
+      );
+    });
+    expect(screen.queryByRole("heading", { name: "To activate the dApp" })).toBeNull();
+  } finally {
+    view.unmount();
     binding.providers.privateStateProvider.dispose();
     await binding.providers.publicDataProvider.dispose();
     await binding.wallet.disconnect();
