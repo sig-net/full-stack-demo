@@ -1,23 +1,18 @@
-import { formatUnits } from 'viem';
+import { formatUnits } from "viem";
 
+/** Display rounding and fiat conversion options, independent of transaction base-unit amounts. */
 export interface FormatBalanceOptions {
   /** Manual precision override (decimal places to show) */
   precision?: number;
   /** Include token symbol in output */
   showSymbol?: boolean;
-  /** Show USD value instead of token amount */
+  /** Select USD output when usdPrice is supplied. */
   showUsd?: boolean;
   /** USD price per token for conversion */
   usdPrice?: number;
 }
 
-/**
- * Calculate smart precision based on amount size
- */
-function calculateSmartPrecision(
-  numericAmount: number,
-  maxDecimals: number,
-): number {
+function calculateSmartPrecision(numericAmount: number, maxDecimals: number): number {
   if (numericAmount >= 1000) {
     return Math.min(2, maxDecimals);
   } else if (numericAmount >= 1) {
@@ -27,12 +22,9 @@ function calculateSmartPrecision(
   } else if (numericAmount > 0) {
     return Math.min(8, maxDecimals);
   }
-  return 2; // For zero amounts
+  return 2;
 }
 
-/**
- * Core formatting logic (used by both sync and async versions)
- */
 function formatBalanceCore(
   amount: bigint | string,
   decimals: number,
@@ -41,37 +33,30 @@ function formatBalanceCore(
 ): string {
   const { precision, showSymbol = false, showUsd = false, usdPrice } = options;
 
-  // Convert amount to bigint if needed
-  const amountBigInt = typeof amount === 'string' ? BigInt(amount) : amount;
+  const amountBigInt = typeof amount === "string" ? BigInt(amount) : amount;
 
-  // Convert to decimal using viem's formatUnits for consistency
   const formattedAmount = formatUnits(amountBigInt, decimals);
   const numericAmount = parseFloat(formattedAmount);
 
-  // Handle USD conversion
-  if (showUsd && typeof usdPrice === 'number') {
+  if (showUsd && typeof usdPrice === "number") {
     const usdValue = numericAmount * usdPrice;
-    if (usdValue === 0) return '$0.00';
-    if (usdValue < 0.01) return '<$0.01';
+    if (usdValue === 0) return "$0.00";
+    if (usdValue < 0.01) return "<$0.01";
 
     return `$${usdValue.toFixed(2)}`;
   }
 
-  // Calculate precision
   const actualPrecision =
     precision !== undefined
       ? Math.min(precision, decimals)
       : calculateSmartPrecision(numericAmount, decimals);
 
-  // Format the number using toFixed and remove trailing zeros
-  let result = numericAmount.toFixed(actualPrecision).replace(/\.?0+$/, '');
+  let result = numericAmount.toFixed(actualPrecision).replace(/\.?0+$/, "");
 
-  // Add thousand separators for large whole numbers
-  if (!result.includes('.') && numericAmount >= 1000) {
+  if (!result.includes(".") && numericAmount >= 1000) {
     result = parseInt(result).toLocaleString();
   }
 
-  // Add symbol if requested
   if (showSymbol && symbol) {
     result = `${result} ${symbol}`;
   }
@@ -80,24 +65,14 @@ function formatBalanceCore(
 }
 
 /**
- * Format token balance synchronously when decimals are already known
- * Use this when you already have the token decimals to avoid async calls
+ * Produces a rounded display label, with optional fiat conversion and token suffix.
  *
- * @param amount - Raw token amount (bigint or string)
- * @param decimals - Number of decimal places for the token
- * @param symbol - Optional token symbol
- * @param options - Formatting options
- * @returns string - Formatted balance string
- *
- * @example
- * // Basic usage with known decimals
- * const formatted = formatTokenBalanceSync(amount, 6);
- *
- * // With symbol and compact format
- * const compact = formatTokenBalanceSync(amount, 6, 'USDC', {
- *   showSymbol: true,
- *   compact: true
- * });
+ * @param amount - Exact base units before display-only numeric conversion.
+ * @param decimals - Authoritative decimals for the token.
+ * @param symbol - The suffix used when showSymbol is enabled.
+ * @param options - Display precision and optional USD pricing.
+ * @returns A display label that must not be reused as a transaction amount.
+ * @throws {SyntaxError | RangeError} If a string amount is not an integer or the requested precision is outside toFixed limits.
  */
 export function formatTokenBalanceSync(
   amount: bigint | string,

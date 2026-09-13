@@ -1,17 +1,17 @@
 # Diagnose the stage before retrying
 
-| Observation | Next evidence and action |
-| --- | --- |
-| Transport closed during proving upload | Inspect bounded MCP stderr for ERR_STRING_TOO_LONG, verify launcher/version and run the public upload preflight. Do not send another deposit. |
-| Server-assisted action unavailable | Inspect /api/runtime-config and the applied snapshot. Distinguish failed compatibility reads from named field differences. Reconcile intended configuration before retrying, preserving independent wallet actions. |
-| MetaMask chooser stays open | Inspect connection error and expected fork marker, account/chain events and pending extension approval. Reconnect deliberately after correcting configuration. |
-| Confirmed transfer, no start request | Preserve transfer hash and destination. Inspect deposit funds and current request state before using the existing continuation. |
-| Confirmed sweep, pending claim | Restore the same caller secret, select the token and use Pending deposit request ID / Recover pending deposit. The live request supplies the amount. |
-| Claim SUCCESS but UI stale | Read the wallet balance and refresh outcome separately. Do not repeat a successful claim or sweep. |
-| expected instance of LedgerParameters | Compare actual ledger constructors resolved by producing and consuming SDKs. The project pins ledger-v9 consistently. Do not change cryptography to mask module duplication. |
-| Invalid attestation signature | Trace wire-to-circuit conversion against the installed SDK and example call site. The app uses respondBidirectionalEventToCircuitInput at settlement boundaries. |
-| signBidirectional verifier 404 | Check for the following successful /zk/signet lookup. The observed registry probes vault then Signet providers. A successful fallback is not a failed proof. |
-| UI chunks stall | Check the exact Next process, its private log and HTTP response. Avoid attributing a stall to cache size without evidence. |
+| Observation                            | Next evidence and action                                                                                                                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transport closed during proving upload | Inspect bounded MCP stderr for ERR_STRING_TOO_LONG, verify launcher/version and run the public upload preflight. Do not send another deposit.                                                                       |
+| Server-assisted action unavailable     | Inspect /api/runtime-config and the applied snapshot. Distinguish failed compatibility reads from named field differences. Reconcile intended configuration before retrying, preserving independent wallet actions. |
+| MetaMask chooser stays open            | Inspect connection error and expected fork marker, account/chain events and pending extension approval. Reconnect deliberately after correcting configuration.                                                      |
+| Confirmed transfer, no start request   | Preserve transfer hash and destination. Inspect deposit funds and current request state before using the existing continuation.                                                                                     |
+| Confirmed sweep, pending claim         | Restore the same caller secret, select the token and use Pending deposit request ID / Recover pending deposit. The live request supplies the amount.                                                                |
+| Claim SUCCESS but UI stale             | Read the wallet balance and refresh outcome separately. Do not repeat a successful claim or sweep.                                                                                                                  |
+| expected instance of LedgerParameters  | Compare actual ledger constructors resolved by producing and consuming SDKs. The project pins ledger-v9 consistently. Do not change cryptography to mask module duplication.                                        |
+| Invalid attestation signature          | Trace wire-to-circuit conversion against the installed SDK and example call site. The app uses respondBidirectionalEventToCircuitInput at settlement boundaries.                                                    |
+| signBidirectional verifier 404         | Check for the following successful /zk/signet lookup. The observed registry probes vault then Signet providers. A successful fallback is not a failed proof.                                                        |
+| UI chunks stall                        | Check the exact Next process, its private log and HTTP response. Avoid attributing a stall to cache size without evidence.                                                                                          |
 
 For current source paths start at `src/lib/midnight/vault.ts`, the deposit dialog and the vault
 operation owner. After a refactor, search for the relevant exported operation or UI label rather
@@ -24,14 +24,18 @@ Query the configured local indexer, using bounded requests. This executed query 
 actual successful transaction fees, including block height:
 
 ```graphql
-query($offset: TransactionOffset!) {
+query ($offset: TransactionOffset!) {
   transactions(offset: $offset) {
     hash
-    block { height }
+    block {
+      height
+    }
     ... on RegularTransaction {
       identifiers
       fee
-      transactionResult { status }
+      transactionResult {
+        status
+      }
     }
   }
 }

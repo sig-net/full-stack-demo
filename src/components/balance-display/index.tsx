@@ -1,47 +1,51 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
+import { Download } from "lucide-react";
+import type * as React from "react";
+import { useState } from "react";
+import { formatUnits } from "viem";
 
-import { Download } from 'lucide-react';
+import { DepositDialog } from "@/components/deposit-dialog";
+import { Button } from "@/components/ui/button";
+import { WithdrawDialog, type WithdrawToken } from "@/components/withdraw-dialog";
+import { useTokenPrices } from "@/hooks/use-token-prices";
+import type { TokenWithBalance } from "@/lib/types/token.types";
+import { cn } from "@/lib/utils";
+import { formatTokenBalanceSync } from "@/lib/utils/balance-formatter";
+import { useMidnightConnection } from "@/providers/midnight-wallet-context";
 
-import { Button } from '@/components/ui/button';
-import { formatUnits } from 'viem';
-
-import { cn } from '@/lib/utils';
-import { formatTokenBalanceSync } from '@/lib/utils/balance-formatter';
-import { DepositDialog } from '@/components/deposit-dialog';
-import { WithdrawDialog, WithdrawToken } from '@/components/withdraw-dialog';
-import { useTokenPrices } from '@/hooks/use-token-prices';
-import { useMidnightConnection } from '@/providers/midnight-wallet-context';
-import type { TokenWithBalance } from '@/lib/types/token.types';
-
-import { BalanceBox } from './balance-box';
-import { CryptoIcon } from './crypto-icon';
+import { BalanceBox } from "./balance-box";
+import { CryptoIcon } from "./crypto-icon";
 
 interface BalanceDisplayProps {
   tokens: TokenWithBalance[];
   className?: string;
 }
 
-export function BalanceDisplay({
-  tokens,
-  className = '',
-}: BalanceDisplayProps) {
+/**
+ * Coordinates balance formatting with deposit and withdrawal actions.
+ *
+ * @param properties - Token balances and optional layout classes.
+ * @returns The balance display and related dialogs.
+ */
+export function BalanceDisplay(properties: BalanceDisplayProps): React.JSX.Element {
+  const { tokens, className = "" } = properties;
   const connection = useMidnightConnection();
   const [isDepositDialogOpen, setIsDepositDialogOpen] = useState(false);
   const [isWithdrawDialogOpen, setIsWithdrawDialogOpen] = useState(false);
-  const [selectedTokenForWithdraw, setSelectedTokenForWithdraw] =
-    useState<WithdrawToken | null>(null);
+  const [selectedTokenForWithdraw, setSelectedTokenForWithdraw] = useState<WithdrawToken | null>(
+    null,
+  );
 
   // Get unique token symbols for price fetching
-  const tokenSymbols = [...new Set(tokens.map(token => token.symbol))];
+  const tokenSymbols = [...new Set(tokens.map((token) => token.symbol))];
   const { data: tokenPrices } = useTokenPrices(tokenSymbols);
 
   // Convert tokens to withdraw format (use exact balance to avoid rounding up)
-  const chainName = (chain: TokenWithBalance['chain']) =>
-    chain === 'ethereum' ? 'Ethereum Sepolia' : 'Midnight';
+  const chainName = (chain: TokenWithBalance["chain"]): string =>
+    chain === "ethereum" ? "Ethereum Sepolia" : "Midnight";
 
-  const withdrawTokens: WithdrawToken[] = tokens.map(token => ({
+  const withdrawTokens: WithdrawToken[] = tokens.map((token) => ({
     symbol: token.symbol,
     name: token.name,
     chain: token.chain,
@@ -52,24 +56,24 @@ export function BalanceDisplay({
   }));
 
   return (
-    <div className='ds-content-gap flex w-full max-w-full flex-col'>
-      <div className='ds-section-header'>
-        <h2 className='ds-muted ds-label ds-section-title self-start'>
-          Balances
-        </h2>
+    <div className="ds-content-gap flex w-full max-w-full flex-col">
+      <div className="ds-section-header">
+        <h2 className="ds-muted ds-label ds-section-title self-start">Balances</h2>
         <Button
-          onClick={() => setIsDepositDialogOpen(true)}
-          variant='outline'
-          size='lg'
+          onClick={() => {
+            setIsDepositDialogOpen(true);
+          }}
+          variant="outline"
+          size="lg"
           disabled={connection.connecting}
         >
-          <Download className='h-4 w-4' />
-          {connection.connecting ? 'Connecting…' : 'Deposit'}
+          <Download className="h-4 w-4" />
+          {connection.connecting ? "Connecting…" : "Deposit"}
         </Button>
       </div>
       <div
         className={cn(
-          'ds-content-gap sm:ds-section-gap md:ds-section-gap lg:ds-section-gap grid w-full max-w-full md:grid-cols-2',
+          "ds-content-gap sm:ds-section-gap md:ds-section-gap lg:ds-section-gap grid w-full max-w-full md:grid-cols-2",
           className,
         )}
       >
@@ -85,21 +89,18 @@ export function BalanceDisplay({
           // Calculate USD value using unified formatter
           const tokenPrice = tokenPrices?.[tokenData.symbol.toUpperCase()];
           const formattedUsdValue = tokenPrice
-            ? formatTokenBalanceSync(
-                tokenData.balance,
-                tokenData.decimals,
-                tokenData.symbol,
-                { showUsd: true, usdPrice: tokenPrice.usd },
-              )
-            : '$0.00';
+            ? formatTokenBalanceSync(tokenData.balance, tokenData.decimals, tokenData.symbol, {
+                showUsd: true,
+                usdPrice: tokenPrice.usd,
+              })
+            : "$0.00";
 
           // Find corresponding withdraw token
           const withdrawToken = withdrawTokens.find(
-            wt =>
-              wt.symbol === tokenData.symbol && wt.chain === tokenData.chain,
+            (wt) => wt.symbol === tokenData.symbol && wt.chain === tokenData.chain,
           );
 
-          const handleSendClick = () => {
+          const handleSendClick = (): void => {
             if (withdrawToken) {
               setSelectedTokenForWithdraw(withdrawToken);
               setIsWithdrawDialogOpen(true);
@@ -108,13 +109,11 @@ export function BalanceDisplay({
 
           return (
             <BalanceBox
-              key={`${tokenData.chain}-${tokenData.symbol}-${index}`}
+              key={`${tokenData.chain}-${tokenData.symbol}-${String(index)}`}
               amount={displayAmount}
               usdValue={formattedUsdValue}
               tokenSymbol={tokenData.symbol}
-              icon={
-                <CryptoIcon chain={tokenData.chain} token={tokenData.symbol} />
-              }
+              icon={<CryptoIcon chain={tokenData.chain} token={tokenData.symbol} />}
               onSendClick={handleSendClick}
               onSwapClick={() => {
                 // TODO: Implement swap functionality
@@ -124,14 +123,11 @@ export function BalanceDisplay({
         })}
       </div>
 
-      <DepositDialog
-        open={isDepositDialogOpen}
-        onOpenChange={setIsDepositDialogOpen}
-      />
+      <DepositDialog open={isDepositDialogOpen} onOpenChange={setIsDepositDialogOpen} />
 
       <WithdrawDialog
         open={isWithdrawDialogOpen}
-        onOpenChange={open => {
+        onOpenChange={(open) => {
           setIsWithdrawDialogOpen(open);
           if (!open) {
             setSelectedTokenForWithdraw(null);

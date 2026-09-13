@@ -1,38 +1,40 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { toast } from 'sonner';
+import type * as React from "react";
+import { useState } from "react";
+import { toast } from "sonner";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { LoadingState } from '@/components/states/LoadingState';
-import { TokenConfig, NetworkData } from '@/lib/constants/token-metadata';
-import { useVaultBalances } from '@/providers/vault-balances-context';
-import { useVaultOperations } from '@/providers/vault-operations-context';
-import { useMidnightConnection } from '@/providers/midnight-wallet-context';
-import { useMidnightProgress } from '@/hooks/use-midnight-progress';
-import { useVault } from '@/providers/vault-context';
-import { useEvmDeposit } from '@/providers/evm-deposit-context';
+import { LoadingState } from "@/components/states/LoadingState";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useMidnightProgress } from "@/hooks/use-midnight-progress";
+import type { NetworkData, TokenConfig } from "@/lib/constants/token-metadata";
+import { useEvmDeposit } from "@/providers/evm-deposit-context";
+import { useMidnightConnection } from "@/providers/midnight-wallet-context";
+import { useVaultBalances } from "@/providers/vault-balances-context";
+import { useVault } from "@/providers/vault-context";
+import { useVaultOperations } from "@/providers/vault-operations-context";
 
-import { TokenSelection } from './token-selection';
-import { EvmDepositTransfer } from './evm-deposit-transfer';
-import { PendingDepositRecovery } from './pending-deposit-recovery';
-import { DepositAddress } from './deposit-address';
+import { DepositAddress } from "./deposit-address";
+import { EvmDepositTransfer } from "./evm-deposit-transfer";
+import { PendingDepositRecovery } from "./pending-deposit-recovery";
+import { TokenSelection } from "./token-selection";
 
 interface DepositDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
+/**
+ * Coordinates token selection, address display and the EVM to Midnight deposit continuation.
+ *
+ * @param root0 - Dialog state properties.
+ * @param root0.open - Whether the dialog is open.
+ * @param root0.onOpenChange - Dialog state callback.
+ * @returns The deposit dialog.
+ */
+export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React.JSX.Element {
   const [selectedToken, setSelectedToken] = useState<TokenConfig | null>(null);
-  const [selectedNetwork, setSelectedNetwork] = useState<NetworkData | null>(
-    null,
-  );
+  const [selectedNetwork, setSelectedNetwork] = useState<NetworkData | null>(null);
 
   const balances = useVaultBalances();
   const operations = useVaultOperations();
@@ -41,48 +43,45 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
   const vault = useVault();
   const progress = useMidnightProgress();
 
-  const isVaultEvmDeposit =
-    vault.binding !== null && selectedNetwork?.chain === 'ethereum';
-  const step =
-    selectedToken && selectedNetwork ? 'show-address' : 'select-token';
+  const isVaultEvmDeposit = vault.binding !== null && selectedNetwork?.chain === "ethereum";
+  const step = selectedToken && selectedNetwork ? "show-address" : "select-token";
 
-  const handleTokenSelect = (token: TokenConfig, network: NetworkData) => {
+  const handleTokenSelect = (token: TokenConfig, network: NetworkData): void => {
     setSelectedToken(token);
     setSelectedNetwork(network);
   };
 
   const recordedTransfer =
-    evm.transfer?.binding === vault.binding &&
-    evm.transfer?.destination === (vault.binding?.depositAddress ?? '') &&
-    evm.transfer?.token === selectedToken?.erc20Address &&
-    evm.transfer.status !== 'error' &&
-    evm.transfer.sweep !== 'complete'
+    evm.transfer &&
+    vault.binding &&
+    selectedToken &&
+    evm.transfer.binding === vault.binding &&
+    evm.transfer.destination === vault.binding.depositAddress &&
+    evm.transfer.token === selectedToken.erc20Address &&
+    evm.transfer.status !== "error" &&
+    evm.transfer.sweep !== "complete"
       ? evm.transfer
       : null;
 
-  const handleContinue = async () => {
+  const handleContinue = async (): Promise<void> => {
     if (!selectedToken || !selectedNetwork) return;
     if (progress.active) return;
 
-    if (selectedNetwork.chain === 'midnight') {
+    if (selectedNetwork.chain === "midnight") {
       handleClose();
       return;
     }
 
     if (isVaultEvmDeposit) {
       if (recordedTransfer) {
-        if (recordedTransfer.status === 'confirmed')
-          await evm.continueDeposit();
+        if (recordedTransfer.status === "confirmed") await evm.continueDeposit();
         return;
       }
       const erc20 = selectedToken.erc20Address;
-      const units =
-        balances.balances?.perToken[erc20.toLowerCase()]?.depositUnits;
+      const units = balances.balances?.perToken[erc20.toLowerCase()]?.depositUnits;
       if (units == null) {
-        toast.error(
-          'Deposit balance is unavailable. Refresh balances and retry.',
-        );
-        void balances.refresh().catch(() => {});
+        toast.error("Deposit balance is unavailable. Refresh balances and retry.");
+        void balances.refresh().catch(() => undefined);
         return;
       }
       if (units === 0n) {
@@ -91,7 +90,7 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
         });
         return;
       }
-      operations.deposit(erc20, units).catch(() => {
+      void operations.deposit(erc20, units).catch(() => {
         /* surfaced by MidnightProgressToaster via flow.fail */
       });
       handleClose();
@@ -99,7 +98,7 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
     }
   };
 
-  const handleClose = () => {
+  const handleClose = (): void => {
     setSelectedToken(null);
     setSelectedNetwork(null);
     onOpenChange(false);
@@ -108,8 +107,8 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent>
-        {step === 'select-token' && (
-          <div className='ds-stack-content'>
+        {step === "select-token" && (
+          <div className="ds-stack-content">
             <DialogHeader>
               <DialogTitle>Select an asset</DialogTitle>
             </DialogHeader>
@@ -117,12 +116,12 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
           </div>
         )}
 
-        {step === 'show-address' && selectedToken && selectedNetwork && (
-          <div className='ds-stack-content'>
+        {step === "show-address" && selectedToken && selectedNetwork && (
+          <div className="ds-stack-content">
             <DialogHeader>
               <DialogTitle>Deposit Address</DialogTitle>
             </DialogHeader>
-            {selectedNetwork.chain === 'ethereum' && (
+            {selectedNetwork.chain === "ethereum" && (
               <>
                 <EvmDepositTransfer token={selectedToken} />
                 <PendingDepositRecovery token={selectedToken} />
@@ -135,14 +134,16 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
                 token={selectedToken}
                 network={selectedNetwork}
                 depositAddress={
-                  selectedNetwork.chain === 'midnight'
-                    ? (connection.wallet?.shieldedAddress ?? '')
-                    : (vault.binding?.depositAddress ?? '')
+                  selectedNetwork.chain === "midnight"
+                    ? (connection.wallet?.shieldedAddress ?? "")
+                    : (vault.binding?.depositAddress ?? "")
                 }
                 isSubmitting={progress.active}
                 showContinue={!recordedTransfer}
                 canContinue={operations.ready}
-                onContinue={handleContinue}
+                onContinue={() => {
+                  void handleContinue();
+                }}
               />
             )}
           </div>

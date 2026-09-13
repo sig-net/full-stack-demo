@@ -1,4 +1,5 @@
-import { z } from 'zod';
+import { z } from "zod";
+
 import {
   ERC20_TRANSFER_GAS_LIMIT,
   ERC20_TRANSFER_MAX_FEE_PER_GAS,
@@ -6,15 +7,16 @@ import {
   STATA_MAX_FEE_PER_GAS,
   SWAP_GAS_LIMIT,
   SWAP_MAX_FEE_PER_GAS,
-} from '@/lib/midnight/evm-envelope';
+} from "@/lib/midnight/evm-envelope";
 
+/** Accepted operation selectors for server-derived recipients and fixed gas allowances. */
 export const gasTopUpRequestSchema = z.union([
   z
     .object({
-      operation: z.literal('deposit'),
+      operation: z.literal("deposit"),
       recipient: z
         .object({
-          kind: z.literal('deposit'),
+          kind: z.literal("deposit"),
           path: z.string().regex(/^[0-9a-f]{64}$/),
         })
         .strict(),
@@ -22,15 +24,16 @@ export const gasTopUpRequestSchema = z.union([
     .strict(),
   z
     .object({
-      operation: z.enum(['withdraw', 'swap', 'supply', 'redeem']),
-      recipient: z.object({ kind: z.literal('vault') }).strict(),
+      operation: z.enum(["withdraw", "swap", "supply", "redeem"]),
+      recipient: z.object({ kind: z.literal("vault") }).strict(),
     })
     .strict(),
 ]);
 
+/** Validated operation selector accepted by the relayer funding endpoint. */
 export type GasTopUpRequest = z.infer<typeof gasTopUpRequestSchema>;
 
-// Swap and supply reserve both the approval and the subsequent operation.
+/** Swap and supply allowances include both approval and operation gas. */
 export const GAS_TOPUP_ALLOWANCES = {
   deposit: {
     gasLimit: ERC20_TRANSFER_GAS_LIMIT,
@@ -49,7 +52,4 @@ export const GAS_TOPUP_ALLOWANCES = {
     maxFeePerGas: STATA_MAX_FEE_PER_GAS,
   },
   redeem: { gasLimit: STATA_GAS_LIMIT, maxFeePerGas: STATA_MAX_FEE_PER_GAS },
-} satisfies Record<
-  GasTopUpRequest['operation'],
-  { gasLimit: bigint; maxFeePerGas: bigint }
->;
+} satisfies Record<GasTopUpRequest["operation"], { gasLimit: bigint; maxFeePerGas: bigint }>;

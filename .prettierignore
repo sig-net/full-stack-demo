@@ -1,11 +1,25 @@
 node_modules/
 .next/
 out/
-dist/
 build/
 coverage/
-*.lock
-*.log
+.yarn/
+.quality-tools/
 .git/
-public/
+.local-vault/
+.playwright-mcp/
+public/zk/
+public/zk.stage-*/
+public/zk.previous/
 yarn.lock
+next-env.d.ts
+scratch-refactor-tasks/verification/private/
+scratch-refactor-tasks/verification/task18/
+# Recorded output and registry bytes retain their captured hashes.
+scratch-refactor-tasks/verification/connected-fixture.html
+scratch-refactor-tasks/verification/task17-upstream/*.json
+
+# Prose and workflow layout follow the reference project.
+*.md
+*.yml
+*.yaml

@@ -1,82 +1,69 @@
-'use client';
+"use client";
 
-// Persist operation history so the lend widget can reconstruct its cost basis.
+import { z } from "zod";
 
-export type MidnightTxType =
-  | 'Deposit'
-  | 'Withdraw'
-  | 'Swap'
-  | 'Supply'
-  | 'Redeem';
-export type MidnightTxStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+const transactionTypeSchema = z.enum(["Deposit", "Withdraw", "Swap", "Supply", "Redeem"]);
+const transactionStatusSchema = z.enum(["pending", "completed", "failed", "refunded"]);
+const transactionRecordSchema = z.object({
+  id: z.string(),
+  type: transactionTypeSchema,
+  fromSymbol: z.string(),
+  fromAmount: z.string(),
+  toSymbol: z.string(),
+  toAmount: z.string(),
+  counterparty: z.string().optional(),
+  status: transactionStatusSchema,
+  timestampRaw: z.number(),
+  txHash: z.string().optional(),
+  networkId: z.string().optional(),
+  chainId: z.number().optional(),
+  rpcUrl: z.string().optional(),
+  explorerUrl: z.string().optional(),
+  vaultContractAddress: z.string().optional(),
+  failureReason: z.string().optional(),
+  basisAssets: z.string().optional(),
+  sharesReceived: z.string().optional(),
+  proceedsAssets: z.string().optional(),
+  sharesBurned: z.string().optional(),
+});
 
-export interface MidnightTxRecord {
-  id: string;
-  type: MidnightTxType;
-  fromSymbol: string;
-  fromAmount: string; // pre-formatted, may be an address for the WALLET side
-  toSymbol: string;
-  toAmount: string;
-  counterparty?: string; // deposit address / withdraw destination
-  status: MidnightTxStatus;
-  timestampRaw: number; // unix seconds
-  txHash?: string;
-  networkId?: string;
-  chainId?: number;
-  rpcUrl?: string;
-  explorerUrl?: string;
-  vaultContractAddress?: string;
-  // Keep the node's failure verdict inspectable after the toast dismisses.
-  failureReason?: string;
-  // Cost basis for the lend position, recorded per leg so the widget can show earnings. Assets are
-  // in underlying units (Aave USDC), shares in stataUSDC units. The widget needs BOTH sides: the
-  // assets give the basis, and the shares prove the history accounts for the whole position.
-  /** Assets supplied on a Supply leg. */
-  basisAssets?: string;
-  /** Shares the wrapper minted for a Supply leg, as attested by the MPC. */
-  sharesReceived?: string;
-  /** Assets received on a Redeem leg, as attested by the MPC. */
-  proceedsAssets?: string;
-  /** Shares burned on a Redeem leg. */
-  sharesBurned?: string;
-}
+/** Operation categories retained in Activity and lending cost-basis history. */
+export type MidnightTxType = z.infer<typeof transactionTypeSchema>;
+/** Recorded completion outcomes, including refunded executions. */
+export type MidnightTxStatus = z.infer<typeof transactionStatusSchema>;
+/**
+ * Persisted public operation record with display amount strings and Unix-second timestamps.
+ * Cost-basis fields retain underlying and wrapper quantities separately as decimal strings.
+ */
+export type MidnightTxRecord = z.infer<typeof transactionRecordSchema>;
 
 type Listener = (txs: MidnightTxRecord[]) => void;
 
-const STORAGE_KEY = 'midnight-tx-history-v1';
+const STORAGE_KEY = "midnight-tx-history-v1";
 // Bound the log so a long-lived browser cannot grow it without limit. Oldest records drop first.
 const MAX_RECORDS = 200;
 
-function isRecord(value: unknown): value is MidnightTxRecord {
-  if (typeof value !== 'object' || value === null) return false;
-  const rec = value as Partial<MidnightTxRecord>;
-  return (
-    typeof rec.id === 'string' &&
-    typeof rec.type === 'string' &&
-    typeof rec.status === 'string' &&
-    typeof rec.timestampRaw === 'number'
-  );
-}
-
 function load(): MidnightTxRecord[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw === null) return [];
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    // A flow cannot resume across a reload, so a stored 'pending' would spin for ever. Mark it
-    // failed instead: the row stays inspectable and the widget still ignores it.
-    return parsed
-      .filter(isRecord)
+    const records = z.array(z.unknown()).safeParse(parsed);
+    if (!records.success) return [];
+    // Persisted pending records need a terminal status because their in-memory flow was lost.
+    return records.data
+      .flatMap((value) => {
+        const record = transactionRecordSchema.safeParse(value);
+        return record.success ? [record.data] : [];
+      })
       .slice(0, MAX_RECORDS)
-      .map(rec =>
-        rec.status === 'pending'
+      .map((rec) =>
+        rec.status === "pending"
           ? {
               ...rec,
-              status: 'failed' as const,
-              failureReason:
-                rec.failureReason ?? 'Interrupted by a page reload',
+              status: "failed" as const,
+              failureReason: rec.failureReason ?? "Interrupted by a page reload",
             }
           : rec,
       );
@@ -86,7 +73,7 @@ function load(): MidnightTxRecord[] {
 }
 
 function save(txs: MidnightTxRecord[]): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(txs));
   } catch {
@@ -98,18 +85,13 @@ class MidnightTxHistory {
   private txs: MidnightTxRecord[] = load();
   private listeners = new Set<Listener>();
 
-  /** Insert (or replace by id) a record, newest first. */
-  add(rec: MidnightTxRecord) {
-    this.txs = [rec, ...this.txs.filter(t => t.id !== rec.id)].slice(
-      0,
-      MAX_RECORDS,
-    );
+  add(rec: MidnightTxRecord): void {
+    this.txs = [rec, ...this.txs.filter((t) => t.id !== rec.id)].slice(0, MAX_RECORDS);
     this.emit();
   }
 
-  /** Patch an existing record (e.g. pending -> completed/failed/refunded, add a tx hash). */
-  update(id: string, patch: Partial<MidnightTxRecord>) {
-    this.txs = this.txs.map(t => (t.id === id ? { ...t, ...patch } : t));
+  update(id: string, patch: Partial<MidnightTxRecord>): void {
+    this.txs = this.txs.map((t) => (t.id === id ? { ...t, ...patch } : t));
     this.emit();
   }
 
@@ -121,11 +103,12 @@ class MidnightTxHistory {
     };
   }
 
-  private emit() {
+  private emit(): void {
     const snap = this.txs;
     save(snap);
     for (const l of this.listeners) l(snap);
   }
 }
 
+/** Bounded history owner sharing in-memory updates and persisted public operation records. */
 export const midnightTxHistory = new MidnightTxHistory();

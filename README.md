@@ -42,12 +42,12 @@ yarn setup-local:erc20-vault --ui-directory /Users/bernard/Projects/github.com/s
 
 Setup leaves services running, closes its wallet connections and writes:
 
-| Output | Purpose |
-| --- | --- |
-| UI `.env.local` | Public endpoints, deployment addresses, MPC key and fork marker, plus server-only genesis and relayer credentials |
-| Examples `.local-demo/testing-user.env` | Optional testing wallet seed and independent vault caller secret |
-| Examples `.local-demo/setup.env` | Private resumable setup state |
-| Examples `.local-demo/instance.json` | Local Anvil instance and marker identity |
+| Output                                  | Purpose                                                                                                           |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| UI `.env.local`                         | Public endpoints, deployment addresses, MPC key and fork marker, plus server-only genesis and relayer credentials |
+| Examples `.local-demo/testing-user.env` | Optional testing wallet seed and independent vault caller secret                                                  |
+| Examples `.local-demo/setup.env`        | Private resumable setup state                                                                                     |
+| Examples `.local-demo/instance.json`    | Local Anvil instance and marker identity                                                                          |
 
 Generated credential files use mode 0600. Setup refuses to overwrite a UI `.env.local` without its generated-file header. Move or reconcile a manually maintained file first. Never copy server credentials into `NEXT_PUBLIC_` variables. Testing credentials are for optional manual entry and are not restored into the browser automatically.
 
@@ -173,7 +173,6 @@ yarn lint && yarn typecheck
 
 Executed validation covered a clean scoped reset and deployment, kept-stack reuse with unchanged configuration, both served asset manifests and asset reuse, actual EVM funding and repeat funding, fresh browser NIGHT funding and signed DUST registration, and a real MetaMask 0.1 USDC deposit through fakenet to final Midnight settlement. The shielded balance and completed Activity entry survived credential re-entry after refresh. Static checks and isolated rejection, reset and lifecycle tests passed. Live withdrawal, swap, lending and comprehensive failure testing remain future work.
 
-
 ## Agent browser verification
 
 **TIP:** Ask Codex to use `$local-vault-e2e` for local browser verification. It handles stack checks,
@@ -184,9 +183,9 @@ Playwright MCP is pinned as a project development dependency. After the immutabl
 installation above, verify the guarded launcher and its public upload fixture from this checkout:
 
 ```bash
-node scripts/local-vault/chromium-post-data-cap.test.cjs
-node scripts/local-vault/transport-preflight.test.cjs
-node scripts/local-vault/transport-preflight.cjs
+node scripts/local-vault/chromium-post-data-cap.test.mjs
+node scripts/local-vault/transport-preflight.test.mjs
+node scripts/local-vault/transport-preflight.ts
 ```
 
 The fixture uses an isolated headless browser and a temporary local sink. It verifies two complete
@@ -196,7 +195,7 @@ protocol-message crash. HTTP uploads remain complete, while captured request bod
 Version and source checks stop an incompatible tool version before browser use.
 
 Configure the Playwright MCP command as the absolute path to Node 24. Its first argument is this
-checkout's `scripts/local-vault/playwright-launcher.cjs`, followed by `--user-data-dir` and the
+checkout's `scripts/local-vault/playwright-launcher.mjs`, followed by `--user-data-dir` and the
 prepared disposable MetaMask profile's absolute path. Restart the MCP connection after changing
 its configuration and check for `local-vault: Chromium Network.enable post-data cap applied` in
 its startup log. Keep one browser owner. MetaMask may require a manual unlock after restart.
@@ -206,3 +205,44 @@ directory, with credential files restricted to their owner. Keep credentials out
 ## Shared presentation
 
 The app uses a light semantic theme and Radix Nova components. The [design-system contract](docs/design-system.md) explains theme roles, shared variants, layout recipes, exact exceptions and verification. The [upgrade provenance](docs/design-system-upstream.json) records the current official source hashes and resolved UI dependencies. Install development dependencies before compiling, as the theme imports the project-pinned shadcn CSS.
+
+## Code quality
+
+The checks follow midnight-integration-dev's TypeScript, import, documentation, formatting and test
+policy, with Next.js, React Hooks, accessibility and the shared design checks added for this app.
+TypeScript source and tests receive type-aware lint. JavaScript tools receive basic JavaScript lint.
+Export documentation applies to application source. Markdown and YAML retain their manual layout.
+
+Run the everyday aggregate with the project's configured Yarn version:
+
+```bash
+yarn quality
+```
+
+It checks formatting, zero-warning lint, TypeScript, the design system and regression tests. The
+individual commands remain available for diagnosing a failure:
+
+```bash
+yarn format
+yarn lint
+yarn typecheck
+yarn quality:design
+yarn test
+```
+
+Workflow syntax and security validation are separate from this everyday command. CI provisions
+pinned actionlint and zizmor and runs workflow validation with read-only GitHub metadata access.
+The aggregate does not run a production build or a funded browser transaction.
+
+Clipboard copying requires HTTPS or localhost and browser permission. Copy controls report unavailable
+access or permission rejection. Vault proofs use the applied application proof-server setting. The
+Midnight connector's deprecated informational prover URL is not read.
+
+The everyday test gate uses small controlled proving assets with the real SDK verifier. To repeat
+the full asset staging and observation acceptance against an already prepared local asset tree:
+
+```bash
+node scratch-refactor-tasks/verification/task11-assets-observation.mjs
+```
+
+This separate check requires the verified proving keys created during local setup.

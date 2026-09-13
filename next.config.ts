@@ -1,4 +1,4 @@
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Enable React Compiler for automatic memoization
@@ -14,11 +14,11 @@ const nextConfig: NextConfig = {
   // Optimize package imports
   experimental: {
     optimizePackageImports: [
-      'lucide-react',
-      '@radix-ui/react-dialog',
-      '@radix-ui/react-dropdown-menu',
-      '@tanstack/react-query',
-      '@web3icons/react',
+      "lucide-react",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-dropdown-menu",
+      "@tanstack/react-query",
+      "@web3icons/react",
     ],
   },
 
@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
     resolveAlias: {
       // Midnight packages import a named `WebSocket`. The browser build of
       // isomorphic-ws only default-exports. The shim provides both.
-      'isomorphic-ws': './src/lib/midnight/shims/isomorphic-ws.ts',
+      "isomorphic-ws": "./src/lib/midnight/shims/isomorphic-ws.ts",
     },
   },
 };

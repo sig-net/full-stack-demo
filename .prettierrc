@@ -1,14 +1,23 @@
 {
   "semi": true,
   "trailingComma": "all",
-  "singleQuote": true,
-  "printWidth": 80,
+  "singleQuote": false,
+  "printWidth": 100,
   "tabWidth": 2,
   "useTabs": false,
   "bracketSpacing": true,
-  "arrowParens": "avoid",
+  "arrowParens": "always",
   "endOfLine": "lf",
-  "jsxSingleQuote": true,
+  "jsxSingleQuote": false,
   "bracketSameLine": false,
-  "plugins": ["prettier-plugin-tailwindcss"]
+  "plugins": ["prettier-plugin-tailwindcss"],
+  "overrides": [
+    {
+      "files": ["**/tsconfig*.json"],
+      "options": {
+        "parser": "jsonc",
+        "trailingComma": "none"
+      }
+    }
+  ]
 }

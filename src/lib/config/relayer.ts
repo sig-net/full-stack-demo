@@ -1,19 +1,20 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 const serverEnvSchema = z.object({
   RELAYER_PRIVATE_KEY: z
     .string()
-    .regex(
-      /^0x[0-9a-fA-F]{64}$/,
-      'Relayer private key must be 0x-prefixed 32-byte hex',
-    ),
+    .regex(/^0x[0-9a-fA-F]{64}$/, "Relayer private key must be 0x-prefixed 32-byte hex"),
 });
 
-export function getRelayerPrivateKey() {
-  if (typeof window !== 'undefined') {
-    throw new Error(
-      'getRelayerPrivateKey() should only be called on the server side',
-    );
+/**
+ * Validates the operator credential when a server operation needs it.
+ *
+ * @returns A 0x-prefixed 32-byte hexadecimal private key.
+ * @throws {Error} If called in a browser or the server credential is absent or malformed.
+ */
+export function getRelayerPrivateKey(): string {
+  if (typeof window !== "undefined") {
+    throw new Error("getRelayerPrivateKey() should only be called on the server side");
   }
 
   const rawEnv: Record<string, string | undefined> = {
@@ -25,8 +26,8 @@ export function getRelayerPrivateKey() {
   } catch (error) {
     if (error instanceof z.ZodError) {
       const missingVars = error.issues
-        .map(err => `${err.path.join('.')}: ${err.message}`)
-        .join(', ');
+        .map((err) => `${err.path.join(".")}: ${err.message}`)
+        .join(", ");
       throw new Error(`Environment validation failed: ${missingVars}`);
     }
     throw error;

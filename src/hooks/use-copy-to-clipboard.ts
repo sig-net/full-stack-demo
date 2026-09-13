@@ -1,14 +1,25 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 
-export function useCopyToClipboard(resetDelay = 2000) {
+/**
+ * Rejects unavailable clipboard access and prevents superseded requests from publishing feedback.
+ *
+ * @param resetDelay - Milliseconds before successful copy feedback clears.
+ * @returns Copy feedback and actions scoped to the current mounted consumer.
+ */
+export function useCopyToClipboard(resetDelay = 2000): {
+  isCopied: boolean;
+  error: Error | null;
+  copyToClipboard: (text: string) => Promise<void>;
+  reset: () => void;
+} {
   const [isCopied, setIsCopied] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const request = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reset = () => {
+  const reset = (): void => {
     request.current += 1;
     if (timer.current) clearTimeout(timer.current);
     setIsCopied(false);
@@ -22,10 +33,10 @@ export function useCopyToClipboard(resetDelay = 2000) {
     [],
   );
 
-  async function copyToClipboard(text: string) {
+  async function copyToClipboard(text: string): Promise<void> {
     reset();
     const attempt = request.current;
-    const copied = () => {
+    const copied = (): void => {
       if (attempt !== request.current) return;
       setIsCopied(true);
       timer.current = setTimeout(() => {
@@ -33,47 +44,15 @@ export function useCopyToClipboard(resetDelay = 2000) {
       }, resetDelay);
     };
     try {
-      if (navigator?.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-        copied();
-        return;
-      }
-
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
-
-      textArea.style.position = 'fixed';
-      textArea.style.left = '-999999px';
-      textArea.style.top = '-999999px';
-      textArea.style.opacity = '0';
-      textArea.style.pointerEvents = 'none';
-      textArea.setAttribute('readonly', '');
-      textArea.setAttribute('tabindex', '-1');
-
-      document.body.appendChild(textArea);
-
-      try {
-        textArea.focus();
-        textArea.select();
-        textArea.setSelectionRange(0, text.length);
-        if (navigator.userAgent.match(/ipad|iphone/i)) {
-          const range = document.createRange();
-          range.selectNodeContents(textArea);
-          const selection = window.getSelection();
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-        }
-        if (!document.execCommand('copy'))
-          throw new Error('Copy command failed');
-      } finally {
-        textArea.value = '';
-        textArea.remove();
-      }
-
+      if (!window.isSecureContext || typeof navigator.clipboard === "undefined")
+        throw new Error(
+          "Clipboard access is unavailable. Open this app on HTTPS or localhost, then try again.",
+        );
+      await navigator.clipboard.writeText(text);
       copied();
     } catch (err) {
       if (attempt !== request.current) return;
-      setError(err instanceof Error ? err : new Error('Failed to copy'));
+      setError(err instanceof Error ? err : new Error("Failed to copy"));
       setIsCopied(false);
     }
   }

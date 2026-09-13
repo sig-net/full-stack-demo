@@ -1,19 +1,17 @@
-'use client';
+"use client";
 
-import { type ReactElement } from 'react';
-import { Copy, Check, Info, Loader2 } from 'lucide-react';
-import { NetworkIcon } from '@web3icons/react';
+import { NetworkIcon } from "@web3icons/react";
+import { Check, Copy, Info, Loader2 } from "lucide-react";
+import type * as React from "react";
+import type { ReactElement } from "react";
 
-import { Button } from '@/components/ui/button';
-import { QRCode } from '@/components/ui/qr-code';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { TokenConfig, NetworkData } from '@/lib/constants/token-metadata';
-import { formatAddress } from '@/lib/address-utils';
-import { useCopyToClipboard } from '@/hooks';
+import { Button } from "@/components/ui/button";
+import { Feedback } from "@/components/ui/feedback";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { QRCode } from "@/components/ui/qr-code";
+import { useCopyToClipboard } from "@/hooks";
+import { formatAddress } from "@/lib/address-utils";
+import type { NetworkData, TokenConfig } from "@/lib/constants/token-metadata";
 
 interface DepositAddressProps {
   token: TokenConfig;
@@ -25,115 +23,113 @@ interface DepositAddressProps {
   onContinue: () => void;
 }
 
-export function DepositAddress({
-  token,
-  network,
-  depositAddress,
-  isSubmitting,
-  showContinue = true,
-  canContinue,
-  onContinue,
-}: DepositAddressProps) {
-  const { isCopied, copyToClipboard } = useCopyToClipboard();
+/**
+ * Presents the deposit address, QR code, copy action and optional continuation.
+ *
+ * @param properties - Address data and continuation controls.
+ * @returns The deposit address surface.
+ */
+export function DepositAddress(properties: DepositAddressProps): React.JSX.Element {
+  const {
+    token,
+    network,
+    depositAddress,
+    isSubmitting,
+    showContinue = true,
+    canContinue,
+    onContinue,
+  } = properties;
+  const { isCopied, copyToClipboard, error } = useCopyToClipboard();
 
-  const handleCopy = () => {
-    copyToClipboard(depositAddress);
+  const handleCopy = (): void => {
+    void copyToClipboard(depositAddress);
   };
 
   // The QR helper takes a file asset via iconUrl (it only serializes SVG elements).
   const qrIconProps: { iconUrl: string } | { icon: ReactElement } =
-    network.chain === 'midnight'
-      ? { iconUrl: '/midnight/logomark.svg' }
+    network.chain === "midnight"
+      ? { iconUrl: "/midnight/logomark.svg" }
       : { icon: <NetworkIcon name={network.chain} /> };
 
   return (
-    <div className='ds-surface ds-stack-content w-full'>
-      <p className='ds-muted ds-label capitalize'>
-        {network.chainName} Address
-      </p>
+    <div className="ds-surface ds-stack-content w-full">
+      <p className="ds-muted ds-label capitalize">{network.chainName} Address</p>
 
-      <div className='ds-page ds-stack ds-content-gap ds-round ds-frame ds-inset-content justify-center'>
+      <div className="ds-page ds-stack ds-content-gap ds-round ds-frame ds-inset-content justify-center">
         <QRCode
           value={depositAddress}
           size={200}
           {...qrIconProps}
-          className='ds-surface mx-auto sm:hidden'
-          errorCorrectionLevel='M'
+          className="ds-surface mx-auto sm:hidden"
+          errorCorrectionLevel="M"
           margin={12}
         />
         <QRCode
           value={depositAddress}
           size={242}
           {...qrIconProps}
-          className='ds-surface mx-auto hidden sm:block'
-          errorCorrectionLevel='M'
+          className="ds-surface mx-auto hidden sm:block"
+          errorCorrectionLevel="M"
           margin={16}
         />
 
-        <div className='ds-surface-muted ds-control-gap ds-inline-inset-control ds-block-inset-control mx-auto flex w-fit items-center'>
-          <span className='ds-muted ds-label'>
-            {formatAddress(depositAddress)}
-          </span>
+        <div className="ds-surface-muted ds-control-gap ds-inline-inset-control ds-block-inset-control mx-auto flex w-fit items-center">
+          <span className="ds-muted ds-label">{formatAddress(depositAddress)}</span>
           <Button
-            variant='ghost'
-            size='icon'
+            variant="ghost"
+            size="icon"
             onClick={handleCopy}
-            className='w-full'
+            className="w-full"
+            aria-label="Copy deposit address"
           >
-            {isCopied ? (
-              <Check className='h-5 w-5' />
-            ) : (
-              <Copy className='h-5 w-5' />
-            )}
+            {isCopied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
           </Button>
         </div>
       </div>
 
-      <div className='ds-row ds-control-gap justify-center'>
-        <p className='ds-muted ds-body text-center'>
-          Use this address to deposit {token.name}
-        </p>
+      {error && (
+        <Feedback tone="error" role="alert">
+          {error.message}
+        </Feedback>
+      )}
+
+      <div className="ds-row ds-control-gap justify-center">
+        <p className="ds-muted ds-body text-center">Use this address to deposit {token.name}</p>
         <Popover>
           <PopoverTrigger asChild>
-            <Button
-              type='button'
-              variant='ghost'
-              size='icon-sm'
-              aria-label='About deposit address'
-            >
-              <Info className='ds-muted h-4 w-4' />
+            <Button type="button" variant="ghost" size="icon-sm" aria-label="About deposit address">
+              <Info className="ds-muted h-4 w-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent side='top'>
-            <p className='ds-caption ds-label ds-text ds-after-control'>
+          <PopoverContent side="top">
+            <p className="ds-caption ds-label ds-text ds-after-control">
               How to get {token.name} on testnet
             </p>
-            <p className='ds-caption ds-muted'>
-              {token.acquireHint ??
-                `Get testnet ${token.symbol} from a faucet.`}
+            <p className="ds-caption ds-muted">
+              {token.acquireHint ?? `Get testnet ${token.symbol} from a faucet.`}
             </p>
             {token.faucetUrl && (
               <a
                 href={token.faucetUrl}
-                target='_blank'
-                rel='noopener noreferrer'
-                className='ds-caption ds-link ds-before-control inline-block'
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ds-caption ds-link ds-before-control inline-block"
               >
                 Get {token.symbol} here
               </a>
             )}
-            <div className='ds-round ds-surface-muted ds-before-control ds-inline-inset-control ds-block-inset-control'>
-              <p className='ds-caption ds-muted'>Contract Address</p>
-              <div className='ds-row ds-tight'>
-                <code className='ds-caption ds-text break-all'>
-                  {token.erc20Address}
-                </code>
+            <div className="ds-round ds-surface-muted ds-before-control ds-inline-inset-control ds-block-inset-control">
+              <p className="ds-caption ds-muted">Contract Address</p>
+              <div className="ds-row ds-tight">
+                <code className="ds-caption ds-text break-all">{token.erc20Address}</code>
                 <Button
-                  variant='ghost'
-                  size='icon'
-                  onClick={() => copyToClipboard(token.erc20Address)}
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    void copyToClipboard(token.erc20Address);
+                  }}
                 >
-                  <Copy className='h-3 w-3' />
+                  <Copy className="h-3 w-3" />
                 </Button>
               </div>
             </div>
@@ -142,16 +138,16 @@ export function DepositAddress({
       </div>
 
       {showContinue && (
-        <div className='flex w-full justify-center'>
+        <div className="flex w-full justify-center">
           <Button
             onClick={onContinue}
-            variant='secondary'
+            variant="secondary"
             disabled={isSubmitting || !canContinue}
-            className='w-full'
+            className="w-full"
           >
             {isSubmitting ? (
               <>
-                <Loader2 className='ds-spinner h-4 w-4' />
+                <Loader2 className="ds-spinner h-4 w-4" />
                 Notifying...
               </>
             ) : (

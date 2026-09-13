@@ -41,8 +41,8 @@ pinned in the UI manifest and lockfile. The scripts resolve their dependencies r
 own location. From the UI root, the transport checks are:
 
 ```bash
-node scripts/local-vault/chromium-post-data-cap.test.cjs
-node scripts/local-vault/transport-preflight.cjs
+node scripts/local-vault/chromium-post-data-cap.test.mjs
+node scripts/local-vault/transport-preflight.ts
 ```
 
 Run them when provisioning or changing the launcher, or diagnosing the known transport failure.

@@ -1,27 +1,33 @@
-'use client';
+"use client";
 
-import { useEffect, useRef } from 'react';
-import { toast } from 'sonner';
+import type * as React from "react";
+import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 
-import { flow, PHASE_MESSAGE, type FlowState } from '@/lib/midnight/flow';
+import { flow, type FlowState, PHASE_MESSAGE } from "@/lib/midnight/flow";
 
-const TOAST_ID = 'midnight-flow-progress';
+const TOAST_ID = "midnight-flow-progress";
 
-export function MidnightProgressToaster() {
+/**
+ * Mirrors the current Midnight flow phase in one stable toast.
+ *
+ * @returns Nothing, while subscribing the toast side effect.
+ */
+export function MidnightProgressToaster(): React.JSX.Element | null {
   const prevPhase = useRef<string | null>(null);
 
   useEffect(() => {
-    const onState = (s: FlowState) => {
+    const onState = (s: FlowState): void => {
       const kind =
-        s.kind === 'withdraw'
-          ? 'Withdrawal'
-          : s.kind === 'swap'
-            ? 'Swap'
-            : s.kind === 'supply'
-              ? 'Supply'
-              : s.kind === 'redeem'
-                ? 'Redeem'
-                : 'Deposit';
+        s.kind === "withdraw"
+          ? "Withdrawal"
+          : s.kind === "swap"
+            ? "Swap"
+            : s.kind === "supply"
+              ? "Supply"
+              : s.kind === "redeem"
+                ? "Redeem"
+                : "Deposit";
 
       if (s.error) {
         prevPhase.current = null;
@@ -42,7 +48,7 @@ export function MidnightProgressToaster() {
         toast.dismiss(TOAST_ID);
         return;
       }
-      if (s.phase === 'done') {
+      if (s.phase === "done") {
         prevPhase.current = null;
         if (s.refunded) {
           toast.warning(`${kind} didn't execute on-chain: tokens refunded`, {
@@ -51,18 +57,18 @@ export function MidnightProgressToaster() {
           return;
         }
         toast.success(
-          s.kind === 'withdraw'
-            ? 'Withdrawal complete'
-            : s.kind === 'swap'
-              ? 'Swap complete: shielded token minted'
-              : 'Deposit complete: shielded token minted',
+          s.kind === "withdraw"
+            ? "Withdrawal complete"
+            : s.kind === "swap"
+              ? "Swap complete: shielded token minted"
+              : "Deposit complete: shielded token minted",
           { id: TOAST_ID },
         );
         return;
       }
       if (s.phase !== prevPhase.current) {
         prevPhase.current = s.phase;
-        toast.loading(`${kind}: ${PHASE_MESSAGE[s.phase] ?? 'Working…'}`, {
+        toast.loading(`${kind}: ${PHASE_MESSAGE[s.phase]}`, {
           id: TOAST_ID,
         });
       }

@@ -1,22 +1,28 @@
-import {
-  createWalletClient,
-  hexToBytes,
-  http,
-  type Chain,
-  type PublicClient,
-} from 'viem';
-import { HDKey, hdKeyToAccount } from 'viem/accounts';
-import type { Wallet, Erc20Transfer } from './Wallet';
-import { transferErc20 } from '../erc20-transfer';
+import { type Chain, createWalletClient, hexToBytes, http, type PublicClient } from "viem";
+import { HDKey, hdKeyToAccount } from "viem/accounts";
 
+import { transferErc20 } from "../erc20-transfer";
+import type { Erc20Transfer, Wallet } from "./Wallet";
+
+/** Keeps seed-derived signing material within a disposable page-memory session. */
 export class SeedWallet implements Wallet {
-  readonly kind = 'seed';
-  readonly name = 'Seed wallet';
+  readonly kind = "seed";
+  readonly name = "Seed wallet";
   readonly iconUrl = undefined;
   readonly sessionId = crypto.randomUUID();
   private active = true;
-  private clientValue?: Wallet['client'];
+  private clientValue?: Wallet["client"];
 
+  /**
+   * Captures signing inputs until connection derives the account and clears the raw seed.
+   *
+   * @param chain - Chain used by the signing client.
+   * @param publicClient - App RPC used for chain and receipt checks.
+   * @param rpcUrl - HTTP endpoint used for signed transaction submission.
+   * @param seed - Disposable hexadecimal seed supplied by the user.
+   * @param explorerUrl - Captured explorer origin for transaction metadata.
+   * @param verifyNetwork - Optional local-fork identity check.
+   */
   constructor(
     readonly chain: Chain,
     readonly publicClient: PublicClient,
@@ -26,13 +32,14 @@ export class SeedWallet implements Wallet {
     private readonly verifyNetwork?: () => Promise<void>,
   ) {}
 
-  async connect() {
+  /** @inheritdoc */
+  async connect(): Promise<void> {
     this.assertActive();
     if (this.clientValue) return;
-    const seed = this.seed.trim().replace(/^0x/i, '');
-    this.seed = '';
+    const seed = this.seed.trim().replace(/^0x/i, "");
+    this.seed = "";
     if (!/^(?:[0-9a-fA-F]{2}){16,64}$/.test(seed))
-      throw new Error('Enter a hexadecimal EVM seed of 16–64 bytes.');
+      throw new Error("Enter a hexadecimal EVM seed of 16–64 bytes.");
     const bytes = hexToBytes(`0x${seed}`);
     try {
       const account = hdKeyToAccount(HDKey.fromMasterSeed(bytes));
@@ -47,39 +54,46 @@ export class SeedWallet implements Wallet {
     await this.verify();
   }
 
-  assertActive() {
-    if (!this.active)
-      throw new Error('EVM wallet session changed. Connect again.');
+  /** @inheritdoc */
+  assertActive(): void {
+    if (!this.active) throw new Error("EVM wallet session changed. Connect again.");
   }
-  get client() {
+  /** @inheritdoc */
+  get client(): Wallet["client"] {
     this.assertActive();
-    if (!this.clientValue) throw new Error('Connect an EVM wallet first.');
+    if (!this.clientValue) throw new Error("Connect an EVM wallet first.");
     return this.clientValue;
   }
-  get account() {
+  /** @inheritdoc */
+  get account(): Wallet["account"] {
     return this.client.account.address;
   }
-  get id() {
+  /** @inheritdoc */
+  get id(): Wallet["account"] {
     return this.account;
   }
-  get accountDetail() {
+  /** @inheritdoc */
+  get accountDetail(): Wallet["account"] {
     return this.account;
   }
-  async verify() {
+  /** @inheritdoc */
+  async verify(): Promise<void> {
     this.assertActive();
     const chainId = await this.publicClient.getChainId();
     this.assertActive();
     await this.verifyNetwork?.();
     this.assertActive();
     if (chainId !== this.chain.id)
-      throw new Error(`EVM RPC must use chain ${this.chain.id}.`);
+      throw new Error(`EVM RPC must use chain ${this.chain.id.toString()}.`);
   }
-  transferErc20(input: Erc20Transfer) {
+  /** @inheritdoc */
+  transferErc20(input: Erc20Transfer): ReturnType<Wallet["transferErc20"]> {
     return transferErc20(this, input);
   }
-  disconnect() {
+  /** @inheritdoc */
+  disconnect(): void {
     this.active = false;
-    this.seed = '';
+    this.seed = "";
     this.clientValue = undefined;
   }
 }

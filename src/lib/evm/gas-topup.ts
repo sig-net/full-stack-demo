@@ -1,18 +1,12 @@
-import {
-  createWalletClient,
-  http,
-  parseEther,
-  type Hex,
-  type PublicClient,
-} from 'viem';
-import { sepolia } from '@/lib/config/evm';
+import { createWalletClient, type Hex, http, parseEther, type PublicClient } from "viem";
 
-import type { EvmChainConfig } from '@/lib/config/evm';
-import { estimateFees } from '@/lib/evm/fees';
-import { getRelayerEthAccount } from '@/lib/utils/relayer-setup';
+import type { EvmChainConfig } from "@/lib/config/evm";
+import { sepolia } from "@/lib/config/evm";
+import { estimateFees } from "@/lib/evm/fees";
+import { getRelayerEthAccount } from "@/lib/utils/relayer-setup";
 
 // The cap must cover every operation reservation after its margin and buffer.
-const MAX_TOPUP_ETH = parseEther('0.05');
+const MAX_TOPUP_ETH = parseEther("0.05");
 const ETH_TRANSFER_GAS = 21000n;
 
 async function sendGasTopUp(
@@ -33,7 +27,7 @@ async function sendGasTopUp(
   if (relayerBalance < requiredBalance) {
     throw new Error(
       `Relayer funding wallet has insufficient ETH. ` +
-        `Has: ${relayerBalance}, needs: ${requiredBalance}. ` +
+        `Has: ${relayerBalance.toString()}, needs: ${requiredBalance.toString()}. ` +
         `Please fund address: ${account.address}`,
     );
   }
@@ -59,8 +53,8 @@ async function sendGasTopUp(
     timeout: 60_000,
   });
 
-  if (receipt.status !== 'success') {
-    throw new Error('Relayer gas top-up transaction reverted');
+  if (receipt.status !== "success") {
+    throw new Error("Relayer gas top-up transaction reverted");
   }
 
   return { txHash, amount: topUpAmount };
@@ -86,15 +80,21 @@ async function checkAndTopUp(
   }
 
   const deficit = totalCost - balance;
-  const { txHash, amount } = await sendGasTopUp(
-    config,
-    client,
-    targetAddress,
-    deficit,
-  );
+  const { txHash, amount } = await sendGasTopUp(config, client, targetAddress, deficit);
   return { topUpTxHash: txHash, topUpAmount: amount };
 }
 
+/**
+ * Funds a gas deficit from the relayer, applying the transfer buffer and per-transfer cap.
+ *
+ * @param config - Captured Sepolia RPC configuration.
+ * @param client - Public client observing recipient and relayer balances.
+ * @param fromAddress - Server-derived operation sender receiving native gas funds.
+ * @param gasLimit - Operation allowance in gas units.
+ * @param maxFeePerGas - Operation allowance's fee cap in wei.
+ * @returns The confirmed top-up hash and amount, or zero when the allowance is covered.
+ * @throws {Error} If relayer funds, transaction submission or receipt verification fail.
+ */
 export async function ensureGasForTransaction(
   config: EvmChainConfig,
   client: PublicClient,

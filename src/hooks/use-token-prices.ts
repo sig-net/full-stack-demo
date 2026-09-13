@@ -1,23 +1,23 @@
-'use client';
+"use client";
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { z } from "zod";
 
-import { useRuntimeConfig } from '@/providers/runtime-config-context';
-import { stataAssetsPerShare } from '@/lib/midnight/evm-stata';
+import { stataAssetsPerShare } from "@/lib/midnight/evm-stata";
+import { useRuntimeConfig } from "@/providers/runtime-config-context";
 
-// CoinGecko API for token prices
-const COINGECKO_API = 'https://api.coingecko.com/api/v3';
+const COINGECKO_API = "https://api.coingecko.com/api/v3";
 
-// Token symbol to CoinGecko ID mapping
 const TOKEN_ID_MAP: Record<string, string> = {
-  USDC: 'usd-coin',
-  'USDC.A': 'usd-coin',
-  ETH: 'ethereum',
-  BTC: 'bitcoin',
-  DAI: 'dai',
-  COW: 'cow-protocol',
+  USDC: "usd-coin",
+  "USDC.A": "usd-coin",
+  ETH: "ethereum",
+  BTC: "bitcoin",
+  DAI: "dai",
+  COW: "cow-protocol",
 };
 
+/** Display-only USD quote and optional daily percentage change for a token symbol. */
 export interface TokenPrice {
   symbol: string;
   usd: number;
@@ -30,39 +30,41 @@ async function fetchTokenPrices(
 ): Promise<Record<string, TokenPrice>> {
   if (symbols.length === 0) return {};
 
-  const coinIds = symbols
-    .map(symbol => TOKEN_ID_MAP[symbol.toUpperCase()])
-    .filter(Boolean);
+  const coinIds = symbols.map((symbol) => TOKEN_ID_MAP[symbol.toUpperCase()]).filter(Boolean);
 
   if (coinIds.length === 0) return {};
 
   const response = await fetch(
-    `${COINGECKO_API}/simple/price?ids=${coinIds.join(',')}&vs_currencies=usd&include_24hr_change=true`,
+    `${COINGECKO_API}/simple/price?ids=${coinIds.join(",")}&vs_currencies=usd&include_24hr_change=true`,
   );
 
   if (!response.ok) {
-    throw new Error('Failed to fetch token prices');
+    throw new Error("Failed to fetch token prices");
   }
 
-  const data = await response.json();
+  const input: unknown = await response.json();
+  const data = z
+    .record(z.string(), z.object({ usd: z.number(), usd_24h_change: z.number().optional() }))
+    .parse(input);
 
   const prices: Record<string, TokenPrice> = {};
 
   Object.entries(TOKEN_ID_MAP).forEach(([symbol, coinId]) => {
-    if (data[coinId]) {
+    const quote = data[coinId];
+    if (quote) {
       prices[symbol] = {
         symbol,
-        usd: data[coinId].usd,
-        change24h: data[coinId].usd_24h_change,
+        usd: quote.usd,
+        change24h: quote.usd_24h_change,
       };
     }
   });
 
-  if (symbols.some(s => s.toUpperCase() === 'STATAUSDC') && prices.USDC) {
+  if (symbols.some((s) => s.toUpperCase() === "STATAUSDC") && prices.USDC) {
     try {
       const rate = await stataAssetsPerShare(rpcUrl);
       prices.STATAUSDC = {
-        symbol: 'stataUSDC',
+        symbol: "stataUSDC",
         usd: prices.USDC.usd * rate,
         change24h: prices.USDC.change24h,
       };
@@ -74,10 +76,16 @@ async function fetchTokenPrices(
   return prices;
 }
 
-export function useTokenPrices(symbols: string[] = []) {
+/**
+ * Shares display quotes by symbol set and the applied RPC used for wrapper share valuation.
+ *
+ * @param symbols - Token symbols requested by the current view.
+ * @returns Cached display-price query state with periodic foreground refresh.
+ */
+export function useTokenPrices(symbols: string[] = []): UseQueryResult<Record<string, TokenPrice>> {
   const { applied } = useRuntimeConfig();
   return useQuery({
-    queryKey: ['tokenPrices', applied.evm.rpcUrl, symbols.toSorted()],
+    queryKey: ["tokenPrices", applied.evm.rpcUrl, symbols.toSorted()],
     queryFn: () => fetchTokenPrices(symbols, applied.evm.rpcUrl),
     staleTime: 120000,
     refetchInterval: 300000,
@@ -86,7 +94,15 @@ export function useTokenPrices(symbols: string[] = []) {
   });
 }
 
-export function useTokenPrice(symbol: string) {
+/**
+ * Projects one case-insensitive symbol from the shared price query.
+ *
+ * @param symbol - Token symbol requested by the view.
+ * @returns The matching price and the underlying query status.
+ */
+export function useTokenPrice(
+  symbol: string,
+): Omit<UseQueryResult<Record<string, TokenPrice>>, "data"> & { data: TokenPrice | undefined } {
   const { data: prices, ...rest } = useTokenPrices([symbol]);
 
   return {

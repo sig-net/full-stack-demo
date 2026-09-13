@@ -7,7 +7,7 @@ Yarn. Install with the README's project-local immutable dependency command. Use 
 installed Chrome and prepared disposable MetaMask profile. Do not run a global browser installer.
 
 Configure the Playwright MCP command as the absolute path to the tested Node executable, with
-arguments containing the absolute UI path to `scripts/local-vault/playwright-launcher.cjs`, then
+arguments containing the absolute UI path to `scripts/local-vault/playwright-launcher.mjs`, then
 `--user-data-dir` and the explicitly selected prepared profile path. Find that profile from the
 current session or observed Chrome process arguments. Do not guess a cache suffix or print all
 process environments. Preserve other MCP settings. Updating configuration requires the user's
@@ -64,8 +64,9 @@ preserved the measured highlight. Use this fallback only after observing that ca
 
 ```javascript
 const session = await page.context().newCDPSession(page);
-const shot = await session.send('Page.captureScreenshot', {
-  format: 'png', captureBeyondViewport: false,
+const shot = await session.send("Page.captureScreenshot", {
+  format: "png",
+  captureBeyondViewport: false,
 });
 await session.detach();
 ```
@@ -100,11 +101,11 @@ successfully inside a Playwright run-code call:
 
 ```javascript
 const session = await page.context().newCDPSession(page);
-const targets = await session.send('Target.getTargets');
+const targets = await session.send("Target.getTargets");
 await session.detach();
 return targets.targetInfos
-  .filter(t => t.type === 'page' && t.url.includes('/sidepanel.html'))
-  .map(t => ({ url: t.url }));
+  .filter((t) => t.type === "page" && t.url.includes("/sidepanel.html"))
+  .map((t) => ({ url: t.url }));
 ```
 
 Filter further to the observed MetaMask extension ID. Open the exact returned confirmation URL

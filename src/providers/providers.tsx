@@ -1,29 +1,28 @@
-'use client';
+"use client";
 
-import { useLayoutEffect } from 'react';
-import {
-  RuntimeConfigProvider,
-  useRuntimeConfig,
-} from './runtime-config-context';
-import { useEvmWallet } from './evm-wallet-context';
-import { useMidnightConnection } from './midnight-wallet-context';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import type * as React from "react";
+import { useLayoutEffect } from "react";
 
-import { EvmBalancesProvider } from './evm-balances-context';
-import { EvmLocalFundingProvider } from './evm-local-funding-context';
-import { EvmDepositProvider } from './evm-deposit-context';
-import { ERC20_TOKENS } from '@/lib/constants/token-metadata';
-import { EvmWalletProvider } from './evm-wallet-context';
-import { queryClient } from '@/lib/query-client';
-import { MidnightWalletProvider } from './midnight-wallet-context';
-import { WalletReadinessProvider } from './wallet-readiness-context';
-import { VaultProvider } from './vault-context';
-import { VaultOperationsProvider } from './vault-operations-context';
-import { VaultBalancesProvider } from './vault-balances-context';
-import { MidnightProgressToaster } from '@/components/midnight-progress-toaster';
+import { MidnightProgressToaster } from "@/components/midnight-progress-toaster";
+import { ERC20_TOKENS } from "@/lib/constants/token-metadata";
+import { queryClient } from "@/lib/query-client";
 
-function RuntimeWallets({ children }: { children: React.ReactNode }) {
+import { EvmBalancesProvider } from "./evm-balances-context";
+import { EvmDepositProvider } from "./evm-deposit-context";
+import { EvmLocalFundingProvider } from "./evm-local-funding-context";
+import { useEvmWallet } from "./evm-wallet-context";
+import { EvmWalletProvider } from "./evm-wallet-context";
+import { useMidnightConnection } from "./midnight-wallet-context";
+import { MidnightWalletProvider } from "./midnight-wallet-context";
+import { RuntimeConfigProvider, useRuntimeConfig } from "./runtime-config-context";
+import { VaultBalancesProvider } from "./vault-balances-context";
+import { VaultProvider } from "./vault-context";
+import { VaultOperationsProvider } from "./vault-operations-context";
+import { WalletReadinessProvider } from "./wallet-readiness-context";
+
+function RuntimeWallets({ children }: { children: React.ReactNode }): React.JSX.Element {
   const runtime = useRuntimeConfig();
   return (
     <MidnightWalletProvider configuration={runtime.applied.midnight}>
@@ -32,27 +31,32 @@ function RuntimeWallets({ children }: { children: React.ReactNode }) {
     </MidnightWalletProvider>
   );
 }
-function RuntimeWalletInvalidation() {
+function RuntimeWalletInvalidation(): null {
   const { owner } = useRuntimeConfig();
   const evm = useEvmWallet();
   const midnight = useMidnightConnection();
   useLayoutEffect(() =>
-    owner.onInvalidate(scopes => {
-      if (scopes.has('evm')) evm.disconnect();
-      if (scopes.has('midnight')) midnight.disconnect();
+    owner.onInvalidate((scopes) => {
+      if (scopes.has("evm")) evm.disconnect();
+      if (scopes.has("midnight")) midnight.disconnect();
     }),
   );
   return null;
 }
 
-export function Providers({ children }: { children: React.ReactNode }) {
+/**
+ * Establishes the application provider order and mounts shared progress feedback.
+ *
+ * @param root0 - Provider properties.
+ * @param root0.children - Application content rendered inside the provider tree.
+ * @returns The application provider tree.
+ */
+export function Providers({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
       <RuntimeConfigProvider>
         <EvmWalletProvider>
-          <EvmBalancesProvider
-            tokens={ERC20_TOKENS.map(token => token.erc20Address)}
-          >
+          <EvmBalancesProvider tokens={ERC20_TOKENS.map((token) => token.erc20Address)}>
             <EvmLocalFundingProvider>
               <RuntimeWallets>
                 <WalletReadinessProvider>

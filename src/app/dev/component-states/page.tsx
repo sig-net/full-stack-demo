@@ -1,97 +1,109 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Feedback } from '@/components/ui/feedback';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import type * as React from "react";
+import { useState } from "react";
+import { toast } from "sonner";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
-  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuCheckboxItem,
-} from '@/components/ui/dropdown-menu';
-import {
-  Tooltip,
-  TooltipProvider,
-  TooltipTrigger,
-  TooltipContent,
-} from '@/components/ui/tooltip';
-import { TokenAmountDisplay } from '@/components/ui/token-amount-display';
-import { toast } from 'sonner';
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Feedback } from "@/components/ui/feedback";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TokenAmountDisplay } from "@/components/ui/token-amount-display";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-export const dynamic = 'force-dynamic';
+/** Keeps development fixture rendering available through a dynamic route. */
+export const dynamic = "force-dynamic";
 
-export default function ComponentStates() {
+/**
+ * Renders interactive states for the shared component library during development.
+ *
+ * @returns The component state gallery, or no content outside development.
+ */
+export default function ComponentStates(): React.JSX.Element | null {
   const [count, setCount] = useState(0);
   const [checked, setChecked] = useState(true);
-  const [amount, setAmount] = useState('');
-  if (process.env.NODE_ENV !== 'development') return null;
+  const [amount, setAmount] = useState("");
+  if (process.env.NODE_ENV !== "development") return null;
   const token = {
-    erc20Address: '0x0000000000000000000000000000000000000001',
-    symbol: 'TEST',
-    name: 'Fixture token',
+    erc20Address: "0x0000000000000000000000000000000000000001",
+    symbol: "TEST",
+    name: "Fixture token",
     decimals: 18,
-    chain: 'ethereum' as const,
-    balance: '123.456789012345678901',
+    chain: "ethereum" as const,
+    balance: "123.456789012345678901",
   };
   return (
-    <main className='ds-stack-section ds-inset-section'>
+    <main className="ds-stack-section ds-inset-section">
       <h1>Component states (development fixtures)</h1>
       <p>
-        Activations: <output data-testid='activations'>{count}</output>
+        Activations: <output data-testid="activations">{count}</output>
       </p>
-      <div className='ds-actions'>
-        {(
-          ['default', 'outline', 'ghost', 'destructive', 'secondary'] as const
-        ).map(variant => (
+      <div className="ds-actions">
+        {(["default", "outline", "ghost", "destructive", "secondary"] as const).map((variant) => (
           <Button
             key={variant}
             variant={variant}
             data-testid={`button-${variant}`}
-            onClick={() => setCount(count + 1)}
+            onClick={() => {
+              setCount(count + 1);
+            }}
           >
             {variant}
           </Button>
         ))}
         <Button
           disabled
-          data-testid='button-disabled'
-          onClick={() => setCount(count + 1)}
+          data-testid="button-disabled"
+          onClick={() => {
+            setCount(count + 1);
+          }}
         >
           Disabled
         </Button>
-        <Button disabled aria-busy='true'>
+        <Button disabled aria-busy="true">
           Loading
         </Button>
       </div>
-      <Label htmlFor='state-input'>Editable field</Label>
-      <Input id='state-input' placeholder='Type here' />
-      <Label htmlFor='state-invalid'>Invalid field</Label>
-      <Input id='state-invalid' aria-invalid='true' defaultValue='invalid' />
-      <Input aria-label='Disabled field' disabled defaultValue='disabled' />
+      <Label htmlFor="state-input">Editable field</Label>
+      <Input id="state-input" placeholder="Type here" />
+      <Label htmlFor="state-invalid">Invalid field</Label>
+      <Input id="state-invalid" aria-invalid="true" defaultValue="invalid" />
+      <Input aria-label="Disabled field" disabled defaultValue="disabled" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button data-testid='menu-trigger'>State menu</Button>
+          <Button data-testid="menu-trigger">State menu</Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuItem
-            data-testid='menu-enabled'
-            onSelect={event => {
+            data-testid="menu-enabled"
+            onSelect={(event) => {
               event.preventDefault();
               setCount(count + 1);
             }}
           >
             Enabled menu item
           </DropdownMenuItem>
-          <DropdownMenuItem asChild onSelect={event => event.preventDefault()}>
+          <DropdownMenuItem
+            asChild
+            onSelect={(event) => {
+              event.preventDefault();
+            }}
+          >
             <Button
-              variant='menu'
-              data-testid='menu-composed'
-              onClick={() => setCount(count + 1)}
+              variant="menu"
+              data-testid="menu-composed"
+              onClick={() => {
+                setCount(count + 1);
+              }}
             >
               Composed menu button
             </Button>
@@ -100,7 +112,9 @@ export default function ComponentStates() {
           <DropdownMenuCheckboxItem
             checked={checked}
             onCheckedChange={setChecked}
-            onSelect={event => event.preventDefault()}
+            onSelect={(event) => {
+              event.preventDefault();
+            }}
           >
             Selected item
           </DropdownMenuCheckboxItem>
@@ -109,23 +123,23 @@ export default function ComponentStates() {
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant='ghost'>Tooltip target</Button>
+            <Button variant="ghost">Tooltip target</Button>
           </TooltipTrigger>
           <TooltipContent>Portal tooltip fixture</TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      <div className='ds-stack-content'>
-        <Feedback tone='error' role='alert'>
+      <div className="ds-stack-content">
+        <Feedback tone="error" role="alert">
           Error fixture
         </Feedback>
-        <Feedback tone='warning'>Warning fixture</Feedback>
-        <Feedback tone='success'>Success fixture</Feedback>
-        <Badge variant='pending'>Pending fixture</Badge>
+        <Feedback tone="warning">Warning fixture</Feedback>
+        <Feedback tone="success">Success fixture</Feedback>
+        <Badge variant="pending">Pending fixture</Badge>
       </div>
       <Card>
         <CardContent>
           <h2>Independent surface A</h2>
-          <p className='ds-caption ds-muted' data-testid='shared-caption-a'>
+          <p className="ds-caption ds-muted" data-testid="shared-caption-a">
             Shared typography A
           </p>
         </CardContent>
@@ -133,7 +147,7 @@ export default function ComponentStates() {
       <Card>
         <CardContent>
           <h2>Independent surface B</h2>
-          <p className='ds-caption ds-muted' data-testid='shared-caption-b'>
+          <p className="ds-caption ds-muted" data-testid="shared-caption-b">
             Shared typography B
           </p>
         </CardContent>
@@ -143,25 +157,37 @@ export default function ComponentStates() {
         onChange={setAmount}
         tokens={[token]}
         selectedToken={token}
-        onTokenSelect={() => {}}
+        onTokenSelect={() => undefined}
       />
       <TokenAmountDisplay
-        value='1'
-        onChange={() => setCount(count + 1)}
+        value="1"
+        onChange={() => {
+          setCount(count + 1);
+        }}
         tokens={[token]}
         selectedToken={token}
-        onTokenSelect={() => setCount(count + 1)}
+        onTokenSelect={() => {
+          setCount(count + 1);
+        }}
         readOnly
       />
       <TokenAmountDisplay
-        value='1'
-        onChange={() => setCount(count + 1)}
+        value="1"
+        onChange={() => {
+          setCount(count + 1);
+        }}
         tokens={[token]}
         selectedToken={token}
-        onTokenSelect={() => setCount(count + 1)}
+        onTokenSelect={() => {
+          setCount(count + 1);
+        }}
         disabled
       />
-      <Button onClick={() => toast.error('Themed error fixture')}>
+      <Button
+        onClick={() => {
+          toast.error("Themed error fixture");
+        }}
+      >
         Show toast
       </Button>
     </main>

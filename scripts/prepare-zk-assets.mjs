@@ -1,98 +1,130 @@
-import { spawn } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
-import { cp, mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
-import { parseZkArtifactManifest } from '@midnight-ntwrk/midnight-js/utils';
-import { servedEntries } from '../node_modules/@sig-net/midnight-examples-erc20-vault-contract/dist/zk-assets/layout.js';
-import { verifyTree } from '../node_modules/@sig-net/midnight-examples-erc20-vault-contract/dist/zk-assets/verify.js';
-import {
-  VAULT_ZK_MANIFEST_SHA256,
-  SIGNET_ZK_MANIFEST_SHA256,
-} from '../src/lib/midnight/zk-manifest-hashes.ts';
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { cp, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const manifestPath = 'compiler/contract-manifest.json';
+import {
+  assertManifestHash,
+  parseZkArtifactManifest,
+  verifyZkArtifactIntegrity,
+  ZK_MANIFEST_DIR,
+  ZK_MANIFEST_FILE_NAME,
+} from "@midnight-ntwrk/midnight-js/utils";
+
+import {
+  SIGNET_ZK_MANIFEST_SHA256,
+  VAULT_ZK_MANIFEST_SHA256,
+} from "../src/lib/midnight/zk-manifest-hashes.ts";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const manifestPath = `${ZK_MANIFEST_DIR}/${ZK_MANIFEST_FILE_NAME}`;
 const trees = [
-  [
-    '',
-    'midnight-examples-erc20-vault-contract/dist/managed/erc20-vault',
-    VAULT_ZK_MANIFEST_SHA256,
-  ],
-  ['signet', 'midnight-contract/dist/managed', SIGNET_ZK_MANIFEST_SHA256],
+  {
+    child: "",
+    manifestUrl: import.meta
+      .resolve("@sig-net/midnight-examples-erc20-vault-contract/managed/erc20-vault/compiler/contract-manifest.json"),
+    pin: VAULT_ZK_MANIFEST_SHA256,
+  },
+  {
+    child: "signet",
+    manifestUrl: import.meta
+      .resolve("@sig-net/midnight-contract/managed/compiler/contract-manifest.json"),
+    pin: SIGNET_ZK_MANIFEST_SHA256,
+  },
 ];
 
+/** @returns {void} */
 function reportManifests() {
-  for (const [child, , pin] of trees)
-    console.log(`${child || 'vault'} ${manifestPath} sha256 = ${pin}`);
+  for (const { child, pin } of trees)
+    console.log(`${child || "vault"} ${manifestPath} sha256 = ${pin}`);
 }
 
+/**
+ * @param {string} path - Filesystem entry to inspect.
+ * @returns {Promise<boolean>} Whether the entry exists.
+ */
 async function exists(path) {
   try {
     await stat(path);
     return true;
   } catch (error) {
-    if (error.code === 'ENOENT') return false;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
     throw error;
   }
 }
 
+/**
+ * Checks both serving trees against the installed manifests and browser integrity pins.
+ * @param {string} directory - Root containing the vault and Signet serving trees.
+ * @returns {Promise<void>} Resolves only after every required artifact verifies.
+ * @throws {Error} If either complete tree fails verification.
+ */
 export async function verifyAssetSet(directory) {
-  for (const [child, packagePath, pin] of trees) {
-    const bytes = await readFile(
-      join(root, 'node_modules/@sig-net', packagePath, manifestPath),
-    );
-    if (createHash('sha256').update(bytes).digest('hex') !== pin)
-      throw new Error(
-        `${child || 'vault'} package manifest differs from the browser integrity pin`,
-      );
+  for (const { child, manifestUrl, pin } of trees) {
+    const bytes = await readFile(new URL(manifestUrl));
+    assertManifestHash(bytes, pin);
     const manifest = parseZkArtifactManifest(bytes.toString());
-    const entries = servedEntries(manifest);
-    if (!entries.length || !entries.some(entry => entry.endsWith('.prover')))
-      throw new Error(
-        `${child || 'vault'} manifest has no complete proving asset set`,
-      );
-    const mismatches = await verifyTree(manifest, bytes, async relativePath => {
-      try {
-        return await readFile(join(directory, child, relativePath));
-      } catch (error) {
-        if (error.code === 'ENOENT') return undefined;
-        throw error;
+    // The CLI's serving-layout helper is private. Replace this filter when the package exports it.
+    const entries = [...manifest.files.keys()].filter(
+      (path) =>
+        path.startsWith("keys/") ||
+        path.startsWith("compiler/") ||
+        (path.startsWith("zkir/") && path.endsWith(".bzkir")),
+    );
+    if (!entries.length || !entries.some((entry) => entry.endsWith(".prover")))
+      throw new Error(`${child || "vault"} manifest has no complete proving asset set`);
+    try {
+      assertManifestHash(await readFile(join(directory, child, manifestPath)), pin);
+      for (const relativePath of entries) {
+        verifyZkArtifactIntegrity({
+          manifest,
+          relativePath,
+          bytes: await readFile(join(directory, child, relativePath)),
+          mode: "require",
+        });
       }
-    });
-    if (mismatches.length)
+    } catch (error) {
       throw new Error(
-        `${child || 'vault'} assets failed verification: ${mismatches.map(item => `${item.relativePath}: ${item.reason}`).join(', ')}`,
+        `${child || "vault"} assets failed verification: ${error instanceof Error ? error.message : "unrecognised verification failure"}`,
+        { cause: error },
       );
+    }
   }
 }
 
+/**
+ * @param {string} stage - Isolated output directory supplied to the public package executable.
+ * @returns {Promise<void>} Resolves after the executable exits successfully.
+ */
 async function runAssetCli(stage) {
   await new Promise((accept, reject) => {
     const child = spawn(
       process.execPath,
-      [
-        join(
-          root,
-          'node_modules/@sig-net/midnight-examples-erc20-vault-contract/dist/bin/erc20-vault-zk-assets.js',
-        ),
-        stage,
-      ],
-      { cwd: root, stdio: 'inherit' },
+      [join(root, "node_modules/.bin/erc20-vault-zk-assets"), stage],
+      { cwd: root, stdio: "inherit" },
     );
-    child.once('error', reject);
-    child.once('exit', code =>
-      code === 0
-        ? accept()
-        : reject(new Error(`Asset CLI exited with ${code}`)),
-    );
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) accept(undefined);
+      else reject(new Error(`Asset CLI exited with ${String(code)}`));
+    });
   });
 }
 
+/**
+ * Promotes a verified complete asset set while preserving recovery after an interrupted rename.
+ * @param {object} [options] - Asset preparation inputs.
+ * @param {string} [options.destination] - Directory served by the app.
+ * @param {string} [options.source] - Complete verified seed directory copied into staging.
+ * @param {(stage: string) => Promise<void>} [options.prepare] - Preparation performed only in staging.
+ * @returns {Promise<void>} Resolves after verified reuse or promotion.
+ * @throws {Error} If locking, preparation or verification fails.
+ */
 export async function prepareAssetSet({
-  destination = join(root, 'public/zk'),
+  destination = join(root, "public/zk"),
   source,
   prepare = runAssetCli,
 } = {}) {
@@ -102,9 +134,9 @@ export async function prepareAssetSet({
   const lockPath = `${destination}.prepare.lock`;
   let lock;
   try {
-    lock = await open(lockPath, 'wx');
+    lock = await open(lockPath, "wx");
   } catch (error) {
-    if (error.code === 'EEXIST')
+    if (error instanceof Error && "code" in error && error.code === "EEXIST")
       throw new Error(
         `Asset preparation is locked by ${lockPath}. If its process has stopped, remove the lock and rerun to recover the complete directory.`,
       );
@@ -113,7 +145,7 @@ export async function prepareAssetSet({
   const stage = `${destination}.stage-${randomUUID()}`;
   const backup = `${destination}.previous`;
   try {
-    await lock.writeFile(`${process.pid}\n`);
+    await lock.writeFile(`${process.pid.toString()}\n`);
     // A stopped process can leave the complete serving directory parked between renames.
     if (await exists(backup)) {
       if (!(await exists(destination))) await rename(backup, destination);
@@ -126,9 +158,7 @@ export async function prepareAssetSet({
     else {
       try {
         await verifyAssetSet(destination);
-        console.log(
-          'Verified complete vault and Signet asset set, reusing public assets',
-        );
+        console.log("Verified complete vault and Signet asset set, reusing public assets");
         reportManifests();
         return;
       } catch {
@@ -151,9 +181,7 @@ export async function prepareAssetSet({
       throw error;
     }
     await rm(backup, { recursive: true, force: true });
-    console.log(
-      `Verified complete vault and Signet asset set installed at ${destination}`,
-    );
+    console.log(`Verified complete vault and Signet asset set installed at ${destination}`);
     reportManifests();
   } finally {
     await rm(stage, { recursive: true, force: true });
@@ -162,12 +190,9 @@ export async function prepareAssetSet({
   }
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({
-    options: { source: { type: 'string' }, output: { type: 'string' } },
+    options: { source: { type: "string" }, output: { type: "string" } },
   });
   await prepareAssetSet({ source: values.source, destination: values.output });
 }

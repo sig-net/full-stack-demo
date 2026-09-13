@@ -1,20 +1,26 @@
-'use client';
+"use client";
 
-import { Feedback } from '@/components/ui/feedback';
-import { useState } from 'react';
-import { Download, Package } from 'lucide-react';
+import { Download, Package } from "lucide-react";
+import type * as React from "react";
+import { useState } from "react";
 
-import { BalanceDisplay } from '@/components/balance-display';
-import { Button } from '@/components/ui/button';
-import { DepositDialog } from '@/components/deposit-dialog';
-import { EmptyState } from '@/components/ui/empty-state';
-import { useVault } from '@/providers/vault-context';
-import { useVaultBalances } from '@/providers/vault-balances-context';
-import { useMidnightConnection } from '@/providers/midnight-wallet-context';
-import { MIDNIGHT_TOKENS } from '@/lib/constants/token-metadata';
-import type { TokenWithBalance } from '@/lib/types/token.types';
+import { BalanceDisplay } from "@/components/balance-display";
+import { DepositDialog } from "@/components/deposit-dialog";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Feedback } from "@/components/ui/feedback";
+import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
+import type { TokenWithBalance } from "@/lib/types/token.types";
+import { useMidnightConnection } from "@/providers/midnight-wallet-context";
+import { useVaultBalances } from "@/providers/vault-balances-context";
+import { useVault } from "@/providers/vault-context";
 
-export function BalanceSection() {
+/**
+ * Chooses the empty or populated balance surface from vault balance state.
+ *
+ * @returns The balance section.
+ */
+export function BalanceSection(): React.JSX.Element {
   const state = useVaultBalances();
   const vault = useVault();
   const connection = useMidnightConnection();
@@ -22,22 +28,16 @@ export function BalanceSection() {
 
   const midnightBalances = state.balances;
   const displayTokens: TokenWithBalance[] = midnightBalances
-    ? MIDNIGHT_TOKENS.flatMap(t => {
+    ? MIDNIGHT_TOKENS.flatMap((t) => {
         const b = midnightBalances.perToken[t.erc20Address.toLowerCase()];
-        if (
-          !b ||
-          b.vaultUnits == null ||
-          b.decimals == null ||
-          b.vaultUnits === 0n
-        )
-          return [];
+        if (b?.vaultUnits == null || b.decimals == null || b.vaultUnits === 0n) return [];
         return [
           {
             erc20Address: t.erc20Address,
             symbol: t.symbol,
             name: t.name,
             decimals: b.decimals,
-            chain: 'midnight' as const,
+            chain: "midnight" as const,
             balance: b.vaultUnits,
           },
         ];
@@ -46,25 +46,27 @@ export function BalanceSection() {
 
   if (displayTokens.length === 0) {
     return (
-      <div className='ds-content-gap flex w-full max-w-full flex-col'>
-        <div className='ds-section-header'>
-          <h2 className='ds-muted ds-label ds-section-title self-start'>
-            Balances
-          </h2>
+      <div className="ds-content-gap flex w-full max-w-full flex-col">
+        <div className="ds-section-header">
+          <h2 className="ds-muted ds-label ds-section-title self-start">Balances</h2>
           <Button
-            onClick={() => setIsDepositDialogOpen(true)}
-            variant='outline'
-            size='lg'
+            onClick={() => {
+              setIsDepositDialogOpen(true);
+            }}
+            variant="outline"
+            size="lg"
             disabled={connection.connecting}
           >
-            <Download className='h-4 w-4' />
-            {connection.connecting ? 'Connecting…' : 'Deposit'}
+            <Download className="h-4 w-4" />
+            {connection.connecting ? "Connecting…" : "Deposit"}
           </Button>
         </div>
         {state.error && (
           <Button
-            variant='outline'
-            onClick={() => void state.refresh().catch(() => {})}
+            variant="outline"
+            onClick={() => {
+              void state.refresh().catch(() => undefined);
+            }}
           >
             Retry balances
           </Button>
@@ -73,27 +75,21 @@ export function BalanceSection() {
           icon={Package}
           title={
             state.loading
-              ? 'Loading balances'
+              ? "Loading balances"
               : state.error
-                ? 'Balances unavailable'
+                ? "Balances unavailable"
                 : !state.balances
-                  ? vault.status === 'missing-identity'
-                    ? 'Set a vault identity'
-                    : vault.status === 'disconnected'
-                      ? 'Connect Midnight'
-                      : 'Vault unavailable'
-                  : 'No tokens found'
+                  ? vault.status === "missing-identity"
+                    ? "Set a vault identity"
+                    : vault.status === "disconnected"
+                      ? "Connect Midnight"
+                      : "Vault unavailable"
+                  : "No tokens found"
           }
-          description={
-            state.error ??
-            'Deposit some tokens to get started managing your portfolio.'
-          }
+          description={state.error ?? "Deposit some tokens to get started managing your portfolio."}
           compact
         />
-        <DepositDialog
-          open={isDepositDialogOpen}
-          onOpenChange={setIsDepositDialogOpen}
-        />
+        <DepositDialog open={isDepositDialogOpen} onOpenChange={setIsDepositDialogOpen} />
       </div>
     );
   }
@@ -101,13 +97,15 @@ export function BalanceSection() {
   return (
     <div>
       {state.error && (
-        <Feedback tone='error' role='alert'>
+        <Feedback tone="error" role="alert">
           {state.error}
         </Feedback>
       )}
       <Button
-        variant='outline'
-        onClick={() => void state.refresh().catch(() => {})}
+        variant="outline"
+        onClick={() => {
+          void state.refresh().catch(() => undefined);
+        }}
       >
         Refresh balances
       </Button>

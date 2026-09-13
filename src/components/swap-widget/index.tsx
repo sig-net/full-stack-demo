@@ -1,35 +1,26 @@
-'use client';
+"use client";
 
-import { Card, CardContent } from '@/components/ui/card';
-import { useEffect, useState } from 'react';
-import { ArrowDown, Settings2 } from 'lucide-react';
-import { formatUnits } from 'viem';
-import { parseTokenAmount } from '@/lib/utils/token-amount';
-import { useQuery } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { useQuery } from "@tanstack/react-query";
+import { ArrowDown, Settings2 } from "lucide-react";
+import type * as React from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { formatUnits } from "viem";
 
-import { TokenAmountDisplay } from '@/components/ui/token-amount-display';
-import { MIDNIGHT_TOKENS } from '@/lib/constants/token-metadata';
-import { useVault } from '@/providers/vault-context';
-import { useVaultBalances } from '@/providers/vault-balances-context';
-import { useVaultOperations } from '@/providers/vault-operations-context';
-import { useMidnightProgress } from '@/hooks/use-midnight-progress';
-import { useRuntimeConfig } from '@/providers/runtime-config-context';
-import {
-  discoverSwappablePairs,
-  pairKey,
-  quoteBestFeeExactInput,
-} from '@/lib/midnight/evm-swap';
-import type { Token } from '@/lib/types/token.types';
+import { Card, CardContent } from "@/components/ui/card";
+import { TokenAmountDisplay } from "@/components/ui/token-amount-display";
+import { useMidnightProgress } from "@/hooks/use-midnight-progress";
+import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
+import { discoverSwappablePairs, pairKey, quoteBestFeeExactInput } from "@/lib/midnight/evm-swap";
+import type { Token } from "@/lib/types/token.types";
+import { parseTokenAmount } from "@/lib/utils/token-amount";
+import { useRuntimeConfig } from "@/providers/runtime-config-context";
+import { useVaultBalances } from "@/providers/vault-balances-context";
+import { useVault } from "@/providers/vault-context";
+import { useVaultOperations } from "@/providers/vault-operations-context";
 
-import { Button } from '../ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
+import { Button } from "../ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 
 interface SwapWidgetProps {
   className?: string;
@@ -40,91 +31,95 @@ const DEFAULT_SLIPPAGE_BPS = 100n;
 
 type TokenWithBalance = Token & { balance: string; units: bigint };
 
-export function SwapWidget({ className }: SwapWidgetProps) {
+/**
+ * Captures maximum spend and displays the quote used to choose a guaranteed swap output.
+ *
+ * @param root0 - Widget properties.
+ * @param root0.className - Optional class name for the containing card.
+ * @returns The swap controls and quote state.
+ */
+export function SwapWidget({ className }: SwapWidgetProps): React.JSX.Element {
   const { applied } = useRuntimeConfig();
   const vault = useVault();
   const { balances } = useVaultBalances();
   const operations = useVaultOperations();
   const progress = useMidnightProgress();
 
-  const [fromAmount, setFromAmount] = useState('');
-  const [toAmount, setToAmount] = useState('');
-  const [fromToken, setFromToken] = useState<TokenWithBalance | undefined>();
-  const [toToken, setToToken] = useState<TokenWithBalance | undefined>();
+  const [fromAmount, setFromAmount] = useState("");
+  const [toAmount, setToAmount] = useState("");
+  const [fromTokenAddress, setFromTokenAddress] = useState<string>();
+  const [toTokenAddress, setToTokenAddress] = useState<string>();
   const [swapping, setSwapping] = useState(false);
   const [slippageBps, setSlippageBps] = useState<bigint>(DEFAULT_SLIPPAGE_BPS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const enabled = vault.binding !== null;
   const rpc = enabled ? applied.evm.rpcUrl : null;
   const pairs = useQuery({
-    queryKey: ['vault-swap-pairs', rpc],
+    queryKey: ["vault-swap-pairs", rpc],
     enabled: rpc !== null,
-    queryFn: () =>
-      discoverSwappablePairs(
-        rpc!,
-        MIDNIGHT_TOKENS.filter(token => !token.noSwap).map(
-          token => token.erc20Address,
-        ),
-      ),
+    queryFn: () => {
+      if (rpc === null) throw new Error("Vault is not ready.");
+      return discoverSwappablePairs(
+        rpc,
+        MIDNIGHT_TOKENS.filter((token) => !token.noSwap).map((token) => token.erc20Address),
+      );
+    },
   });
   const swappablePairs = pairs.isError ? null : (pairs.data ?? null);
-  const tokens: TokenWithBalance[] = MIDNIGHT_TOKENS.filter(
-    token => !token.noSwap,
-  ).flatMap(token => {
-    const balance = balances?.perToken[token.erc20Address.toLowerCase()];
-    if (balance?.decimals == null || balance.vaultUnits == null) return [];
-    return [
-      {
-        ...token,
-        chain: 'midnight' as const,
-        decimals: balance.decimals,
-        units: balance.vaultUnits,
-        balance: formatUnits(balance.vaultUnits, balance.decimals),
-      },
-    ];
-  });
+  const tokens: TokenWithBalance[] = MIDNIGHT_TOKENS.filter((token) => !token.noSwap).flatMap(
+    (token) => {
+      const balance = balances?.perToken[token.erc20Address.toLowerCase()];
+      if (balance?.decimals == null || balance.vaultUnits == null) return [];
+      return [
+        {
+          ...token,
+          chain: "midnight" as const,
+          decimals: balance.decimals,
+          units: balance.vaultUnits,
+          balance: formatUnits(balance.vaultUnits, balance.decimals),
+        },
+      ];
+    },
+  );
   const fromTokens = swappablePairs
-    ? tokens.filter(token =>
+    ? tokens.filter((token) =>
         tokens.some(
-          other =>
+          (other) =>
             other.erc20Address !== token.erc20Address &&
             swappablePairs.has(pairKey(token.erc20Address, other.erc20Address)),
         ),
       )
     : [];
   const toTokens =
-    swappablePairs && fromToken
+    swappablePairs && fromTokenAddress
       ? tokens.filter(
-          token =>
-            token.erc20Address !== fromToken.erc20Address &&
-            swappablePairs.has(
-              pairKey(fromToken.erc20Address, token.erc20Address),
-            ),
+          (token) =>
+            token.erc20Address !== fromTokenAddress &&
+            swappablePairs.has(pairKey(fromTokenAddress, token.erc20Address)),
         )
       : [];
 
+  const fromTokenKeys = fromTokens.map((token) => token.erc20Address).join(",");
+  const defaultFromTokenAddress =
+    fromTokens.find((token) => token.units > 0n)?.erc20Address ?? fromTokens[0]?.erc20Address;
   useEffect(() => {
-    if (!enabled || fromTokens.length === 0) return;
-    setFromToken(prev =>
-      prev && fromTokens.some(t => t.erc20Address === prev.erc20Address)
-        ? prev
-        : (fromTokens.find(t => t.units > 0n) ?? fromTokens[0]),
+    if (!enabled || defaultFromTokenAddress === undefined) return;
+    setFromTokenAddress((previous) =>
+      previous && fromTokenKeys.split(",").includes(previous) ? previous : defaultFromTokenAddress,
     );
-  }, [enabled, fromTokens]);
+  }, [defaultFromTokenAddress, enabled, fromTokenKeys]);
 
+  const toTokenKeys = toTokens.map((token) => token.erc20Address).join(",");
+  const defaultToTokenAddress = toTokens[0]?.erc20Address;
   useEffect(() => {
-    if (toTokens.length === 0) return;
-    setToToken(prev =>
-      prev && toTokens.some(t => t.erc20Address === prev.erc20Address)
-        ? prev
-        : toTokens[0],
+    if (defaultToTokenAddress === undefined) return;
+    setToTokenAddress((previous) =>
+      previous && toTokenKeys.split(",").includes(previous) ? previous : defaultToTokenAddress,
     );
-  }, [toTokens]);
+  }, [defaultToTokenAddress, toTokenKeys]);
 
-  const fromSel =
-    fromToken && tokens.find(t => t.erc20Address === fromToken.erc20Address);
-  const toSel =
-    toToken && tokens.find(t => t.erc20Address === toToken.erc20Address);
+  const fromSel = tokens.find((token) => token.erc20Address === fromTokenAddress);
+  const toSel = tokens.find((token) => token.erc20Address === toTokenAddress);
 
   let quoteUnits: bigint | null = null;
   try {
@@ -134,7 +129,7 @@ export function SwapWidget({ className }: SwapWidgetProps) {
   }
   const quote = useQuery({
     queryKey: [
-      'vault-swap-quote',
+      "vault-swap-quote",
       vault.binding?.sessionId,
       rpc,
       fromSel?.erc20Address,
@@ -148,13 +143,12 @@ export function SwapWidget({ className }: SwapWidgetProps) {
       quoteUnits !== null &&
       fromSel.erc20Address !== toSel.erc20Address,
     staleTime: 10_000,
-    queryFn: () =>
-      quoteBestFeeExactInput(
-        rpc!,
-        fromSel!.erc20Address,
-        toSel!.erc20Address,
-        quoteUnits!,
-      ),
+    queryFn: () => {
+      if (rpc === null || fromSel === undefined || toSel === undefined || quoteUnits === null) {
+        throw new Error("Swap quote is unavailable.");
+      }
+      return quoteBestFeeExactInput(rpc, fromSel.erc20Address, toSel.erc20Address, quoteUnits);
+    },
   });
   const fee = quote.isError ? null : (quote.data?.fee ?? null);
   const quoting = quote.isFetching;
@@ -162,14 +156,14 @@ export function SwapWidget({ className }: SwapWidgetProps) {
     setToAmount(
       quote.data && !quote.isError && toSel
         ? formatUnits(quote.data.amountOut, toSel.decimals)
-        : '',
+        : "",
     );
   }, [quote.data, quote.isError, toSel]);
 
   const amountValid = (() => {
     if (!fromSel || !toSel) return false;
     try {
-      const spend = parseTokenAmount(fromAmount || '0', fromSel.decimals);
+      const spend = parseTokenAmount(fromAmount || "0", fromSel.decimals);
       return spend > 0n && spend <= fromSel.units;
     } catch {
       return false;
@@ -179,17 +173,17 @@ export function SwapWidget({ className }: SwapWidgetProps) {
   const inEntered = (() => {
     if (!fromSel) return false;
     try {
-      return parseTokenAmount(fromAmount || '0', fromSel.decimals) > 0n;
+      return parseTokenAmount(fromAmount || "0", fromSel.decimals) > 0n;
     } catch {
       return false;
     }
   })();
 
+  const swapInputs = fromSel && toSel && fee !== null ? { from: fromSel, to: toSel, fee } : null;
   const canSwap =
     enabled &&
-    !!fromSel &&
-    !!toSel &&
-    fromSel.erc20Address !== toSel.erc20Address &&
+    swapInputs !== null &&
+    swapInputs.from.erc20Address !== swapInputs.to.erc20Address &&
     amountValid &&
     fee !== null &&
     !quoting &&
@@ -197,63 +191,66 @@ export function SwapWidget({ className }: SwapWidgetProps) {
     !operations.busy &&
     operations.ready;
 
-  const handleSwap = () => {
-    if (!canSwap || !fromSel || !toSel || fee === null) return;
-    const amountIn = parseTokenAmount(fromAmount, fromSel.decimals);
+  const handleSwap = (): void => {
+    const swapRequest = canSwap ? swapInputs : null;
+    if (swapRequest === null) return;
+    const amountIn = parseTokenAmount(fromAmount, swapRequest.from.decimals);
     setSwapping(true);
     operations
       .swap(
-        fromSel.erc20Address,
-        toSel.erc20Address,
+        swapRequest.from.erc20Address,
+        swapRequest.to.erc20Address,
         amountIn,
-        fee,
+        swapRequest.fee,
         slippageBps,
       )
       .then(() => {
-        setFromAmount('');
-        setToAmount('');
+        setFromAmount("");
+        setToAmount("");
       })
-      .catch((e: unknown) =>
-        toast.error(e instanceof Error ? e.message : 'Swap failed'),
-      )
-      .finally(() => setSwapping(false));
+      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : "Swap failed"))
+      .finally(() => {
+        setSwapping(false);
+      });
   };
 
   const noPool = inEntered && !quoting && fee === null;
   const buttonLabel = !enabled
-    ? vault.status === 'disconnected'
-      ? 'Connect Midnight to swap'
-      : vault.status === 'missing-identity'
-        ? 'Set a vault identity'
-        : vault.status === 'loading'
-          ? 'Loading vault…'
-          : 'Retry vault loading'
+    ? vault.status === "disconnected"
+      ? "Connect Midnight to swap"
+      : vault.status === "missing-identity"
+        ? "Set a vault identity"
+        : vault.status === "loading"
+          ? "Loading vault…"
+          : "Retry vault loading"
     : pairs.isError
-      ? 'Pools unavailable'
+      ? "Pools unavailable"
       : tokens.length === 0
-        ? 'Balances unavailable'
+        ? "Balances unavailable"
         : swappablePairs === null
-          ? 'Loading pools…'
+          ? "Loading pools…"
           : swapping
-            ? 'Swapping…'
+            ? "Swapping…"
             : quoting
-              ? 'Fetching quote…'
+              ? "Fetching quote…"
               : noPool
-                ? 'No pool for this pair'
-                : 'Swap';
+                ? "No pool for this pair"
+                : "Swap";
 
   return (
     <Card className={className}>
       <CardContent>
-        <div className='ds-row justify-between'>
-          <h2 className='ds-text ds-heading ds-label'>Swap</h2>
+        <div className="ds-row justify-between">
+          <h2 className="ds-text ds-heading ds-label">Swap</h2>
           <Button
-            variant='ghost'
-            size='icon'
-            onClick={() => setSettingsOpen(true)}
-            aria-label='Swap settings'
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setSettingsOpen(true);
+            }}
+            aria-label="Swap settings"
           >
-            <Settings2 className='ds-muted h-6 w-6' />
+            <Settings2 className="ds-muted h-6 w-6" />
           </Button>
         </div>
 
@@ -262,18 +259,19 @@ export function SwapWidget({ className }: SwapWidgetProps) {
             <DialogHeader>
               <DialogTitle>Swap settings</DialogTitle>
               <DialogDescription>
-                Max slippage sets the minimum you receive for your spend. The
-                swap reverts on-chain if the output would fall more than this
-                below the quote.
+                Max slippage sets the minimum you receive for your spend. The swap reverts on-chain
+                if the output would fall more than this below the quote.
               </DialogDescription>
             </DialogHeader>
-            <div className='ds-control-gap flex flex-wrap'>
-              {SLIPPAGE_PRESETS.map(bps => (
+            <div className="ds-control-gap flex flex-wrap">
+              {SLIPPAGE_PRESETS.map((bps) => (
                 <Button
                   key={String(bps)}
-                  variant={slippageBps === bps ? 'secondary' : 'outline'}
-                  size='sm'
-                  onClick={() => setSlippageBps(bps)}
+                  variant={slippageBps === bps ? "secondary" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setSlippageBps(bps);
+                  }}
                 >
                   {formatUnits(bps, 2)}%
                 </Button>
@@ -282,28 +280,32 @@ export function SwapWidget({ className }: SwapWidgetProps) {
           </DialogContent>
         </Dialog>
 
-        <div className='ds-stack-content'>
+        <div className="ds-stack-content">
           <TokenAmountDisplay
             value={fromAmount}
             onChange={setFromAmount}
             tokens={enabled ? fromTokens : []}
             selectedToken={fromSel}
-            onTokenSelect={t => setFromToken(t as TokenWithBalance)}
-            placeholder='0'
+            onTokenSelect={(token) => {
+              setFromTokenAddress(token.erc20Address);
+            }}
+            placeholder="0"
             disabled={!enabled || progress.active}
           />
 
-          <div className='flex justify-center'>
-            <ArrowDown className='ds-muted h-5 w-5' />
+          <div className="flex justify-center">
+            <ArrowDown className="ds-muted h-5 w-5" />
           </div>
 
           <TokenAmountDisplay
             value={toAmount}
-            onChange={() => {}}
+            onChange={() => undefined}
             tokens={enabled ? toTokens : []}
             selectedToken={toSel}
-            onTokenSelect={t => setToToken(t as TokenWithBalance)}
-            placeholder='0'
+            onTokenSelect={(token) => {
+              setToTokenAddress(token.erc20Address);
+            }}
+            placeholder="0"
             disabled={!enabled}
             readOnly
           />
@@ -312,9 +314,9 @@ export function SwapWidget({ className }: SwapWidgetProps) {
         <Button
           onClick={handleSwap}
           disabled={!canSwap}
-          variant='secondary'
-          size='lg'
-          className='w-full'
+          variant="secondary"
+          size="lg"
+          className="w-full"
         >
           {buttonLabel}
         </Button>

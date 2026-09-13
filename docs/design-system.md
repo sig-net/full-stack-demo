@@ -63,7 +63,7 @@ node scripts/design-system/self-test.mjs
 The focused table keyboard regression exercises the actual TableRow source and class helper:
 
 ```bash
-node scripts/design-system/table.mjs
+node node_modules/vitest/vitest.mjs run tests/components/table.test.tsx
 ```
 
 Run the repository checks:

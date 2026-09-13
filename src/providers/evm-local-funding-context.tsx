@@ -1,27 +1,55 @@
-'use client';
+"use client";
 
+import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 import {
   createContext,
+  type JSX,
+  type ReactNode,
   useContext,
   useEffect,
   useLayoutEffect,
   useRef,
-  type ReactNode,
-} from 'react';
-import { useMutation } from '@tanstack/react-query';
-import type { Address } from 'viem';
-import { ERC20_TOKENS } from '@/lib/constants/token-metadata';
-import { hasLocalEvmFunds } from '@/lib/wallet-funding';
-import { useRuntimeConfig } from './runtime-config-context';
-import { useEvmWallet } from './evm-wallet-context';
-import { useEvmBalances } from './evm-balances-context';
+} from "react";
+import type { Address } from "viem";
 
+import { ERC20_TOKENS } from "@/lib/constants/token-metadata";
+import { fundingErrorSchema, hasLocalEvmFunds } from "@/lib/wallet-funding";
+
+import { useEvmBalances } from "./evm-balances-context";
+import { useEvmWallet } from "./evm-wallet-context";
+import { useRuntimeConfig } from "./runtime-config-context";
+
+interface FundingRecipient {
+  address: Address;
+  session: string | undefined;
+}
+
+interface AddressFundingState {
+  funding: UseMutationResult<string | null, Error, FundingRecipient>;
+  fund: () => Promise<void>;
+  refreshError: string | null;
+}
+
+interface EvmLocalFundingState extends AddressFundingState {
+  ready: boolean;
+  fundingUnavailable: string | null;
+}
+
+/**
+ * Coalesces funding requests for the captured recipient and rejects stale completions.
+ *
+ * @param address - Current signing account.
+ * @param session - Identity of the current signing session.
+ * @param refresh - Reloads balances after successful funding.
+ * @param requireHeaders - Supplies the captured server configuration attestation.
+ * @returns Funding mutation state and its recipient-scoped action.
+ */
 export function useAddressFunding(
   address: Address | undefined,
   session: string | undefined,
-  refresh: () => Promise<unknown>,
+  refresh: () => Promise<void>,
   requireHeaders: () => Record<string, string> = () => ({}),
-) {
+): AddressFundingState {
   const current = useRef({ address, session });
   const pending = useRef<{
     address: Address;
@@ -29,33 +57,35 @@ export function useAddressFunding(
     promise: Promise<void>;
   } | null>(null);
   const mutation = useMutation({
-    mutationKey: ['evm-local-funding', session, address],
-    mutationFn: async (recipient: {
-      address: Address;
-      session: string | undefined;
-    }) => {
-      const assertRecipient = () => {
+    mutationKey: ["evm-local-funding", session, address],
+    mutationFn: async (recipient: FundingRecipient): Promise<string | null> => {
+      const assertRecipient = (): void => {
         if (
           current.current.address !== recipient.address ||
           current.current.session !== recipient.session
         )
-          throw new Error('EVM funding recipient changed.');
+          throw new Error("EVM funding recipient changed.");
       };
       assertRecipient();
-      const response = await fetch('/api/local-funding/evm', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...requireHeaders() },
+      const response = await fetch("/api/local-funding/evm", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...requireHeaders() },
         body: JSON.stringify({ address: recipient.address }),
       });
-      const body = await response.json();
+      const body: unknown = await response.json();
       assertRecipient();
-      if (!response.ok) throw new Error(body.error ?? 'EVM funding failed.');
+      if (!response.ok) {
+        const parsed = fundingErrorSchema.safeParse(body);
+        throw new Error(
+          parsed.success ? (parsed.data.error ?? "EVM funding failed.") : "EVM funding failed.",
+        );
+      }
       try {
         await refresh();
         assertRecipient();
       } catch {
         assertRecipient();
-        return 'Funding succeeded. Balance refresh failed. Retry balances before transferring.';
+        return "Funding succeeded. Balance refresh failed. Retry balances before transferring.";
       }
       return null;
     },
@@ -71,16 +101,12 @@ export function useAddressFunding(
     };
   }, [address, session]);
   const fund = (): Promise<void> => {
-    if (!address)
-      return Promise.reject(new Error('Connect an EVM wallet first.'));
-    if (
-      pending.current?.address === address &&
-      pending.current.session === session
-    )
+    if (!address) return Promise.reject(new Error("Connect an EVM wallet first."));
+    if (pending.current?.address === address && pending.current.session === session)
       return pending.current.promise;
     const promise = mutation
       .mutateAsync({ address, session })
-      .then(() => {})
+      .then(() => undefined)
       .finally(() => {
         if (pending.current?.promise === promise) pending.current = null;
       });
@@ -90,20 +116,21 @@ export function useAddressFunding(
   return { funding: mutation, fund, refreshError: mutation.data ?? null };
 }
 
-function useEvmLocalFundingOwner() {
+function useEvmLocalFundingOwner(): EvmLocalFundingState {
   const runtime = useRuntimeConfig();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
   const funding = useAddressFunding(
     wallet?.account,
     wallet?.sessionId,
-    () => balances.refetch({ throwOnError: true }),
+    async () => {
+      await balances.refetch({ throwOnError: true });
+    },
     runtime.requireServerHeaders,
   );
   const usdc = balances.data?.tokens.find(
-    token =>
-      token.erc20Address ===
-      ERC20_TOKENS.find(token => token.symbol === 'USDC')?.erc20Address,
+    (token) =>
+      token.erc20Address === ERC20_TOKENS.find((token) => token.symbol === "USDC")?.erc20Address,
   );
   const ready =
     !!wallet &&
@@ -111,20 +138,30 @@ function useEvmLocalFundingOwner() {
     hasLocalEvmFunds(balances.data.eth, usdc?.units, usdc?.decimals);
   return { ...funding, ready, fundingUnavailable: runtime.serverUnavailable };
 }
-const EvmLocalFundingContext = createContext<ReturnType<
-  typeof useEvmLocalFundingOwner
-> | null>(null);
-export function EvmLocalFundingProvider({ children }: { children: ReactNode }) {
+const EvmLocalFundingContext = createContext<ReturnType<typeof useEvmLocalFundingOwner> | null>(
+  null,
+);
+/**
+ * Shares local funding eligibility with consumers of the connected EVM account.
+ *
+ * @param props - Provider content.
+ * @param props.children - Components using funding state.
+ * @returns The funding context surrounding its consumers.
+ */
+export function EvmLocalFundingProvider({ children }: { children: ReactNode }): JSX.Element {
   const value = useEvmLocalFundingOwner();
   return (
-    <EvmLocalFundingContext.Provider value={value}>
-      {children}
-    </EvmLocalFundingContext.Provider>
+    <EvmLocalFundingContext.Provider value={value}>{children}</EvmLocalFundingContext.Provider>
   );
 }
-export function useEvmLocalFunding() {
+/**
+ * Reads funding eligibility and actions for the active EVM session.
+ *
+ * @returns Funding state, refresh failures and server availability.
+ * @throws {Error} If the funding provider is missing.
+ */
+export function useEvmLocalFunding(): EvmLocalFundingState {
   const value = useContext(EvmLocalFundingContext);
-  if (!value)
-    throw new Error('useEvmLocalFunding requires EvmLocalFundingProvider.');
+  if (!value) throw new Error("useEvmLocalFunding requires EvmLocalFundingProvider.");
   return value;
 }

@@ -1,83 +1,91 @@
-'use client';
+"use client";
 
 import {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  type ReactNode,
-} from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useRuntimeConfig } from './runtime-config-context';
-import { useMidnightConnection } from './midnight-wallet-context';
+  useMutation,
+  type UseMutationResult,
+  useQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+import { createContext, type JSX, type ReactNode, useContext, useEffect, useRef } from "react";
+import { z } from "zod";
+
+import type { Wallet } from "@/lib/midnight/wallet/Wallet";
 import {
+  fundingErrorSchema,
   hasMidnightFees,
-  MINIMUM_MIDNIGHT_DUST,
   LOCAL_NIGHT_GRANT,
-} from '@/lib/wallet-funding';
+  MINIMUM_MIDNIGHT_DUST,
+} from "@/lib/wallet-funding";
 
-function useReadinessOwner() {
+import { useMidnightConnection } from "./midnight-wallet-context";
+import { useRuntimeConfig } from "./runtime-config-context";
+
+interface ReadinessState {
+  wallet: Wallet | null;
+  balances: UseQueryResult<{ dust: bigint; night: bigint }>;
+  eligibility: UseQueryResult<boolean>;
+  funding: UseMutationResult<void, Error, void>;
+  fund: () => Promise<void>;
+  ready: boolean;
+  resourcesReady: boolean;
+  fundingUnavailable: string | undefined;
+  transactionUnavailable: string | undefined;
+  requireReady: () => Promise<void>;
+}
+
+function useReadinessOwner(): ReadinessState {
   const runtime = useRuntimeConfig();
   const connection = useMidnightConnection();
   const wallet = connection.wallet;
   const pending = useRef<Promise<void> | null>(null);
   const balances = useQuery({
-    queryKey: ['midnight-readiness', connection.session],
+    queryKey: ["midnight-readiness", connection.session],
     enabled: !!wallet,
     gcTime: 0,
     refetchInterval: wallet ? 5_000 : false,
     queryFn: async () => {
-      if (!wallet) throw new Error('Connect Midnight first.');
+      if (!wallet) throw new Error("Connect Midnight first.");
       const [dust, unshielded] = await Promise.all([
         wallet.getDustBalance(),
         wallet.getUnshieldedBalances(),
       ]);
-      if (!connection.isCurrent(wallet))
-        throw new Error('Wallet session changed.');
+      if (!connection.isCurrent(wallet)) throw new Error("Wallet session changed.");
       return {
         dust,
-        night: Object.values(unshielded).reduce(
-          (sum, value) => sum + value,
-          0n,
-        ),
+        night: Object.values(unshielded).reduce((sum, value) => sum + value, 0n),
       };
     },
   });
   const eligibility = useQuery({
-    queryKey: ['local-funding-eligibility'],
+    queryKey: ["local-funding-eligibility"],
     queryFn: async () => {
-      const response = await fetch('/api/local-funding/evm');
-      if (!response.ok)
-        throw new Error('Local funding eligibility is unavailable.');
-      return ((await response.json()) as { eligible: boolean }).eligible;
+      const response = await fetch("/api/local-funding/evm");
+      if (!response.ok) throw new Error("Local funding eligibility is unavailable.");
+      const input: unknown = await response.json();
+      return z.object({ eligible: z.boolean() }).parse(input).eligible;
     },
     refetchInterval: 30_000,
   });
   const funding = useMutation({
-    mutationKey: ['midnight-funding', connection.session],
+    mutationKey: ["midnight-funding", connection.session],
     mutationFn: async () => {
-      if (!wallet) throw new Error('Connect Midnight first.');
-      const assertCurrent = () => {
-        if (!connection.isCurrent(wallet))
-          throw new Error('Wallet session changed.');
+      if (!wallet) throw new Error("Connect Midnight first.");
+      const assertCurrent = (): void => {
+        if (!connection.isCurrent(wallet)) throw new Error("Wallet session changed.");
       };
       assertCurrent();
       runtime.requireServerHeaders();
       if (!wallet.ensureFeeReady || !wallet.unshieldedPublicKey)
         throw new Error(
-          wallet.fundingUnavailable ??
-            'Local Midnight funding is unavailable for this wallet.',
+          wallet.fundingUnavailable ?? "Local Midnight funding is unavailable for this wallet.",
         );
       const unshielded = await wallet.getUnshieldedBalances();
       assertCurrent();
-      if (
-        Object.values(unshielded).reduce((sum, value) => sum + value, 0n) <
-        LOCAL_NIGHT_GRANT
-      ) {
-        const response = await fetch('/api/local-funding/midnight', {
-          method: 'POST',
+      if (Object.values(unshielded).reduce((sum, value) => sum + value, 0n) < LOCAL_NIGHT_GRANT) {
+        const response = await fetch("/api/local-funding/midnight", {
+          method: "POST",
           headers: {
-            'content-type': 'application/json',
+            "content-type": "application/json",
             ...runtime.requireServerHeaders(),
           },
           body: JSON.stringify({
@@ -86,10 +94,16 @@ function useReadinessOwner() {
           }),
         });
         assertCurrent();
-        const body = await response.json();
+        const body: unknown = await response.json();
         assertCurrent();
-        if (!response.ok)
-          throw new Error(body.error ?? 'Midnight funding failed.');
+        if (!response.ok) {
+          const parsed = fundingErrorSchema.safeParse(body);
+          throw new Error(
+            parsed.success
+              ? (parsed.data.error ?? "Midnight funding failed.")
+              : "Midnight funding failed.",
+          );
+        }
       }
       await wallet.ensureFeeReady(MINIMUM_MIDNIGHT_DUST);
       assertCurrent();
@@ -97,13 +111,12 @@ function useReadinessOwner() {
       assertCurrent();
     },
   });
+  const { reset } = funding;
   useEffect(() => {
-    funding.reset();
+    reset();
     pending.current = null;
-    // Wallet generations own visible funding progress.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connection.session]);
-  const fund = () => {
+  }, [connection.session, reset]);
+  const fund = (): Promise<void> => {
     if (pending.current) return pending.current;
     const operation = funding.mutateAsync().finally(() => {
       if (pending.current === operation) pending.current = null;
@@ -111,9 +124,8 @@ function useReadinessOwner() {
     pending.current = operation;
     return operation;
   };
-  const resourcesReady =
-    !!wallet && !balances.isError && hasMidnightFees(balances.data?.dust);
-  const ready = resourcesReady && !wallet?.transactionUnavailable;
+  const resourcesReady = !!wallet && !balances.isError && hasMidnightFees(balances.data?.dust);
+  const ready = resourcesReady && !wallet.transactionUnavailable;
   return {
     wallet,
     balances,
@@ -125,35 +137,40 @@ function useReadinessOwner() {
     fundingUnavailable: runtime.serverUnavailable ?? wallet?.fundingUnavailable,
     transactionUnavailable: wallet?.transactionUnavailable,
     requireReady: async () => {
-      if (!wallet || !connection.isCurrent(wallet))
-        throw new Error('Connect Midnight first.');
-      if (wallet.transactionUnavailable)
-        throw new Error(wallet.transactionUnavailable);
+      if (!wallet || !connection.isCurrent(wallet)) throw new Error("Connect Midnight first.");
+      if (wallet.transactionUnavailable) throw new Error(wallet.transactionUnavailable);
       const dust = await wallet.getDustBalance();
-      if (!connection.isCurrent(wallet))
-        throw new Error('Wallet session changed.');
+      if (!connection.isCurrent(wallet)) throw new Error("Wallet session changed.");
       if (!hasMidnightFees(dust))
         throw new Error(
-          'Midnight DUST is below the transaction threshold. Fund the wallet or retry readiness.',
+          "Midnight DUST is below the transaction threshold. Fund the wallet or retry readiness.",
         );
     },
   };
 }
 
-const WalletReadinessContext = createContext<ReturnType<
-  typeof useReadinessOwner
-> | null>(null);
-export function WalletReadinessProvider({ children }: { children: ReactNode }) {
+const WalletReadinessContext = createContext<ReturnType<typeof useReadinessOwner> | null>(null);
+/**
+ * Shares observed Midnight fee readiness and local funding progress for the connected session.
+ *
+ * @param props - Provider content.
+ * @param props.children - Components sharing readiness and funding state.
+ * @returns The wallet readiness context.
+ */
+export function WalletReadinessProvider({ children }: { children: ReactNode }): JSX.Element {
   const value = useReadinessOwner();
   return (
-    <WalletReadinessContext.Provider value={value}>
-      {children}
-    </WalletReadinessContext.Provider>
+    <WalletReadinessContext.Provider value={value}>{children}</WalletReadinessContext.Provider>
   );
 }
-export function useWalletReadiness() {
+/**
+ * Reads readiness separately from vault binding and shielded token balances.
+ *
+ * @returns Fee eligibility, local funding state and the guarded readiness check.
+ * @throws {Error} If the readiness provider is missing.
+ */
+export function useWalletReadiness(): ReadinessState {
   const value = useContext(WalletReadinessContext);
-  if (!value)
-    throw new Error('useWalletReadiness requires WalletReadinessProvider.');
+  if (!value) throw new Error("useWalletReadiness requires WalletReadinessProvider.");
   return value;
 }

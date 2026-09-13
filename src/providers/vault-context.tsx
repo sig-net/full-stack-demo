@@ -1,33 +1,30 @@
-'use client';
+"use client";
 
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
+  type JSX,
+  type ReactNode,
   useContext,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
-  type ReactNode,
-} from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { hexToBytes } from 'viem';
-import { useMidnightConnection } from './midnight-wallet-context';
-import { getZkConfigOrigin } from '@/lib/config/midnight';
-import { useRuntimeConfig } from './runtime-config-context';
-import {
-  createVaultSession,
-  type VaultBinding,
-} from '@/lib/midnight/vault-session';
-import type { Wallet } from '@/lib/midnight/wallet/Wallet';
+} from "react";
+import { hexToBytes } from "viem";
+
+import { getZkConfigOrigin } from "@/lib/config/midnight";
+import { createVaultSession, type VaultBinding } from "@/lib/midnight/vault-session";
+import type { Wallet } from "@/lib/midnight/wallet/Wallet";
+
+import { useMidnightConnection } from "./midnight-wallet-context";
+import { useRuntimeConfig } from "./runtime-config-context";
 
 type VaultSession = ReturnType<typeof createVaultSession>;
+/** Binding eligibility keeps missing credentials, deployment failures and active loading distinct. */
 export type VaultStatus =
-  | 'disconnected'
-  | 'missing-identity'
-  | 'missing-deployment'
-  | 'loading'
-  | 'error'
-  | 'ready';
+  "disconnected" | "missing-identity" | "missing-deployment" | "loading" | "error" | "ready";
 
 interface VaultContextValue {
   identitySecret: string;
@@ -47,22 +44,27 @@ interface VaultContextValue {
 
 const VaultContext = createContext<VaultContextValue | null>(null);
 
-export function VaultProvider({ children }: { children: ReactNode }) {
+/**
+ * Owns caller identity and cancels vault resources synchronously when captured inputs change.
+ *
+ * @param props - Provider content.
+ * @param props.children - Components sharing the current vault binding.
+ * @returns Binding state and explicit identity/recovery actions.
+ */
+export function VaultProvider({ children }: { children: ReactNode }): JSX.Element {
   const connection = useMidnightConnection();
   const runtime = useRuntimeConfig();
   const queryClient = useQueryClient();
-  const [identitySecret, setSecret] = useState('');
-  const secretRef = useRef('');
+  const [identitySecret, setSecret] = useState("");
+  const secretRef = useRef("");
   const revision = useRef(0);
-  const current = useRef<{ session: VaultSession; wallet: Wallet } | null>(
-    null,
-  );
+  const current = useRef<{ session: VaultSession; wallet: Wallet } | null>(null);
   const [session, setSession] = useState<VaultSession | null>(null);
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
   const [retryRevision, setRetryRevision] = useState(0);
   const recovering = useRef(false);
 
-  const clearSession = () => {
+  const clearSession = (): void => {
     const previous = current.current;
     current.current = null;
     if (previous) {
@@ -81,17 +83,17 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   };
 
   useLayoutEffect(() =>
-    runtime.owner.onInvalidate(scopes => {
-      if (!scopes.has('vault')) return;
+    runtime.owner.onInvalidate((scopes) => {
+      if (!scopes.has("vault")) return;
       revision.current += 1;
       clearSession();
-      setRetryRevision(value => value + 1);
+      setRetryRevision((value) => value + 1);
     }),
   );
 
-  const startSession = (wallet: Wallet) => {
+  const startSession = (wallet: Wallet): VaultSession => {
     clearSession();
-    if (!secretRef.current) throw new Error('Enter a vault secret first.');
+    if (!secretRef.current) throw new Error("Enter a vault secret first.");
     const captured = runtime.owner.getSnapshot().applied;
     const { midnight, environment } = captured;
     const zkOrigin = getZkConfigOrigin(window.location.origin);
@@ -126,50 +128,43 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       : null;
   const query = useQuery({
     ...(activeSession?.options ?? {
-      queryKey: ['vault-binding', 'disabled'],
-      queryFn: async (): Promise<VaultBinding> => {
-        throw new Error('Vault is not ready.');
-      },
+      queryKey: ["vault-binding", "disabled"],
+      queryFn: (): Promise<VaultBinding> => Promise.reject(new Error("Vault is not ready.")),
       gcTime: 0,
     }),
     enabled: activeSession !== null,
   });
-  const binding =
-    activeSession && query.isSuccess && query.data ? query.data : null;
-  const requireBinding = () => {
+  const binding = activeSession && query.isSuccess ? query.data : null;
+  const requireBinding = (): VaultBinding => {
     const active = current.current;
-    const result = active
-      ? queryClient.getQueryData(active.session.options.queryKey)
-      : null;
-    if (!result) throw new Error('Vault is not ready.');
+    const result = active ? queryClient.getQueryData(active.session.options.queryKey) : null;
+    if (!result) throw new Error("Vault is not ready.");
     result.assertActive();
     return result;
   };
 
-  const setIdentitySecret = (input: string) => {
-    const normalised = input.trim().replace(/^0x/i, '').toLowerCase();
+  const setIdentitySecret = (input: string): void => {
+    const normalised = input.trim().replace(/^0x/i, "").toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(normalised))
-      throw new Error(
-        'Enter a 32-byte vault secret as 64 hexadecimal characters.',
-      );
+      throw new Error("Enter a 32-byte vault secret as 64 hexadecimal characters.");
     if (normalised === secretRef.current) return;
     revision.current += 1;
     clearSession();
     secretRef.current = normalised;
     setSecret(normalised);
   };
-  const clearIdentity = () => {
+  const clearIdentity = (): void => {
     revision.current += 1;
     clearSession();
-    secretRef.current = '';
-    setSecret('');
+    secretRef.current = "";
+    setSecret("");
   };
-  const retry = () => {
+  const retry = (): void => {
     revision.current += 1;
     clearSession();
-    setRetryRevision(value => value + 1);
+    setRetryRevision((value) => value + 1);
   };
-  const disconnect = () => {
+  const disconnect = (): void => {
     revision.current += 1;
     clearSession();
     connection.disconnect();
@@ -177,7 +172,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const rebuild = async (
     binding: VaultBinding,
     onOwnedFailure?: (error: unknown) => void,
-  ) => {
+  ): Promise<VaultBinding> => {
     binding.assertActive();
     if (connection.wallet?.recoveryUnavailable)
       throw new Error(connection.wallet.recoveryUnavailable);
@@ -190,49 +185,40 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       walletAttempt = connection.getGeneration();
       const wallet = await recovery;
       if (attempt !== revision.current || !connection.isCurrent(wallet))
-        throw new Error('Vault recovery superseded.');
+        throw new Error("Vault recovery superseded.");
       const next = startSession(wallet);
       const result = await queryClient.fetchQuery(next.options);
       result.assertActive();
       return result;
     } catch (error) {
-      if (
-        attempt === revision.current &&
-        walletAttempt === connection.getGeneration()
-      )
+      if (attempt === revision.current && walletAttempt === connection.getGeneration())
         onOwnedFailure?.(error);
       throw error;
     } finally {
       recovering.current = false;
-      setRetryRevision(value => value + 1);
+      setRetryRevision((value) => value + 1);
     }
   };
 
-  useEffect(() => {
+  const onSessionInputsChanged = useEffectEvent((wallet: Wallet | null) => {
     if (recovering.current) return;
-    if (
-      current.current?.wallet === connection.wallet &&
-      connection.wallet &&
-      connection.isCurrent(connection.wallet)
-    )
-      return;
+    if (wallet && current.current?.wallet === wallet && connection.isCurrent(wallet)) return;
     clearSession();
-    if (!connection.wallet || !secretRef.current) return;
+    if (!wallet || !secretRef.current) return;
     try {
-      startSession(connection.wallet);
+      startSession(wallet);
     } catch {
-      setDeploymentError(
-        'Vault deployment configuration is missing or invalid.',
-      );
+      setDeploymentError("Vault deployment configuration is missing or invalid.");
     }
-    // Input revisions own resource lifetime. Functions observe the current owner refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    onSessionInputsChanged(connection.wallet);
   }, [connection.wallet, connection.session, identitySecret, retryRevision]);
 
   useEffect(
     () => () => {
       revision.current += 1;
-      secretRef.current = '';
+      secretRef.current = "";
       const previous = current.current;
       current.current = null;
       previous?.session.dispose();
@@ -246,16 +232,16 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 
   const status: VaultStatus = !connection.wallet
-    ? 'disconnected'
+    ? "disconnected"
     : !identitySecret
-      ? 'missing-identity'
+      ? "missing-identity"
       : deploymentError
-        ? 'missing-deployment'
+        ? "missing-deployment"
         : activeSession && query.isError
-          ? 'error'
+          ? "error"
           : binding
-            ? 'ready'
-            : 'loading';
+            ? "ready"
+            : "loading";
 
   return (
     <VaultContext.Provider
@@ -280,8 +266,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Reads the current identity and binding without acquiring separate SDK resources.
+ *
+ * @returns Shared vault state and generation-guarded binding actions.
+ * @throws {Error} If the vault provider is missing.
+ */
 export function useVault(): VaultContextValue {
   const context = useContext(VaultContext);
-  if (!context) throw new Error('useVault must be used within VaultProvider');
+  if (!context) throw new Error("useVault must be used within VaultProvider");
   return context;
 }

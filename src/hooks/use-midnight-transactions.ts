@@ -1,35 +1,32 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-import {
-  midnightTxHistory,
-  type MidnightTxRecord,
-} from '@/lib/midnight/tx-history';
-import { formatActivityDate } from '@/lib/utils/date-formatting';
-import type { ActivityTransaction } from '@/components/activity-list-table';
+import type { ActivityTransaction } from "@/components/activity-list-table";
+import { midnightTxHistory, type MidnightTxRecord } from "@/lib/midnight/tx-history";
+import { formatActivityDate } from "@/lib/utils/date-formatting";
 
-const CHAIN = 'midnight';
+const CHAIN = "midnight";
 
 function toActivity(r: MidnightTxRecord): ActivityTransaction {
   const explorer = r.explorerUrl;
   const fromToken =
-    r.type === 'Deposit'
-      ? { symbol: 'WALLET', chain: CHAIN, amount: r.fromAmount, usdValue: '' }
+    r.type === "Deposit"
+      ? { symbol: "WALLET", chain: CHAIN, amount: r.fromAmount, usdValue: "" }
       : {
           symbol: r.fromSymbol,
           chain: CHAIN,
           amount: r.fromAmount,
-          usdValue: '',
+          usdValue: "",
         };
   const toToken =
-    r.type === 'Withdraw'
-      ? { symbol: 'WALLET', chain: CHAIN, amount: r.toAmount, usdValue: '' }
+    r.type === "Withdraw"
+      ? { symbol: "WALLET", chain: CHAIN, amount: r.toAmount, usdValue: "" }
       : {
           symbol: r.toSymbol,
           chain: CHAIN,
           amount: r.toAmount || r.toSymbol,
-          usdValue: '',
+          usdValue: "",
         };
   return {
     id: r.id,
@@ -43,12 +40,15 @@ function toActivity(r: MidnightTxRecord): ActivityTransaction {
     status: r.status,
     transactionHash: r.txHash,
     failureReason: r.failureReason,
-    explorerUrl:
-      r.txHash && explorer ? `${explorer}/tx/${r.txHash}` : undefined,
+    explorerUrl: r.txHash && explorer ? `${explorer}/tx/${r.txHash}` : undefined,
   };
 }
 
-/** Live Midnight vault operations mapped to the Activity table's row shape. */
+/**
+ * Subscribes to operation history and retains captured explorer links in Activity rows.
+ *
+ * @returns Live rows with exact recorded amount strings and formatted timestamps.
+ */
 export function useMidnightTransactions(): ActivityTransaction[] {
   const [txs, setTxs] = useState<MidnightTxRecord[]>([]);
   useEffect(() => midnightTxHistory.subscribe(setTxs), []);

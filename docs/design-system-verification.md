@@ -39,7 +39,7 @@ The six shadcn-derived primitives and six additions are accounted for individual
 
 No production build, funded operation, deployment reset, new acceptance identity, global install, commit or push was performed. CLAUDE.md was already modified at entry and is preserved.
 
-- `node scripts/design-system/table.mjs` reproduced a nested-link keyboard interception, then passed after TableRow limited Enter/Space activation to its own focused element. The updated task01 fixture also passed.
+- `node node_modules/vitest/vitest.mjs run tests/components/table.test.tsx` verifies focused row activation, nested-link keyboard isolation and passive row tab order using real DOM rendering. A planted nested-link interception failed the regression, and the restored implementation passed.
 
 ## Browser evidence
 

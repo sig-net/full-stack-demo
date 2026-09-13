@@ -54,3 +54,6 @@ public/zk.prepare.lock
 *scratch*
 .playwright-mcp
 .local-vault/
+
+# Project-local downloaded quality tools
+.quality-tools/

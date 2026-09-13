@@ -1,13 +1,13 @@
-// Core token interface with balance - decimals required (fetched from chain)
+/** Token metadata with contract-reported precision for exact amount conversion. */
 export interface Token {
   erc20Address: string;
   symbol: string;
   name: string;
   decimals: number;
-  chain: 'ethereum' | 'midnight';
+  chain: "ethereum" | "midnight";
 }
 
-// Token with bigint balance (for UI components)
+/** Observed token balance in base units with an optional formatted USD valuation. */
 export interface TokenWithBalance extends Token {
   balance: bigint;
   balanceUsd?: string;

@@ -1,17 +1,17 @@
-'use client';
+"use client";
 
-import { Label } from '@/components/ui/label';
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { Loader2, SendIcon } from 'lucide-react';
+import { Loader2, SendIcon } from "lucide-react";
+import type * as React from "react";
+import { useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { TokenAmountDisplay } from '@/components/ui/token-amount-display';
-import { useTokenPrice } from '@/hooks/use-token-prices';
-import type { Token } from '@/lib/types/token.types';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TokenAmountDisplay } from "@/components/ui/token-amount-display";
+import { useTokenPrice } from "@/hooks/use-token-prices";
 
-import { WithdrawToken } from './index';
+import type { WithdrawToken } from "./index";
 
 interface FormData {
   amount: string;
@@ -21,59 +21,69 @@ interface FormData {
 interface AmountInputProps {
   availableTokens: WithdrawToken[];
   transactionReady: boolean;
-  onSubmit: (data: {
-    token: WithdrawToken;
-    amount: string;
-    receiverAddress: string;
-  }) => void;
+  onSubmit: (data: { token: WithdrawToken; amount: string; receiverAddress: string }) => void;
   preSelectedToken?: WithdrawToken | null;
 }
 
+/**
+ * Keeps token selection, amount validation and receiver entry together for withdrawal.
+ *
+ * @param root0 - Amount form properties.
+ * @param root0.availableTokens - Tokens available for withdrawal.
+ * @param root0.transactionReady - Whether withdrawal prerequisites are ready.
+ * @param root0.onSubmit - Validated withdrawal callback.
+ * @param root0.preSelectedToken - Optional token selected by the parent.
+ * @returns The withdrawal amount form.
+ */
 export function AmountInput({
   availableTokens,
   transactionReady,
   onSubmit,
   preSelectedToken,
-}: AmountInputProps) {
-  const [selectedToken, setSelectedToken] = useState<WithdrawToken | undefined>(
-    preSelectedToken || availableTokens[0] || undefined,
-  );
-  const [error, setError] = useState<string>('');
+}: AmountInputProps): React.JSX.Element {
+  const [selection, setSelection] = useState<{
+    selectedToken: WithdrawToken | undefined;
+    previousPreSelectedToken: WithdrawToken | null | undefined;
+  }>({
+    selectedToken: preSelectedToken ?? availableTokens[0],
+    previousPreSelectedToken: preSelectedToken,
+  });
+  if (preSelectedToken !== selection.previousPreSelectedToken) {
+    setSelection({
+      selectedToken: preSelectedToken ?? selection.selectedToken,
+      previousPreSelectedToken: preSelectedToken,
+    });
+  }
+  const selectedToken = selection.selectedToken;
+  const [error, setError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: priceData } = useTokenPrice(selectedToken?.symbol ?? '');
+  const { data: priceData } = useTokenPrice(selectedToken?.symbol ?? "");
 
-  const { register, handleSubmit, setValue, watch } = useForm<FormData>({
+  const { register, handleSubmit, setValue, control } = useForm<FormData>({
     defaultValues: {
-      amount: '',
-      receiverAddress: '',
+      amount: "",
+      receiverAddress: "",
     },
   });
 
-  const watchedAmount = watch('amount');
-  const watchedAddress = watch('receiverAddress');
+  const watchedAmount = useWatch({ control, name: "amount" });
+  const watchedAddress = useWatch({ control, name: "receiverAddress" });
 
-  // Update selected token when preSelectedToken changes
-  useEffect(() => {
-    if (preSelectedToken) {
-      setSelectedToken(preSelectedToken);
-    }
-  }, [preSelectedToken]);
-
-  const onFormSubmit = (data: FormData) => {
+  const onFormSubmit = (data: FormData): void => {
     if (isSubmitting) return;
     if (!selectedToken) {
-      setError('Please select a token');
+      setError("Please select a token");
       return;
     }
 
     if (parseFloat(data.amount) > parseFloat(selectedToken.balance)) {
-      setError('Amount exceeds available balance');
+      setError("Amount exceeds available balance");
       return;
     }
 
     setIsSubmitting(true);
-    setError('');
+    setError("");
     onSubmit({
       token: selectedToken,
       amount: data.amount,
@@ -82,13 +92,20 @@ export function AmountInput({
   };
 
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className='ds-stack-content'>
+    <form
+      onSubmit={(event) => {
+        void handleSubmit(onFormSubmit)(event);
+      }}
+      className="ds-stack-content"
+    >
       {/* Token Selection */}
       <div>
         <TokenAmountDisplay
           value={watchedAmount}
-          onChange={value => setValue('amount', value)}
-          tokens={availableTokens.map(t => ({
+          onChange={(value) => {
+            setValue("amount", value);
+          }}
+          tokens={availableTokens.map((t) => ({
             erc20Address: t.address,
             symbol: t.symbol,
             name: t.name,
@@ -98,82 +115,77 @@ export function AmountInput({
           }))}
           selectedToken={
             selectedToken
-              ? ({
+              ? {
                   erc20Address: selectedToken.address,
                   symbol: selectedToken.symbol,
                   name: selectedToken.name,
                   decimals: selectedToken.decimals,
                   chain: selectedToken.chain,
                   balance: selectedToken.balance,
-                } as Token & { balance: string })
+                }
               : undefined
           }
-          onTokenSelect={token => {
+          onTokenSelect={(token) => {
             const mapped: WithdrawToken = {
               symbol: token.symbol,
               name: token.name,
               chain: token.chain,
-              chainName:
-                token.chain === 'ethereum' ? 'Ethereum Sepolia' : 'Midnight',
+              chainName: token.chain === "ethereum" ? "Ethereum Sepolia" : "Midnight",
               address: token.erc20Address,
               balance: token.balance,
               decimals: token.decimals,
             };
-            setSelectedToken(mapped);
-            setValue('amount', '');
-            setError('');
+            setSelection({ selectedToken: mapped, previousPreSelectedToken: preSelectedToken });
+            setValue("amount", "");
+            setError("");
           }}
           usdValue={`≈ $${
             watchedAmount && priceData?.usd
               ? (parseFloat(watchedAmount) * priceData.usd).toFixed(2)
-              : '0.00'
+              : "0.00"
           }`}
-          placeholder='0.00'
+          placeholder="0.00"
         />
       </div>
 
       {/* Receiver Address */}
-      <div className='ds-stack-control'>
+      <div className="ds-stack-control">
         <Label>Receiver Address</Label>
         <Input
-          placeholder='Recipient address'
-          {...register('receiverAddress')}
-          autoComplete='off'
-          autoCorrect='off'
-          autoCapitalize='none'
+          placeholder="Recipient address"
+          {...register("receiverAddress")}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
           spellCheck={false}
-          enterKeyHint='done'
+          enterKeyHint="done"
         />
       </div>
 
       {error && (
-        <div className='ds-row ds-control-gap ds-round ds-frame ds-surface-error ds-inset-control'>
-          <div className='ds-circle ds-dot-error h-2 w-2 shrink-0'></div>
-          <p className='ds-caption ds-label ds-error'>{error}</p>
+        <div className="ds-row ds-control-gap ds-round ds-frame ds-surface-error ds-inset-control">
+          <div className="ds-circle ds-dot-error h-2 w-2 shrink-0"></div>
+          <p className="ds-caption ds-label ds-error">{error}</p>
         </div>
       )}
 
       <Button
-        type='submit'
-        variant='secondary'
+        type="submit"
+        variant="secondary"
         disabled={
-          !transactionReady ||
-          isSubmitting ||
-          !selectedToken ||
-          !watchedAmount ||
-          !watchedAddress
+          !transactionReady || isSubmitting || !selectedToken || !watchedAmount || !watchedAddress
         }
-        className='w-full'
-        size='lg'
+        className="w-full"
+        size="lg"
       >
         {isSubmitting ? (
           <>
-            <Loader2 className='ds-spinner size-4' />
+            <Loader2 className="ds-spinner size-4" />
             Sending...
           </>
         ) : (
           <>
-            <SendIcon className='size-4' />
+            <SendIcon className="size-4" />
             Send
           </>
         )}
