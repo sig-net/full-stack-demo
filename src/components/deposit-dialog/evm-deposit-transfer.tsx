@@ -6,6 +6,9 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EvmWalletButton } from '@/components/evm-wallet-button';
+import { useEvmDeposit } from '@/providers/evm-deposit-context';
+import { useEvmBalances } from '@/providers/evm-balances-context';
+import { useEvmDepositEligibility } from '@/hooks/use-evm-deposit-eligibility';
 import { useEvmWallet } from '@/providers/evm-wallet-context';
 import { useWalletReadiness } from '@/providers/wallet-readiness-context';
 import { useVault } from '@/providers/vault-context';
@@ -14,13 +17,20 @@ import type { TokenConfig } from '@/lib/constants/token-metadata';
 
 export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
   const evm = useEvmWallet();
+  const deposit = useEvmDeposit();
+  const balances = useEvmBalances();
   const vault = useVault();
   const readiness = useWalletReadiness();
   const progress = useMidnightProgress();
   const [amount, setAmount] = useState('');
-  const transfer = evm.transfer;
-  const explorer = evm.wallet?.config.explorerUrl;
-  const tokenBalance = evm.balances.data?.tokens.find(
+  const eligibility = useEvmDepositEligibility(
+    token.erc20Address,
+    amount,
+    vault.binding?.depositAddress,
+  );
+  const transfer = deposit.transfer;
+  const explorer = transfer?.explorerUrl ?? evm.wallet?.explorerUrl;
+  const tokenBalance = balances.data?.tokens.find(
     value => value.erc20Address === token.erc20Address,
   );
   const pending =
@@ -41,7 +51,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
           {token.symbol}
         </p>
       )}
-      {evm.balances.isError && (
+      {balances.isError && (
         <p role='alert'>
           Wallet balances unavailable. Open Sepolia wallet to retry.
         </p>
@@ -58,7 +68,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
       />
       <Button
         disabled={
-          !evm.ready ||
+          !eligibility.ready ||
           !readiness.ready ||
           !evm.wallet ||
           !vault.binding ||
@@ -67,7 +77,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
         }
         onClick={() => {
           try {
-            void evm
+            void deposit
               .sendDeposit(vault.requireBinding(), token.erc20Address, amount)
               .catch(() => toast.error('The deposit session changed.'));
           } catch {
@@ -77,6 +87,9 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
       >
         {pending ? 'Transfer pending…' : 'Send tokens to deposit address'}
       </Button>
+      {amount.trim() && eligibility.error && (
+        <p role='alert'>{eligibility.error}</p>
+      )}
       {!vault.binding && (
         <p>
           Connect Midnight and load your vault identity to obtain a deposit
@@ -109,7 +122,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
                   progress.active ||
                   transfer.sweep !== 'ready'
                 }
-                onClick={() => void evm.continueDeposit()}
+                onClick={() => void deposit.continueDeposit()}
               >
                 {transfer.sweep === 'complete'
                   ? 'Midnight deposit complete'

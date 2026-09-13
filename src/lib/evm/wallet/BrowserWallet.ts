@@ -7,7 +7,9 @@ import {
   type Address,
   type EIP1193Provider,
 } from 'viem';
-import { sepolia, type EvmChainConfig } from '@/lib/config/evm';
+import type { Chain, PublicClient } from 'viem';
+import type { Wallet, Erc20Transfer } from './Wallet';
+import { transferErc20 } from '../erc20-transfer';
 
 export interface BrowserWalletChoice {
   id: string;
@@ -42,7 +44,7 @@ export function discoverBrowserWallets(
   return () => window.removeEventListener('eip6963:announceProvider', announce);
 }
 
-export class BrowserWallet {
+export class BrowserWallet implements Wallet {
   readonly sessionId = crypto.randomUUID();
   private active = true;
   private accountValue: Address | null = null;
@@ -57,9 +59,12 @@ export class BrowserWallet {
   private readonly providerDisconnected = () => this.invalidate();
 
   constructor(
-    readonly config: EvmChainConfig,
+    readonly chain: Chain,
+    readonly publicClient: PublicClient,
     readonly choice: BrowserWalletChoice,
     private readonly onInvalidated: (reason?: Error) => void,
+    private readonly verifyNetwork?: () => Promise<void>,
+    readonly explorerUrl?: string,
   ) {
     choice.provider.on('accountsChanged', this.accountChanged);
     choice.provider.on('chainChanged', this.chainChanged);
@@ -82,7 +87,7 @@ export class BrowserWallet {
   get client() {
     return createWalletClient({
       account: this.account,
-      chain: sepolia,
+      chain: this.chain,
       transport: custom(this.choice.provider),
     });
   }
@@ -108,12 +113,12 @@ export class BrowserWallet {
       await provider.request({ method: 'eth_chainId' }),
     );
     this.assertActive();
-    if (chain !== this.config.chainId) {
+    if (chain !== this.chain.id) {
       this.switching = true;
       try {
         await provider.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: numberToHex(this.config.chainId) }],
+          params: [{ chainId: numberToHex(this.chain.id) }],
         });
       } finally {
         this.switching = false;
@@ -133,41 +138,33 @@ export class BrowserWallet {
       method: 'eth_accounts',
     });
     this.assertActive();
-    if (chain !== this.config.chainId) {
+    if (chain !== this.chain.id) {
       const failure = new Error(
-        `Switch the EVM wallet to Sepolia (chain ${this.config.chainId}) at ${this.config.rpcUrl} and connect again.`,
+        `Switch the EVM wallet to ${this.chain.name} (chain ${this.chain.id}) and connect again.`,
       );
       this.invalidate(failure);
       throw failure;
     }
-    if (
-      (process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID ?? 'undeployed') ===
-      'undeployed'
-    ) {
-      const markerAddress = process.env.NEXT_PUBLIC_LOCAL_EVM_MARKER_ADDRESS;
-      const markerCode = process.env.NEXT_PUBLIC_LOCAL_EVM_MARKER_CODE;
-      if (!markerAddress || !markerCode)
-        throw new Error(
-          'Run local setup and restart the app to configure the local fork.',
-        );
-      const observed = await this.choice.provider.request({
-        method: 'eth_getCode',
-        params: [getAddress(markerAddress), 'latest'],
-      });
+    try {
+      await this.verifyNetwork?.();
       this.assertActive();
-      if (observed.toLowerCase() !== markerCode.toLowerCase()) {
-        const failure = new Error(
-          `Configure the extension’s Sepolia RPC as ${this.config.rpcUrl}, then reconnect. The local fork marker does not match.`,
-        );
-        this.invalidate(failure);
-        throw failure;
-      }
+    } catch (failure) {
+      const error =
+        failure instanceof Error
+          ? failure
+          : new Error('EVM network verification failed.');
+      this.invalidate(error);
+      throw error;
     }
     if (!accounts[0] || getAddress(accounts[0]) !== account) {
       const failure = new Error('EVM account changed. Connect again.');
       this.invalidate(failure);
       throw failure;
     }
+  }
+
+  transferErc20(input: Erc20Transfer) {
+    return transferErc20(this, input);
   }
 
   disconnect() {

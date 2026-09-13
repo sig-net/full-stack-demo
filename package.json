@@ -66,6 +66,7 @@
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^16.1.1",
+    "@playwright/mcp": "0.0.80",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

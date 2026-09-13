@@ -53,3 +53,4 @@ public/zk.prepare.lock
 
 *scratch*
 .playwright-mcp
+.local-vault/

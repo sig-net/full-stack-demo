@@ -2,24 +2,28 @@
 
 import { Button } from './ui/button';
 import { useWalletReadiness } from '@/providers/wallet-readiness-context';
+import { useEvmLocalFunding } from '@/providers/evm-local-funding-context';
+import { useEvmBalances } from '@/providers/evm-balances-context';
 import { useEvmWallet } from '@/providers/evm-wallet-context';
 
 export function LocalWalletFunding() {
   const midnight = useWalletReadiness();
   const evm = useEvmWallet();
-  const pending = midnight.funding.isPending || evm.funding.isPending;
+  const localEvm = useEvmLocalFunding();
+  const evmBalances = useEvmBalances();
+  const pending = midnight.funding.isPending || localEvm.funding.isPending;
   if (!midnight.wallet && !evm.wallet) return null;
   const needsMidnight = !!midnight.wallet && !midnight.ready;
-  const needsEvm = !!evm.wallet && !evm.ready;
+  const needsEvm = !!evm.wallet && !localEvm.ready;
   const canFundMidnight = needsMidnight && midnight.balances.isSuccess;
-  const canFundEvm = needsEvm && evm.balances.isSuccess;
+  const canFundEvm = needsEvm && evmBalances.isSuccess;
   return (
     <div className='mx-auto max-w-3xl space-y-2 rounded border bg-white/80 p-4 text-sm'>
       <p role='status'>
         {midnight.wallet &&
           `Midnight: ${midnight.balances.isPending ? 'checking resources' : midnight.ready ? 'DUST ready' : midnight.balances.isError ? 'balance unavailable' : 'DUST below transaction threshold'}. `}
         {evm.wallet &&
-          `EVM: ${evm.balances.isPending ? 'checking balances' : evm.ready ? 'deposit funds ready' : evm.balances.isError ? 'balances unavailable' : 'funds below deposit threshold'}.`}
+          `EVM: ${evmBalances.isPending ? 'checking balances' : localEvm.ready ? 'local funding reserve ready' : evmBalances.isError ? 'balances unavailable' : 'funds below local funding reserve'}.`}
       </p>
       {(needsMidnight || needsEvm) && (
         <>
@@ -34,7 +38,7 @@ export function LocalWalletFunding() {
               onClick={() => {
                 void Promise.allSettled([
                   ...(canFundMidnight ? [midnight.fund()] : []),
-                  ...(canFundEvm ? [evm.fund()] : []),
+                  ...(canFundEvm ? [localEvm.fund()] : []),
                 ]);
               }}
             >
@@ -54,8 +58,11 @@ export function LocalWalletFunding() {
       {midnight.funding.error && (
         <p role='alert'>Midnight: {midnight.funding.error.message}</p>
       )}
-      {evm.funding.error && (
-        <p role='alert'>EVM: {evm.funding.error.message}</p>
+      {localEvm.funding.error && (
+        <p role='alert'>EVM: {localEvm.funding.error.message}</p>
+      )}
+      {localEvm.refreshError && (
+        <p role='alert'>EVM: {localEvm.refreshError}</p>
       )}
       {midnight.eligibility.isError && (
         <p role='alert'>Funding eligibility could not be checked.</p>
@@ -65,7 +72,7 @@ export function LocalWalletFunding() {
         onClick={() => {
           void midnight.eligibility.refetch();
           if (midnight.wallet) void midnight.balances.refetch();
-          if (evm.wallet) void evm.balances.refetch();
+          if (evm.wallet) void evmBalances.refetch();
         }}
       >
         Refresh wallet readiness

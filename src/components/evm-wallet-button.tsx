@@ -13,10 +13,14 @@ import {
   discoverBrowserWallets,
   type BrowserWalletChoice,
 } from '@/lib/evm/wallet/BrowserWallet';
+import { browserWalletConnection } from '@/lib/config/evm-wallet';
+import { useEvmBalances } from '@/providers/evm-balances-context';
+import { ERC20_TOKENS } from '@/lib/constants/token-metadata';
 import { useEvmWallet } from '@/providers/evm-wallet-context';
 
 export function EvmWalletButton() {
   const evm = useEvmWallet();
+  const balances = useEvmBalances();
   const [open, setOpen] = useState(false);
   const [revision, setRevision] = useState(0);
   const [choices, setChoices] = useState<BrowserWalletChoice[]>([]);
@@ -47,21 +51,24 @@ export function EvmWalletButton() {
           {evm.wallet && (
             <div className='space-y-2'>
               <p className='break-all'>{evm.wallet.account}</p>
-              {evm.balances.isPending && <p>Loading balances…</p>}
-              {evm.balances.isError && (
+              {balances.isPending && <p>Loading balances…</p>}
+              {balances.isError && (
                 <p role='alert'>
                   Unable to read wallet balances.{' '}
-                  <Button onClick={() => void evm.balances.refetch()}>
+                  <Button onClick={() => void balances.refetch()}>
                     Retry balances
                   </Button>
                 </p>
               )}
-              {evm.balances.isSuccess && (
+              {balances.isSuccess && (
                 <>
-                  <p>{formatEther(evm.balances.data.eth)} ETH</p>
-                  {evm.balances.data.tokens.map(token => (
+                  <p>{formatEther(balances.data.eth)} ETH</p>
+                  {balances.data.tokens.map(token => (
                     <p key={token.erc20Address}>
-                      {formatUnits(token.units, token.decimals)} {token.symbol}
+                      {formatUnits(token.units, token.decimals)}{' '}
+                      {ERC20_TOKENS.find(
+                        value => value.erc20Address === token.erc20Address,
+                      )?.symbol ?? token.erc20Address}
                     </p>
                   ))}
                 </>
@@ -78,7 +85,7 @@ export function EvmWalletButton() {
               key={choice.id}
               disabled={evm.connecting}
               onClick={() => {
-                void evm.connect(choice);
+                void evm.connect(browserWalletConnection(choice));
               }}
             >
               {choice.name}

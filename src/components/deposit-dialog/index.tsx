@@ -16,7 +16,7 @@ import { useVaultOperations } from '@/providers/vault-operations-context';
 import { useMidnightConnection } from '@/providers/midnight-wallet-context';
 import { useMidnightProgress } from '@/hooks/use-midnight-progress';
 import { useVault } from '@/providers/vault-context';
-import { useEvmWallet } from '@/providers/evm-wallet-context';
+import { useEvmDeposit } from '@/providers/evm-deposit-context';
 
 import { TokenSelection } from './token-selection';
 import { EvmDepositTransfer } from './evm-deposit-transfer';
@@ -37,7 +37,7 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
   const balances = useVaultBalances();
   const operations = useVaultOperations();
   const connection = useMidnightConnection();
-  const evm = useEvmWallet();
+  const evm = useEvmDeposit();
   const vault = useVault();
   const progress = useMidnightProgress();
 

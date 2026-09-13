@@ -1,33 +1,22 @@
-import { parseTokenAmount } from '@/lib/utils/token-amount';
 import {
   encodeFunctionData,
   parseEventLogs,
   erc20Abi,
   getAddress,
-  type Address,
   type Hash,
-  type PublicClient,
 } from 'viem';
-import {
-  fetchErc20Decimals,
-  isErc20Allowed,
-} from '@/lib/constants/token-metadata';
-import type { BrowserWallet } from './wallet/BrowserWallet';
+import type { Wallet, Erc20Transfer } from './wallet/Wallet';
 
-export async function transferDeposit(input: {
-  wallet: BrowserWallet;
-  client: PublicClient;
-  token: Address;
-  destination: Address;
-  amount: string;
-  assertTarget: () => void;
-  submitted: (hash: Hash) => void;
-}): Promise<{ hash: Hash; units: bigint }> {
-  const { wallet, client, token, destination, assertTarget } = input;
-  const account = wallet.account;
-  if (!isErc20Allowed(token)) throw new Error('Unsupported deposit token.');
-  const decimals = await fetchErc20Decimals(token);
-  const units = parseTokenAmount(input.amount, decimals);
+export async function transferErc20(
+  wallet: Wallet,
+  input: Erc20Transfer,
+): Promise<{ hash: Hash; units: bigint }> {
+  const token = getAddress(input.token);
+  const destination = getAddress(input.destination);
+  const { units } = input;
+  const client = wallet.publicClient;
+  const account = getAddress(wallet.account);
+  if (units <= 0n) throw new Error('Enter an amount greater than zero.');
   const data = encodeFunctionData({
     abi: erc20Abi,
     functionName: 'transfer',
@@ -46,9 +35,9 @@ export async function transferDeposit(input: {
   ]);
   if (balance < units) throw new Error('Insufficient token balance.');
   if (nativeBalance < gas * gasPrice)
-    throw new Error('Insufficient Sepolia ETH for network fees.');
+    throw new Error('Insufficient native balance for network fees.');
   await wallet.verify();
-  assertTarget();
+  input.beforeSubmit?.();
   wallet.assertActive();
   const hash = await wallet.client.writeContract({
     address: token,
@@ -76,7 +65,7 @@ export async function transferDeposit(input: {
     transaction.value !== 0n
   )
     throw new Error(
-      'The mined transaction replaced or cancelled this deposit transfer.',
+      'The mined transaction replaced or cancelled this token transfer.',
     );
   const transfers = parseEventLogs({
     abi: erc20Abi,

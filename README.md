@@ -68,7 +68,7 @@ For an EVM extension, configure a local network with RPC `http://127.0.0.1:8545`
 
 Choose **Fund local wallets** for the connected wallets, then wait for registration and balance refresh. Local funding targets 1 ETH, 100 USDC using on-chain decimals, and 1,000,000,000,000 NIGHT base units. Repeated requests transfer only a deficit and preserve balances above target. Midnight funding sends the public NIGHT address and verifying key. DUST registration is signed by the browser wallet. The user seed and vault secret stay in page memory.
 
-Readiness requires measured balances of at least 0.01 ETH, 1 USDC and 10 DUST. One DUST equals 1,000,000,000,000,000 SPECK. The local 0.1 USDC browser deposit consumed 0.691887923870713 DUST across start and settlement, below the 10 DUST reserve. The responder paid a separate 0.315009887444318 DUST for its signature and execution attestation. Fees vary with the transaction and current ledger parameters. Unknown balances require refresh and cannot unlock a transaction.
+The local funding reserve indicator requires measured balances of at least 0.01 ETH and 1 USDC. EVM deposit eligibility uses the selected token, requested amount, fetched decimals and estimated network fee. Midnight readiness requires at least 10 DUST. One DUST equals 1,000,000,000,000,000 SPECK. The local 0.1 USDC browser deposit consumed 0.691887923870713 DUST across start and settlement, below the 10 DUST reserve. The responder paid a separate 0.315009887444318 DUST for its signature and execution attestation. Fees vary with the transaction and current ledger parameters. Unknown balances require refresh and cannot unlock a transaction.
 
 ## Deposit and recovery
 
@@ -121,3 +121,33 @@ yarn lint && yarn typecheck
 ```
 
 Executed validation covered a clean scoped reset and deployment, kept-stack reuse with unchanged configuration, both served asset manifests and asset reuse, actual EVM funding and repeat funding, fresh browser NIGHT funding and signed DUST registration, and a real MetaMask 0.1 USDC deposit through fakenet to final Midnight settlement. The shielded balance and completed Activity entry survived credential re-entry after refresh. Static checks and isolated rejection, reset and lifecycle tests passed. Live withdrawal, swap, lending and comprehensive failure testing remain future work.
+
+
+## Agent browser verification
+
+**TIP:** Ask Codex to use `$local-vault-e2e` for local browser verification. It handles stack checks,
+Playwright ownership, MetaMask interaction and deposit evidence within the requested scope.
+A wallet refactor smoke check does not require a new deposit or chain reset.
+
+Playwright MCP is pinned as a project development dependency. After the immutable dependency
+installation above, verify the guarded launcher and its public upload fixture from this checkout:
+
+```bash
+node scripts/local-vault/chromium-post-data-cap.test.cjs
+node scripts/local-vault/transport-preflight.test.cjs
+node scripts/local-vault/transport-preflight.cjs
+```
+
+The fixture uses an isolated headless browser and a temporary local sink. It verifies two complete
+proving-key uploads by hash and then checks browser interaction. It preserves the prepared wallet
+profile. The launcher limits Chromium's captured POST bodies to prevent the observed oversized
+protocol-message crash. HTTP uploads remain complete, while captured request bodies are omitted.
+Version and source checks stop an incompatible tool version before browser use.
+
+Configure the Playwright MCP command as the absolute path to Node 24. Its first argument is this
+checkout's `scripts/local-vault/playwright-launcher.cjs`, followed by `--user-data-dir` and the
+prepared disposable MetaMask profile's absolute path. Restart the MCP connection after changing
+its configuration and check for `local-vault: Chromium Network.enable post-data cap applied` in
+its startup log. Keep one browser owner. MetaMask may require a manual unlock after restart.
+Local agent session records and disposable test credentials belong in the ignored `.local-vault/`
+directory, with credential files restricted to their owner. Keep credentials out of committed files.

@@ -7,7 +7,7 @@ export function hasMidnightFees(dust: bigint | undefined): boolean {
   return dust !== undefined && dust >= MINIMUM_MIDNIGHT_DUST;
 }
 
-export function hasEvmDepositFunds(
+export function hasLocalEvmFunds(
   eth: bigint | undefined,
   usdc: bigint | undefined,
   decimals: number | undefined,
