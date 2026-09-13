@@ -8,11 +8,23 @@ import {
   type WalletFacade,
   type AccountKeys,
 } from '../seedlib';
-import type { Wallet } from './Wallet';
+import type { Wallet, WalletTransactions } from './Wallet';
 
 type State = Awaited<ReturnType<WalletFacade['waitForSyncedState']>>;
 
 export class SeedWallet implements Wallet {
+  readonly kind = 'seed';
+  readonly name = 'Seed wallet';
+  readonly iconUrl = undefined;
+  get id() {
+    return this.shieldedAddress;
+  }
+  get accountDetail() {
+    return this.shieldedAddress;
+  }
+  get transactions(): WalletTransactions {
+    return this;
+  }
   private facade?: WalletFacade;
   private provider?: ReturnType<typeof createWalletAndMidnightProvider>;
   private latestState?: State;
@@ -138,13 +150,14 @@ export class SeedWallet implements Wallet {
     this.assertActive();
     return this.address;
   }
-  getCoinPublicKey: Wallet['getCoinPublicKey'] = () =>
+  getCoinPublicKey: WalletTransactions['getCoinPublicKey'] = () =>
     this.requireProvider().getCoinPublicKey();
-  getEncryptionPublicKey: Wallet['getEncryptionPublicKey'] = () =>
+  getEncryptionPublicKey: WalletTransactions['getEncryptionPublicKey'] = () =>
     this.requireProvider().getEncryptionPublicKey();
-  balanceTx: Wallet['balanceTx'] = (tx, ttl) =>
+  balanceTx: WalletTransactions['balanceTx'] = (tx, ttl) =>
     this.requireProvider().balanceTx(tx, ttl);
-  submitTx: Wallet['submitTx'] = tx => this.requireProvider().submitTx(tx);
+  submitTx: WalletTransactions['submitTx'] = tx =>
+    this.requireProvider().submitTx(tx);
 
   private state(): State {
     this.assertActive();

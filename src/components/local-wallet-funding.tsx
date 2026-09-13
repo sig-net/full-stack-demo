@@ -13,18 +13,22 @@ export function LocalWalletFunding() {
   const evmBalances = useEvmBalances();
   const pending = midnight.funding.isPending || localEvm.funding.isPending;
   if (!midnight.wallet && !evm.wallet) return null;
-  const needsMidnight = !!midnight.wallet && !midnight.ready;
+  const needsMidnight = !!midnight.wallet && !midnight.resourcesReady;
   const needsEvm = !!evm.wallet && !localEvm.ready;
-  const canFundMidnight = needsMidnight && midnight.balances.isSuccess;
+  const canFundMidnight =
+    needsMidnight &&
+    midnight.balances.isSuccess &&
+    !midnight.fundingUnavailable;
   const canFundEvm = needsEvm && evmBalances.isSuccess;
   return (
     <div className='mx-auto max-w-3xl space-y-2 rounded border bg-white/80 p-4 text-sm'>
       <p role='status'>
         {midnight.wallet &&
-          `Midnight: ${midnight.balances.isPending ? 'checking resources' : midnight.ready ? 'DUST ready' : midnight.balances.isError ? 'balance unavailable' : 'DUST below transaction threshold'}. `}
+          `Midnight: ${midnight.transactionUnavailable ?? (midnight.balances.isPending ? 'checking resources' : midnight.ready ? 'DUST ready' : midnight.balances.isError ? 'balance unavailable' : 'DUST below transaction threshold')}. `}
         {evm.wallet &&
           `EVM: ${evmBalances.isPending ? 'checking balances' : localEvm.ready ? 'local funding reserve ready' : evmBalances.isError ? 'balances unavailable' : 'funds below local funding reserve'}.`}
       </p>
+      {midnight.fundingUnavailable && <p>{midnight.fundingUnavailable}</p>}
       {(needsMidnight || needsEvm) && (
         <>
           <p>

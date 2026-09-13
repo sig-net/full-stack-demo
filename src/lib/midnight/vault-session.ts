@@ -108,6 +108,14 @@ export function createVaultSession(input: {
             assertActive,
           ),
           proofProvider: sessionMethods(resources.proofProvider, assertActive),
+          walletProvider: sessionMethods(
+            resources.walletProvider,
+            assertActive,
+          ),
+          midnightProvider: sessionMethods(
+            resources.midnightProvider,
+            assertActive,
+          ),
         };
         if (!secret) throw new Error('Vault session superseded.');
         await providers.privateStateProvider.setContractAddress(

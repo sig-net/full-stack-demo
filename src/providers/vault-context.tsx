@@ -182,6 +182,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     onOwnedFailure?: (error: unknown) => void,
   ) => {
     binding.assertActive();
+    if (connection.wallet?.recoveryUnavailable)
+      throw new Error(connection.wallet.recoveryUnavailable);
     const attempt = ++revision.current;
     clearSession();
     recovering.current = true;
@@ -266,6 +268,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         clearIdentity,
         status,
         error:
+          connection.wallet?.transactionUnavailable ??
           deploymentError ??
           (activeSession ? (query.error?.message ?? null) : null),
         binding,

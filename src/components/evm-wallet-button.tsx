@@ -13,7 +13,11 @@ import {
   discoverBrowserWallets,
   type BrowserWalletChoice,
 } from '@/lib/evm/wallet/BrowserWallet';
-import { browserWalletConnection } from '@/lib/config/evm-wallet';
+import { Input } from '@/components/ui/input';
+import {
+  browserWalletConnection,
+  seedWalletConnection,
+} from '@/lib/config/evm-wallet';
 import { useEvmBalances } from '@/providers/evm-balances-context';
 import { ERC20_TOKENS } from '@/lib/constants/token-metadata';
 import { useEvmWallet } from '@/providers/evm-wallet-context';
@@ -22,12 +26,20 @@ export function EvmWalletButton() {
   const evm = useEvmWallet();
   const balances = useEvmBalances();
   const [open, setOpen] = useState(false);
+  const [seed, setSeed] = useState('');
+  const openChanged = (value: boolean) => {
+    setOpen(value);
+    if (!value) setSeed('');
+  };
   const [revision, setRevision] = useState(0);
   const [choices, setChoices] = useState<BrowserWalletChoice[]>([]);
   const [observedWallet, setObservedWallet] = useState(evm.wallet);
   if (observedWallet !== evm.wallet) {
     setObservedWallet(evm.wallet);
-    if (evm.wallet) setOpen(false);
+    if (evm.wallet) {
+      setOpen(false);
+      setSeed('');
+    }
   }
   useEffect(() => {
     if (!open) return;
@@ -42,7 +54,7 @@ export function EvmWalletButton() {
             ? 'Connecting EVM wallet…'
             : 'Connect EVM wallet'}
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={openChanged}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Sepolia wallet</DialogTitle>
@@ -80,6 +92,31 @@ export function EvmWalletButton() {
               Disconnect EVM wallet
             </Button>
           )}
+          <form
+            onSubmit={event => {
+              event.preventDefault();
+              void evm.connect(seedWalletConnection(seed));
+              setSeed('');
+            }}
+            className='flex flex-col gap-2'
+          >
+            <label htmlFor='evm-seed'>EVM seed</label>
+            <Input
+              id='evm-seed'
+              type='password'
+              autoComplete='off'
+              spellCheck={false}
+              value={seed}
+              onChange={event => setSeed(event.target.value)}
+            />
+            <p>
+              The hexadecimal seed stays in page memory. This wallet signs
+              transactions without an extension prompt.
+            </p>
+            <Button type='submit' disabled={!seed.trim()}>
+              Connect EVM seed wallet
+            </Button>
+          </form>
           {choices.map(choice => (
             <Button
               key={choice.id}

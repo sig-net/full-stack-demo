@@ -15,6 +15,7 @@ export interface BrowserWalletChoice {
   id: string;
   name: string;
   provider: EIP1193Provider;
+  iconUrl?: string;
 }
 
 export function discoverBrowserWallets(
@@ -35,6 +36,8 @@ export function discoverBrowserWallets(
     choices.set(detail.info.uuid, {
       id: detail.info.uuid,
       name: detail.info.name,
+      iconUrl:
+        typeof detail.info.icon === 'string' ? detail.info.icon : undefined,
       provider: detail.provider,
     });
     publish([...choices.values()]);
@@ -45,6 +48,19 @@ export function discoverBrowserWallets(
 }
 
 export class BrowserWallet implements Wallet {
+  readonly kind = 'browser';
+  get name() {
+    return this.choice.name;
+  }
+  get iconUrl() {
+    return this.choice.iconUrl;
+  }
+  get id() {
+    return this.account;
+  }
+  get accountDetail() {
+    return this.account;
+  }
   readonly sessionId = crypto.randomUUID();
   private active = true;
   private accountValue: Address | null = null;

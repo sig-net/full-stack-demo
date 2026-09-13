@@ -60,6 +60,11 @@ function useReadinessOwner() {
           throw new Error('Wallet session changed.');
       };
       assertCurrent();
+      if (!wallet.ensureFeeReady || !wallet.unshieldedPublicKey)
+        throw new Error(
+          wallet.fundingUnavailable ??
+            'Local Midnight funding is unavailable for this wallet.',
+        );
       const unshielded = await wallet.getUnshieldedBalances();
       assertCurrent();
       if (
@@ -100,8 +105,9 @@ function useReadinessOwner() {
     pending.current = operation;
     return operation;
   };
-  const ready =
+  const resourcesReady =
     !!wallet && !balances.isError && hasMidnightFees(balances.data?.dust);
+  const ready = resourcesReady && !wallet?.transactionUnavailable;
   return {
     wallet,
     balances,
@@ -109,9 +115,14 @@ function useReadinessOwner() {
     funding,
     fund,
     ready,
+    resourcesReady,
+    fundingUnavailable: wallet?.fundingUnavailable,
+    transactionUnavailable: wallet?.transactionUnavailable,
     requireReady: async () => {
       if (!wallet || !connection.isCurrent(wallet))
         throw new Error('Connect Midnight first.');
+      if (wallet.transactionUnavailable)
+        throw new Error(wallet.transactionUnavailable);
       const dust = await wallet.getDustBalance();
       if (!connection.isCurrent(wallet))
         throw new Error('Wallet session changed.');

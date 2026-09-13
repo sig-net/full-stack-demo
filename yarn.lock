@@ -918,6 +918,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@midnight-ntwrk/dapp-connector-api@npm:4.0.1":
+  version: 4.0.1
+  resolution: "@midnight-ntwrk/dapp-connector-api@npm:4.0.1"
+  checksum: 10c0/4578035a8752d4138da70d56e89f29026943a361ef6c9edbebd2a1baf15b10057a4b65827afd494f0adc75555aa1f9e0727b269920dde9aacea7d9dedb036b70
+  languageName: node
+  linkType: hard
+
 "@midnight-ntwrk/midnight-js-contracts@npm:5.0.0-beta.6":
   version: 5.0.0-beta.6
   resolution: "@midnight-ntwrk/midnight-js-contracts@npm:5.0.0-beta.6"
@@ -4244,6 +4251,7 @@ __metadata:
   dependencies:
     "@midnight-ntwrk/compact-js": "npm:2.5.5-rc.7"
     "@midnight-ntwrk/compact-runtime": "npm:0.18.0-rc.1"
+    "@midnight-ntwrk/dapp-connector-api": "npm:4.0.1"
     "@midnight-ntwrk/midnight-js": "npm:5.0.0-beta.6"
     "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "npm:5.0.0-beta.6"
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "npm:5.0.0-beta.6"

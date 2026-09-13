@@ -1,3 +1,4 @@
+import type { WalletMetadata } from '@/lib/wallet-metadata';
 import type {
   Account,
   Address,
@@ -16,7 +17,7 @@ export interface Erc20Transfer {
   submitted: (hash: Hash) => void;
 }
 
-export interface Wallet {
+export interface Wallet extends WalletMetadata {
   readonly sessionId: string;
   readonly account: Address;
   readonly chain: Chain;

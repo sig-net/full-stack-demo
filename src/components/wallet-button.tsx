@@ -16,11 +16,18 @@ import { formatAddress } from '@/lib/address-utils';
 import { useVault } from '@/providers/vault-context';
 import { EvmWalletButton } from './evm-wallet-button';
 import { VaultIdentityButton } from './vault-identity-button';
+import {
+  discoverBrowserWallets,
+  type BrowserWalletChoice,
+} from '@/lib/midnight/wallet/BrowserWallet';
 import { useMidnightConnection } from '@/providers/midnight-wallet-context';
 
 export function WalletButton() {
   const [modalOpen, setModalOpen] = useState(false);
   const [seed, setSeed] = useState('');
+  const [browserChoices, setBrowserChoices] = useState<BrowserWalletChoice[]>(
+    [],
+  );
   const attempt = useRef(0);
   useEffect(
     () => () => {
@@ -32,6 +39,7 @@ export function WalletButton() {
   const connection = useMidnightConnection();
   const openChanged = (open: boolean) => {
     setModalOpen(open);
+    if (open) setBrowserChoices(discoverBrowserWallets());
     if (!open) setSeed('');
   };
 
@@ -75,6 +83,7 @@ export function WalletButton() {
           </Button>
         )}
       </div>
+      {connection.error && <p role='alert'>{connection.error}</p>}
       {connection.wallet && vault.status === 'missing-identity' && (
         <p role='status'>
           Midnight connected. Set a vault identity to load the vault.
@@ -105,6 +114,30 @@ export function WalletButton() {
               memory. Refreshing requires you to enter it again.
             </DialogDescription>
           </DialogHeader>
+          {browserChoices.map(choice => (
+            <Button
+              key={choice.key}
+              onClick={() => {
+                const current = ++attempt.current;
+                void connection
+                  .installBrowserWallet(choice)
+                  .catch((error: unknown) => {
+                    if (current === attempt.current)
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : 'Midnight browser connection failed.',
+                      );
+                  });
+                openChanged(false);
+              }}
+            >
+              {choice.name}
+            </Button>
+          ))}
+          {!browserChoices.length && (
+            <p>No Midnight browser wallet discovered.</p>
+          )}
           <form
             onSubmit={event => {
               event.preventDefault();

@@ -1,4 +1,4 @@
-# Playwright and MetaMask
+# Browser wallet verification
 
 ## Provisioning and transport
 
@@ -45,6 +45,16 @@ For a browser smoke check, reuse the available authorised wallet and identity wh
 Inspect connection, balance, readiness and the affected controls. Fund, create a fresh identity or
 submit a transaction only when the task's acceptance explicitly includes that operation. A visible
 funding button can be smoke evidence without clicking it.
+
+For adapter checks, inspect injection on the app's actual origin and record the observed wallet
+keys and public metadata. An absent `window.midnight` proves that this page exposes no Midnight
+connector, not that Lace is absent from the whole laptop. Keep controlled connector fixtures
+separate from real extension observations. A public derivation vector can check seed connection,
+address and form clearing without funding it. Restore the prepared account after replacement.
+
+Choose signing interactions from the connected adapter kind. EVM seed wallets sign in the app,
+so they do not require a MetaMask approval step. The extension procedure below applies to browser
+wallets. Connecting either kind does not add a transfer to a smoke test's acceptance scope.
 
 When full deposit or low-funds acceptance is in scope, open the local app and connect the EVM
 wallet through its chooser. Verify local fork identity. Restore the Midnight seed and independent

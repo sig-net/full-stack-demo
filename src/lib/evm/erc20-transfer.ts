@@ -45,7 +45,7 @@ export async function transferErc20(
     functionName: 'transfer',
     args: [destination, units],
   });
-  // Extension approval can finish after session replacement. Keep the resulting hash observable.
+  // Submission can finish after session replacement. Keep the resulting hash observable.
   input.submitted(hash);
   const receipt = await client.waitForTransactionReceipt({
     hash,
