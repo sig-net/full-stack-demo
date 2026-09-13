@@ -107,24 +107,20 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className='gradient-popover max-h-[90vh] max-w-md overflow-y-auto rounded-sm p-5 shadow-[0px_4px_9.3px_0px_rgba(41,86,70,0.35)] sm:p-10'>
+      <DialogContent>
         {step === 'select-token' && (
-          <div className='space-y-5'>
-            <DialogHeader className='space-y-0 p-0'>
-              <DialogTitle className='text-dark-neutral-400 text-xl font-semibold'>
-                Select an asset
-              </DialogTitle>
+          <div className='ds-stack-content'>
+            <DialogHeader>
+              <DialogTitle>Select an asset</DialogTitle>
             </DialogHeader>
             <TokenSelection onTokenSelect={handleTokenSelect} />
           </div>
         )}
 
         {step === 'show-address' && selectedToken && selectedNetwork && (
-          <div className='space-y-5'>
-            <DialogHeader className='space-y-0 p-0'>
-              <DialogTitle className='text-dark-neutral-400 text-xl font-semibold'>
-                Deposit Address
-              </DialogTitle>
+          <div className='ds-stack-content'>
+            <DialogHeader>
+              <DialogTitle>Deposit Address</DialogTitle>
             </DialogHeader>
             {selectedNetwork.chain === 'ethereum' && (
               <>

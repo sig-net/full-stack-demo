@@ -1,5 +1,6 @@
 'use client';
 
+import { Feedback } from '@/components/ui/feedback';
 import { useEffect, useState } from 'react';
 import { formatEther, formatUnits } from 'viem';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -51,13 +52,12 @@ export function EvmWalletButton() {
       disconnect={evm.disconnect}
     >
       {evm.wallet && (
-        <div
-          className='space-y-1 border-b p-2 text-sm'
-          aria-label='EVM balances'
-        >
+        <div className='ds-menu-section' aria-label='EVM balances'>
           {balances.isPending && <p role='status'>Loading balances…</p>}
           {balances.isError && (
-            <p role='alert'>Unable to read wallet balances.</p>
+            <Feedback tone='error' role='alert'>
+              Unable to read wallet balances.
+            </Feedback>
           )}
           {balances.isSuccess && (
             <>

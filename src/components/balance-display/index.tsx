@@ -52,16 +52,15 @@ export function BalanceDisplay({
   }));
 
   return (
-    <div className='flex w-full max-w-full flex-col gap-5'>
-      <div className='border-dark-neutral-300 flex w-full items-center justify-between border-t py-5'>
-        <h2 className='text-dark-neutral-200 self-start font-semibold uppercase'>
+    <div className='ds-content-gap flex w-full max-w-full flex-col'>
+      <div className='ds-section-header'>
+        <h2 className='ds-muted ds-label ds-section-title self-start'>
           Balances
         </h2>
         <Button
           onClick={() => setIsDepositDialogOpen(true)}
           variant='outline'
           size='lg'
-          className='gap-1.5 font-semibold'
           disabled={connection.connecting}
         >
           <Download className='h-4 w-4' />
@@ -70,7 +69,7 @@ export function BalanceDisplay({
       </div>
       <div
         className={cn(
-          'grid w-full max-w-full gap-4 sm:gap-6 md:grid-cols-2 md:gap-8 lg:gap-10',
+          'ds-content-gap sm:ds-section-gap md:ds-section-gap lg:ds-section-gap grid w-full max-w-full md:grid-cols-2',
           className,
         )}
       >

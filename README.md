@@ -148,6 +148,23 @@ If setup fails, inspect the private setup log and rerun after resolving the repo
 
 `.env.example` lists the local defaults and generated fields. Hosted operation remains configurable through validated EVM and Midnight endpoint overrides and compatible deployment values. Local funding requires development mode, Midnight `undeployed`, loopback services, and matching live Anvil metadata and marker. The operation-specific relayer gas top-up route retains its separate contract and derives its recipient from the vault operation.
 
+For development, `package.json` defines the available development, production, lint, typecheck,
+formatting and asset-preparation scripts. `tsconfig.json` maps `@/*` to `src/*` and enables strict
+typing with checked indexed access. React Compiler is enabled in `next.config.ts`. Production
+compilation is configured to skip TypeScript errors, so the separate typecheck is essential.
+
+Public chain configuration is defined in `src/lib/config/evm.ts` and
+`src/lib/config/midnight.ts`. `src/lib/config/runtime.ts` composes applied public configuration,
+and `src/lib/midnight/env.ts` captures deployment inputs for lazy address resolution. Explicit
+vault and Signet address overrides take precedence over package defaults and are required for
+the undeployed network. Server relayer-key validation belongs to `src/lib/config/relayer.ts`.
+
+The vault package `@sig-net/midnight-examples-erc20-vault-contract` supplies generated contract
+types, witnesses and deployment defaults. `@sig-net/midnight` supplies the Signet SDK and its
+deployment defaults. Vault provider assembly is in `src/lib/midnight/vault-providers.ts`,
+including the bounded prover-key cache and manifest verification against the hashes in
+`src/lib/midnight/zk-manifest-hashes.ts`. The asset preparation workflow is described above.
+
 Run the required UI checks:
 
 ```bash
@@ -185,3 +202,7 @@ its configuration and check for `local-vault: Chromium Network.enable post-data 
 its startup log. Keep one browser owner. MetaMask may require a manual unlock after restart.
 Local agent session records and disposable test credentials belong in the ignored `.local-vault/`
 directory, with credential files restricted to their owner. Keep credentials out of committed files.
+
+## Shared presentation
+
+The app uses a light semantic theme and Radix Nova components. The [design-system contract](docs/design-system.md) explains theme roles, shared variants, layout recipes, exact exceptions and verification. The [upgrade provenance](docs/design-system-upstream.json) records the current official source hashes and resolved UI dependencies. Install development dependencies before compiling, as the theme imports the project-pinned shadcn CSS.

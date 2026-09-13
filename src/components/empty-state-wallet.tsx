@@ -13,34 +13,30 @@ export function EmptyStateWallet() {
       description='Deposit ERC-20 tokens and your program can call into Ethereum liquidity, markets, and assets'
       action={
         <>
-          <div className='mb-12 flex flex-wrap justify-center gap-2'>
+          <div className='ds-control-gap ds-after-section flex flex-wrap justify-center'>
             <MidnightWalletButton />
             <EvmWalletButton />
             <VaultIdentityButton />
           </div>
 
-          <div className='grid grid-cols-2 gap-4 text-center sm:gap-8'>
-            <div className='flex flex-col items-center gap-3'>
-              <div className='flex h-12 w-12 items-center justify-center rounded-full bg-green-100 sm:h-16 sm:w-16'>
-                <ArrowDownCircle className='h-6 w-6 text-green-600 sm:h-8 sm:w-8' />
+          <div className='ds-content-gap sm:ds-section-gap grid grid-cols-2 text-center'>
+            <div className='ds-stack ds-control-gap items-center'>
+              <div className='ds-circle ds-surface-success flex h-12 w-12 items-center justify-center sm:h-16 sm:w-16'>
+                <ArrowDownCircle className='ds-success h-6 w-6 sm:h-8 sm:w-8' />
               </div>
               <div>
-                <p className='text-dark-neutral-900 text-base font-medium'>
-                  Deposit
-                </p>
-                <p className='text-dark-neutral-600 text-sm'>From Ethereum</p>
+                <p className='ds-text ds-prose ds-label'>Deposit</p>
+                <p className='ds-text ds-body'>From Ethereum</p>
               </div>
             </div>
 
-            <div className='flex flex-col items-center gap-3'>
-              <div className='flex h-12 w-12 items-center justify-center rounded-full bg-purple-100 sm:h-16 sm:w-16'>
-                <ArrowRightLeft className='h-6 w-6 text-purple-600 sm:h-8 sm:w-8' />
+            <div className='ds-stack ds-control-gap items-center'>
+              <div className='ds-circle ds-surface flex h-12 w-12 items-center justify-center sm:h-16 sm:w-16'>
+                <ArrowRightLeft className='ds-muted h-6 w-6 sm:h-8 sm:w-8' />
               </div>
               <div>
-                <p className='text-dark-neutral-900 text-base font-medium'>
-                  Manage
-                </p>
-                <p className='text-dark-neutral-600 text-sm'>Cross-Chain</p>
+                <p className='ds-text ds-prose ds-label'>Manage</p>
+                <p className='ds-text ds-body'>Cross-Chain</p>
               </div>
             </div>
           </div>

@@ -14,9 +14,9 @@ export function LoadingState({
   className,
 }: LoadingStateProps) {
   const sizeConfig = {
-    sm: { icon: 16, text: 'text-sm' },
-    md: { icon: 24, text: 'text-base' },
-    lg: { icon: 32, text: 'text-lg' },
+    sm: { icon: 16, text: 'ds-body' },
+    md: { icon: 24, text: 'ds-prose' },
+    lg: { icon: 32, text: 'ds-subheading' },
   };
 
   const config = sizeConfig[size];
@@ -24,15 +24,12 @@ export function LoadingState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-4 p-8',
+        'ds-stack ds-content-gap ds-inset-section items-center justify-center',
         className,
       )}
     >
-      <Loader2
-        className='text-muted-foreground animate-spin'
-        size={config.icon}
-      />
-      <p className={cn('text-muted-foreground', config.text)}>{message}</p>
+      <Loader2 className='ds-text ds-spinner' size={config.icon} />
+      <p className={cn('ds-text', config.text)}>{message}</p>
     </div>
   );
 }

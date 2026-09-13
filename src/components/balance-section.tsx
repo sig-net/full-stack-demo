@@ -1,5 +1,6 @@
 'use client';
 
+import { Feedback } from '@/components/ui/feedback';
 import { useState } from 'react';
 import { Download, Package } from 'lucide-react';
 
@@ -45,16 +46,15 @@ export function BalanceSection() {
 
   if (displayTokens.length === 0) {
     return (
-      <div className='flex w-full max-w-full flex-col gap-5'>
-        <div className='border-dark-neutral-300 flex w-full items-center justify-between border-t py-5'>
-          <h2 className='text-dark-neutral-200 self-start font-semibold uppercase'>
+      <div className='ds-content-gap flex w-full max-w-full flex-col'>
+        <div className='ds-section-header'>
+          <h2 className='ds-muted ds-label ds-section-title self-start'>
             Balances
           </h2>
           <Button
             onClick={() => setIsDepositDialogOpen(true)}
             variant='outline'
             size='lg'
-            className='gap-1.5 font-semibold'
             disabled={connection.connecting}
           >
             <Download className='h-4 w-4' />
@@ -100,7 +100,11 @@ export function BalanceSection() {
 
   return (
     <div>
-      {state.error && <p role='alert'>{state.error}</p>}
+      {state.error && (
+        <Feedback tone='error' role='alert'>
+          {state.error}
+        </Feedback>
+      )}
       <Button
         variant='outline'
         onClick={() => void state.refresh().catch(() => {})}

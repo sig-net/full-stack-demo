@@ -1,5 +1,6 @@
 'use client';
 
+import { Label } from '@/components/ui/label';
 import { useId, useState, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,7 +34,6 @@ export function SeedWalletDialog({
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent
-        className='rounded-xl'
         onCloseAutoFocus={event => {
           event.preventDefault();
           returnFocus.current?.focus();
@@ -48,7 +48,7 @@ export function SeedWalletDialog({
           </DialogDescription>
         </DialogHeader>
         <form
-          className='space-y-3'
+          className='ds-stack-control'
           onSubmit={event => {
             event.preventDefault();
             const value = seed.trim();
@@ -57,7 +57,7 @@ export function SeedWalletDialog({
             onInstall(value);
           }}
         >
-          <label htmlFor={id}>{chainName} seed</label>
+          <Label htmlFor={id}>{chainName} seed</Label>
           <Input
             id={id}
             type='password'
@@ -66,7 +66,7 @@ export function SeedWalletDialog({
             value={seed}
             onChange={event => setSeed(event.target.value)}
           />
-          <div className='flex flex-wrap justify-end gap-2'>
+          <div className='ds-control-gap flex flex-wrap justify-end'>
             <Button
               type='button'
               variant='outline'

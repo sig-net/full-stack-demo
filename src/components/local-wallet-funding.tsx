@@ -1,5 +1,6 @@
 'use client';
 
+import { Feedback } from '@/components/ui/feedback';
 import { Button } from './ui/button';
 import { useWalletReadiness } from '@/providers/wallet-readiness-context';
 import { useEvmLocalFunding } from '@/providers/evm-local-funding-context';
@@ -22,7 +23,7 @@ export function LocalWalletFunding() {
   const canFundEvm =
     needsEvm && evmBalances.isSuccess && !localEvm.fundingUnavailable;
   return (
-    <div className='mx-auto max-w-3xl space-y-2 rounded border bg-white/80 p-4 text-sm'>
+    <div className='ds-stack-control ds-round ds-frame ds-surface ds-inset-content ds-body mx-auto max-w-3xl'>
       <p role='status'>
         {midnight.wallet &&
           `Midnight: ${midnight.transactionUnavailable ?? (midnight.balances.isPending ? 'checking resources' : midnight.ready ? 'DUST ready' : midnight.balances.isError ? 'balance unavailable' : 'DUST below transaction threshold')}. `}
@@ -62,16 +63,24 @@ export function LocalWalletFunding() {
         </>
       )}
       {midnight.funding.error && (
-        <p role='alert'>Midnight: {midnight.funding.error.message}</p>
+        <Feedback tone='error' role='alert'>
+          Midnight: {midnight.funding.error.message}
+        </Feedback>
       )}
       {localEvm.funding.error && (
-        <p role='alert'>EVM: {localEvm.funding.error.message}</p>
+        <Feedback tone='error' role='alert'>
+          EVM: {localEvm.funding.error.message}
+        </Feedback>
       )}
       {localEvm.refreshError && (
-        <p role='alert'>EVM: {localEvm.refreshError}</p>
+        <Feedback tone='error' role='alert'>
+          EVM: {localEvm.refreshError}
+        </Feedback>
       )}
       {midnight.eligibility.isError && (
-        <p role='alert'>Funding eligibility could not be checked.</p>
+        <Feedback tone='error' role='alert'>
+          Funding eligibility could not be checked.
+        </Feedback>
       )}
       <Button
         variant='outline'

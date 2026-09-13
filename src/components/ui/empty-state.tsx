@@ -24,39 +24,38 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex items-center justify-center',
-        compact ? 'py-8' : 'min-h-[60vh]',
+        'ds-row justify-center',
+        compact ? 'ds-block-inset-section' : 'min-h-[60vh]',
         className,
       )}
     >
       <div
         className={cn(
-          'flex flex-col items-center justify-center text-center',
-          compact ? 'max-w-md p-8' : 'max-w-2xl p-6 sm:p-10 md:p-16',
+          'ds-stack items-center justify-center text-center',
+          compact
+            ? 'ds-inset-section max-w-md'
+            : 'ds-inset-section sm:ds-inset-section md:ds-inset-section max-w-2xl',
         )}
       >
         {Icon && (
           <div
             className={cn(
-              'mb-6 flex items-center justify-center rounded-full',
+              'ds-row ds-circle ds-after-content justify-center',
               compact ? 'h-16 w-16' : 'h-20 w-20',
-              'bg-dark-neutral-800',
+              'ds-surface',
               iconClassName,
             )}
           >
             <Icon
-              className={cn(
-                'text-dark-neutral-400',
-                compact ? 'h-8 w-8' : 'h-10 w-10',
-              )}
+              className={cn('ds-muted', compact ? 'h-8 w-8' : 'h-10 w-10')}
             />
           </div>
         )}
 
         <h2
           className={cn(
-            'text-dark-neutral-900 mb-3 font-semibold',
-            compact ? 'text-xl' : 'text-2xl sm:text-3xl',
+            'ds-text ds-label ds-after-content',
+            compact ? 'ds-heading' : 'ds-title sm:ds-display',
           )}
         >
           {title}
@@ -65,15 +64,19 @@ export function EmptyState({
         {description && (
           <p
             className={cn(
-              'text-dark-neutral-600 mb-8 text-center',
-              compact ? 'max-w-sm text-base' : 'max-w-md text-base sm:text-lg',
+              'ds-text ds-after-section text-center',
+              compact
+                ? 'ds-prose max-w-sm'
+                : 'ds-prose sm:ds-subheading max-w-md',
             )}
           >
             {description}
           </p>
         )}
 
-        {action && <div className={compact ? '' : 'mt-4'}>{action}</div>}
+        {action && (
+          <div className={compact ? '' : 'ds-before-content'}>{action}</div>
+        )}
       </div>
     </div>
   );

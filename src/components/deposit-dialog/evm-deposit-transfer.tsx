@@ -1,5 +1,7 @@
 'use client';
 
+import { Feedback } from '@/components/ui/feedback';
+import { Label } from '@/components/ui/label';
 import { useState } from 'react';
 import { formatUnits } from 'viem';
 import { toast } from 'sonner';
@@ -41,10 +43,10 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
     transfer?.binding === vault.binding &&
     transfer?.token === token.erc20Address;
   return (
-    <div className='space-y-3 border-t pt-4'>
-      <p className='font-semibold'>Transfer from your Sepolia wallet</p>
+    <div className='ds-stack-control ds-divider-top ds-top-inset-content'>
+      <p className='ds-label'>Transfer from your Sepolia wallet</p>
       <EvmWalletButton />
-      {evm.wallet && <p className='text-sm break-all'>{evm.wallet.account}</p>}
+      {evm.wallet && <p className='ds-body break-all'>{evm.wallet.account}</p>}
       {tokenBalance && (
         <p>
           Available: {formatUnits(tokenBalance.units, tokenBalance.decimals)}{' '}
@@ -52,13 +54,13 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
         </p>
       )}
       {balances.isError && (
-        <p role='alert'>
+        <Feedback tone='error' role='alert'>
           Wallet balances unavailable. Open the EVM wallet menu to retry.
-        </p>
+        </Feedback>
       )}
-      <label className='block' htmlFor={`deposit-amount-${token.symbol}`}>
+      <Label htmlFor={`deposit-amount-${token.symbol}`}>
         Amount ({token.symbol})
-      </label>
+      </Label>
       <Input
         id={`deposit-amount-${token.symbol}`}
         inputMode='decimal'
@@ -88,7 +90,9 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
         {pending ? 'Transfer pending…' : 'Send tokens to deposit address'}
       </Button>
       {amount.trim() && eligibility.error && (
-        <p role='alert'>{eligibility.error}</p>
+        <Feedback tone='error' role='alert'>
+          {eligibility.error}
+        </Feedback>
       )}
       {!vault.binding && (
         <p>
@@ -97,13 +101,13 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
         </p>
       )}
       {transfer && (
-        <div className='space-y-2 text-sm'>
+        <div className='ds-stack-control ds-body'>
           <p>Transfer: {transfer.status}</p>
           <p className='break-all'>Destination: {transfer.destination}</p>
           {transfer.hash &&
             (explorer ? (
               <a
-                className='block break-all underline'
+                className='block break-all'
                 href={`${explorer}/tx/${transfer.hash}`}
                 target='_blank'
                 rel='noopener noreferrer'
@@ -113,7 +117,11 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
             ) : (
               <p className='break-all'>{transfer.hash}</p>
             ))}
-          {transfer.error && <p role='alert'>{transfer.error}</p>}
+          {transfer.error && (
+            <Feedback tone='error' role='alert'>
+              {transfer.error}
+            </Feedback>
+          )}
           {transfer.status === 'confirmed' &&
             (currentTransfer ? (
               <Button

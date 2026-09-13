@@ -14,7 +14,6 @@ import {
 import { TokenConfig, NetworkData } from '@/lib/constants/token-metadata';
 import { formatAddress } from '@/lib/address-utils';
 import { useCopyToClipboard } from '@/hooks';
-import { cn } from '@/lib/utils';
 
 interface DepositAddressProps {
   token: TokenConfig;
@@ -48,17 +47,17 @@ export function DepositAddress({
       : { icon: <NetworkIcon name={network.chain} /> };
 
   return (
-    <div className='gradient-popover w-full space-y-5'>
-      <p className='text-dark-neutral-400 font-semibold capitalize'>
+    <div className='ds-surface ds-stack-content w-full'>
+      <p className='ds-muted ds-label capitalize'>
         {network.chainName} Address
       </p>
 
-      <div className='border-dark-neutral-400/80 gradient-bg-main flex flex-col justify-center gap-5 rounded-xs border p-5'>
+      <div className='ds-page ds-stack ds-content-gap ds-round ds-frame ds-inset-content justify-center'>
         <QRCode
           value={depositAddress}
           size={200}
           {...qrIconProps}
-          className='mx-auto border-none bg-white sm:hidden'
+          className='ds-surface mx-auto sm:hidden'
           errorCorrectionLevel='M'
           margin={12}
         />
@@ -66,20 +65,20 @@ export function DepositAddress({
           value={depositAddress}
           size={242}
           {...qrIconProps}
-          className='mx-auto hidden border-none bg-white sm:block'
+          className='ds-surface mx-auto hidden sm:block'
           errorCorrectionLevel='M'
           margin={16}
         />
 
-        <div className='bg-pastels-swiss-coffee-50 mx-auto flex w-fit items-center gap-3 px-2 py-1'>
-          <span className='text-dark-neutral-400 font-medium'>
+        <div className='ds-surface-muted ds-control-gap ds-inline-inset-control ds-block-inset-control mx-auto flex w-fit items-center'>
+          <span className='ds-muted ds-label'>
             {formatAddress(depositAddress)}
           </span>
           <Button
             variant='ghost'
             size='icon'
             onClick={handleCopy}
-            className={cn('text-dark-neutral-400 hover:text-dark-neutral-500')}
+            className='w-full'
           >
             {isCopied ? (
               <Check className='h-5 w-5' />
@@ -90,21 +89,26 @@ export function DepositAddress({
         </div>
       </div>
 
-      <div className='flex items-center justify-center gap-2'>
-        <p className='text-dark-neutral-400 text-center text-sm leading-relaxed'>
+      <div className='ds-row ds-control-gap justify-center'>
+        <p className='ds-muted ds-body text-center'>
           Use this address to deposit {token.name}
         </p>
         <Popover>
           <PopoverTrigger asChild>
-            <button type='button' className='cursor-help'>
-              <Info className='text-dark-neutral-400 hover:text-dark-neutral-300 h-4 w-4' />
-            </button>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon-sm'
+              aria-label='About deposit address'
+            >
+              <Info className='ds-muted h-4 w-4' />
+            </Button>
           </PopoverTrigger>
-          <PopoverContent side='top' className='w-72'>
-            <p className='mb-2 text-xs font-medium text-stone-800'>
+          <PopoverContent side='top'>
+            <p className='ds-caption ds-label ds-text ds-after-control'>
               How to get {token.name} on testnet
             </p>
-            <p className='text-xs leading-relaxed text-stone-600'>
+            <p className='ds-caption ds-muted'>
               {token.acquireHint ??
                 `Get testnet ${token.symbol} from a faucet.`}
             </p>
@@ -113,22 +117,21 @@ export function DepositAddress({
                 href={token.faucetUrl}
                 target='_blank'
                 rel='noopener noreferrer'
-                className='mt-1 inline-block text-xs text-blue-600 underline hover:text-blue-700'
+                className='ds-caption ds-link ds-before-control inline-block'
               >
                 Get {token.symbol} here
               </a>
             )}
-            <div className='mt-2 rounded bg-stone-100 px-2 py-1.5'>
-              <p className='text-xs text-stone-500'>Contract Address</p>
-              <div className='flex items-center gap-1'>
-                <code className='text-xs break-all text-stone-700'>
+            <div className='ds-round ds-surface-muted ds-before-control ds-inline-inset-control ds-block-inset-control'>
+              <p className='ds-caption ds-muted'>Contract Address</p>
+              <div className='ds-row ds-tight'>
+                <code className='ds-caption ds-text break-all'>
                   {token.erc20Address}
                 </code>
                 <Button
                   variant='ghost'
                   size='icon'
                   onClick={() => copyToClipboard(token.erc20Address)}
-                  className='h-5 w-5 flex-shrink-0 text-stone-500 hover:text-stone-700'
                 >
                   <Copy className='h-3 w-3' />
                 </Button>
@@ -144,13 +147,11 @@ export function DepositAddress({
             onClick={onContinue}
             variant='secondary'
             disabled={isSubmitting || !canContinue}
-            className={cn(
-              isSubmitting ? 'cursor-not-allowed' : 'cursor-pointer',
-            )}
+            className='w-full'
           >
             {isSubmitting ? (
               <>
-                <Loader2 className='h-4 w-4 animate-spin' />
+                <Loader2 className='ds-spinner h-4 w-4' />
                 Notifying...
               </>
             ) : (

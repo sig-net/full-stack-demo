@@ -1,5 +1,7 @@
 'use client';
 
+import { Feedback } from '@/components/ui/feedback';
+import { Label } from '@/components/ui/label';
 import { useRef, useState } from 'react';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { bytesToHex } from 'viem';
@@ -33,7 +35,11 @@ export function VaultIdentityButton({
     reset();
   };
   const control = (
-    <Button ref={trigger} variant='outline' onClick={() => changeOpen(true)}>
+    <Button
+      ref={trigger}
+      variant={menuItem ? 'menu' : 'outline'}
+      onClick={() => changeOpen(true)}
+    >
       {vault.identitySecret ? 'Vault identity' : 'Set vault identity'}
     </Button>
   );
@@ -62,7 +68,7 @@ export function VaultIdentityButton({
             </DialogDescription>
           </DialogHeader>
           <form
-            className='flex flex-col gap-3'
+            className='ds-stack-control'
             onSubmit={event => {
               event.preventDefault();
               try {
@@ -73,7 +79,7 @@ export function VaultIdentityButton({
               }
             }}
           >
-            <label htmlFor='vault-secret'>Vault secret</label>
+            <Label htmlFor='vault-secret'>Vault secret</Label>
             <Input
               id='vault-secret'
               type='password'
@@ -87,8 +93,12 @@ export function VaultIdentityButton({
               }}
               placeholder='64 hexadecimal characters'
             />
-            {validation && <p role='alert'>{validation}</p>}
-            <div className='flex gap-2'>
+            {validation && (
+              <Feedback tone='error' role='alert'>
+                {validation}
+              </Feedback>
+            )}
+            <div className='ds-control-gap flex'>
               <Button
                 type='button'
                 variant='outline'
@@ -114,9 +124,9 @@ export function VaultIdentityButton({
               </Button>
             </div>
             {error && (
-              <p role='alert'>
+              <Feedback tone='error' role='alert'>
                 Copy failed. Allow clipboard access and try again.
-              </p>
+              </Feedback>
             )}
             <Button type='submit' disabled={!input.trim()}>
               Use vault secret

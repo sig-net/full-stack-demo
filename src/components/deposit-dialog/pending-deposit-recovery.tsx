@@ -1,5 +1,6 @@
 'use client';
 
+import { Label } from '@/components/ui/label';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,10 +17,10 @@ export function PendingDepositRecovery({ token }: { token: TokenConfig }) {
   const vault = useVault();
   const progress = useMidnightProgress();
   return (
-    <div className='space-y-2 border-t pt-3'>
-      <label htmlFor={`recover-deposit-${token.symbol}`}>
+    <div className='ds-stack-control ds-divider-top ds-top-inset-content'>
+      <Label htmlFor={`recover-deposit-${token.symbol}`}>
         Pending deposit request ID
-      </label>
+      </Label>
       <Input
         id={`recover-deposit-${token.symbol}`}
         value={recoveryRequestId}
@@ -41,7 +42,7 @@ export function PendingDepositRecovery({ token }: { token: TokenConfig }) {
       >
         Recover pending deposit
       </Button>
-      <p className='text-sm'>
+      <p className='ds-body'>
         Use the request ID from Activity to finish a deposit after its EVM
         sweep. The pending request supplies the amount.
       </p>

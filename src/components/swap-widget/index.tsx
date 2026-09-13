@@ -1,5 +1,6 @@
 'use client';
 
+import { Card, CardContent } from '@/components/ui/card';
 import { useEffect, useState } from 'react';
 import { ArrowDown, Settings2 } from 'lucide-react';
 import { formatUnits } from 'viem';
@@ -7,7 +8,6 @@ import { parseTokenAmount } from '@/lib/utils/token-amount';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-import { cn } from '@/lib/utils';
 import { TokenAmountDisplay } from '@/components/ui/token-amount-display';
 import { MIDNIGHT_TOKENS } from '@/lib/constants/token-metadata';
 import { useVault } from '@/providers/vault-context';
@@ -243,86 +243,82 @@ export function SwapWidget({ className }: SwapWidgetProps) {
                 : 'Swap';
 
   return (
-    <div
-      className={cn(
-        'border-dark-neutral-50 gradient-bg-swap relative w-full max-w-full shrink-0 space-y-6 self-start border p-4 sm:p-6 lg:max-w-sm lg:p-8',
-        className,
-      )}
-    >
-      <div className='flex items-center justify-between'>
-        <h2 className='text-tundora-400 text-xl font-semibold'>Swap</h2>
-        <Button
-          variant='ghost'
-          size='icon'
-          className='h-8 w-8 p-0'
-          onClick={() => setSettingsOpen(true)}
-          aria-label='Swap settings'
-        >
-          <Settings2 className='text-dark-neutral-300 h-6 w-6' />
-        </Button>
-      </div>
-
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Swap settings</DialogTitle>
-            <DialogDescription>
-              Max slippage sets the minimum you receive for your spend. The swap
-              reverts on-chain if the output would fall more than this below the
-              quote.
-            </DialogDescription>
-          </DialogHeader>
-          <div className='flex flex-wrap gap-2'>
-            {SLIPPAGE_PRESETS.map(bps => (
-              <Button
-                key={String(bps)}
-                variant={slippageBps === bps ? 'secondary' : 'outline'}
-                size='sm'
-                onClick={() => setSlippageBps(bps)}
-              >
-                {formatUnits(bps, 2)}%
-              </Button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <div className='flex flex-col gap-4'>
-        <TokenAmountDisplay
-          value={fromAmount}
-          onChange={setFromAmount}
-          tokens={enabled ? fromTokens : []}
-          selectedToken={fromSel}
-          onTokenSelect={t => setFromToken(t as TokenWithBalance)}
-          placeholder='0'
-          disabled={!enabled || progress.active}
-        />
-
-        <div className='flex justify-center'>
-          <ArrowDown className='text-dark-neutral-300 h-5 w-5' />
+    <Card className={className}>
+      <CardContent>
+        <div className='ds-row justify-between'>
+          <h2 className='ds-text ds-heading ds-label'>Swap</h2>
+          <Button
+            variant='ghost'
+            size='icon'
+            onClick={() => setSettingsOpen(true)}
+            aria-label='Swap settings'
+          >
+            <Settings2 className='ds-muted h-6 w-6' />
+          </Button>
         </div>
 
-        <TokenAmountDisplay
-          value={toAmount}
-          onChange={() => {}}
-          tokens={enabled ? toTokens : []}
-          selectedToken={toSel}
-          onTokenSelect={t => setToToken(t as TokenWithBalance)}
-          placeholder='0'
-          disabled={!enabled}
-          readOnly
-        />
-      </div>
+        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Swap settings</DialogTitle>
+              <DialogDescription>
+                Max slippage sets the minimum you receive for your spend. The
+                swap reverts on-chain if the output would fall more than this
+                below the quote.
+              </DialogDescription>
+            </DialogHeader>
+            <div className='ds-control-gap flex flex-wrap'>
+              {SLIPPAGE_PRESETS.map(bps => (
+                <Button
+                  key={String(bps)}
+                  variant={slippageBps === bps ? 'secondary' : 'outline'}
+                  size='sm'
+                  onClick={() => setSlippageBps(bps)}
+                >
+                  {formatUnits(bps, 2)}%
+                </Button>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
 
-      <Button
-        onClick={handleSwap}
-        disabled={!canSwap}
-        variant='secondary'
-        size='lg'
-        className='w-full'
-      >
-        {buttonLabel}
-      </Button>
-    </div>
+        <div className='ds-stack-content'>
+          <TokenAmountDisplay
+            value={fromAmount}
+            onChange={setFromAmount}
+            tokens={enabled ? fromTokens : []}
+            selectedToken={fromSel}
+            onTokenSelect={t => setFromToken(t as TokenWithBalance)}
+            placeholder='0'
+            disabled={!enabled || progress.active}
+          />
+
+          <div className='flex justify-center'>
+            <ArrowDown className='ds-muted h-5 w-5' />
+          </div>
+
+          <TokenAmountDisplay
+            value={toAmount}
+            onChange={() => {}}
+            tokens={enabled ? toTokens : []}
+            selectedToken={toSel}
+            onTokenSelect={t => setToToken(t as TokenWithBalance)}
+            placeholder='0'
+            disabled={!enabled}
+            readOnly
+          />
+        </div>
+
+        <Button
+          onClick={handleSwap}
+          disabled={!canSwap}
+          variant='secondary'
+          size='lg'
+          className='w-full'
+        >
+          {buttonLabel}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

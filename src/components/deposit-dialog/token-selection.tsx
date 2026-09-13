@@ -34,13 +34,13 @@ export function TokenSelection({ onTokenSelect }: TokenSelectionProps) {
   };
 
   return (
-    <div className='space-y-3'>
-      <p className='text-wf-base-700 text-sm font-medium tracking-wider uppercase'>
+    <div className='ds-stack-control'>
+      <p className='ds-muted ds-body ds-label ds-section-title'>
         Select Network
       </p>
 
       {/* Network Accordion List */}
-      <div className='max-h-96 space-y-3 overflow-y-auto'>
+      <div className='ds-stack-control max-h-96 overflow-y-auto'>
         {networks.map(network => {
           const networkId = network.chain;
           const isExpanded = expandedNetworkId === networkId;

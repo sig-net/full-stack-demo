@@ -1,5 +1,7 @@
 'use client';
 
+import { Feedback } from '@/components/ui/feedback';
+import { Button } from '@/components/ui/button';
 import { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
@@ -32,7 +34,14 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
-      return this.props.children;
+      return (
+        <Feedback tone='error' role='alert'>
+          <p>The application could not render this view.</p>
+          <Button variant='outline' onClick={() => window.location.reload()}>
+            Reload page
+          </Button>
+        </Feedback>
+      );
     }
 
     return this.props.children;

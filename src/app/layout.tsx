@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
-import { Toaster } from 'sonner';
+import { Toaster } from '@/components/ui/sonner';
 
 import './globals.css';
 import { Providers } from '@/providers/providers';
@@ -33,7 +33,7 @@ export default function RootLayout({
   return (
     <html lang='en'>
       <body
-        className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}
+        className={` ${inter.variable} ${jetbrainsMono.variable}antialiased `}
       >
         <Providers>
           <ErrorBoundary>{children}</ErrorBoundary>

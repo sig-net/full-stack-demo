@@ -101,7 +101,7 @@ export function WithdrawDialog({
 }: WithdrawDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='flex max-h-[90vh] max-w-md flex-col overflow-hidden p-6 sm:p-8'>
+      <DialogContent>
         {open && (
           <WithdrawDialogContent
             availableTokens={availableTokens}

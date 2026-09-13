@@ -1,3 +1,5 @@
+import { Badge } from '@/components/ui/badge';
+import { StatusDot } from '@/components/ui/feedback';
 import { useState } from 'react';
 import { ArrowRight, ExternalLink, WalletIcon } from 'lucide-react';
 
@@ -69,34 +71,33 @@ function TokenDisplay({ token }: TokenDisplayProps) {
 
   if (token.symbol === 'WALLET') {
     return (
-      <div className='flex min-w-0 items-center gap-2 sm:gap-4'>
-        <WalletIcon className='text-tundora-50 h-4 w-4 flex-shrink-0 sm:h-5 sm:w-5' />
-        <div className='flex min-w-0 flex-col gap-1'>
-          <div className='text-xs font-medium text-stone-600 sm:text-sm'>
+      <div className='ds-control-gap sm:ds-content-gap flex min-w-0 items-center'>
+        <WalletIcon className='ds-muted h-4 w-4 flex-shrink-0 sm:h-5 sm:w-5' />
+        <div className='ds-tight flex min-w-0 flex-col'>
+          <div className='ds-caption ds-label ds-muted sm:ds-body'>
             <TruncatedText
               text={token.amount}
               prefixLength={4}
               suffixLength={3}
               copyable={true}
-              className='transition-colors hover:text-blue-600'
             />
           </div>
-          <div className='text-xs font-semibold text-stone-400'>Wallet</div>
+          <div className='ds-caption ds-label ds-muted'>Wallet</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className='flex min-w-0 items-center gap-2 sm:gap-4'>
+    <div className='ds-control-gap sm:ds-content-gap flex min-w-0 items-center'>
       <div className='flex-shrink-0'>
         <CryptoIcon chain={token.chain} token={token.symbol} />
       </div>
-      <div className='flex min-w-0 flex-col gap-1'>
-        <div className='truncate text-xs font-medium text-stone-600 sm:text-sm'>
+      <div className='ds-tight flex min-w-0 flex-col'>
+        <div className='ds-caption ds-label ds-muted sm:ds-body truncate'>
           {token.amount}
         </div>
-        <div className='truncate text-xs font-semibold text-stone-400'>
+        <div className='ds-caption ds-label ds-muted truncate'>
           {token.usdValue}
         </div>
       </div>
@@ -108,28 +109,27 @@ function DetailsCell({ transaction }: DetailsCellProps) {
   const showsTokenDestination = transaction.type !== 'Withdraw';
 
   return (
-    <div className='flex max-w-full min-w-0 items-center gap-2 sm:gap-4'>
+    <div className='ds-control-gap sm:ds-content-gap flex max-w-full min-w-0 items-center'>
       <div className='flex-shrink-0'>
         <TokenDisplay token={transaction.fromToken} />
       </div>
 
-      <ArrowRight className='text-tundora-50 h-4 w-4 shrink-0 sm:h-5 sm:w-5' />
+      <ArrowRight className='ds-muted h-4 w-4 shrink-0 sm:h-5 sm:w-5' />
 
       {showsTokenDestination ? (
         <div className='flex-shrink-0'>
           <TokenDisplay token={transaction.toToken} />
         </div>
       ) : (
-        <div className='flex min-w-0 items-center gap-1 sm:gap-2'>
-          <WalletIcon className='text-tundora-50 h-4 w-4 shrink-0 sm:h-5 sm:w-5' />
-          <div className='min-w-0 text-xs font-medium text-stone-600 sm:text-sm'>
+        <div className='ds-tight sm:ds-control-gap flex min-w-0 items-center'>
+          <WalletIcon className='ds-muted h-4 w-4 shrink-0 sm:h-5 sm:w-5' />
+          <div className='ds-caption ds-label ds-muted sm:ds-body min-w-0'>
             {transaction.address ? (
               <TruncatedText
                 text={transaction.address}
                 prefixLength={4}
                 suffixLength={3}
                 copyable={true}
-                className='transition-colors hover:text-blue-600'
               />
             ) : (
               'Unknown'
@@ -151,36 +151,19 @@ function StatusBadge({ status }: StatusBadgeProps) {
           ? 'Refunded'
           : 'Pending';
 
-  const variants = {
-    pending: 'bg-colors-pastels-polar-100 border-colors-dark-neutral-50',
-    completed: 'bg-colors-pastels-polar-100 border-colors-dark-neutral-50',
-    failed: 'bg-red-50 border-red-200',
-    refunded: 'bg-amber-50 border-amber-200',
-  } as const;
-
+  const tone =
+    status === 'completed'
+      ? 'success'
+      : status === 'failed'
+        ? 'error'
+        : status === 'refunded'
+          ? 'warning'
+          : 'pending';
   return (
-    <div
-      className={cn(
-        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5',
-        variants[status],
-      )}
-    >
-      <div
-        className={cn(
-          'h-2 w-2 rounded-full',
-          status === 'refunded'
-            ? 'bg-amber-500'
-            : status === 'failed'
-              ? 'bg-red-500'
-              : status === 'pending'
-                ? 'animate-pulse bg-blue-500'
-                : 'bg-success-500',
-        )}
-      />
-      <span className='text-colors-dark-neutral-500 text-xs font-medium'>
-        {displayLabel}
-      </span>
-    </div>
+    <Badge variant={tone}>
+      <StatusDot tone={tone} />
+      {displayLabel}
+    </Badge>
   );
 }
 
@@ -209,8 +192,8 @@ export function ActivityListTable({ className }: ActivityListTableProps) {
 
   return (
     <div className={cn('w-full', className)}>
-      <div className='mb-6'>
-        <h2 className='text-dark-neutral-200 self-start font-semibold uppercase'>
+      <div className='ds-after-content'>
+        <h2 className='ds-muted ds-label ds-section-title self-start'>
           Activity
         </h2>
       </div>
@@ -234,11 +217,10 @@ export function ActivityListTable({ className }: ActivityListTableProps) {
             displayTransactions.map(transaction => (
               <TableRow
                 key={transaction.id}
-                className='cursor-pointer transition-colors hover:bg-gray-50'
                 onClick={() => handleRowClick(transaction)}
               >
                 <TableCell>
-                  <div className='text-tundora-50 text-xs font-medium sm:text-sm'>
+                  <div className='ds-muted ds-caption ds-label sm:ds-body'>
                     {transaction.type}
                   </div>
                 </TableCell>
@@ -246,7 +228,7 @@ export function ActivityListTable({ className }: ActivityListTableProps) {
                   <DetailsCell transaction={transaction} />
                 </TableCell>
                 <TableCell className='hidden sm:table-cell'>
-                  <div className='text-xs font-medium text-stone-700 sm:text-sm'>
+                  <div className='ds-caption ds-label ds-text sm:ds-body'>
                     {transaction.timestamp}
                   </div>
                 </TableCell>
@@ -259,10 +241,10 @@ export function ActivityListTable({ className }: ActivityListTableProps) {
                       href={transaction.explorerUrl}
                       target='_blank'
                       rel='noopener noreferrer'
-                      className='inline-block h-5 w-5 transition-opacity hover:opacity-80'
+                      className='inline-block h-5 w-5'
                       onClick={e => e.stopPropagation()}
                     >
-                      <ExternalLink className='text-tundora-50 h-5 w-5' />
+                      <ExternalLink className='ds-muted h-5 w-5' />
                     </a>
                   ) : null}
                 </TableCell>
@@ -270,7 +252,10 @@ export function ActivityListTable({ className }: ActivityListTableProps) {
             ))
           ) : (
             <TableRow>
-              <TableCell colSpan={5} className='py-8 text-center text-gray-500'>
+              <TableCell
+                colSpan={5}
+                className='ds-muted ds-block-inset-section text-center'
+              >
                 {vault.binding !== null
                   ? 'No transactions found. Deposit, withdraw, or swap to see activity.'
                   : 'Connect your wallet to view transaction activity.'}

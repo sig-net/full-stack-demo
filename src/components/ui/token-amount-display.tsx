@@ -1,6 +1,8 @@
 'use client';
 
 import { ChevronDown } from 'lucide-react';
+import { Button } from './button';
+import { Input } from './input';
 
 import { CryptoIcon } from '@/components/balance-display/crypto-icon';
 import {
@@ -12,7 +14,7 @@ import {
 import type { Token } from '@/lib/types/token.types';
 
 interface TokenAmountToken extends Token {
-  balance: string; // Required balance as string for this display component
+  balance: string;
 }
 
 interface TokenAmountDisplayProps {
@@ -55,58 +57,63 @@ export function TokenAmountDisplay({
   };
   return (
     <div
-      className={`bg-pastels-swiss-coffee-200 border-dark-neutral-400/80 flex max-w-full flex-col gap-3 rounded-xs border p-4 sm:p-5 ${className}`}
+      className={`ds-surface-muted ds-control-gap ds-round ds-frame ds-inset-content sm:ds-inset-content flex max-w-full flex-col ${className} `}
     >
-      <div className='flex w-full min-w-0 items-center justify-between gap-2'>
-        <div className='flex min-w-0 flex-1 items-center gap-2'>
-          <input
+      <div className='ds-control-gap flex w-full min-w-0 items-center justify-between'>
+        <div className='ds-control-gap flex min-w-0 flex-1 items-center'>
+          <Input
             type='text'
             inputMode='decimal'
             enterKeyHint='done'
             value={value}
             onChange={e => !disabled && !readOnly && onChange(e.target.value)}
             readOnly={readOnly}
+            disabled={disabled}
+            aria-label='Token amount'
             placeholder={placeholder}
-            className='text-dark-neutral-500 w-full min-w-0 border-none bg-transparent text-lg outline-none sm:text-xl'
+            className='w-full min-w-0'
           />
           {selectedToken && !disabled && !readOnly && (
-            <button
+            <Button
               type='button'
+              variant='link'
+              size='xs'
               onClick={handleMaxClick}
-              className='text-dark-neutral-300 hover:text-dark-neutral-400 shrink-0 text-xs font-medium underline decoration-dotted underline-offset-2'
+              className='shrink-0'
             >
               max
-            </button>
+            </Button>
           )}
         </div>
 
         <DropdownMenu open={disabled ? false : undefined}>
           <DropdownMenuTrigger asChild disabled={disabled}>
-            <button className='bg-pastels-pampas-500 border-dark-neutral-50 text-dark-neutral-400 flex w-24 shrink-0 items-center justify-between gap-2 rounded-xs border px-2 py-1 font-medium outline-none sm:w-30'>
+            <Button
+              type='button'
+              variant='outline'
+              aria-label='Select token'
+              className='shrink-0'
+            >
               {selectedToken ? (
-                <div className='flex items-center gap-2'>
+                <div className='ds-row ds-control-gap'>
                   <CryptoIcon
                     chain={selectedToken.chain}
                     token={selectedToken.symbol}
                     className='size-4'
                   />
-                  <span className='text-sm'>{selectedToken.symbol}</span>
+                  <span className='ds-body'>{selectedToken.symbol}</span>
                 </div>
               ) : (
-                <span className='text-sm'>Select</span>
+                <span className='ds-body'>Select</span>
               )}
-              <ChevronDown className='text-dark-neutral-400 size-4' />
-            </button>
+              <ChevronDown className='ds-muted size-4' />
+            </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align='end'
-            className='w-30 min-w-0 space-y-1 rounded-xs'
-          >
+          <DropdownMenuContent align='end' className='min-w-0'>
             {tokens.map((token, index) => (
               <DropdownMenuItem
                 key={`${token.chain}-${token.erc20Address}-${index}`}
                 onClick={() => onTokenSelect(token)}
-                className='text-dark-neutral-400 flex cursor-pointer items-center gap-3 rounded-xs px-1 py-0 font-medium'
               >
                 <CryptoIcon
                   chain={token.chain}
@@ -121,18 +128,16 @@ export function TokenAmountDisplay({
       </div>
 
       {(usdValue || selectedToken) && (
-        <div className='flex flex-col gap-1'>
+        <div className='ds-stack ds-tight'>
           {usdValue && (
-            <div className='flex items-center'>
-              <span className='text-dark-neutral-200 text-xs font-medium'>
-                {usdValue}
-              </span>
+            <div className='ds-row'>
+              <span className='ds-muted ds-caption ds-label'>{usdValue}</span>
             </div>
           )}
 
           {selectedToken && (
-            <div className='flex items-center'>
-              <span className='text-dark-neutral-300 text-xs font-medium'>
+            <div className='ds-row'>
+              <span className='ds-muted ds-caption ds-label'>
                 Available:{' '}
                 {(() => {
                   const b = selectedToken.balance;

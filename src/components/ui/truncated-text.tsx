@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from './button';
 import { Check, Copy } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -42,26 +43,27 @@ export function TruncatedText({
   const truncatedText = getTruncatedText();
   const isTextTruncated = truncatedText !== text;
 
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center',
-        copyable && 'cursor-pointer transition-colors hover:text-blue-600',
-        className,
-      )}
-      onClick={copyable ? () => copyToClipboard(text) : undefined}
-      title={showTooltip && isTextTruncated ? text : undefined}
+  const content = (
+    <>
+      <span className='ds-value ds-body'>{truncatedText}</span>
+      {copyable && (isCopied ? <Check /> : <Copy />)}
+    </>
+  );
+  const title = showTooltip && isTextTruncated ? text : undefined;
+  return copyable ? (
+    <Button
+      variant='ghost'
+      size='sm'
+      className={className}
+      onClick={() => void copyToClipboard(text)}
+      title={title}
+      aria-label={`Copy ${truncatedText}`}
     >
-      <span className='font-mono text-sm'>{truncatedText}</span>
-      {copyable && (
-        <span className='ml-1 text-gray-400 hover:text-gray-600'>
-          {isCopied ? (
-            <Check className='h-3 w-3' />
-          ) : (
-            <Copy className='h-3 w-3' />
-          )}
-        </span>
-      )}
+      {content}
+    </Button>
+  ) : (
+    <span className={cn('inline-flex items-center', className)} title={title}>
+      {content}
     </span>
   );
 }

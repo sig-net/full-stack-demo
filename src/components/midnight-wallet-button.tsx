@@ -1,5 +1,6 @@
 'use client';
 
+import { Feedback } from '@/components/ui/feedback';
 import { useState } from 'react';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { WalletMenu } from './wallet-menu';
@@ -39,7 +40,7 @@ export function MidnightWalletButton() {
       installSeed={seed => connect(() => connection.installSeedWallet(seed))}
       disconnect={vault.disconnect}
     >
-      <div className='space-y-2 border-b p-2 text-sm'>
+      <div className='ds-menu-section'>
         <VaultIdentityButton menuItem />
         {connection.wallet && vault.status === 'missing-identity' && (
           <p role='status'>Set a vault identity to load the vault.</p>
@@ -47,7 +48,9 @@ export function MidnightWalletButton() {
         {vault.status === 'loading' && <p role='status'>Loading vault…</p>}
         {vault.error && (
           <>
-            <p role='alert'>{vault.error}</p>
+            <Feedback tone='error' role='alert'>
+              {vault.error}
+            </Feedback>
             <DropdownMenuItem
               onSelect={event => {
                 event.preventDefault();

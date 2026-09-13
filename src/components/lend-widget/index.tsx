@@ -1,4 +1,7 @@
 'use client';
+import { Card, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 
 import { useEffect, useState } from 'react';
 import { formatUnits, parseUnits } from 'viem';
@@ -7,7 +10,6 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { useRuntimeConfig } from '@/providers/runtime-config-context';
-import { cn } from '@/lib/utils';
 import { useVault } from '@/providers/vault-context';
 import { useVaultBalances } from '@/providers/vault-balances-context';
 import { useVaultOperations } from '@/providers/vault-operations-context';
@@ -173,89 +175,88 @@ export function LendWidget({ className }: LendWidgetProps) {
       : null;
 
   return (
-    <div
-      className={cn(
-        'border-border bg-card flex flex-col gap-4 rounded-2xl border p-4',
-        className,
-      )}
-    >
-      <div className='flex items-baseline justify-between'>
-        <span className='text-sm font-semibold'>Aave lending</span>
-        <span className='text-muted-foreground text-xs'>
-          {apy === null ? 'APY unavailable' : `${(apy * 100).toFixed(2)}% APY`}
-        </span>
-      </div>
-
-      {earnings !== null && (
-        <div className='flex items-baseline justify-between text-xs'>
-          <span className='text-muted-foreground'>Earned</span>
-          <span
-            className={earnings >= 0 ? 'text-emerald-600' : 'text-destructive'}
-          >
-            {earnings >= 0 ? '+' : ''}
-            {earnings.toFixed(6)} USDC.a
+    <Card className={className}>
+      <CardContent>
+        <div className='flex items-baseline justify-between'>
+          <span className='ds-body ds-label'>Aave lending</span>
+          <span className='ds-text ds-caption'>
+            {apy === null
+              ? 'APY unavailable'
+              : `${(apy * 100).toFixed(2)}% APY`}
           </span>
         </div>
-      )}
 
-      <div className='flex flex-col gap-2'>
-        <label className='text-muted-foreground flex justify-between text-xs'>
-          <span>Supply USDC → stataUSDC</span>
-          <span>Available: {supplyLabel}</span>
-        </label>
-        <div className='flex gap-2'>
-          <input
-            className='border-border bg-background flex-1 rounded-lg border px-3 py-2 text-sm'
-            inputMode='decimal'
-            placeholder='0.0'
-            value={supplyAmount}
-            onChange={e => setSupplyAmount(e.target.value)}
-            disabled={disabled}
-          />
-          <Button
-            onClick={runSupply}
-            disabled={disabled || !supplyReady || !supplyAmount}
-          >
-            {busy === 'supply' ? 'Supplying…' : 'Supply'}
-          </Button>
-        </div>
-      </div>
+        {earnings !== null && (
+          <div className='ds-caption flex items-baseline justify-between'>
+            <span className='ds-text'>Earned</span>
+            <span className={earnings >= 0 ? 'ds-success' : 'ds-error'}>
+              {earnings >= 0 ? '+' : ''}
+              {earnings.toFixed(6)} USDC.a
+            </span>
+          </div>
+        )}
 
-      <div className='flex flex-col gap-2'>
-        <label className='text-muted-foreground flex justify-between text-xs'>
-          <span>Redeem stataUSDC → USDC</span>
-          <span>
-            Available: {redeemLabel}
-            {assetsPerShare === null || !redeemReady
-              ? ''
-              : ` ≈ ${(Number(redeemLabel) * assetsPerShare).toFixed(
-                  6,
-                )} USDC.a`}
-          </span>
-        </label>
-        <div className='flex gap-2'>
-          <input
-            className='border-border bg-background flex-1 rounded-lg border px-3 py-2 text-sm'
-            inputMode='decimal'
-            placeholder='0.0'
-            value={redeemAmount}
-            onChange={e => setRedeemAmount(e.target.value)}
-            disabled={disabled}
-          />
-          <Button
-            onClick={runRedeem}
-            disabled={disabled || !redeemReady || !redeemAmount}
-          >
-            {busy === 'redeem' ? 'Redeeming…' : 'Redeem'}
-          </Button>
+        <div className='ds-stack-control'>
+          <Label>
+            <span>Supply USDC → stataUSDC</span>
+            <span>Available: {supplyLabel}</span>
+          </Label>
+          <div className='ds-control-gap flex'>
+            <Input
+              className='flex-1'
+              inputMode='decimal'
+              placeholder='0.0'
+              aria-label='Supply amount'
+              value={supplyAmount}
+              onChange={e => setSupplyAmount(e.target.value)}
+              disabled={disabled}
+            />
+            <Button
+              onClick={runSupply}
+              disabled={disabled || !supplyReady || !supplyAmount}
+            >
+              {busy === 'supply' ? 'Supplying…' : 'Supply'}
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {!connected && (
-        <div className='text-muted-foreground text-xs'>
-          Connect Midnight and set a vault identity to supply or redeem.
+        <div className='ds-stack-control'>
+          <Label>
+            <span>Redeem stataUSDC → USDC</span>
+            <span>
+              Available: {redeemLabel}
+              {assetsPerShare === null || !redeemReady
+                ? ''
+                : ` ≈ ${(Number(redeemLabel) * assetsPerShare).toFixed(
+                    6,
+                  )} USDC.a`}
+            </span>
+          </Label>
+          <div className='ds-control-gap flex'>
+            <Input
+              className='flex-1'
+              inputMode='decimal'
+              placeholder='0.0'
+              aria-label='Redeem amount'
+              value={redeemAmount}
+              onChange={e => setRedeemAmount(e.target.value)}
+              disabled={disabled}
+            />
+            <Button
+              onClick={runRedeem}
+              disabled={disabled || !redeemReady || !redeemAmount}
+            >
+              {busy === 'redeem' ? 'Redeeming…' : 'Redeem'}
+            </Button>
+          </div>
         </div>
-      )}
-    </div>
+
+        {!connected && (
+          <div className='ds-text ds-caption'>
+            Connect Midnight and set a vault identity to supply or redeem.
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

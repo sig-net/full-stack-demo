@@ -49,6 +49,30 @@ viewport visually as well as by bounds: two identical wallet icons with hidden c
 at 375 pixels but did not distinguish the chains. Save screenshots under the ignored verification
 directory explicitly, as relative screenshot names can land in the repository root.
 
+For styling acceptance, use the actual components with the compiled application theme. Compare
+computed cursor, background and focus treatment before and after hover or keyboard highlighting,
+and capture the active state. A successful click, a highlighted DOM attribute or a static image
+does not establish a visible interaction state: the wallet menu highlighted while its missing
+accent token left its background unchanged. Include composed menu/button elements because their
+merged recipes can change the cursor and override the highlight. Primitive doubles cannot verify
+the CSS cascade. Keep these checks scoped to styling changes.
+
+If screenshot capture clears a measured hover or focus state, compare computed state immediately
+before and after capture. In the prepared Chromium session, both the screenshot tool and
+`page.screenshot()` cleared menu hover, including within one run-code call. Direct CDP capture
+preserved the measured highlight. Use this fallback only after observing that capture issue:
+
+```javascript
+const session = await page.context().newCDPSession(page);
+const shot = await session.send('Page.captureScreenshot', {
+  format: 'png', captureBeyondViewport: false,
+});
+await session.detach();
+```
+
+Transfer `shot.data` privately to an ignored PNG and recheck the element state after capture.
+Do not print the base64 payload. Capture only after credential fields close or clear.
+
 For a browser smoke check, reuse the available authorised wallet and identity where possible.
 Inspect connection, balance, readiness and the affected controls. Fund, create a fresh identity or
 submit a transaction only when the task's acceptance explicitly includes that operation. A visible

@@ -1,91 +1,97 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '../components/ui/presentation.css';
+
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --: var(--font-inter);
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-inter);
   --font-mono: var(--font-jetbrains-mono);
-
-  /* Figma design colors */
-  --color-brand-50: var(--brand-50);
-  --color-brand-100: var(--brand-100);
-  --color-brand-950: var(--brand-950);
-  --color-pastels-polar-200: var(--pastels-polar-200);
-  --color-pastels-green-white-200: var(--pastels-green-white-200);
-  --color-pastels-mercury-100: var(--pastels-mercury-100);
-  --color-dark-neutral-100: var(--dark-neutral-100);
-  --color-dark-neutral-50: var(--dark-neutral-50);
-  --color-dark-neutral-200: var(--dark-neutral-200);
-  --color-dark-neutral-300: var(--dark-neutral-300);
-  --color-dark-neutral-400: var(--dark-neutral-400);
-  --color-dark-neutral-500: var(--dark-neutral-500);
-  --color-pastels-polar-100: var(--pastels-polar-100);
-  --color-pastels-green-white-300: var(--pastels-green-white-300);
-  --color-pastels-mercury-400: var(--pastels-mercury-400);
-  --color-pastels-swiss-coffee-50: var(--pastels-swiss-coffee-50);
-  --color-pastels-swiss-coffee-400: var(--pastels-swiss-coffee-400);
-  --color-success-500: var(--success-500);
-  --color-tundora-300: var(--tundora-300);
-  --color-tundora-400: var(--tundora-400);
-  --color-tundora-50: var(--tundora-50);
-  --color-clam-shell-100: var(--clam-shell-100);
-  --color-clam-shell-500: var(--clam-shell-500);
-  --color-pastels-swiss-coffee-200: var(--pastels-swiss-coffee-200);
-  --color-pastels-pampas-500: var(--pastels-pampas-500);
-  --color-stone-100: var(--stone-100);
-  --color-stone-600: var(--stone-600);
-  --color-stone-700: var(--stone-700);
-  --color-red-500: var(--red-500);
-  --color-clam-shell-300: var(--clam-shell-300);
-  --color-wf-base-700: var(--wf-base-700);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-link: var(--link);
+  --color-overlay: var(--overlay);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
 }
 
 :root {
-  /* Figma design colors */
-  --brand-50: #f2ddc4;
-  --brand-100: #f2e0c5;
-  --brand-950: #eaeec9;
-  --pastels-polar-200: #f2fcfb;
-  --pastels-green-white-200: #f0f4f0;
-  --pastels-mercury-100: #f9f6f6;
-  --dark-neutral-50: #c6b3b2;
-  --dark-neutral-100: #b49e9e;
-  --dark-neutral-200: #a28b8a;
-  --dark-neutral-300: #8e7777;
-  --dark-neutral-400: #786767;
-  --dark-neutral-500: #625757;
-  --pastels-polar-100: #f6fdfd;
-  --pastels-green-white-300: #ebf0ea;
-  --pastels-mercury-400: #eae7e7;
-  --pastels-swiss-coffee-50: #fdfcfc;
-  --pastels-swiss-coffee-400: #eae1e0;
-  --success-500: #17b26a;
-  --tundora-300: #6c6060;
-  --tundora-400: #5c5353;
-  --tundora-50: #9c8686;
-  --clam-shell-100: #f3edea;
-  --clam-shell-500: #cbb7ad;
-  --pastels-swiss-coffee-200: #f3eeee;
-  --pastels-pampas-500: #f6f4f1;
-  --stone-100: #f5f0ee;
-  --stone-600: #625757;
-  --stone-700: #4c4646;
-  --red-500: #fb2c36;
-  --clam-shell-300: #dfd2cb;
-  --wf-base-700: #4a5468;
+  color-scheme: light;
+  --radius: 0.625rem;
+  --motion-duration: 150ms;
+  --layer-tooltip: 60;
+  --space-control: 0.5rem;
+  --space-content: 1rem;
+  --space-section: 1.5rem;
+  --page-gradient: linear-gradient(
+    180deg,
+    #f9f8f1 0%,
+    #f1f9f8 50%,
+    #f8f1f9 100%
+  );
+  --background: #fdfcfc;
+  --foreground: #4c4646;
+  --card: #f6fdfd;
+  --card-foreground: #4c4646;
+  --popover: #fdfcfc;
+  --popover-foreground: #4c4646;
+  --primary: #eaeec9;
+  --primary-foreground: #4c4646;
+  --secondary: #f2e0c5;
+  --secondary-foreground: #4c4646;
+  --accent: #dce8d9;
+  --accent-foreground: #383b32;
+  --muted: #eeebe8;
+  --muted-foreground: #786767;
+  --destructive: #a9212b;
+  --destructive-foreground: #fffafa;
+  --success: #147348;
+  --success-foreground: #edf9f2;
+  --warning: #855210;
+  --warning-foreground: #fff5df;
+  --input: #a28b8a;
+  --border: #c6b3b2;
+  --ring: #476d59;
+  --link: #245fa0;
+  --overlay: #625757;
 }
 @layer base {
   * {
-    @apply border-dark-neutral-50 outline-dark-neutral-50;
+    @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-white text-stone-700;
+    @apply bg-background text-foreground font-sans antialiased;
   }
   html,
   body {
     @apply overflow-x-hidden;
   }
-
-  /* Base typography styles */
   h1,
   h2,
   h3,
@@ -94,55 +100,54 @@
   h6 {
     @apply font-semibold;
   }
-
-  /* Monospace for numbers and values */
-  .font-mono-value {
-    @apply font-mono;
+  a[href] {
+    @apply text-link focus-visible:outline-ring cursor-pointer underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2;
+  }
+  button:disabled,
+  [aria-disabled='true'],
+  [data-disabled] {
+    cursor: not-allowed;
+  }
+  input,
+  textarea {
+    cursor: text;
+  }
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+  [role='alert'] {
+    color: var(--destructive);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
-
-@layer utilities {
-  .gradient-bg-main {
-    background: linear-gradient(180deg, #f9f8f1 0%, #f1f9f8 50%, #f8f1f9 100%);
+@layer components {
+  [data-slot='dropdown-menu-item'][data-highlighted] {
+    background-color: var(--accent);
+    color: var(--accent-foreground);
   }
-
-  .gradient-bg-swap {
-    background: linear-gradient(
-      180deg,
-      var(--pastels-green-white-200) 0%,
-      var(--pastels-mercury-100) 100%
-    );
+  [data-slot='dropdown-menu-item'][data-variant='destructive'][data-highlighted] {
+    background-color: var(--destructive-foreground);
+    color: var(--destructive);
   }
-
-  .gradient-popover {
-    background: linear-gradient(
-      200deg,
-      var(--pastels-green-white-300, #ebf0ea) 2.62%,
-      var(--pastels-mercury-400, #eae7e7) 62.3%,
-      var(--pastels-swiss-coffee-400, #eae1e0) 97.38%
-    );
+  [data-slot='tooltip-content'] {
+    z-index: var(--layer-tooltip);
   }
-
-  /* Custom scrollbar for better table scrolling */
-  .scroll-smooth-table {
-    scroll-behavior: smooth;
-  }
-
-  .scroll-smooth-table::-webkit-scrollbar {
-    height: 8px;
-  }
-
-  .scroll-smooth-table::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 4px;
-  }
-
-  .scroll-smooth-table::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-  }
-
-  .scroll-smooth-table::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+  [data-sonner-toaster] {
+    --success-bg: var(--success-foreground);
+    --success-text: var(--success);
+    --success-border: var(--success);
+    --error-bg: var(--destructive-foreground);
+    --error-text: var(--destructive);
+    --error-border: var(--destructive);
+    --warning-bg: var(--warning-foreground);
+    --warning-text: var(--warning);
+    --warning-border: var(--warning);
   }
 }

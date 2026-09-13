@@ -1,5 +1,6 @@
 'use client';
 
+import { Label } from '@/components/ui/label';
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Loader2, SendIcon } from 'lucide-react';
@@ -9,7 +10,6 @@ import { Input } from '@/components/ui/input';
 import { TokenAmountDisplay } from '@/components/ui/token-amount-display';
 import { useTokenPrice } from '@/hooks/use-token-prices';
 import type { Token } from '@/lib/types/token.types';
-import { cn } from '@/lib/utils';
 
 import { WithdrawToken } from './index';
 
@@ -82,7 +82,7 @@ export function AmountInput({
   };
 
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className='space-y-4'>
+    <form onSubmit={handleSubmit(onFormSubmit)} className='ds-stack-content'>
       {/* Token Selection */}
       <div>
         <TokenAmountDisplay
@@ -133,10 +133,8 @@ export function AmountInput({
       </div>
 
       {/* Receiver Address */}
-      <div className='space-y-2'>
-        <label className='text-tundora-300 text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70'>
-          Receiver Address
-        </label>
+      <div className='ds-stack-control'>
+        <Label>Receiver Address</Label>
         <Input
           placeholder='Recipient address'
           {...register('receiverAddress')}
@@ -145,19 +143,16 @@ export function AmountInput({
           autoCapitalize='none'
           spellCheck={false}
           enterKeyHint='done'
-          className='h-12 font-mono text-base'
         />
       </div>
 
-      {/* Error Message */}
       {error && (
-        <div className='flex items-center gap-2 rounded-sm border border-red-200 bg-red-50 p-3'>
-          <div className='h-2 w-2 shrink-0 rounded-full bg-red-500'></div>
-          <p className='text-xs font-medium text-red-800'>{error}</p>
+        <div className='ds-row ds-control-gap ds-round ds-frame ds-surface-error ds-inset-control'>
+          <div className='ds-circle ds-dot-error h-2 w-2 shrink-0'></div>
+          <p className='ds-caption ds-label ds-error'>{error}</p>
         </div>
       )}
 
-      {/* Continue Button */}
       <Button
         type='submit'
         variant='secondary'
@@ -168,17 +163,12 @@ export function AmountInput({
           !watchedAmount ||
           !watchedAddress
         }
-        className={cn(
-          'h-12 w-full text-base font-semibold',
-          isSubmitting || !selectedToken || !watchedAmount || !watchedAddress
-            ? 'cursor-not-allowed'
-            : 'cursor-pointer',
-        )}
+        className='w-full'
         size='lg'
       >
         {isSubmitting ? (
           <>
-            <Loader2 className='size-4 animate-spin' />
+            <Loader2 className='ds-spinner size-4' />
             Sending...
           </>
         ) : (

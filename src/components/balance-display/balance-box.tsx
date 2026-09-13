@@ -25,29 +25,32 @@ export function BalanceBox({
   return (
     <div
       className={cn(
-        'border-colors-dark-neutral-200 flex w-full max-w-full gap-4 border-t py-4 sm:items-center sm:justify-between sm:py-5',
+        'ds-content-gap ds-divider-top ds-block-inset-content sm:ds-block-inset-content flex w-full max-w-full sm:items-center sm:justify-between',
         className,
       )}
     >
-      <div className='flex min-w-0 flex-1 gap-4 sm:gap-5'>
-        <div className='flex min-w-0 flex-col gap-1 sm:gap-2'>
-          <div className='text-tundora-300 truncate text-2xl font-light sm:text-3xl'>
+      <div className='ds-content-gap sm:ds-content-gap flex min-w-0 flex-1'>
+        <div className='ds-tight sm:ds-control-gap flex min-w-0 flex-col'>
+          <div className='ds-text ds-title sm:ds-display truncate'>
             {amount}
           </div>
-          <div className='text-tundora-50 text-sm font-semibold'>
-            {usdValue}
-          </div>
+          <div className='ds-muted ds-body ds-label'>{usdValue}</div>
         </div>
-        <div className='flex flex-shrink-0 items-center gap-3 sm:gap-4'>
+        <div className='ds-control-gap sm:ds-content-gap flex flex-shrink-0 items-center'>
           {icon}
-          <span className='text-tundora-300 text-sm font-bold sm:text-base'>
+          <span className='ds-text ds-body ds-label sm:ds-prose'>
             {tokenSymbol}
           </span>
         </div>
       </div>
       <div className='flex justify-end sm:justify-start'>
-        <div className='flex items-center gap-4'>
-          <Button variant='default' size='default' disabled onClick={onSwapClick}>
+        <div className='ds-row ds-content-gap'>
+          <Button
+            variant='default'
+            size='default'
+            disabled
+            onClick={onSwapClick}
+          >
             <ArrowUpDown className='h-3 w-3' />
             Swap
           </Button>

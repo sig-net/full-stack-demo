@@ -1,5 +1,7 @@
 'use client';
 
+import { StatusDot } from '@/components/ui/feedback';
+import { Feedback } from '@/components/ui/feedback';
 import { useRef, useState, type ReactNode } from 'react';
 import { KeyRound, LoaderCircle, RefreshCw } from 'lucide-react';
 import type { WalletMetadata } from '@/lib/wallet-metadata';
@@ -68,50 +70,38 @@ export function WalletMenu({
             size='sm'
             aria-label={label}
             title={label}
-            className={`gap-1.5 rounded-lg px-2 ${wallet ? 'text-stone-900' : 'text-stone-500'}`}
           >
             {connecting ? (
-              <LoaderCircle
-                className='size-4 animate-spin'
-                aria-hidden='true'
-              />
+              <LoaderCircle className='ds-spinner size-4' aria-hidden='true' />
             ) : (
               <WalletMark iconUrl={wallet?.iconUrl} />
             )}
             <span>{chainName}</span>
-            <span
-              aria-hidden='true'
-              className={`size-1.5 rounded-full ${wallet ? 'bg-emerald-500' : 'bg-stone-400'}`}
-            />
+            <StatusDot tone={wallet ? 'success' : 'neutral'} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align='end'
-          className='w-72 max-w-[calc(100vw-2rem)] rounded-xl'
           onCloseAutoFocus={event => {
             if (seedOpen) event.preventDefault();
           }}
         >
-          <div className='border-b px-2 py-2 text-sm font-medium'>
-            {chainName} wallet{' '}
-            <span className='font-normal text-stone-500'>({status})</span>
+          <div className='ds-divider-bottom ds-body ds-label ds-inline-inset-control ds-block-inset-control'>
+            {chainName} wallet <span className='ds-muted'>({status})</span>
           </div>
           {connecting && (
-            <p role='status' className='p-2 text-sm'>
+            <p role='status' className='ds-inset-control ds-body'>
               Connecting… {progress}
             </p>
           )}
           {error && (
-            <p
-              role='alert'
-              className='text-destructive p-2 text-sm break-words'
-            >
+            <Feedback tone='error' role='alert'>
               {error}
-            </p>
+            </Feedback>
           )}
           {wallet && (
-            <div className='space-y-1 border-b p-2 text-sm'>
-              <p className='flex items-center gap-2'>
+            <div className='ds-menu-section'>
+              <p className='ds-row ds-control-gap'>
                 <WalletMark iconUrl={wallet.iconUrl} />
                 <span className='break-all'>{wallet.name}</span>
               </p>
@@ -119,14 +109,14 @@ export function WalletMenu({
                 {wallet.kind === 'seed' ? 'Seed wallet' : 'Browser wallet'} ·
                 Connected
               </p>
-              <p className='font-mono text-xs break-all'>
+              <p className='ds-value ds-caption break-all'>
                 {wallet.accountDetail}
               </p>
             </div>
           )}
           {children}
           {!choices.length && (
-            <p className='p-2 text-sm text-stone-500'>
+            <p className='ds-inset-control ds-body ds-muted'>
               No {chainName} wallet extension found. Enable an extension for
               this page, then refresh wallets.
             </p>

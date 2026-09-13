@@ -14,7 +14,7 @@ export function WalletMark({ iconUrl }: { iconUrl?: string }) {
       src={iconUrl}
       alt=''
       aria-hidden='true'
-      className='size-4 shrink-0 rounded-sm'
+      className='ds-round size-4 shrink-0'
       onError={() => setFailedUrl(iconUrl)}
     />
   );

@@ -14,23 +14,23 @@ export default function Home() {
   const isConnected = vault.binding !== null;
 
   return (
-    <div className='gradient-bg-main min-h-screen w-full overflow-x-hidden'>
+    <div className='ds-page min-h-screen w-full overflow-x-hidden'>
       <NavigationHeader />
       <LocalWalletFunding />
 
       {!isConnected ? (
-        <div className='mx-auto mt-16 max-w-full p-4 xl:container'>
+        <div className="ds-inset-content mx-auto ds-before-section max-w-full xl:container">
           <EmptyStateWallet />
         </div>
       ) : (
-        <div className='mx-auto mt-8 max-w-full p-4 pb-16 lg:mt-16 xl:container'>
-          <div className='flex flex-col gap-6 lg:flex-row lg:gap-8'>
-            <div className='order-1 flex w-full flex-col gap-6 lg:order-2 lg:w-auto lg:shrink-0'>
+        <div className="ds-inset-content mx-auto ds-before-section max-w-full ds-bottom-inset-section lg:ds-before-section xl:container">
+          <div className='ds-stack-section lg:ds-section-gap lg:flex-row'>
+            <div className='ds-section-gap order-1 flex w-full flex-col lg:order-2 lg:w-auto lg:shrink-0'>
               <SwapWidget />
               <LendWidget />
             </div>
 
-            <div className='order-2 flex w-full flex-col gap-8 lg:order-1 lg:flex-1 lg:gap-12'>
+            <div className='ds-section-gap lg:ds-section-gap order-2 flex w-full flex-col lg:order-1 lg:flex-1'>
               <BalanceSection />
               <ActivityListTable />
             </div>

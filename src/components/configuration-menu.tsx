@@ -1,8 +1,19 @@
 'use client';
 
+import { Feedback } from '@/components/ui/feedback';
+import { Label } from '@/components/ui/label';
 import { useId, useState } from 'react';
 import { Info, Settings, X } from 'lucide-react';
-import * as Tooltip from '@radix-ui/react-tooltip';
+import {
+  Tooltip,
+  TooltipProvider,
+  TooltipTrigger,
+  TooltipContent,
+} from '@/components/ui/tooltip';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -23,33 +34,27 @@ export function ConfigurationMenu() {
         <Button
           variant='ghost'
           size='icon'
-          className='size-8 rounded-lg text-stone-500'
           aria-label='Configuration'
           title='Configuration'
         >
           <Settings className='size-4' aria-hidden='true' />
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        align='end'
-        aria-label='Configuration'
-        className='max-h-[min(85vh,var(--radix-popover-content-available-height))] w-96 overflow-y-auto rounded-xl p-3'
-      >
-        <div className='mb-2 flex items-center justify-between'>
-          <h2 className='font-semibold'>Configuration</h2>
+      <PopoverContent align='end' aria-label='Configuration' size='wide'>
+        <div className='ds-row ds-after-control justify-between'>
+          <h2 className='ds-label'>Configuration</h2>
           <Button
             variant='ghost'
-            size='icon'
-            className='size-7'
+            size='icon-sm'
             aria-label='Close configuration'
             onClick={() => setOpen(false)}
           >
             <X className='size-4' />
           </Button>
         </div>
-        <Tooltip.Provider delayDuration={200}>
+        <TooltipProvider delayDuration={200}>
           <form
-            className='space-y-4'
+            className='ds-stack-content'
             onSubmit={event => {
               event.preventDefault();
               setResult(
@@ -64,25 +69,20 @@ export function ConfigurationMenu() {
                 key={section.title}
                 aria-label={`${section.title} configuration`}
               >
-                <h3 className='mb-2 text-sm font-semibold'>
+                <h3 className='ds-body ds-label ds-after-control'>
                   {section.title === 'Vault' ? 'ERC20 vault' : section.title}
                 </h3>
-                <div className='space-y-2.5'>
+                <div className='ds-stack-control'>
                   {section.fields.map(field => {
                     const fieldId = `${id}-${field.key}`;
                     return (
                       <div key={field.key}>
-                        <label
-                          className='text-xs text-stone-500'
-                          htmlFor={fieldId}
-                        >
-                          {field.label}
-                        </label>
-                        <div className='flex items-center gap-1'>
+                        <Label htmlFor={fieldId}>{field.label}</Label>
+                        <div className='ds-row ds-tight'>
                           {field.options ? (
-                            <select
+                            <NativeSelect
                               id={fieldId}
-                              className='h-9 min-w-0 flex-1 rounded-md border bg-white px-3 text-sm'
+                              className='min-w-0 flex-1'
                               value={field.value}
                               onChange={event => {
                                 model.edit(field.key, event.target.value);
@@ -92,15 +92,18 @@ export function ConfigurationMenu() {
                               aria-describedby={`${fieldId}-feedback`}
                             >
                               {field.options.map(option => (
-                                <option key={option.value} value={option.value}>
+                                <NativeSelectOption
+                                  key={option.value}
+                                  value={option.value}
+                                >
                                   {option.label}
-                                </option>
+                                </NativeSelectOption>
                               ))}
-                            </select>
+                            </NativeSelect>
                           ) : (
                             <Input
                               id={fieldId}
-                              className='h-9 min-w-0 flex-1 text-sm'
+                              className='min-w-0 flex-1'
                               value={field.value}
                               onChange={event => {
                                 model.edit(field.key, event.target.value);
@@ -110,39 +113,34 @@ export function ConfigurationMenu() {
                               aria-describedby={`${fieldId}-feedback`}
                             />
                           )}
-                          <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
                               <Button
                                 type='button'
                                 variant='ghost'
-                                size='icon'
-                                className='size-7 shrink-0 text-stone-500'
+                                size='icon-sm'
                                 aria-label={`About ${field.label}`}
                               >
                                 <Info className='size-3.5' />
                               </Button>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content
-                                side='left'
-                                className='z-[60] max-w-64 rounded-md border bg-white p-2 text-xs shadow-md'
-                              >
-                                {field.help}
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
+                            </TooltipTrigger>
+
+                            <TooltipContent side='left'>
+                              {field.help}
+                            </TooltipContent>
+                          </Tooltip>
                         </div>
                         <div
                           id={`${fieldId}-feedback`}
-                          className='text-xs break-words'
+                          className='ds-caption break-words'
                         >
                           {field.error && (
-                            <p role='alert' className='text-destructive'>
+                            <Feedback tone='error' role='alert'>
                               {field.error}
-                            </p>
+                            </Feedback>
                           )}
                           {field.difference && (
-                            <p className='text-amber-800'>
+                            <p className='ds-warning'>
                               {field.difference.message} Wallet value:{' '}
                               {field.difference.walletValue}
                             </p>
@@ -155,24 +153,21 @@ export function ConfigurationMenu() {
               </section>
             ))}
             {model.walletError && (
-              <p role='alert' className='text-destructive text-xs'>
+              <Feedback tone='error' role='alert'>
                 {model.walletError}
-              </p>
+              </Feedback>
             )}
             {model.serverUnavailable && (
-              <p
-                role='status'
-                className='rounded-md bg-amber-50 p-2 text-xs text-amber-900'
-              >
+              <Feedback tone='warning' role='status'>
                 {model.serverUnavailable}
-              </p>
+              </Feedback>
             )}
             {result && (
-              <p role='status' className='text-sm'>
+              <p role='status' className='ds-body'>
                 {result}
               </p>
             )}
-            <div className='flex flex-wrap gap-2 border-t pt-3'>
+            <div className='ds-control-gap ds-divider-top ds-top-inset-content flex flex-wrap'>
               <Button type='submit' size='sm'>
                 Apply
               </Button>
@@ -200,7 +195,7 @@ export function ConfigurationMenu() {
               </Button>
             </div>
           </form>
-        </Tooltip.Provider>
+        </TooltipProvider>
       </PopoverContent>
     </Popover>
   );

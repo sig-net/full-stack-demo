@@ -27,17 +27,17 @@ export function TransactionDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-lg overflow-y-auto'>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{transaction.type} Details</DialogTitle>
           <DialogDescription>Status: {transaction.status}</DialogDescription>
         </DialogHeader>
-        <div className='space-y-3 text-sm'>
+        <div className='ds-stack-control ds-body'>
           <p>{transaction.timestamp}</p>
           {transaction.fromToken && <p>From: {transaction.fromToken.amount}</p>}
           {transaction.toToken && <p>To: {transaction.toToken.amount}</p>}
           {transaction.failureReason && (
-            <p className='rounded-md bg-red-50 p-3 break-all text-red-800'>
+            <p className='ds-round ds-surface-error ds-inset-control ds-error break-all'>
               {transaction.failureReason}
             </p>
           )}
@@ -54,7 +54,7 @@ export function TransactionDetailsDialog({
               href={transaction.explorerUrl}
               target='_blank'
               rel='noopener noreferrer'
-              className='flex items-center gap-1 text-blue-600 hover:underline'
+              className='ds-row ds-tight ds-link'
             >
               View Sepolia transaction
               <ExternalLink className='h-3 w-3' />

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, ReactElement } from 'react';
+import { Loader2 } from 'lucide-react';
 import QRCodeStyling from 'qr-code-styling';
 import React from 'react';
 
@@ -149,15 +150,17 @@ export function QRCode({
     return (
       <div
         className={cn(
-          'flex flex-col items-center justify-center rounded-sm border border-red-500/20 bg-red-500/5 p-4',
+          'ds-stack ds-round ds-frame ds-dot-error ds-inset-content items-center justify-center',
           className,
         )}
         style={{ width: size, height: size }}
       >
-        <div className='text-center text-xs font-medium text-red-500'>
+        <div className='ds-caption ds-label ds-error text-center'>
           QR Code Error
         </div>
-        <div className='mt-1 text-center text-xs text-red-500/70'>{error}</div>
+        <div className='ds-caption ds-error ds-before-control text-center'>
+          {error}
+        </div>
       </div>
     );
   }
@@ -167,23 +170,16 @@ export function QRCode({
       className={cn('relative', className)}
       style={{ width: size, height: size }}
     >
-      {/* Loading State */}
       {isGenerating && (
-        <div className='bg-pastels-polar-100 border-dark-neutral-50 absolute inset-0 flex flex-col items-center justify-center rounded-sm border'>
-          <div className='border-dark-neutral-300 mb-2 h-6 w-6 animate-spin rounded-full border-2 border-t-transparent'></div>
-          <div className='text-dark-neutral-400 text-xs font-medium'>
-            Generating QR
-          </div>
+        <div className='ds-surface ds-stack ds-round ds-frame absolute inset-0 items-center justify-center'>
+          <Loader2 className='ds-spinner' size={24} />
+          <div className='ds-muted ds-caption ds-label'>Generating QR</div>
         </div>
       )}
 
-      {/* QR Code Container */}
       <div
         ref={containerRef}
-        className={cn(
-          'transition-opacity duration-200',
-          isGenerating ? 'opacity-0' : 'opacity-100',
-        )}
+        className={cn('', isGenerating ? 'opacity-0' : 'opacity-100')}
         style={{
           visibility: isGenerating ? 'hidden' : 'visible',
           maxWidth: '100%',
