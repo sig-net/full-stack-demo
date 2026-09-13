@@ -18,11 +18,11 @@ import { parseTokenAmount } from "@/lib/utils/token-amount";
 
 import { useEvmBalances } from "./evm-balances-context";
 import { useEvmWallet } from "./evm-wallet-context";
+import { useMidnightReadiness } from "./midnight-readiness-context";
 import { useRuntimeConfig } from "./runtime-config-context";
 import { useVaultBalances } from "./vault-balances-context";
 import { useVault } from "./vault-context";
 import { useVaultOperations } from "./vault-operations-context";
-import { useWalletReadiness } from "./wallet-readiness-context";
 
 interface DepositTransfer {
   destination: string;
@@ -53,7 +53,7 @@ function useEvmDepositOwner(): EvmDepositState {
   const operations = useVaultOperations();
   const vaultBalances = useVaultBalances();
   const vault = useVault();
-  const readiness = useWalletReadiness();
+  const readiness = useMidnightReadiness();
   const transferRef = useRef<DepositTransfer | null>(null);
   const mounted = useRef(true);
   const busy = useRef(false);

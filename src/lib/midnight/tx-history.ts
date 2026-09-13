@@ -3,33 +3,65 @@
 import { z } from "zod";
 
 const transactionTypeSchema = z.enum(["Deposit", "Withdraw", "Swap", "Supply", "Redeem"]);
-const transactionStatusSchema = z.enum(["pending", "completed", "failed", "refunded"]);
-const transactionRecordSchema = z.object({
-  id: z.string(),
-  type: transactionTypeSchema,
-  fromSymbol: z.string(),
-  fromAmount: z.string(),
-  toSymbol: z.string(),
-  toAmount: z.string(),
-  counterparty: z.string().optional(),
-  status: transactionStatusSchema,
-  timestampRaw: z.number(),
-  txHash: z.string().optional(),
-  networkId: z.string().optional(),
-  chainId: z.number().optional(),
-  rpcUrl: z.string().optional(),
-  explorerUrl: z.string().optional(),
-  vaultContractAddress: z.string().optional(),
-  failureReason: z.string().optional(),
-  basisAssets: z.string().optional(),
-  sharesReceived: z.string().optional(),
-  proceedsAssets: z.string().optional(),
-  sharesBurned: z.string().optional(),
+const transactionStatusSchema = z.enum([
+  "pending",
+  "completed",
+  "failed",
+  "refunded",
+  "interrupted",
+]);
+const unsignedUnitsSchema = z.string().regex(/^(0|[1-9][0-9]*)$/);
+const decimalSchema = z.string().regex(/^(0|[1-9][0-9]*)(\.[0-9]+)?$/);
+const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
+const positionSchema = z.object({
+  deploymentFingerprint: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+  commitment: z.string().regex(/^[0-9a-fA-F]{64}$/),
+  midnightNetwork: z.string().min(1),
+  chainId: z.number().int().positive(),
+  vaultContract: z.string().min(1),
+  assetToken: addressSchema,
+  shareToken: addressSchema,
+  assetDecimals: z.number().int().min(0).max(255),
+  shareDecimals: z.number().int().min(0).max(255),
 });
+/** Public identity and asset scope required before attributing lending history. */
+export type LendingPosition = z.infer<typeof positionSchema>;
+const transactionRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    type: transactionTypeSchema,
+    fromSymbol: z.string().min(1),
+    fromAmount: z.string(),
+    toSymbol: z.string().min(1),
+    toAmount: z.string(),
+    counterparty: z.string().optional(),
+    status: transactionStatusSchema,
+    timestampRaw: z.number().int().nonnegative(),
+    txHash: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{64}$/)
+      .optional(),
+    networkId: z.string().optional(),
+    chainId: z.number().int().positive().optional(),
+    rpcUrl: z.url({ protocol: /^https?$/ }).optional(),
+    explorerUrl: z.url({ protocol: /^https?$/ }).optional(),
+    vaultContractAddress: z.string().optional(),
+    failureReason: z.string().optional(),
+    position: positionSchema.optional(),
+    assetUnits: unsignedUnitsSchema.optional(),
+    shareUnits: unsignedUnitsSchema.optional(),
+    basisAssets: decimalSchema.optional(),
+    sharesReceived: decimalSchema.optional(),
+    proceedsAssets: decimalSchema.optional(),
+    sharesBurned: decimalSchema.optional(),
+  })
+  .refine((record) => record.type !== "Deposit" || record.status !== "refunded", {
+    message: "Deposits cannot have a refunded outcome.",
+  });
 
 /** Operation categories retained in Activity and lending cost-basis history. */
 export type MidnightTxType = z.infer<typeof transactionTypeSchema>;
-/** Recorded completion outcomes, including refunded executions. */
+/** Recorded observation and settlement states. */
 export type MidnightTxStatus = z.infer<typeof transactionStatusSchema>;
 /**
  * Persisted public operation record with display amount strings and Unix-second timestamps.
@@ -51,7 +83,7 @@ function load(): MidnightTxRecord[] {
     const parsed: unknown = JSON.parse(raw);
     const records = z.array(z.unknown()).safeParse(parsed);
     if (!records.success) return [];
-    // Persisted pending records need a terminal status because their in-memory flow was lost.
+    // Reload interrupts observation without establishing a chain outcome.
     return records.data
       .flatMap((value) => {
         const record = transactionRecordSchema.safeParse(value);
@@ -62,7 +94,7 @@ function load(): MidnightTxRecord[] {
         rec.status === "pending"
           ? {
               ...rec,
-              status: "failed" as const,
+              status: "interrupted" as const,
               failureReason: rec.failureReason ?? "Interrupted by a page reload",
             }
           : rec,

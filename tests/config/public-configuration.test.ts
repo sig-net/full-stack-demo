@@ -16,10 +16,15 @@ it("preserves endpoint validation, deployment identity and immutable snapshots",
   const evm = createEvmChainConfig("https://rpc.example.invalid");
   expect(evm.chainId).toBe(sepolia.id);
   expect(evm.explorerUrl).toBe(sepolia.blockExplorers.default.url);
-  expect(getEthereumProvider(evm)).toBe(getEthereumProvider({ ...evm }));
-  expect(getEthereumProvider(evm)).not.toBe(
-    getEthereumProvider(createEvmChainConfig("https://other.example.invalid")),
-  );
+  const firstClient = getEthereumProvider(evm);
+  const secondClient = getEthereumProvider({ ...evm });
+  expect(firstClient).not.toBe(secondClient);
+  expect(firstClient.chain?.id).toBe(evm.chainId);
+  expect(firstClient.transport.url).toBe(evm.rpcUrl);
+  expect(secondClient.transport.url).toBe(evm.rpcUrl);
+  expect(
+    getEthereumProvider(createEvmChainConfig("https://other.example.invalid")).transport.url,
+  ).toBe("https://other.example.invalid");
   for (const invalid of ["", "relative", "ws://example.invalid", "file:///etc/passwd"])
     expect(() => createEvmChainConfig(invalid)).toThrow(/NEXT_PUBLIC_SEPOLIA_RPC_URL/);
   expect(createEvmChainConfig(undefined).rpcUrl).toBe("http://127.0.0.1:8545");

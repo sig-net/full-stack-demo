@@ -8,9 +8,10 @@ import {
   type ConstantContractMethod,
   Contract as EthersContract,
   type ContractMethod,
-  JsonRpcProvider,
   ZeroAddress,
 } from "ethers";
+
+import { withEthersProvider } from "@/lib/evm/ethers-provider";
 
 /** Router address shared by approval and swap envelopes on the configured Sepolia deployment. */
 export const UNISWAP_SWAP_ROUTER_02 = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E";
@@ -57,8 +58,10 @@ const QUOTER_ABI = [
  * @throws {Error} If the RPC code read fails.
  */
 export async function uniswapAvailable(evmRpcUrl: string): Promise<boolean> {
-  const code = await new JsonRpcProvider(evmRpcUrl).getCode(UNISWAP_SWAP_ROUTER_02);
-  return code !== "0x";
+  return withEthersProvider(evmRpcUrl, async (provider) => {
+    const code = await provider.getCode(UNISWAP_SWAP_ROUTER_02);
+    return code !== "0x";
+  });
 }
 
 /**
@@ -81,29 +84,31 @@ export async function quoteExactOutputSingle(
   amountOut: bigint,
   slippageBps = 100n,
 ): Promise<{ amountIn: bigint; amountInMaximum: bigint }> {
-  const quoter = new EthersContract(UNISWAP_QUOTER_V2, QUOTER_ABI, new JsonRpcProvider(evmRpcUrl));
-  const [amountIn] = await quoter
-    .getFunction<
-      ContractMethod<
-        {
-          tokenIn: string;
-          tokenOut: string;
-          amount: bigint;
-          fee: bigint;
-          sqrtPriceLimitX96: bigint;
-        }[],
-        [bigint, bigint, bigint, bigint]
-      >
-    >("quoteExactOutputSingle")
-    .staticCall({
-      tokenIn,
-      tokenOut,
-      amount: amountOut,
-      fee,
-      sqrtPriceLimitX96: 0n,
-    });
-  const amountInMaximum = (amountIn * (10_000n + slippageBps)) / 10_000n;
-  return { amountIn: amountIn, amountInMaximum };
+  return withEthersProvider(evmRpcUrl, async (provider) => {
+    const quoter = new EthersContract(UNISWAP_QUOTER_V2, QUOTER_ABI, provider);
+    const [amountIn] = await quoter
+      .getFunction<
+        ContractMethod<
+          {
+            tokenIn: string;
+            tokenOut: string;
+            amount: bigint;
+            fee: bigint;
+            sqrtPriceLimitX96: bigint;
+          }[],
+          [bigint, bigint, bigint, bigint]
+        >
+      >("quoteExactOutputSingle")
+      .staticCall({
+        tokenIn,
+        tokenOut,
+        amount: amountOut,
+        fee,
+        sqrtPriceLimitX96: 0n,
+      });
+    const amountInMaximum = (amountIn * (10_000n + slippageBps)) / 10_000n;
+    return { amountIn: amountIn, amountInMaximum };
+  });
 }
 
 /** Fee tiers searched independently so an unavailable pool does not discard other quotes. */
@@ -167,28 +172,30 @@ export async function quoteExactInputSingle(
   fee: bigint,
   amountIn: bigint,
 ): Promise<{ amountOut: bigint }> {
-  const quoter = new EthersContract(UNISWAP_QUOTER_V2, QUOTER_ABI, new JsonRpcProvider(evmRpcUrl));
-  const [amountOut] = await quoter
-    .getFunction<
-      ContractMethod<
-        {
-          tokenIn: string;
-          tokenOut: string;
-          amountIn: bigint;
-          fee: bigint;
-          sqrtPriceLimitX96: bigint;
-        }[],
-        [bigint, bigint, bigint, bigint]
-      >
-    >("quoteExactInputSingle")
-    .staticCall({
-      tokenIn,
-      tokenOut,
-      amountIn,
-      fee,
-      sqrtPriceLimitX96: 0n,
-    });
-  return { amountOut: amountOut };
+  return withEthersProvider(evmRpcUrl, async (provider) => {
+    const quoter = new EthersContract(UNISWAP_QUOTER_V2, QUOTER_ABI, provider);
+    const [amountOut] = await quoter
+      .getFunction<
+        ContractMethod<
+          {
+            tokenIn: string;
+            tokenOut: string;
+            amountIn: bigint;
+            fee: bigint;
+            sqrtPriceLimitX96: bigint;
+          }[],
+          [bigint, bigint, bigint, bigint]
+        >
+      >("quoteExactInputSingle")
+      .staticCall({
+        tokenIn,
+        tokenOut,
+        amountIn,
+        fee,
+        sqrtPriceLimitX96: 0n,
+      });
+    return { amountOut: amountOut };
+  });
 }
 
 /**
@@ -249,33 +256,31 @@ export async function discoverSwappablePairs(
   evmRpcUrl: string,
   tokens: string[],
 ): Promise<Set<string>> {
-  const factory = new EthersContract(
-    UNISWAP_V3_FACTORY,
-    FACTORY_ABI,
-    new JsonRpcProvider(evmRpcUrl),
-  );
-  const getPool =
-    factory.getFunction<ConstantContractMethod<(string | bigint)[], string>>("getPool");
-  const swappable = new Set<string>();
-  const checks: Promise<void>[] = [];
-  for (let i = 0; i < tokens.length; i++) {
-    for (let j = i + 1; j < tokens.length; j++) {
-      const a = tokens[i];
-      const b = tokens[j];
-      if (a === undefined || b === undefined) continue;
-      for (const fee of UNISWAP_FEE_TIERS) {
-        checks.push(
-          getPool(a, b, fee)
-            .then((pool: string) => {
-              if (pool && pool !== ZeroAddress) swappable.add(pairKey(a, b));
-            })
-            .catch(() => undefined),
-        );
+  return withEthersProvider(evmRpcUrl, async (provider) => {
+    const factory = new EthersContract(UNISWAP_V3_FACTORY, FACTORY_ABI, provider);
+    const getPool =
+      factory.getFunction<ConstantContractMethod<(string | bigint)[], string>>("getPool");
+    const swappable = new Set<string>();
+    const checks: Promise<void>[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      for (let j = i + 1; j < tokens.length; j++) {
+        const a = tokens[i];
+        const b = tokens[j];
+        if (a === undefined || b === undefined) continue;
+        for (const fee of UNISWAP_FEE_TIERS) {
+          checks.push(
+            getPool(a, b, fee)
+              .then((pool: string) => {
+                if (pool && pool !== ZeroAddress) swappable.add(pairKey(a, b));
+              })
+              .catch(() => undefined),
+          );
+        }
       }
     }
-  }
-  await Promise.all(checks);
-  return swappable;
+    await Promise.all(checks);
+    return swappable;
+  });
 }
 
 /**
@@ -292,13 +297,15 @@ export async function routerAllowance(
   erc20Hex: string,
   vaultEvmAddress: string,
 ): Promise<bigint> {
-  const token = new EthersContract(
-    erc20Hex,
-    ["function allowance(address,address) view returns (uint256)"],
-    new JsonRpcProvider(evmRpcUrl),
-  );
-  return await token.getFunction<ConstantContractMethod<string[], bigint>>("allowance")(
-    vaultEvmAddress,
-    UNISWAP_SWAP_ROUTER_02,
-  );
+  return withEthersProvider(evmRpcUrl, async (provider) => {
+    const token = new EthersContract(
+      erc20Hex,
+      ["function allowance(address,address) view returns (uint256)"],
+      provider,
+    );
+    return await token.getFunction<ConstantContractMethod<string[], bigint>>("allowance")(
+      vaultEvmAddress,
+      UNISWAP_SWAP_ROUTER_02,
+    );
+  });
 }

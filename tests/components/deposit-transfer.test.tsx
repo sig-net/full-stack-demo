@@ -9,21 +9,21 @@ import type { VaultBinding } from "@/lib/midnight/vault-session";
 import { EvmBalancesProvider, useEvmBalances } from "@/providers/evm-balances-context";
 import { EvmDepositProvider, useEvmDeposit } from "@/providers/evm-deposit-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
+import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { RuntimeConfigProvider, useRuntimeConfig } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
-import { useWalletReadiness } from "@/providers/wallet-readiness-context";
 
 import { mockMatchingRuntimeServer } from "../config/runtime-server-fixture";
 import { browserWalletFixture, hash } from "../evm/browser-wallet-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
-import { useReadyWalletFixture } from "./wallet-readiness-fixture";
+import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 
 vi.mock(import("@/providers/vault-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/vault-operations-context"), { spy: true });
-vi.mock(import("@/providers/wallet-readiness-context"), { spy: true });
+vi.mock(import("@/providers/midnight-readiness-context"), { spy: true });
 vi.mock(import("@/components/evm-wallet-button"), () => ({
   EvmWalletButton: () => <button type="button">Fixture wallet</button>,
 }));
@@ -78,8 +78,8 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
     supply: vi.fn(),
     redeem: vi.fn(),
   });
-  vi.mocked(useWalletReadiness).mockImplementation(function useFixtureReadiness() {
-    return useReadyWalletFixture(binding.wallet);
+  vi.mocked(useMidnightReadiness).mockImplementation(function useFixtureReadiness() {
+    return useReadyMidnightFixture(binding.wallet);
   });
   mockMatchingRuntimeServer();
   vi.spyOn(f.publicClient, "getBalance").mockResolvedValue(1000000000000000000n);

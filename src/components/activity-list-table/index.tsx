@@ -163,7 +163,9 @@ function StatusBadge(properties: StatusBadgeProps): React.JSX.Element {
         ? "Failed"
         : status === "refunded"
           ? "Refunded"
-          : "Pending";
+          : status === "interrupted"
+            ? "Observation interrupted"
+            : "Pending";
 
   const tone =
     status === "completed"
@@ -172,7 +174,9 @@ function StatusBadge(properties: StatusBadgeProps): React.JSX.Element {
         ? "error"
         : status === "refunded"
           ? "warning"
-          : "pending";
+          : status === "interrupted"
+            ? "warning"
+            : "pending";
   return (
     <Badge variant={tone}>
       <StatusDot tone={tone} />

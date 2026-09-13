@@ -16,6 +16,7 @@ import {
   signAttestationDigest,
   signatureToSignatureRespondedEvent,
 } from "@sig-net/midnight/testing";
+import { JsonRpcProvider } from "ethers";
 import { TransactionReceipt, Wallet } from "ethers";
 import { expect, it, vi } from "vitest";
 
@@ -25,7 +26,7 @@ import {
   ERC20_TRANSFER_MAX_PRIORITY_FEE_PER_GAS,
 } from "@/lib/midnight/evm-envelope";
 import * as observation from "@/lib/midnight/observed-execution";
-import { evmProvider, readPendingDeposit, runDeposit } from "@/lib/midnight/vault";
+import { readPendingDeposit, runDeposit } from "@/lib/midnight/vault";
 import type { StandaloneVaultContract } from "@/lib/midnight/vault-providers";
 
 import { createPendingDeposit, createVaultCircuitFixture } from "./vault-circuit-fixture";
@@ -77,8 +78,8 @@ it("recovers a generated pending deposit without creating a request or reading a
     success: true,
     output: `0x${"00".repeat(31)}01`,
   });
-  const provider = evmProvider(binding.environment.evmRpcUrl);
-  vi.spyOn(provider, "getTransactionReceipt").mockImplementation((hash) =>
+  const provider = new JsonRpcProvider(binding.environment.evmRpcUrl);
+  vi.spyOn(JsonRpcProvider.prototype, "getTransactionReceipt").mockImplementation((hash) =>
     Promise.resolve(
       new TransactionReceipt(
         {
@@ -102,7 +103,7 @@ it("recovers a generated pending deposit without creating a request or reading a
       ),
     ),
   );
-  const nonce = vi.spyOn(provider, "getTransactionCount");
+  const nonce = vi.spyOn(JsonRpcProvider.prototype, "getTransactionCount");
   const start = vi.spyOn(binding.contract.callTx, "startDeposit");
   const completion: Awaited<ReturnType<StandaloneVaultContract["callTx"]["completeDeposit"]>> = {
     public: {
@@ -163,6 +164,7 @@ it("recovers a generated pending deposit without creating a request or reading a
       ),
     ).rejects.toThrow("different token");
     await runDeposit(
+      { set: vi.fn() },
       binding.providers,
       binding.contract,
       binding.environment,
@@ -179,6 +181,7 @@ it("recovers a generated pending deposit without creating a request or reading a
     expect(complete.mock.calls[0]?.[1]).toEqual(respondBidirectionalEventToCircuitInput(response));
     await expect(
       runDeposit(
+        { set: vi.fn() },
         binding.providers,
         binding.contract,
         binding.environment,
@@ -190,9 +193,12 @@ it("recovers a generated pending deposit without creating a request or reading a
         requestId,
       ),
     ).rejects.toThrow("amount changed");
-    vi.spyOn(provider, "call").mockResolvedValue(`0x${1000000n.toString(16).padStart(64, "0")}`);
+    vi.spyOn(JsonRpcProvider.prototype, "call").mockResolvedValue(
+      `0x${1000000n.toString(16).padStart(64, "0")}`,
+    );
     await expect(
       runDeposit(
+        { set: vi.fn() },
         binding.providers,
         binding.contract,
         binding.environment,
@@ -214,6 +220,7 @@ it("recovers a generated pending deposit without creating a request or reading a
     state.data = duplicate.context.callContext.currentQueryContext.state;
     await expect(
       runDeposit(
+        { set: vi.fn() },
         binding.providers,
         binding.contract,
         binding.environment,
@@ -235,6 +242,7 @@ it("recovers a generated pending deposit without creating a request or reading a
     ).rejects.toThrow("already be completed");
     await expect(
       runDeposit(
+        { set: vi.fn() },
         binding.providers,
         binding.contract,
         binding.environment,
@@ -249,6 +257,7 @@ it("recovers a generated pending deposit without creating a request or reading a
     expect(start).not.toHaveBeenCalled();
     expect(complete).toHaveBeenCalledTimes(1);
   } finally {
+    provider.destroy();
     binding.providers.privateStateProvider.dispose();
     await binding.providers.publicDataProvider.dispose();
   }

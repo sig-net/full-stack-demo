@@ -1,25 +1,10 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
 import type * as React from "react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { formatUnits, parseUnits } from "viem";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  AAVE_USDC,
-  STATA_USDC,
-  stataAssetsPerShare,
-  stataSupplyApy,
-} from "@/lib/midnight/evm-stata";
-import { midnightTxHistory, type MidnightTxRecord } from "@/lib/midnight/tx-history";
-import { parseTokenAmount } from "@/lib/utils/token-amount";
-import { useRuntimeConfig } from "@/providers/runtime-config-context";
-import { useVaultBalances } from "@/providers/vault-balances-context";
-import { useVault } from "@/providers/vault-context";
-import { useVaultOperations } from "@/providers/vault-operations-context";
+import { useVaultLending } from "@/hooks/use-vault-lending";
 
 import { Button } from "../ui/button";
 
@@ -35,136 +20,24 @@ interface LendWidgetProps {
  * @returns The lending controls and position summary.
  */
 export function LendWidget({ className }: LendWidgetProps): React.JSX.Element {
-  const { applied } = useRuntimeConfig();
-  const vault = useVault();
-  const connected = vault.binding !== null;
-  const { balances } = useVaultBalances();
-  const operations = useVaultOperations();
-  const { supply, redeem } = operations;
-  const [history, setHistory] = useState<MidnightTxRecord[]>([]);
-  useEffect(() => midnightTxHistory.subscribe(setHistory), []);
-  const rpc = connected ? applied.evm.rpcUrl : null;
-  const rates = useQuery({
-    queryKey: ["vault-lending-rates", rpc],
-    enabled: rpc !== null,
-    refetchInterval: 60_000,
-    queryFn: async () => {
-      if (!rpc) throw new Error("Vault is not ready.");
-      const [rate, apy] = await Promise.all([
-        stataAssetsPerShare(rpc).catch(() => null),
-        stataSupplyApy(rpc).catch(() => null),
-      ]);
-      return { rate, apy };
-    },
-  });
-  const apy = rates.isError ? null : (rates.data?.apy ?? null);
-  const assetsPerShare = rates.isError ? null : (rates.data?.rate ?? null);
-  const [supplyAmount, setSupplyAmount] = useState("");
-  const [redeemAmount, setRedeemAmount] = useState("");
-  const [busy, setBusy] = useState<"supply" | "redeem" | null>(null);
-
-  const supplyToken = balances?.perToken[AAVE_USDC.toLowerCase()];
-  const redeemToken = balances?.perToken[STATA_USDC.toLowerCase()];
-  const supplyAvailable = supplyToken?.vaultUnits ?? null;
-  const redeemAvailable = redeemToken?.vaultUnits ?? null;
-  const assetDecimals = supplyToken?.decimals ?? null;
-  const shareDecimals = redeemToken?.decimals ?? null;
-  const supplyReady = supplyAvailable !== null && assetDecimals !== null;
-  const redeemReady = redeemAvailable !== null && shareDecimals !== null;
-  const supplyLabel = supplyReady ? formatUnits(supplyAvailable, assetDecimals) : "Unavailable";
-  const redeemLabel = redeemReady ? formatUnits(redeemAvailable, shareDecimals) : "Unavailable";
-
-  const runSupply = async (): Promise<void> => {
-    if (!supplyAmount || !supplyReady) return;
-    let units: bigint;
-    try {
-      units = parseTokenAmount(supplyAmount, assetDecimals);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to parse supply amount.");
-      return;
-    }
-    if (units > supplyAvailable) {
-      toast.error("Not enough shielded USDC", {
-        description: `You hold ${supplyLabel} shielded Aave USDC. Deposit Aave USDC into the vault first.`,
-      });
-      return;
-    }
-    setBusy("supply");
-    try {
-      const result = await supply(units);
-      if (!result.refunded) toast.success("Supplied USDC into stataUSDC");
-      setSupplyAmount("");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Supply failed.");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const runRedeem = async (): Promise<void> => {
-    if (!redeemAmount || !redeemReady) return;
-    let units: bigint;
-    try {
-      units = parseTokenAmount(redeemAmount, shareDecimals);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to parse redeem amount.");
-      return;
-    }
-    if (units > redeemAvailable) {
-      toast.error("Not enough shielded stataUSDC", {
-        description: `You hold ${redeemLabel} shielded stataUSDC. Supply USDC first to receive shares.`,
-      });
-      return;
-    }
-    setBusy("redeem");
-    try {
-      const result = await redeem(units);
-      if (!result.refunded) toast.success("Redeemed stataUSDC back to USDC");
-      setRedeemAmount("");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Redeem failed.");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const disabled = !operations.ready || !connected || busy !== null || operations.busy;
-
-  const num = (v: string | undefined): number | null => {
-    if (v === undefined) return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
-  const units = (v: string | undefined): bigint | null => {
-    if (v === undefined || shareDecimals === null) return null;
-    try {
-      return parseUnits(v, shareDecimals);
-    } catch {
-      return null;
-    }
-  };
-  const completed = history.filter((t) => t.status === "completed");
-  const supplies = completed.filter((t) => t.type === "Supply");
-  const redeems = completed.filter((t) => t.type === "Redeem");
-  const basis = supplies.map((t) => num(t.basisAssets));
-  const proceeds = redeems.map((t) => num(t.proceedsAssets));
-  const sharesIn = supplies.map((t) => units(t.sharesReceived));
-  const sharesOut = redeems.map((t) => units(t.sharesBurned));
-  const legsComplete =
-    supplies.length > 0 &&
-    basis.every((v) => v !== null) &&
-    proceeds.every((v) => v !== null) &&
-    sharesIn.every((v) => v !== null) &&
-    sharesOut.every((v) => v !== null);
-  const accountedShares = legsComplete
-    ? sharesIn.reduce((a, v) => a + v, 0n) - sharesOut.reduce((a, v) => a + v, 0n)
-    : null;
-  const positionAssets =
-    assetsPerShare === null || !redeemReady ? null : Number(redeemLabel) * assetsPerShare;
-  const earnings =
-    legsComplete && accountedShares === redeemAvailable && positionAssets !== null
-      ? positionAssets + proceeds.reduce((a, v) => a + v, 0) - basis.reduce((a, v) => a + v, 0)
-      : null;
+  const {
+    connected,
+    disabled,
+    supplyAmount,
+    redeemAmount,
+    setSupplyAmount,
+    setRedeemAmount,
+    supplyLabel,
+    redeemLabel,
+    supplyReady,
+    redeemReady,
+    busy,
+    runSupply,
+    runRedeem,
+    apy,
+    positionAssets,
+    earnings,
+  } = useVaultLending();
 
   return (
     <Card className={className}>
@@ -219,9 +92,7 @@ export function LendWidget({ className }: LendWidgetProps): React.JSX.Element {
             <span>Redeem stataUSDC → USDC</span>
             <span>
               Available: {redeemLabel}
-              {assetsPerShare === null || !redeemReady
-                ? ""
-                : ` ≈ ${(Number(redeemLabel) * assetsPerShare).toFixed(6)} USDC.a`}
+              {positionAssets === null ? "" : ` ≈ ${positionAssets.toFixed(6)} USDC.a`}
             </span>
           </Label>
           <div className="ds-control-gap flex">

@@ -37,7 +37,7 @@ const record = (id: string): MidnightTxRecord => ({
 });
 
 describe("activity history", () => {
-  it("maps live pending, failed, completed and refunded updates and unsubscribes", async () => {
+  it("maps live pending, interrupted, failed, completed and refunded updates and unsubscribes", async () => {
     let unsubscribeCalls = 0;
     const originalSubscribe = midnightTxHistory.subscribe.bind(midnightTxHistory);
     const subscribeSpy = vi.spyOn(midnightTxHistory, "subscribe").mockImplementation((listener) => {
@@ -54,6 +54,16 @@ describe("activity history", () => {
     });
     await waitFor(() => {
       expect(result.current[0]?.status).toBe("pending");
+    });
+    act(() => {
+      midnightTxHistory.update(fixture.id, {
+        status: "interrupted",
+        failureReason: "Observation interrupted",
+      });
+    });
+    await waitFor(() => {
+      expect(result.current[0]?.status).toBe("interrupted");
+      expect(result.current[0]?.failureReason).toBe("Observation interrupted");
     });
     act(() => {
       midnightTxHistory.update(fixture.id, { status: "failed", failureReason: "Proof failed" });

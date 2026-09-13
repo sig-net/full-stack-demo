@@ -7,21 +7,21 @@ import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import { EvmBalancesProvider } from "@/providers/evm-balances-context";
 import { EvmDepositProvider, useEvmDeposit } from "@/providers/evm-deposit-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
+import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
-import { useWalletReadiness } from "@/providers/wallet-readiness-context";
 
 import { mockMatchingRuntimeServer } from "../config/runtime-server-fixture";
 import { browserWalletFixture, hash } from "../evm/browser-wallet-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
-import { useReadyWalletFixture } from "./wallet-readiness-fixture";
+import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 
 vi.mock(import("@/providers/vault-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/vault-operations-context"), { spy: true });
-vi.mock(import("@/providers/wallet-readiness-context"), { spy: true });
+vi.mock(import("@/providers/midnight-readiness-context"), { spy: true });
 
 afterEach(cleanup);
 
@@ -73,8 +73,8 @@ it("serialises EVM deposit preflight and preserves confirmed transfer state", as
     supply: vi.fn(),
     redeem: vi.fn(),
   });
-  vi.mocked(useWalletReadiness).mockImplementation(() => ({
-    ...useReadyWalletFixture(binding.wallet),
+  vi.mocked(useMidnightReadiness).mockImplementation(() => ({
+    ...useReadyMidnightFixture(binding.wallet),
     requireReady: readiness,
   }));
   mockMatchingRuntimeServer();

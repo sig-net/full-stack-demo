@@ -9,8 +9,7 @@ import { formatUnits } from "viem";
 
 import { createEvmChainConfig } from "@/lib/config/evm";
 import { fetchErc20Decimals } from "@/lib/constants/token-metadata";
-
-import { evmProvider } from "./vault";
+import { withEthersProvider } from "@/lib/evm/ethers-provider";
 
 /** Aave v3 Sepolia USDC: the underlying the vault lends (initialize's stataUnderlying). */
 export const AAVE_USDC = "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8";
@@ -47,20 +46,22 @@ export const REDEEM_RESPOND_SCHEMA = '[{"name":"assets","type":"uint64"}]';
  * @throws {Error} If decimals or the conversion read is unavailable.
  */
 export async function stataAssetsPerShare(evmRpcUrl: string): Promise<number> {
-  const wrapper = new Contract(
-    STATA_USDC,
-    ["function convertToAssets(uint256 shares) view returns (uint256)"],
-    evmProvider(evmRpcUrl),
-  );
-  const config = createEvmChainConfig(evmRpcUrl);
-  const [shareDecimals, assetDecimals] = await Promise.all([
-    fetchErc20Decimals(STATA_USDC, config),
-    fetchErc20Decimals(AAVE_USDC, config),
-  ]);
-  const assets: bigint = await wrapper.getFunction<ConstantContractMethod<bigint[], bigint>>(
-    "convertToAssets",
-  )(10n ** BigInt(shareDecimals));
-  return Number(formatUnits(assets, assetDecimals));
+  return withEthersProvider(evmRpcUrl, async (provider) => {
+    const wrapper = new Contract(
+      STATA_USDC,
+      ["function convertToAssets(uint256 shares) view returns (uint256)"],
+      provider,
+    );
+    const config = createEvmChainConfig(evmRpcUrl);
+    const [shareDecimals, assetDecimals] = await Promise.all([
+      fetchErc20Decimals(STATA_USDC, config),
+      fetchErc20Decimals(AAVE_USDC, config),
+    ]);
+    const assets: bigint = await wrapper.getFunction<ConstantContractMethod<bigint[], bigint>>(
+      "convertToAssets",
+    )(10n ** BigInt(shareDecimals));
+    return Number(formatUnits(assets, assetDecimals));
+  });
 }
 
 const RAY = 10n ** 27n;
@@ -73,23 +74,24 @@ const SECONDS_PER_YEAR = 31_536_000;
  * @throws {Error} If pool discovery or reserve data reads fail.
  */
 export async function stataSupplyApy(evmRpcUrl: string): Promise<number> {
-  const provider = evmProvider(evmRpcUrl);
-  const wrapper = new Contract(STATA_USDC, ["function POOL() view returns (address)"], provider);
-  const poolAddress: string =
-    await wrapper.getFunction<ConstantContractMethod<never[], string>>("POOL")();
-  const pool = new Contract(
-    poolAddress,
-    [
-      "function getReserveData(address asset) view returns (tuple(tuple(uint256 data) configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))",
-    ],
-    provider,
-  );
-  const data =
-    await pool.getFunction<ConstantContractMethod<string[], { currentLiquidityRate: bigint }>>(
-      "getReserveData",
-    )(AAVE_USDC);
-  const apr = Number(data.currentLiquidityRate) / Number(RAY);
-  return (1 + apr / SECONDS_PER_YEAR) ** SECONDS_PER_YEAR - 1;
+  return withEthersProvider(evmRpcUrl, async (provider) => {
+    const wrapper = new Contract(STATA_USDC, ["function POOL() view returns (address)"], provider);
+    const poolAddress: string =
+      await wrapper.getFunction<ConstantContractMethod<never[], string>>("POOL")();
+    const pool = new Contract(
+      poolAddress,
+      [
+        "function getReserveData(address asset) view returns (tuple(tuple(uint256 data) configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))",
+      ],
+      provider,
+    );
+    const data =
+      await pool.getFunction<ConstantContractMethod<string[], { currentLiquidityRate: bigint }>>(
+        "getReserveData",
+      )(AAVE_USDC);
+    const apr = Number(data.currentLiquidityRate) / Number(RAY);
+    return (1 + apr / SECONDS_PER_YEAR) ** SECONDS_PER_YEAR - 1;
+  });
 }
 
 /**
@@ -100,8 +102,10 @@ export async function stataSupplyApy(evmRpcUrl: string): Promise<number> {
  * @throws {Error} If the code read fails.
  */
 export async function stataAvailable(evmRpcUrl: string): Promise<boolean> {
-  const code = await evmProvider(evmRpcUrl).getCode(STATA_USDC);
-  return code !== "0x";
+  return withEthersProvider(evmRpcUrl, async (provider) => {
+    const code = await provider.getCode(STATA_USDC);
+    return code !== "0x";
+  });
 }
 
 /** Contract-fixed routing of a supply event (the supply-schema variant of VAULT_MPC_ROUTING). */

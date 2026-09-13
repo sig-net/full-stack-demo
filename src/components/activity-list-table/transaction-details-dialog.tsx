@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Feedback } from "@/components/ui/feedback";
 
 import type { ActivityTransaction } from "./index";
 
@@ -43,9 +44,9 @@ export function TransactionDetailsDialog(
           {transaction.fromToken && <p>From: {transaction.fromToken.amount}</p>}
           {transaction.toToken && <p>To: {transaction.toToken.amount}</p>}
           {transaction.failureReason && (
-            <p className="ds-round ds-surface-error ds-inset-control ds-error break-all">
+            <Feedback tone={transaction.status === "interrupted" ? "warning" : "error"}>
               {transaction.failureReason}
-            </p>
+            </Feedback>
           )}
           {transaction.requestId && (
             <p className="break-all">Request ID: {transaction.requestId}</p>

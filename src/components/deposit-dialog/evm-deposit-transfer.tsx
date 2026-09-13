@@ -16,8 +16,8 @@ import type { TokenConfig } from "@/lib/constants/token-metadata";
 import { useEvmBalances } from "@/providers/evm-balances-context";
 import { useEvmDeposit } from "@/providers/evm-deposit-context";
 import { useEvmWallet } from "@/providers/evm-wallet-context";
+import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { useVault } from "@/providers/vault-context";
-import { useWalletReadiness } from "@/providers/wallet-readiness-context";
 
 /**
  * Owns the EVM transfer amount and continues a matching vault deposit session.
@@ -31,7 +31,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
   const deposit = useEvmDeposit();
   const balances = useEvmBalances();
   const vault = useVault();
-  const readiness = useWalletReadiness();
+  const readiness = useMidnightReadiness();
   const progress = useMidnightProgress();
   const [amount, setAmount] = useState("");
   const eligibility = useEvmDepositEligibility(

@@ -1,13 +1,13 @@
-import { Transaction, TransactionReceipt, Wallet } from "ethers";
+import { JsonRpcProvider, Transaction, TransactionReceipt, Wallet } from "ethers";
 import { expect, it, vi } from "vitest";
 
-import { broadcastEvm, evmProvider } from "@/lib/midnight/vault";
+import { broadcastEvm } from "@/lib/midnight/vault";
 
 import { createVaultFixture } from "../sdk/vault-fixture";
 
 it("uses an already mined receipt without rebroadcasting the signed transaction", async () => {
   const fixture = await createVaultFixture();
-  const provider = evmProvider(fixture.environment.evmRpcUrl);
+  const provider = new JsonRpcProvider(fixture.environment.evmRpcUrl);
   const signer = new Wallet(`0x${"01".repeat(32)}`);
   const signed = Transaction.from(
     await signer.signTransaction({
@@ -40,12 +40,13 @@ it("uses an already mined receipt without rebroadcasting the signed transaction"
     },
     provider,
   );
-  vi.spyOn(provider, "getTransactionReceipt").mockResolvedValue(receipt);
-  const broadcast = vi.spyOn(provider, "broadcastTransaction");
+  vi.spyOn(JsonRpcProvider.prototype, "getTransactionReceipt").mockResolvedValue(receipt);
+  const broadcast = vi.spyOn(JsonRpcProvider.prototype, "broadcastTransaction");
   try {
     await broadcastEvm(fixture.environment, signed);
     expect(broadcast).not.toHaveBeenCalled();
   } finally {
+    provider.destroy();
     fixture.providers.privateStateProvider.dispose();
     await fixture.providers.publicDataProvider.dispose();
   }
@@ -53,7 +54,7 @@ it("uses an already mined receipt without rebroadcasting the signed transaction"
 
 it("cannot broadcast after the session changes during receipt lookup", async () => {
   const fixture = await createVaultFixture();
-  const provider = evmProvider(fixture.environment.evmRpcUrl);
+  const provider = new JsonRpcProvider(fixture.environment.evmRpcUrl);
   const signer = new Wallet(`0x${"01".repeat(32)}`);
   const signed = Transaction.from(
     await signer.signTransaction({
@@ -66,8 +67,10 @@ it("cannot broadcast after the session changes during receipt lookup", async () 
     }),
   );
   const lookup = Promise.withResolvers<TransactionReceipt | null>();
-  const read = vi.spyOn(provider, "getTransactionReceipt").mockReturnValue(lookup.promise);
-  const broadcast = vi.spyOn(provider, "broadcastTransaction");
+  const read = vi
+    .spyOn(JsonRpcProvider.prototype, "getTransactionReceipt")
+    .mockReturnValue(lookup.promise);
+  const broadcast = vi.spyOn(JsonRpcProvider.prototype, "broadcastTransaction");
   let active = true;
   const environment = {
     ...fixture.environment,
@@ -83,6 +86,7 @@ it("cannot broadcast after the session changes during receipt lookup", async () 
     await expect(pending).rejects.toThrow("superseded");
     expect(broadcast).not.toHaveBeenCalled();
   } finally {
+    provider.destroy();
     fixture.providers.privateStateProvider.dispose();
     await fixture.providers.publicDataProvider.dispose();
   }

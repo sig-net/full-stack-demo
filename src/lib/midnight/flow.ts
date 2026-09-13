@@ -80,3 +80,12 @@ export const PHASE_MESSAGE: Record<FlowPhase, string> = {
   refunding: "On-chain leg failed. Refunding your tokens…",
   done: "Done",
 };
+
+/** Execution checkpoints supplied by the owner of a captured operation. */
+export interface OperationProgress {
+  set: (phase: Exclude<FlowPhase, "done">) => void;
+}
+
+/** Attested terminal outcome, with exact output units when the circuit returns them. */
+export type VaultExecutionResult =
+  { status: "settled"; outputUnits: bigint | null } | { status: "refunded" };

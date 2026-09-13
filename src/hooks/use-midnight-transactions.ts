@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import type { ActivityTransaction } from "@/components/activity-list-table";
-import { midnightTxHistory, type MidnightTxRecord } from "@/lib/midnight/tx-history";
+import type { MidnightTxRecord } from "@/lib/midnight/tx-history";
 import { formatActivityDate } from "@/lib/utils/date-formatting";
+
+import { useMidnightHistory } from "./use-midnight-history";
 
 const CHAIN = "midnight";
 
@@ -50,7 +50,6 @@ function toActivity(r: MidnightTxRecord): ActivityTransaction {
  * @returns Live rows with exact recorded amount strings and formatted timestamps.
  */
 export function useMidnightTransactions(): ActivityTransaction[] {
-  const [txs, setTxs] = useState<MidnightTxRecord[]>([]);
-  useEffect(() => midnightTxHistory.subscribe(setTxs), []);
+  const txs = useMidnightHistory();
   return txs.map(toActivity);
 }

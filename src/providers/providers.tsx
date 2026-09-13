@@ -14,13 +14,14 @@ import { EvmDepositProvider } from "./evm-deposit-context";
 import { EvmLocalFundingProvider } from "./evm-local-funding-context";
 import { useEvmWallet } from "./evm-wallet-context";
 import { EvmWalletProvider } from "./evm-wallet-context";
+import { MidnightLocalFundingProvider } from "./midnight-local-funding-context";
+import { MidnightReadinessProvider } from "./midnight-readiness-context";
 import { useMidnightConnection } from "./midnight-wallet-context";
 import { MidnightWalletProvider } from "./midnight-wallet-context";
 import { RuntimeConfigProvider, useRuntimeConfig } from "./runtime-config-context";
 import { VaultBalancesProvider } from "./vault-balances-context";
 import { VaultProvider } from "./vault-context";
 import { VaultOperationsProvider } from "./vault-operations-context";
-import { WalletReadinessProvider } from "./wallet-readiness-context";
 
 function RuntimeWallets({ children }: { children: React.ReactNode }): React.JSX.Element {
   const runtime = useRuntimeConfig();
@@ -59,18 +60,20 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
           <EvmBalancesProvider tokens={ERC20_TOKENS.map((token) => token.erc20Address)}>
             <EvmLocalFundingProvider>
               <RuntimeWallets>
-                <WalletReadinessProvider>
-                  <VaultProvider>
-                    <VaultBalancesProvider>
-                      <VaultOperationsProvider>
-                        <EvmDepositProvider>
-                          {children}
-                          <MidnightProgressToaster />
-                        </EvmDepositProvider>
-                      </VaultOperationsProvider>
-                    </VaultBalancesProvider>
-                  </VaultProvider>
-                </WalletReadinessProvider>
+                <MidnightReadinessProvider>
+                  <MidnightLocalFundingProvider>
+                    <VaultProvider>
+                      <VaultBalancesProvider>
+                        <VaultOperationsProvider>
+                          <EvmDepositProvider>
+                            {children}
+                            <MidnightProgressToaster />
+                          </EvmDepositProvider>
+                        </VaultOperationsProvider>
+                      </VaultBalancesProvider>
+                    </VaultProvider>
+                  </MidnightLocalFundingProvider>
+                </MidnightReadinessProvider>
               </RuntimeWallets>
             </EvmLocalFundingProvider>
           </EvmBalancesProvider>

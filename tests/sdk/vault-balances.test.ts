@@ -2,8 +2,9 @@ import { Interface, JsonRpcProvider } from "ethers";
 import { expect, it, vi } from "vitest";
 
 import { fetchErc20Decimals } from "@/lib/constants/token-metadata";
+import { withEthersProvider } from "@/lib/evm/ethers-provider";
 import { AAVE_USDC, STATA_USDC, stataAssetsPerShare } from "@/lib/midnight/evm-stata";
-import { erc20Balance, evmProvider, vaultTokenType } from "@/lib/midnight/vault";
+import { erc20Balance, vaultTokenType } from "@/lib/midnight/vault";
 import { readBalances } from "@/lib/midnight/vault-balances";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
 
@@ -11,6 +12,7 @@ import { account } from "../evm/browser-wallet-fixture";
 import { createVaultFixture } from "./vault-fixture";
 
 vi.mock(import("@/lib/midnight/vault"), { spy: true });
+vi.mock(import("@/lib/evm/ethers-provider"), { spy: true });
 vi.mock(import("@/lib/constants/token-metadata"), { spy: true });
 
 it.each(["dust", "unshielded", "shielded", "deposit", "pool", "decimals"])(
@@ -65,7 +67,7 @@ it("uses observed share and asset precision with the supplied RPC", async () => 
   const call = vi
     .spyOn(provider, "call")
     .mockResolvedValue(abi.encodeFunctionResult("convertToAssets", [1250000n]));
-  vi.mocked(evmProvider).mockReturnValue(provider);
+  vi.mocked(withEthersProvider).mockImplementation((_url, operation) => operation(provider));
   vi.mocked(fetchErc20Decimals).mockImplementation((address) =>
     Promise.resolve(address === STATA_USDC ? 8 : 6),
   );

@@ -8,9 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import type { TokenConfig } from "@/lib/constants/token-metadata";
+import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
-import { useWalletReadiness } from "@/providers/wallet-readiness-context";
 
 /**
  * Recovers a pending deposit for the selected token after the transfer stage.
@@ -22,7 +22,7 @@ import { useWalletReadiness } from "@/providers/wallet-readiness-context";
 export function PendingDepositRecovery({ token }: { token: TokenConfig }): React.JSX.Element {
   const [recoveryRequestId, setRecoveryRequestId] = useState("");
   const operations = useVaultOperations();
-  const readiness = useWalletReadiness();
+  const readiness = useMidnightReadiness();
   const vault = useVault();
   const progress = useMidnightProgress();
   return (

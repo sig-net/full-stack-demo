@@ -186,6 +186,8 @@ it("keeps balance and operation consumers on their separate ownership APIs", asy
     "src/lib/midnight/vault-balances.ts",
     "src/components/lend-widget/index.tsx",
     "src/components/swap-widget/index.tsx",
+    "src/hooks/use-vault-swap.ts",
+    "src/hooks/use-vault-lending.ts",
     "src/components/withdraw-dialog/index.tsx",
     "src/components/deposit-dialog/index.tsx",
   ];

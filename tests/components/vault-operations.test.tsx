@@ -5,22 +5,27 @@ import { StrictMode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import * as tokens from "@/lib/constants/token-metadata";
-import { flow, type FlowKind } from "@/lib/midnight/flow";
+import {
+  flow,
+  type FlowKind,
+  type FlowState,
+  type VaultExecutionResult,
+} from "@/lib/midnight/flow";
 import { midnightTxHistory } from "@/lib/midnight/tx-history";
 import * as vault from "@/lib/midnight/vault";
+import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations, VaultOperationsProvider } from "@/providers/vault-operations-context";
-import { useWalletReadiness } from "@/providers/wallet-readiness-context";
 
 import { mockMatchingRuntimeServer } from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
-import { useReadyWalletFixture } from "./wallet-readiness-fixture";
+import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 
 vi.mock(import("@/providers/vault-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
-vi.mock(import("@/providers/wallet-readiness-context"), { spy: true });
+vi.mock(import("@/providers/midnight-readiness-context"), { spy: true });
 vi.mock(import("@/lib/midnight/vault"), { spy: true });
 vi.mock(import("@/lib/constants/token-metadata"), { spy: true });
 afterEach(() => {
@@ -32,18 +37,22 @@ const scenarios: {
   kind: FlowKind;
   outcome: "completed" | "refunded" | "failed";
   recovery?: "owned" | "superseded";
+  replacedAfterSubmission?: boolean;
+  unmounted?: boolean;
 }[] = [];
 for (const kind of ["deposit", "withdraw", "swap", "supply", "redeem"] satisfies FlowKind[]) {
   scenarios.push({ kind, outcome: "completed" }, { kind, outcome: "failed" });
   if (kind !== "deposit") scenarios.push({ kind, outcome: "refunded" });
 }
 scenarios.push(
+  { kind: "deposit", outcome: "completed", replacedAfterSubmission: true },
+  { kind: "withdraw", outcome: "failed", unmounted: true },
   { kind: "deposit", outcome: "failed", recovery: "owned" },
   { kind: "deposit", outcome: "failed", recovery: "superseded" },
 );
 it.each(scenarios)(
   "shares the $kind lock and preserves the $outcome history terminal with recovery $recovery",
-  async ({ kind, outcome, recovery }) => {
+  async ({ kind, outcome, recovery, replacedAfterSubmission, unmounted }) => {
     const binding = await createVaultFixture();
     vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS", binding.environment.contractAddress);
     vi.stubEnv(
@@ -90,28 +99,41 @@ it.each(scenarios)(
       error: null,
       refresh,
     });
-    vi.mocked(useWalletReadiness).mockImplementation(function useFixtureReadiness() {
-      return useReadyWalletFixture(binding.wallet);
+    vi.mocked(useMidnightReadiness).mockImplementation(function useFixtureReadiness() {
+      return useReadyMidnightFixture(binding.wallet);
     });
     const execution = Promise.withResolvers<undefined>();
     const recordId = parseRequestIdHex("01".repeat(32));
-    const record = (onRecord: Parameters<typeof vault.runDeposit>[7]): Promise<void> => {
+    const record = (
+      onRecord: Parameters<typeof vault.runDeposit>[8],
+    ): Promise<VaultExecutionResult> => {
       onRecord?.(recordId, `0x${"01".repeat(32)}`);
       return execution.promise.then(() => {
-        if (outcome === "refunded") flow.finishRefunded();
-        else flow.set("done");
+        return outcome === "refunded"
+          ? { status: "refunded" }
+          : { status: "settled", outputUnits: 12n };
       });
     };
     const deposit = vi
       .mocked(vault.runDeposit)
       .mockImplementation(
-        (_providers, _contract, _environment, _identity, _token, _amount, _log, onRecord) =>
-          record(onRecord),
+        (
+          _progress,
+          _providers,
+          _contract,
+          _environment,
+          _identity,
+          _token,
+          _amount,
+          _log,
+          onRecord,
+        ) => record(onRecord),
       );
     const withdraw = vi
       .mocked(vault.runWithdraw)
       .mockImplementation(
         (
+          _progress,
           _providers,
           _contract,
           _environment,
@@ -128,6 +150,7 @@ it.each(scenarios)(
       .mocked(vault.runSwap)
       .mockImplementation(
         (
+          _progress,
           _providers,
           _contract,
           _environment,
@@ -145,23 +168,43 @@ it.each(scenarios)(
     const supply = vi
       .mocked(vault.runSupply)
       .mockImplementation(
-        async (_providers, _contract, _environment, _identity, _amount, _log, _fund, onRecord) => {
-          await record(onRecord);
-          return 12n;
+        async (
+          _progress,
+          _providers,
+          _contract,
+          _environment,
+          _identity,
+          _amount,
+          _log,
+          _fund,
+          onRecord,
+        ) => {
+          return record(onRecord);
         },
       );
     const redeem = vi
       .mocked(vault.runRedeem)
       .mockImplementation(
-        async (_providers, _contract, _environment, _identity, _amount, _log, _fund, onRecord) => {
-          await record(onRecord);
-          return 12n;
+        async (
+          _progress,
+          _providers,
+          _contract,
+          _environment,
+          _identity,
+          _amount,
+          _log,
+          _fund,
+          onRecord,
+        ) => {
+          return record(onRecord);
         },
       );
     const executions = { deposit, withdraw, swap, supply, redeem };
     const execute = executions[kind];
     const history = vi.spyOn(midnightTxHistory, "add");
     const terminal = vi.spyOn(midnightTxHistory, "update");
+    const snapshots = vi.fn<(state: FlowState) => void>();
+    const unsubscribe = flow.subscribe(snapshots);
     const query = new QueryClient();
     const mounted = renderHook(() => [useVaultOperations(), useVaultOperations()] as const, {
       wrapper: ({ children }) => (
@@ -218,6 +261,19 @@ it.each(scenarios)(
       );
       if (!first) throw new Error("Expected synchronously captured operation promise");
       const settled = Promise.allSettled([first]);
+      if (unmounted) mounted.unmount();
+      if (replacedAfterSubmission) {
+        vi.spyOn(binding, "assertActive").mockImplementation(() => {
+          throw new Error("Vault session superseded.");
+        });
+        flow.start("swap");
+        const progress = deposit.mock.calls[0]?.[0];
+        const log = deposit.mock.calls[0]?.[7];
+        progress?.set("refunding");
+        log?.("Obsolete operation log");
+      }
+      expect(flow.phase).toBe("preparing");
+      expect(mounted.result.current[0].log.join(" ")).not.toContain("Obsolete operation log");
       const failure = recovery ? "Rebuild failed" : "Fixture proof rejected";
       await act(async () => {
         if (recovery) {
@@ -240,26 +296,37 @@ it.each(scenarios)(
             : { status: "fulfilled", value: { refunded: outcome === "refunded" } },
         ]);
       });
+      const terminals = snapshots.mock.calls
+        .map(([state]) => state)
+        .filter((state) => state.phase === "done");
+      expect(terminals).toHaveLength(outcome === "failed" || replacedAfterSubmission ? 0 : 1);
+      expect(terminals.every((state) => state.refunded === (outcome === "refunded"))).toBe(true);
       expect(execute).toHaveBeenCalledTimes(1);
       expect(refresh).toHaveBeenCalledTimes(outcome === "failed" ? 0 : 1);
       expect(history).toHaveBeenCalledTimes(1);
-      expect(terminal).toHaveBeenCalledWith(recordId, expect.objectContaining({ status: outcome }));
+      expect(terminal).toHaveBeenCalledWith(
+        recordId,
+        expect.objectContaining({ status: recovery === "superseded" ? "interrupted" : outcome }),
+      );
       expect(rebuild).toHaveBeenCalledTimes(recovery ? 1 : 0);
-      expect(flow.error).toBe(outcome === "failed" && recovery !== "superseded" ? failure : null);
-      expect(flow.kind).toBe(recovery === "superseded" ? "swap" : kind);
+      expect(flow.error).toBe(
+        outcome === "failed" && recovery !== "superseded" && !unmounted ? failure : null,
+      );
+      expect(flow.kind).toBe(recovery === "superseded" || replacedAfterSubmission ? "swap" : kind);
       expect(terminal).toHaveBeenCalledWith(
         recordId,
         expect.objectContaining(
           outcome === "failed"
             ? {
-                status: "failed",
+                status: recovery === "superseded" ? "interrupted" : "failed",
                 failureReason: recovery === "superseded" ? "Vault session superseded." : failure,
               }
             : { status: outcome },
         ),
       );
-      expect(mounted.result.current[0].busy).toBe(false);
+      expect(mounted.result.current[0].busy).toBe(unmounted === true);
     } finally {
+      unsubscribe();
       mounted.unmount();
       query.clear();
       binding.providers.privateStateProvider.dispose();
