@@ -508,3 +508,38 @@ it("ignores a rejected swap completion after its widget unmounts", async () => {
     await f.close();
   }
 });
+
+it.each(["quote", "discovery"] as const)(
+  "exposes %s errors and retries explicitly",
+  async (kind) => {
+    const f = await fixture();
+    const failure = new Error("EVM RPC read timed out");
+    if (kind === "quote") vi.mocked(quoteBestFeeExactInput).mockRejectedValueOnce(failure);
+    else vi.mocked(discoverSwappablePairs).mockRejectedValueOnce(failure);
+    const hook = renderHook(() => useVaultSwap(), { wrapper: f.wrapper });
+    try {
+      act(() => {
+        hook.result.current.setFromAmount("1");
+      });
+      await waitFor(() => {
+        expect(hook.result.current.quoteError).toContain("timed out");
+      });
+      expect(hook.result.current.canSwap).toBe(false);
+      act(() => {
+        hook.result.current.retryQuote();
+      });
+      await waitFor(() => {
+        expect(hook.result.current.quoteError).toBeNull();
+      });
+      if (kind === "discovery")
+        act(() => {
+          hook.result.current.setFromAmount("1");
+        });
+      await waitFor(() => {
+        expect(hook.result.current.canSwap).toBe(true);
+      });
+    } finally {
+      await f.close();
+    }
+  },
+);

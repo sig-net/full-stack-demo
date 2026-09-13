@@ -8,10 +8,13 @@ import {
   type ConstantContractMethod,
   Contract as EthersContract,
   type ContractMethod,
+  isError,
   ZeroAddress,
 } from "ethers";
 
 import { withEthersProvider } from "@/lib/evm/ethers-provider";
+
+import { SWAP_GAS_LIMIT } from "./evm-envelope";
 
 /** Router address shared by approval and swap envelopes on the configured Sepolia deployment. */
 export const UNISWAP_SWAP_ROUTER_02 = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E";
@@ -45,6 +48,26 @@ export const SWAP_MPC_ROUTING = {
   respondSerializationSchema: asciiPadded(SWAP_RESPOND_SCHEMA, SWAP_RESPOND_SCHEMA_BYTES),
 };
 
+/** Deadline for each concurrent quote tier and the complete pool-discovery read. */
+export const SWAP_READ_TIMEOUT_MS = 10_000;
+
+class SwapGasLimitError extends Error {}
+
+function assertSwapGasEstimate(gasEstimate: bigint): void {
+  if (gasEstimate >= SWAP_GAS_LIMIT)
+    throw new SwapGasLimitError("Pool quote exceeds the vault swap gas allowance.");
+}
+
+function throwQuoteFailure(results: PromiseSettledResult<unknown>[]): void {
+  const failed = results.find(
+    (result) =>
+      result.status === "rejected" &&
+      !isError(result.reason, "CALL_EXCEPTION") &&
+      !(result.reason instanceof SwapGasLimitError),
+  );
+  if (failed?.status === "rejected") throw failed.reason;
+}
+
 const QUOTER_ABI = [
   "function quoteExactOutputSingle((address tokenIn,address tokenOut,uint256 amount,uint24 fee,uint160 sqrtPriceLimitX96)) returns (uint256 amountIn,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)",
   "function quoteExactInputSingle((address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96)) returns (uint256 amountOut,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)",
@@ -73,6 +96,7 @@ export async function uniswapAvailable(evmRpcUrl: string): Promise<boolean> {
  * @param fee - Selected pool fee tier.
  * @param amountOut - Desired output in token base units.
  * @param slippageBps - Input headroom in basis points.
+ * @param signal - Cancels an obsolete quote.
  * @returns Quoted input and its slippage-adjusted maximum.
  * @throws {Error} If the pool quote fails.
  */
@@ -83,32 +107,38 @@ export async function quoteExactOutputSingle(
   fee: bigint,
   amountOut: bigint,
   slippageBps = 100n,
+  signal?: AbortSignal,
 ): Promise<{ amountIn: bigint; amountInMaximum: bigint }> {
-  return withEthersProvider(evmRpcUrl, async (provider) => {
-    const quoter = new EthersContract(UNISWAP_QUOTER_V2, QUOTER_ABI, provider);
-    const [amountIn] = await quoter
-      .getFunction<
-        ContractMethod<
-          {
-            tokenIn: string;
-            tokenOut: string;
-            amount: bigint;
-            fee: bigint;
-            sqrtPriceLimitX96: bigint;
-          }[],
-          [bigint, bigint, bigint, bigint]
-        >
-      >("quoteExactOutputSingle")
-      .staticCall({
-        tokenIn,
-        tokenOut,
-        amount: amountOut,
-        fee,
-        sqrtPriceLimitX96: 0n,
-      });
-    const amountInMaximum = (amountIn * (10_000n + slippageBps)) / 10_000n;
-    return { amountIn: amountIn, amountInMaximum };
-  });
+  return withEthersProvider(
+    evmRpcUrl,
+    async (provider) => {
+      const quoter = new EthersContract(UNISWAP_QUOTER_V2, QUOTER_ABI, provider);
+      const [amountIn, , , gasEstimate] = await quoter
+        .getFunction<
+          ContractMethod<
+            {
+              tokenIn: string;
+              tokenOut: string;
+              amount: bigint;
+              fee: bigint;
+              sqrtPriceLimitX96: bigint;
+            }[],
+            [bigint, bigint, bigint, bigint]
+          >
+        >("quoteExactOutputSingle")
+        .staticCall({
+          tokenIn,
+          tokenOut,
+          amount: amountOut,
+          fee,
+          sqrtPriceLimitX96: 0n,
+        });
+      assertSwapGasEstimate(gasEstimate);
+      const amountInMaximum = (amountIn * (10_000n + slippageBps)) / 10_000n;
+      return { amountIn: amountIn, amountInMaximum };
+    },
+    { timeoutMs: SWAP_READ_TIMEOUT_MS, signal },
+  );
 }
 
 /** Fee tiers searched independently so an unavailable pool does not discard other quotes. */
@@ -122,6 +152,7 @@ export const UNISWAP_FEE_TIERS = [100n, 500n, 3000n, 10000n];
  * @param tokenOut - Output token address.
  * @param amountOut - Desired output in token base units.
  * @param slippageBps - Input headroom in basis points.
+ * @param signal - Cancels obsolete tier reads.
  * @returns The winning quote and tier, or null if every tier is unavailable.
  */
 export async function quoteBestFee(
@@ -130,11 +161,20 @@ export async function quoteBestFee(
   tokenOut: string,
   amountOut: bigint,
   slippageBps = 100n,
+  signal?: AbortSignal,
 ): Promise<{ amountIn: bigint; amountInMaximum: bigint; fee: bigint } | null> {
   const results = await Promise.allSettled(
     UNISWAP_FEE_TIERS.map(async (fee) => ({
       fee,
-      ...(await quoteExactOutputSingle(evmRpcUrl, tokenIn, tokenOut, fee, amountOut, slippageBps)),
+      ...(await quoteExactOutputSingle(
+        evmRpcUrl,
+        tokenIn,
+        tokenOut,
+        fee,
+        amountOut,
+        slippageBps,
+        signal,
+      )),
     })),
   );
   let best: { amountIn: bigint; amountInMaximum: bigint; fee: bigint } | null = null;
@@ -151,6 +191,7 @@ export async function quoteBestFee(
       };
     }
   }
+  if (best === null) throwQuoteFailure(results);
   return best;
 }
 
@@ -162,6 +203,7 @@ export async function quoteBestFee(
  * @param tokenOut - Output token address.
  * @param fee - Selected pool fee tier.
  * @param amountIn - Input in token base units.
+ * @param signal - Cancels an obsolete quote.
  * @returns Expected output in token base units.
  * @throws {Error} If the pool quote fails.
  */
@@ -171,31 +213,37 @@ export async function quoteExactInputSingle(
   tokenOut: string,
   fee: bigint,
   amountIn: bigint,
+  signal?: AbortSignal,
 ): Promise<{ amountOut: bigint }> {
-  return withEthersProvider(evmRpcUrl, async (provider) => {
-    const quoter = new EthersContract(UNISWAP_QUOTER_V2, QUOTER_ABI, provider);
-    const [amountOut] = await quoter
-      .getFunction<
-        ContractMethod<
-          {
-            tokenIn: string;
-            tokenOut: string;
-            amountIn: bigint;
-            fee: bigint;
-            sqrtPriceLimitX96: bigint;
-          }[],
-          [bigint, bigint, bigint, bigint]
-        >
-      >("quoteExactInputSingle")
-      .staticCall({
-        tokenIn,
-        tokenOut,
-        amountIn,
-        fee,
-        sqrtPriceLimitX96: 0n,
-      });
-    return { amountOut: amountOut };
-  });
+  return withEthersProvider(
+    evmRpcUrl,
+    async (provider) => {
+      const quoter = new EthersContract(UNISWAP_QUOTER_V2, QUOTER_ABI, provider);
+      const [amountOut, , , gasEstimate] = await quoter
+        .getFunction<
+          ContractMethod<
+            {
+              tokenIn: string;
+              tokenOut: string;
+              amountIn: bigint;
+              fee: bigint;
+              sqrtPriceLimitX96: bigint;
+            }[],
+            [bigint, bigint, bigint, bigint]
+          >
+        >("quoteExactInputSingle")
+        .staticCall({
+          tokenIn,
+          tokenOut,
+          amountIn,
+          fee,
+          sqrtPriceLimitX96: 0n,
+        });
+      assertSwapGasEstimate(gasEstimate);
+      return { amountOut: amountOut };
+    },
+    { timeoutMs: SWAP_READ_TIMEOUT_MS, signal },
+  );
 }
 
 /**
@@ -205,6 +253,7 @@ export async function quoteExactInputSingle(
  * @param tokenIn - Input token address.
  * @param tokenOut - Output token address.
  * @param amountIn - Input in token base units.
+ * @param signal - Cancels obsolete tier reads.
  * @returns The winning output and tier, or null if every tier is unavailable.
  */
 export async function quoteBestFeeExactInput(
@@ -212,11 +261,12 @@ export async function quoteBestFeeExactInput(
   tokenIn: string,
   tokenOut: string,
   amountIn: bigint,
+  signal?: AbortSignal,
 ): Promise<{ amountOut: bigint; fee: bigint } | null> {
   const results = await Promise.allSettled(
     UNISWAP_FEE_TIERS.map(async (fee) => ({
       fee,
-      ...(await quoteExactInputSingle(evmRpcUrl, tokenIn, tokenOut, fee, amountIn)),
+      ...(await quoteExactInputSingle(evmRpcUrl, tokenIn, tokenOut, fee, amountIn, signal)),
     })),
   );
   let best: { amountOut: bigint; fee: bigint } | null = null;
@@ -229,6 +279,7 @@ export async function quoteBestFeeExactInput(
       best = { amountOut: r.value.amountOut, fee: r.value.fee };
     }
   }
+  if (best === null) throwQuoteFailure(results);
   return best;
 }
 
@@ -250,37 +301,48 @@ const FACTORY_ABI = ["function getPool(address,address,uint24) view returns (add
  *
  * @param evmRpcUrl - Captured RPC endpoint.
  * @param tokens - Candidate token addresses.
+ * @param signal - Cancels obsolete discovery.
  * @returns Normalised pair keys with at least one deployed pool.
  */
 export async function discoverSwappablePairs(
   evmRpcUrl: string,
   tokens: string[],
+  signal?: AbortSignal,
 ): Promise<Set<string>> {
-  return withEthersProvider(evmRpcUrl, async (provider) => {
-    const factory = new EthersContract(UNISWAP_V3_FACTORY, FACTORY_ABI, provider);
-    const getPool =
-      factory.getFunction<ConstantContractMethod<(string | bigint)[], string>>("getPool");
-    const swappable = new Set<string>();
-    const checks: Promise<void>[] = [];
-    for (let i = 0; i < tokens.length; i++) {
-      for (let j = i + 1; j < tokens.length; j++) {
-        const a = tokens[i];
-        const b = tokens[j];
-        if (a === undefined || b === undefined) continue;
-        for (const fee of UNISWAP_FEE_TIERS) {
-          checks.push(
-            getPool(a, b, fee)
-              .then((pool: string) => {
-                if (pool && pool !== ZeroAddress) swappable.add(pairKey(a, b));
-              })
-              .catch(() => undefined),
-          );
+  return withEthersProvider(
+    evmRpcUrl,
+    async (provider) => {
+      const factory = new EthersContract(UNISWAP_V3_FACTORY, FACTORY_ABI, provider);
+      const getPool =
+        factory.getFunction<ConstantContractMethod<(string | bigint)[], string>>("getPool");
+      const swappable = new Set<string>();
+      const checks: Promise<void>[] = [];
+      let failure: unknown;
+      for (let i = 0; i < tokens.length; i++) {
+        for (let j = i + 1; j < tokens.length; j++) {
+          const a = tokens[i];
+          const b = tokens[j];
+          if (a === undefined || b === undefined) continue;
+          for (const fee of UNISWAP_FEE_TIERS) {
+            checks.push(
+              getPool(a, b, fee)
+                .then((pool: string) => {
+                  if (pool && pool !== ZeroAddress) swappable.add(pairKey(a, b));
+                })
+                .catch((error: unknown) => {
+                  failure = error;
+                }),
+            );
+          }
         }
       }
-    }
-    await Promise.all(checks);
-    return swappable;
-  });
+      await Promise.all(checks);
+      if (swappable.size === 0 && failure)
+        throw failure instanceof Error ? failure : new Error("Pool discovery failed.");
+      return swappable;
+    },
+    { timeoutMs: SWAP_READ_TIMEOUT_MS, signal },
+  );
 }
 
 /**

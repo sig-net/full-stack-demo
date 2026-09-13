@@ -42,6 +42,8 @@ interface VaultSwapModel {
   inputDisabled: boolean;
   canSwap: boolean;
   buttonLabel: string;
+  quoteError: string | null;
+  retryQuote: () => void;
   handleSwap: () => Promise<void>;
 }
 
@@ -78,11 +80,13 @@ export function useVaultSwap(): VaultSwapModel {
   const pairs = useQuery({
     queryKey: ["vault-swap-pairs", applied.fingerprint, applied.evm.chainId, rpc],
     enabled: rpc !== null,
-    queryFn: () => {
+    retry: false,
+    queryFn: ({ signal }) => {
       if (rpc === null) throw new Error("Vault is not ready.");
       return discoverSwappablePairs(
         rpc,
         MIDNIGHT_TOKENS.filter((token) => !token.noSwap).map((token) => token.erc20Address),
+        signal,
       );
     },
   });
@@ -155,15 +159,28 @@ export function useVaultSwap(): VaultSwapModel {
     ],
     enabled: quoteEnabled,
     staleTime: 10_000,
-    queryFn: () => {
+    retry: false,
+    queryFn: ({ signal }) => {
       if (rpc === null || fromSel === undefined || toSel === undefined || quoteUnits === null)
         throw new Error("Swap quote is unavailable.");
-      return quoteBestFeeExactInput(rpc, fromSel.erc20Address, toSel.erc20Address, quoteUnits);
+      return quoteBestFeeExactInput(
+        rpc,
+        fromSel.erc20Address,
+        toSel.erc20Address,
+        quoteUnits,
+        signal,
+      );
     },
   });
   const currentQuote = quoteEnabled && !quote.isError ? quote.data : undefined;
   const fee = currentQuote?.fee ?? null;
   const quoting = quoteEnabled && quote.isFetching;
+  const failedRead = enabled ? (pairs.error ?? (quoteEnabled ? quote.error : null)) : null;
+  const quoteError = failedRead
+    ? failedRead.message.includes("timed out")
+      ? "Swap pricing timed out. Check the local RPC connection and retry."
+      : "Swap pricing could not be read from the EVM network. Check the connection and retry."
+    : null;
   const amountValid = fromSel !== undefined && quoteUnits !== null && quoteUnits <= fromSel.units;
   const canSwap =
     enabled &&
@@ -215,9 +232,11 @@ export function useVaultSwap(): VaultSwapModel {
             ? "Swapping…"
             : quoting
               ? "Fetching quote…"
-              : quoteUnits !== null && fee === null
-                ? "No pool for this pair"
-                : "Swap";
+              : quoteError
+                ? "Quote unavailable"
+                : quoteUnits !== null && fee === null
+                  ? "No viable quote for this pair"
+                  : "Swap";
   return {
     fromAmount: inputs.amount,
     toAmount: currentQuote && toSel ? formatUnits(currentQuote.amountOut, toSel.decimals) : "",
@@ -242,6 +261,11 @@ export function useVaultSwap(): VaultSwapModel {
     inputDisabled: !enabled || progress.active,
     canSwap,
     buttonLabel,
+    quoteError,
+    retryQuote: () => {
+      if (pairs.isError) void pairs.refetch();
+      else if (quoteEnabled) void quote.refetch();
+    },
     handleSwap,
   };
 }

@@ -92,3 +92,19 @@ timing and error lines only. Avoid dumping whole setup logs, request bodies or D
 A swap is a different operation: establish input/output token, minimum output/slippage, current
 quote and shielded balance before signing. Correlate its request, EVM execution and claim/refund.
 Do not call a refund a successful swap, or infer swap correctness from a deposit passing.
+
+
+For a reverted swap, inspect the EVM receipt and a bounded local call trace before changing the
+stack. A task21 quote offered the best output at a pool estimate of 760299 gas, exceeding the
+vault's fixed 700000 gas allowance. The pool call ran out of gas and the operation refunded.
+The next viable tier completed successfully. Check the installed circuit/envelope allowance and
+per-tier quote gas estimates. Do not override the signed gas envelope or reset liquidity to make
+a quote executable. Confirm the earlier refund/claim settled before submitting another swap.
+
+For swap evidence, read `swapEventMap` and `swapSettleViews`, not the deposit maps. Capture the
+pending block for historical lookup after claim. Verify the signature-derived EVM transaction,
+token transfers and the amountIn response attestation, then correlate startSwap and completeSwap.
+Separate the maximum input surrendered from actual spend and returned change. Exclude user
+transaction hashes when summing responder fees: Signet events can include the user's start call.
+The amount fields' max controls exposed exact holdings during task21 when the visible balance
+labels rounded them. Reading those controls does not require submitting another operation.

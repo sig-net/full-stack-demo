@@ -6,6 +6,7 @@ import { useState } from "react";
 import { formatUnits } from "viem";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Feedback } from "@/components/ui/feedback";
 import { TokenAmountDisplay } from "@/components/ui/token-amount-display";
 import { useVaultSwap } from "@/hooks/use-vault-swap";
 
@@ -41,6 +42,8 @@ export function SwapWidget({ className }: SwapWidgetProps): React.JSX.Element {
     inputDisabled,
     canSwap,
     buttonLabel,
+    quoteError,
+    retryQuote,
     handleSwap,
   } = useVaultSwap();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -119,6 +122,14 @@ export function SwapWidget({ className }: SwapWidgetProps): React.JSX.Element {
           />
         </div>
 
+        {quoteError && (
+          <Feedback tone="error" role="alert">
+            <p>{quoteError}</p>
+            <Button variant="outline" onClick={retryQuote}>
+              Retry pricing
+            </Button>
+          </Feedback>
+        )}
         <Button
           onClick={() => {
             void handleSwap();

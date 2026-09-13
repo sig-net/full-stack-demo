@@ -86,6 +86,18 @@ Wallet connection, vault identity, binding and balances have separate readiness 
 
 Withdraw, swap, supply and redeem use the MPC path independently of the EVM extension. One shared operation runs at a time. Activity distinguishes success, refund, failure and interrupted observation. Reloading a pending record preserves its request and transaction identifiers and marks observation interrupted, without asserting a chain failure. A failed balance refresh after settlement does not turn settlement into failure. EVM output is reconstructed from the configured fork's executed transaction and checked against the on-chain response attestation before settlement.
 
+## Swap pricing
+
+Pool discovery and each concurrently queried fee tier have a 10-second deadline, including response
+body reads. Changing the selected amount, tokens or vault session cancels obsolete quote reads.
+Pricing failures show an error and **Retry pricing**. A pool with no viable quote is distinguished
+from an RPC failure. Other successful fee tiers can still provide a quote when one tier fails. Quotes whose pool gas
+estimate already reaches the vault’s fixed swap gas allowance are excluded from tier selection.
+
+The input amount is the maximum spend. The swap obtains a fresh quote before creating its request,
+applies the selected slippage to determine the exact output, and returns unspent input as shielded
+change at settlement. Completed Activity and the resulting balances establish successful execution.
+
 ## Runtime configuration
 
 Public configuration starts from the generated environment and package deployment defaults.
