@@ -14,6 +14,7 @@ import {
 import {
   calculateRequestId,
   requestIdHex,
+  parseRequestIdHex,
   requestIdBytes,
   evmAddressAbiWord,
   numericAbiWord,
@@ -24,6 +25,7 @@ import {
   toSignBidirectionalEventIndex,
   deserializeEvmOutput,
   serializeRespondOutput,
+  respondBidirectionalEventToCircuitInput,
   signBidirectionalEventToSignedEvmTransaction,
   signetEventSourceFromPublicDataProvider,
   SignetRequestResponseReader,
@@ -186,7 +188,10 @@ export async function syncPathRendering(
   return resolvePathRendering(env, bytesToHex(state.vaultEvmAddress));
 }
 
-export function depositAddress(env: VaultSessionEnvironment, identity: Identity): string {
+export function depositAddress(
+  env: VaultSessionEnvironment,
+  identity: Identity,
+): string {
   env.assertActive();
   return derivePathAddress(env, identity.pathHex, env.pathRendering);
 }
@@ -223,7 +228,10 @@ export async function erc20Balance(
   return BigInt(await token.getFunction('balanceOf')(address));
 }
 
-async function readVaultLedger(providers: VaultProviders, env: Env): Promise<ReturnType<typeof ledger>> {
+async function readVaultLedger(
+  providers: VaultProviders,
+  env: Env,
+): Promise<ReturnType<typeof ledger>> {
   const cs = await providers.publicDataProvider.queryContractState(
     env.contractAddress,
   );
@@ -246,7 +254,9 @@ function responseReader(
     publicDataProvider: providers.publicDataProvider,
     // 0.19: the MPC's responses are read from the signet contract's emitted
     // events, adapted from the same public data provider.
-    eventSource: signetEventSourceFromPublicDataProvider(providers.publicDataProvider),
+    eventSource: signetEventSourceFromPublicDataProvider(
+      providers.publicDataProvider,
+    ),
   } as any);
 }
 
@@ -312,7 +322,9 @@ async function assertDepositRequestOnLedger(
 ) {
   const after = await readVaultLedger(providers, env);
   if (!toSignBidirectionalEventIndex(after.depositEventMap).has(rid)) {
-    throw new Error(`deposit request ${rid} not on the ledger after startDeposit()`);
+    throw new Error(
+      `deposit request ${rid} not on the ledger after startDeposit()`,
+    );
   }
 }
 
@@ -336,7 +348,11 @@ function predictCallRequestId(
   to: Uint8Array,
   routing: Pick<
     SignBidirectionalEvent,
-    'algo' | 'dest' | 'params' | 'outputDeserializationSchema' | 'respondSerializationSchema'
+    | 'algo'
+    | 'dest'
+    | 'params'
+    | 'outputDeserializationSchema'
+    | 'respondSerializationSchema'
   >,
   gasLimit: bigint,
   maxFee: bigint,
@@ -574,6 +590,26 @@ async function settleViaMpc(
   );
 }
 
+export async function readPendingDeposit(
+  providers: VaultProviders,
+  env: VaultSessionEnvironment,
+  identity: Identity,
+  erc20Hex: string,
+  requestId: string,
+) {
+  const id = requestIdBytes(parseRequestIdHex(requestId));
+  const state = await readVaultLedger(providers, env);
+  env.assertActive();
+  if (!state.depositEventMap.member(id) || !state.depositSettleViews.member(id))
+    throw new Error('Pending deposit not found. It may already be completed.');
+  const view = state.depositSettleViews.lookup(id);
+  if (bytesToHex(view.commitment) !== bytesToHex(identity.commitment))
+    throw new Error('This pending deposit belongs to another vault identity.');
+  if (bytesToHex(view.erc20) !== bytesToHex(addrBytes(erc20Hex)))
+    throw new Error('This pending deposit uses a different token.');
+  return view;
+}
+
 // startDeposit() -> MPC round trip -> completeDeposit() mints the shielded token.
 export async function runDeposit(
   providers: any,
@@ -584,43 +620,73 @@ export async function runDeposit(
   amount: bigint,
   log: (m: string) => void,
   onRecord?: (rid: RequestIdHex, evmTxHash?: string) => void,
+  recoveryRequestId?: string,
 ) {
   env.assertActive();
   flow.start('deposit');
   const erc20 = addrBytes(erc20Hex);
   const userEvm = depositAddress(env, identity);
-  const nonce = await evmNonce(env, userEvm);
-  log(`Deposit sender ${userEvm} (evm nonce ${nonce})`);
-
   const before = await readVaultLedger(providers, env);
   if (!before.initialised) throw new Error('vault not initialised');
-  const rid = predictRequestId(
-    env,
-    before,
-    identity.commitment,
-    nonce,
-    erc20,
-    before.vaultEvmAddress,
-    amount,
+  const pending = [...before.depositSettleViews].filter(
+    ([, view]) =>
+      bytesToHex(view.commitment) === bytesToHex(identity.commitment) &&
+      bytesToHex(view.erc20) === bytesToHex(erc20) &&
+      view.amount === amount,
   );
-  log(`Predicted requestId 0x${rid}`);
-
-  env.assertActive();
-
-  flow.set('proving');
-  log('Submitting startDeposit() on Midnight...');
-  await vault.callTx.startDeposit(
-    nonce,
-    GAS_LIMIT,
-    MAX_FEE,
-    PRIORITY_FEE,
-    SIGNET_DEFAULT_KEY_VERSION,
-    {
-      erc20Address: erc20,
+  if (!recoveryRequestId && pending.length > 1)
+    throw new Error(
+      'Multiple pending deposits match this identity, token and amount. Select a specific request before continuing.',
+    );
+  let rid: RequestIdHex;
+  if (recoveryRequestId) {
+    const view = await readPendingDeposit(
+      providers,
+      env,
+      identity,
+      erc20Hex,
+      recoveryRequestId,
+    );
+    if (view.amount !== amount)
+      throw new Error('Pending deposit amount changed.');
+    rid = parseRequestIdHex(recoveryRequestId);
+    log(`Recovering pending deposit 0x${rid}`);
+  } else if (pending[0]) {
+    rid = requestIdHex(pending[0][0]);
+    const unspent = await erc20Balance(env.evmRpcUrl, erc20Hex, userEvm);
+    env.assertActive();
+    if (unspent >= amount)
+      throw new Error(
+        `Pending deposit 0x${rid} requires explicit recovery before sweeping newly available funds.`,
+      );
+    await assertDepositRequestOnLedger(providers, env, rid);
+    log(`Resuming pending deposit 0x${rid}`);
+  } else {
+    const nonce = await evmNonce(env, userEvm);
+    log(`Deposit sender ${userEvm} (evm nonce ${nonce})`);
+    rid = predictRequestId(
+      env,
+      before,
+      identity.commitment,
+      nonce,
+      erc20,
+      before.vaultEvmAddress,
       amount,
-    },
-  );
-  await assertDepositRequestOnLedger(providers, env, rid);
+    );
+    log(`Predicted requestId 0x${rid}`);
+    env.assertActive();
+    flow.set('proving');
+    log('Submitting startDeposit() on Midnight...');
+    await vault.callTx.startDeposit(
+      nonce,
+      GAS_LIMIT,
+      MAX_FEE,
+      PRIORITY_FEE,
+      SIGNET_DEFAULT_KEY_VERSION,
+      { erc20Address: erc20, amount },
+    );
+    await assertDepositRequestOnLedger(providers, env, rid);
+  }
   onRecord?.(rid);
 
   const outcome = await settleViaMpc(
@@ -649,7 +715,7 @@ export async function runDeposit(
   };
   await vault.callTx.completeDeposit(
     requestIdBytes(rid),
-    outcome.event,
+    respondBidirectionalEventToCircuitInput(outcome.event),
     outcome.serializedOutput,
     rand32(),
     selfRecipient,
@@ -730,7 +796,7 @@ export async function runWithdraw(
     log('EVM transfer never executed. Refunding...');
     await vault.callTx.refundWithdraw(
       requestIdBytes(rid),
-      outcome.event,
+      respondBidirectionalEventToCircuitInput(outcome.event),
       outcome.serializedOutput,
       rand32(),
     );
@@ -744,7 +810,7 @@ export async function runWithdraw(
   log('Settling completeWithdraw...');
   await vault.callTx.completeWithdraw(
     requestIdBytes(rid),
-    outcome.event,
+    respondBidirectionalEventToCircuitInput(outcome.event),
     outcome.serializedOutput,
     rand32(),
   );
@@ -753,10 +819,11 @@ export async function runWithdraw(
   log('Withdraw finalized (success).');
 }
 
-async function evmNonce(env: VaultSessionEnvironment, address: string): Promise<bigint> {
-  return BigInt(
-    await evmProvider(env.evmRpcUrl).getTransactionCount(address),
-  );
+async function evmNonce(
+  env: VaultSessionEnvironment,
+  address: string,
+): Promise<bigint> {
+  return BigInt(await evmProvider(env.evmRpcUrl).getTransactionCount(address));
 }
 
 // Ensure the vault account has approved the router for `erc20Hex`: read the live allowance,
@@ -925,7 +992,7 @@ export async function runSwap(
     log('Swap did not execute on EVM. Refunding tokenIn...');
     await vault.callTx.refundSwap(
       requestIdBytes(rid),
-      outcome.event,
+      respondBidirectionalEventToCircuitInput(outcome.event),
       outcome.serializedOutput,
       rand32(),
     );
@@ -941,7 +1008,7 @@ export async function runSwap(
   // random nonce. A derived second nonce would leave the change coin no entropy of its own.
   await vault.callTx.completeSwap(
     requestIdBytes(rid),
-    outcome.event,
+    respondBidirectionalEventToCircuitInput(outcome.event),
     outcome.serializedOutput,
     rand32(),
     rand32(),
@@ -956,7 +1023,10 @@ export async function runSwap(
 // ===================== Aave lending (supply / redeem) =====================
 
 // The USDC allowance the vault granted the stataToken wrapper (owner = vault, spender = stataToken).
-async function stataAllowance(env: VaultSessionEnvironment, vaultEvm: string): Promise<bigint> {
+async function stataAllowance(
+  env: VaultSessionEnvironment,
+  vaultEvm: string,
+): Promise<bigint> {
   const token = new EthersContract(
     AAVE_USDC,
     ['function allowance(address,address) view returns (uint256)'],
@@ -965,17 +1035,29 @@ async function stataAllowance(env: VaultSessionEnvironment, vaultEvm: string): P
   return BigInt(await token.getFunction('allowance')(vaultEvm, STATA_USDC));
 }
 
-async function assertSupplyRequestOnLedger(providers: any, env: VaultSessionEnvironment, rid: RequestIdHex) {
+async function assertSupplyRequestOnLedger(
+  providers: any,
+  env: VaultSessionEnvironment,
+  rid: RequestIdHex,
+) {
   const after = await readVaultLedger(providers, env);
   if (!toSignBidirectionalEventIndex(after.supplyEventMap).has(rid)) {
-    throw new Error(`supply request ${rid} not on the ledger after startSupply()`);
+    throw new Error(
+      `supply request ${rid} not on the ledger after startSupply()`,
+    );
   }
 }
 
-async function assertRedeemRequestOnLedger(providers: any, env: VaultSessionEnvironment, rid: RequestIdHex) {
+async function assertRedeemRequestOnLedger(
+  providers: any,
+  env: VaultSessionEnvironment,
+  rid: RequestIdHex,
+) {
   const after = await readVaultLedger(providers, env);
   if (!toSignBidirectionalEventIndex(after.redeemEventMap).has(rid)) {
-    throw new Error(`redeem request ${rid} not on the ledger after startRedeem()`);
+    throw new Error(
+      `redeem request ${rid} not on the ledger after startRedeem()`,
+    );
   }
 }
 
@@ -1006,7 +1088,10 @@ async function ensureStataApproved(
     MAX_FEE,
     PRIORITY_FEE,
     STATA_APPROVE_SELECTOR,
-    [evmAddressAbiWord(addrBytes(STATA_USDC)), numericAbiWord(STATA_MAX_APPROVE)],
+    [
+      evmAddressAbiWord(addrBytes(STATA_USDC)),
+      numericAbiWord(STATA_MAX_APPROVE),
+    ],
   );
   await vault.callTx.approveStata(nonce, SIGNET_DEFAULT_KEY_VERSION);
   await assertRequestOnLedger(providers, env, rid, 'approveStata');
@@ -1074,7 +1159,12 @@ export async function runSupply(
 
   flow.set('proving');
   log('Submitting startSupply() (surrendering USDC to lend)...');
-  await vault.callTx.startSupply(nonce, SIGNET_DEFAULT_KEY_VERSION, amount, coin);
+  await vault.callTx.startSupply(
+    nonce,
+    SIGNET_DEFAULT_KEY_VERSION,
+    amount,
+    coin,
+  );
   await assertSupplyRequestOnLedger(providers, env, rid);
   onRecord?.(rid);
 
@@ -1097,7 +1187,7 @@ export async function runSupply(
     log('Supply did not execute on EVM. Refunding USDC...');
     await vault.callTx.refundSupply(
       requestIdBytes(rid),
-      outcome.event,
+      respondBidirectionalEventToCircuitInput(outcome.event),
       outcome.serializedOutput,
       rand32(),
     );
@@ -1111,13 +1201,15 @@ export async function runSupply(
   log('Settling completeSupply (minting shielded stataUSDC)...');
   await vault.callTx.completeSupply(
     requestIdBytes(rid),
-    outcome.event,
+    respondBidirectionalEventToCircuitInput(outcome.event),
     outcome.serializedOutput,
     rand32(),
   );
   env.assertActive();
   flow.set('done');
-  log(`Supply complete. Minted ${outcome.decoded?.shares ?? '?'} stataUSDC shares.`);
+  log(
+    `Supply complete. Minted ${outcome.decoded?.shares ?? '?'} stataUSDC shares.`,
+  );
   return (outcome.decoded?.shares ?? null) as bigint | null;
 }
 
@@ -1169,7 +1261,12 @@ export async function runRedeem(
   };
 
   log('Submitting startRedeem() (surrendering stataUSDC shares)...');
-  await vault.callTx.startRedeem(nonce, SIGNET_DEFAULT_KEY_VERSION, shares, coin);
+  await vault.callTx.startRedeem(
+    nonce,
+    SIGNET_DEFAULT_KEY_VERSION,
+    shares,
+    coin,
+  );
   await assertRedeemRequestOnLedger(providers, env, rid);
   onRecord?.(rid);
 
@@ -1192,7 +1289,7 @@ export async function runRedeem(
     log('Redeem did not execute on EVM. Refunding stataUSDC...');
     await vault.callTx.refundRedeem(
       requestIdBytes(rid),
-      outcome.event,
+      respondBidirectionalEventToCircuitInput(outcome.event),
       outcome.serializedOutput,
       rand32(),
     );
@@ -1206,7 +1303,7 @@ export async function runRedeem(
   log('Settling completeRedeem (minting shielded USDC)...');
   await vault.callTx.completeRedeem(
     requestIdBytes(rid),
-    outcome.event,
+    respondBidirectionalEventToCircuitInput(outcome.event),
     outcome.serializedOutput,
     rand32(),
   );

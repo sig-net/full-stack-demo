@@ -41,6 +41,9 @@ export function TransactionDetailsDialog({
               {transaction.failureReason}
             </p>
           )}
+          {transaction.requestId && (
+            <p className='break-all'>Request ID: {transaction.requestId}</p>
+          )}
           {transaction.transactionHash && (
             <p className='break-all'>
               Transaction: {transaction.transactionHash}

@@ -38,6 +38,7 @@ export interface ActivityTransaction {
   timestampRaw?: number;
   status: MidnightTxRecord['status'];
   transactionHash?: string;
+  requestId?: string;
   explorerUrl?: string;
   failureReason?: string;
 }

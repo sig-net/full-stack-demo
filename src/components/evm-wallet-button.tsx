@@ -20,6 +20,11 @@ export function EvmWalletButton() {
   const [open, setOpen] = useState(false);
   const [revision, setRevision] = useState(0);
   const [choices, setChoices] = useState<BrowserWalletChoice[]>([]);
+  const [observedWallet, setObservedWallet] = useState(evm.wallet);
+  if (observedWallet !== evm.wallet) {
+    setObservedWallet(evm.wallet);
+    if (evm.wallet) setOpen(false);
+  }
   useEffect(() => {
     if (!open) return;
     return discoverBrowserWallets(setChoices);
@@ -69,7 +74,13 @@ export function EvmWalletButton() {
             </Button>
           )}
           {choices.map(choice => (
-            <Button key={choice.id} onClick={() => void evm.connect(choice)}>
+            <Button
+              key={choice.id}
+              disabled={evm.connecting}
+              onClick={() => {
+                void evm.connect(choice);
+              }}
+            >
               {choice.name}
             </Button>
           ))}

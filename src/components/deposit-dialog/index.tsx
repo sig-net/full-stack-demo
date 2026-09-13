@@ -20,6 +20,7 @@ import { useEvmWallet } from '@/providers/evm-wallet-context';
 
 import { TokenSelection } from './token-selection';
 import { EvmDepositTransfer } from './evm-deposit-transfer';
+import { PendingDepositRecovery } from './pending-deposit-recovery';
 import { DepositAddress } from './deposit-address';
 
 interface DepositDialogProps {
@@ -126,7 +127,10 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps) {
               </DialogTitle>
             </DialogHeader>
             {selectedNetwork.chain === 'ethereum' && (
-              <EvmDepositTransfer token={selectedToken} />
+              <>
+                <EvmDepositTransfer token={selectedToken} />
+                <PendingDepositRecovery token={selectedToken} />
+              </>
             )}
             {isVaultEvmDeposit && progress.active ? (
               <LoadingState message={progress.message} />

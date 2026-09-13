@@ -76,11 +76,12 @@ function useEvmWalletOwner() {
     disconnect();
     setError(null);
     try {
-      const next = new BrowserWallet(getEvmChainConfig(), choice, () => {
+      const next = new BrowserWallet(getEvmChainConfig(), choice, reason => {
         if (current.current !== next) return;
         disconnect();
         setError(
-          'EVM wallet account, network or connection changed. Connect again.',
+          reason?.message ??
+            'EVM wallet account, network or connection changed. Connect again.',
         );
       });
       current.current = next;

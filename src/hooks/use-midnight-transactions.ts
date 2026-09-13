@@ -34,6 +34,7 @@ function toActivity(r: MidnightTxRecord): ActivityTransaction {
         };
   return {
     id: r.id,
+    requestId: r.id,
     type: r.type,
     fromToken,
     toToken,

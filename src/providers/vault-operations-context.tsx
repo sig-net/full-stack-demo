@@ -174,6 +174,7 @@ function useVaultOperationOwner() {
     erc20Address: string,
     amountUnits: bigint,
     receiver?: string,
+    recoveryRequestId?: string,
   ) => {
     const captured = requireOperationBinding(kind);
     const operation: { binding: VaultBinding; recoveryError?: unknown } = {
@@ -239,6 +240,7 @@ function useVaultOperationOwner() {
                 },
                 hash,
               ),
+            recoveryRequestId,
           ),
         );
       } else {
@@ -607,6 +609,20 @@ function useVaultOperationOwner() {
     ready: readiness.ready,
     deposit: (erc20: string, amount: bigint) =>
       execute('deposit', [erc20], () => runFlow('deposit', erc20, amount)),
+    recoverDeposit: (erc20: string, requestId: string) =>
+      execute('deposit', [erc20], async () => {
+        const active = vaultOwner.requireBinding();
+        const { readPendingDeposit } = await import('@/lib/midnight/vault');
+        const view = await readPendingDeposit(
+          active.providers,
+          active.environment,
+          active.identity,
+          erc20,
+          requestId,
+        );
+        active.assertActive();
+        await runFlow('deposit', erc20, view.amount, undefined, requestId);
+      }),
     withdraw: (erc20: string, amount: bigint, receiver?: string) =>
       execute('withdraw', [erc20], () =>
         runFlow('withdraw', erc20, amount, receiver),

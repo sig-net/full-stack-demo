@@ -1060,13 +1060,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@midnightntwrk/ledger-v9@npm:^1.0.0-rc.3":
-  version: 1.0.0-rc.4
-  resolution: "@midnightntwrk/ledger-v9@npm:1.0.0-rc.4"
-  checksum: 10c0/5acf00db2539f656aef2c4985d56c79063ed39f77fb3cf05390460feba3a803855a1079e2753aca99f6401aba2b87b87a9f5df4da546fbec4504b82d9323eb9e
-  languageName: node
-  linkType: hard
-
 "@midnightntwrk/onchain-runtime-v4@npm:4.0.0-rc.3, @midnightntwrk/onchain-runtime-v4@npm:^4.0.0-rc.3":
   version: 4.0.0-rc.3
   resolution: "@midnightntwrk/onchain-runtime-v4@npm:4.0.0-rc.3"

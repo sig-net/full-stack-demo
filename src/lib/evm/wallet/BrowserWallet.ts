@@ -59,16 +59,16 @@ export class BrowserWallet {
   constructor(
     readonly config: EvmChainConfig,
     readonly choice: BrowserWalletChoice,
-    private readonly onInvalidated: () => void,
+    private readonly onInvalidated: (reason?: Error) => void,
   ) {
     choice.provider.on('accountsChanged', this.accountChanged);
     choice.provider.on('chainChanged', this.chainChanged);
     choice.provider.on('disconnect', this.providerDisconnected);
   }
 
-  private invalidate() {
+  private invalidate(reason?: Error) {
     this.disconnect();
-    this.onInvalidated();
+    this.onInvalidated(reason);
   }
   assertActive() {
     if (!this.active)
@@ -134,8 +134,11 @@ export class BrowserWallet {
     });
     this.assertActive();
     if (chain !== this.config.chainId) {
-      this.invalidate();
-      throw new Error('Switch the EVM wallet to Sepolia and connect again.');
+      const failure = new Error(
+        `Switch the EVM wallet to Sepolia (chain ${this.config.chainId}) at ${this.config.rpcUrl} and connect again.`,
+      );
+      this.invalidate(failure);
+      throw failure;
     }
     if (
       (process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID ?? 'undeployed') ===
@@ -153,15 +156,17 @@ export class BrowserWallet {
       });
       this.assertActive();
       if (observed.toLowerCase() !== markerCode.toLowerCase()) {
-        this.invalidate();
-        throw new Error(
+        const failure = new Error(
           `Configure the extension’s Sepolia RPC as ${this.config.rpcUrl}, then reconnect. The local fork marker does not match.`,
         );
+        this.invalidate(failure);
+        throw failure;
       }
     }
     if (!accounts[0] || getAddress(accounts[0]) !== account) {
-      this.invalidate();
-      throw new Error('EVM account changed. Connect again.');
+      const failure = new Error('EVM account changed. Connect again.');
+      this.invalidate(failure);
+      throw failure;
     }
   }
 
