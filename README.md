@@ -238,11 +238,4 @@ Clipboard copying requires HTTPS or localhost and browser permission. Copy contr
 access or permission rejection. Vault proofs use the applied application proof-server setting. The
 Midnight connector's deprecated informational prover URL is not read.
 
-The everyday test gate uses small controlled proving assets with the real SDK verifier. To repeat
-the full asset staging and observation acceptance against an already prepared local asset tree:
-
-```bash
-node scratch-refactor-tasks/verification/task11-assets-observation.mjs
-```
-
-This separate check requires the verified proving keys created during local setup.
+The everyday test gate uses small controlled proving assets with the real SDK verifier.
