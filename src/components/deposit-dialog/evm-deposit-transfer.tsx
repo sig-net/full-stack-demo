@@ -53,7 +53,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }) {
       )}
       {balances.isError && (
         <p role='alert'>
-          Wallet balances unavailable. Open Sepolia wallet to retry.
+          Wallet balances unavailable. Open the EVM wallet menu to retry.
         </p>
       )}
       <label className='block' htmlFor={`deposit-amount-${token.symbol}`}>

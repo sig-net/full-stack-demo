@@ -79,10 +79,13 @@ export function MidnightWalletProvider({
   const installSeedWallet = (input: string): Promise<Wallet> => {
     const seed = input.trim().replace(/^0x/i, '').toLowerCase();
     if (!/^(?:[0-9a-f]{2}){16,64}$/.test(seed)) {
-      return Promise.reject(
-        new Error('Enter a hexadecimal Midnight seed of 16–64 bytes.'),
+      const failure = new Error(
+        'Enter a hexadecimal Midnight seed of 16–64 bytes.',
       );
+      setError(failure.message);
+      return Promise.reject(failure);
     }
+    setError(null);
     if (seedInFlight.current?.seed === seed)
       return seedInFlight.current.promise;
     if (active.current && installedSeed.current === seed)
@@ -115,6 +118,11 @@ export function MidnightWalletProvider({
           active.current = null;
           installedSeed.current = null;
           setSyncStatus('');
+          setError(
+            error instanceof Error
+              ? error.message
+              : 'Midnight seed wallet connection failed.',
+          );
         }
         throw error;
       })
@@ -132,6 +140,7 @@ export function MidnightWalletProvider({
   const installBrowserWallet = (
     choice: BrowserWalletChoice,
   ): Promise<Wallet> => {
+    setError(null);
     if (browserInFlight.current?.connector === choice.connector)
       return browserInFlight.current.promise;
     disconnect();
@@ -163,7 +172,14 @@ export function MidnightWalletProvider({
       return candidate;
     })()
       .catch(error => {
-        if (attempt === generation.current) disconnect();
+        if (attempt === generation.current) {
+          disconnect();
+          setError(
+            error instanceof Error
+              ? error.message
+              : 'Midnight browser wallet connection failed.',
+          );
+        }
         throw error;
       })
       .finally(() => {

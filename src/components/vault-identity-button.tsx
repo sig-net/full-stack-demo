@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { bytesToHex } from 'viem';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +15,12 @@ import {
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useVault } from '@/providers/vault-context';
 
-export function VaultIdentityButton() {
+export function VaultIdentityButton({
+  menuItem = false,
+}: {
+  menuItem?: boolean;
+}) {
+  const trigger = useRef<HTMLButtonElement>(null);
   const vault = useVault();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -26,13 +32,27 @@ export function VaultIdentityButton() {
     setValidation('');
     reset();
   };
+  const control = (
+    <Button ref={trigger} variant='outline' onClick={() => changeOpen(true)}>
+      {vault.identitySecret ? 'Vault identity' : 'Set vault identity'}
+    </Button>
+  );
   return (
     <>
-      <Button variant='outline' onClick={() => changeOpen(true)}>
-        {vault.identitySecret ? 'Vault identity' : 'Set vault identity'}
-      </Button>
+      {menuItem ? (
+        <DropdownMenuItem asChild onSelect={event => event.preventDefault()}>
+          {control}
+        </DropdownMenuItem>
+      ) : (
+        control
+      )}
       <Dialog open={open} onOpenChange={changeOpen}>
-        <DialogContent>
+        <DialogContent
+          onCloseAutoFocus={event => {
+            event.preventDefault();
+            trigger.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Vault identity</DialogTitle>
             <DialogDescription>

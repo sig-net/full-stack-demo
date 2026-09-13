@@ -78,7 +78,7 @@ Preserve the destination and transaction hash when troubleshooting. A failed con
 
 After an EVM sweep has confirmed, restore the same vault identity, select the deposit token, paste the request ID from Activity into **Pending deposit request ID**, and choose **Recover pending deposit**. Recovery reads the exact pending amount from the vault. It validates the identity and token, reuses the confirmed sweep and submits settlement. A manual continuation is available for a transfer made outside the app.
 
-Each chain offers independent seed and browser wallet choices. EVM seeds accept 16–64 hexadecimal bytes and derive the first Ethereum BIP-44 account. EVM seed wallets sign in the page without an extension approval prompt. Closing a seed form clears its input.
+Open the Midnight or EVM wallet menu in the header to select a seed or browser wallet independently. Each menu identifies the connected wallet kind and account and offers disconnect. The Midnight menu also provides **Vault identity**, with separate generate, paste and copy controls. EVM seeds accept 16–64 hexadecimal bytes and derive the first Ethereum BIP-44 account. EVM seed wallets sign in the page without an extension approval prompt. Closing a seed form clears its input.
 
 Midnight browser discovery lists injected connector API 4 wallets by their own names. Connection checks the reported network. The extension owns its balance and submission services, and the app uses the applied endpoints for vault reads and proofs. Connector balancing and submission methods enable vault transactions. If those methods are missing, the UI reports that capability limitation while wallet identity and balance reads remain available. Local Midnight funding and automatic rebuilding require the seed adapter. Browser wallet users fund, register NIGHT and resynchronise through their extension, then reconnect. Browser credentials remain in the extension.
 
@@ -89,9 +89,11 @@ Withdraw, swap, supply and redeem use the MPC path independently of the EVM exte
 ## Runtime configuration
 
 Public configuration starts from the generated environment and package deployment defaults.
-The runtime configuration API keeps draft changes in page memory until Apply validates the
-whole draft. Invalid values remain editable. Reset restores startup defaults, and reloading the
-page discards overrides. Task16 supplies the configuration panel over this API.
+The header gear opens **Configuration**, grouped into ERC20 vault, Midnight and EVM fields.
+Edits stay in page memory until **Apply** validates the whole draft. Invalid values remain
+editable. **Discard** restores the applied values in the inputs. **Reset to defaults** applies
+the startup defaults, and reloading the page discards overrides. Field information buttons
+explain each value. Wallet endpoint differences and server incompatibility appear in the panel.
 
 The supported selections are Sepolia and the startup Midnight network. Applying EVM RPC changes
 requires EVM reconnection. Applying Midnight endpoint changes requires Midnight reconnection.

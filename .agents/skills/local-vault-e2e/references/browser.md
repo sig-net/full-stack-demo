@@ -41,6 +41,14 @@ connection buttons to the banner or active dialog. A click can return before Rea
 state transition: wait for the expected control rather than interpreting an immediate false
 visibility result as failure.
 
+For wallet-menu presentation changes, traverse every actionable item with the keyboard, including
+identity and balance actions embedded in menu content. Ordinary buttons inside a Radix menu were
+skipped by arrow navigation during task16. After a menu opens a dialog, wait for its close animation
+to finish before checking focus return and reopen it to verify seed clearing. Inspect a narrow
+viewport visually as well as by bounds: two identical wallet icons with hidden chain labels fitted
+at 375 pixels but did not distinguish the chains. Save screenshots under the ignored verification
+directory explicitly, as relative screenshot names can land in the repository root.
+
 For a browser smoke check, reuse the available authorised wallet and identity where possible.
 Inspect connection, balance, readiness and the affected controls. Fund, create a fresh identity or
 submit a transaction only when the task's acceptance explicitly includes that operation. A visible

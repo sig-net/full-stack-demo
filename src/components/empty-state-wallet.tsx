@@ -1,6 +1,8 @@
 import { Wallet, ArrowDownCircle, ArrowRightLeft } from 'lucide-react';
 
-import { WalletButton } from '@/components/wallet-button';
+import { MidnightWalletButton } from '@/components/midnight-wallet-button';
+import { EvmWalletButton } from '@/components/evm-wallet-button';
+import { VaultIdentityButton } from '@/components/vault-identity-button';
 import { EmptyState } from '@/components/ui/empty-state';
 
 export function EmptyStateWallet() {
@@ -11,8 +13,10 @@ export function EmptyStateWallet() {
       description='Deposit ERC-20 tokens and your program can call into Ethereum liquidity, markets, and assets'
       action={
         <>
-          <div className='mb-12 flex justify-center'>
-            <WalletButton />
+          <div className='mb-12 flex flex-wrap justify-center gap-2'>
+            <MidnightWalletButton />
+            <EvmWalletButton />
+            <VaultIdentityButton />
           </div>
 
           <div className='grid grid-cols-2 gap-4 text-center sm:gap-8'>
