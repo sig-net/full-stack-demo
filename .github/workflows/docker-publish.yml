@@ -9,7 +9,8 @@
 # browser bundle at build). It builds linux/amd64 natively, while `build-arm64` builds
 # linux/arm64 on its native runner in parallel without credentials and hands the image over
 # as a run artifact. `publish` then pushes both architectures under `<tag>-linux-<arch>` and
-# combines them into the multi-architecture manifest `<tag>`.
+# combines them into the multi-architecture manifest `<tag>`, also tagged `latest` and with the
+# tagged commit's full hash.
 # Layers are not cached between runs: a publish job must not consume a poisonable cache.
 
 name: docker-publish
@@ -170,8 +171,14 @@ jobs:
           docker push "$IMAGE:$GITHUB_REF_NAME-linux-arm64"
       - name: Create and push the multi-architecture manifest
         run: |
-          docker buildx imagetools create --tag "$IMAGE:$GITHUB_REF_NAME" \
+          docker buildx imagetools create \
+            --tag "$IMAGE:$GITHUB_REF_NAME" \
+            --tag "$IMAGE:$GITHUB_SHA" \
+            --tag "$IMAGE:latest" \
             "$IMAGE:$GITHUB_REF_NAME-linux-amd64" \
             "$IMAGE:$GITHUB_REF_NAME-linux-arm64"
-      - name: Inspect the published manifest
-        run: docker buildx imagetools inspect "$IMAGE:$GITHUB_REF_NAME"
+      - name: Inspect the published manifest under each tag
+        run: |
+          for tag in "$GITHUB_REF_NAME" "$GITHUB_SHA" latest; do
+            docker buildx imagetools inspect "$IMAGE:$tag"
+          done

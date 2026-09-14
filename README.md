@@ -239,8 +239,10 @@ the git tag, including the `v`. Any other tag shape fails the first job. A stabl
 at a commit on `main`, while release candidates may come from any branch. Each architecture
 builds on its own native runner. The `publish` job builds `linux/amd64`, pushes it as
 `<tag>-linux-amd64`, waits for the parallel `build-arm64` job's image tarball, pushes that as
-`<tag>-linux-arm64`, and combines both into the multi-architecture manifest `<tag>`. Layers are
-rebuilt from scratch on every run, so a publish takes roughly the length of one image build.
+`<tag>-linux-arm64`, and combines both into the multi-architecture manifest `<tag>`. That manifest
+is also tagged `latest` and with the full hash of the tagged commit, so every publish, release
+candidates included, moves `latest`. Layers are rebuilt from scratch on every run, so a publish
+takes roughly the length of one image build.
 
 The workflow needs a repository environment named `deploy` with required reviewers. Only the
 `publish` job runs in it, and it asks for approval as soon as the tag checks pass, so a release
