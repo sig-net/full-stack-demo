@@ -12,12 +12,12 @@ import {
 } from "react";
 import type { Address } from "viem";
 
+import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
 import { ERC20_TOKENS } from "@/lib/constants/token-metadata";
 import { fundingErrorSchema, hasLocalEvmFunds } from "@/lib/wallet-funding";
 
 import { useEvmBalances } from "./evm-balances-context";
 import { useEvmWallet } from "./evm-wallet-context";
-import { useRuntimeConfig } from "./runtime-config-context";
 
 interface FundingRecipient {
   address: Address;
@@ -117,7 +117,7 @@ export function useAddressFunding(
 }
 
 function useEvmLocalFundingOwner(): EvmLocalFundingState {
-  const runtime = useRuntimeConfig();
+  const compatibility = useServerRuntimeCompatibility();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
   const funding = useAddressFunding(
@@ -126,7 +126,7 @@ function useEvmLocalFundingOwner(): EvmLocalFundingState {
     async () => {
       await balances.refetch({ throwOnError: true });
     },
-    runtime.requireServerHeaders,
+    compatibility.requireServerHeaders,
   );
   const usdc = balances.data?.tokens.find(
     (token) =>
@@ -135,8 +135,8 @@ function useEvmLocalFundingOwner(): EvmLocalFundingState {
   const ready =
     !!wallet &&
     balances.isSuccess &&
-    hasLocalEvmFunds(balances.data.eth, usdc?.units, usdc?.decimals);
-  return { ...funding, ready, fundingUnavailable: runtime.serverUnavailable };
+    hasLocalEvmFunds(balances.data.nativeUnits, usdc?.units, usdc?.decimals);
+  return { ...funding, ready, fundingUnavailable: compatibility.serverUnavailable };
 }
 const EvmLocalFundingContext = createContext<ReturnType<typeof useEvmLocalFundingOwner> | null>(
   null,

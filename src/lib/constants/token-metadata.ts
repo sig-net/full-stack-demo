@@ -148,7 +148,7 @@ export async function fetchErc20Decimals(address: string, config: EvmChainConfig
   const normalizedAddress = address.toLowerCase();
 
   return queryClient.fetchQuery({
-    queryKey: ["erc20-decimals", config.chainId, config.rpcUrl, normalizedAddress],
+    queryKey: ["erc20-decimals", config.chainId?.toString(), config.rpcUrl, normalizedAddress],
     staleTime: Infinity,
     queryFn: () =>
       getEthereumProvider(config).readContract({

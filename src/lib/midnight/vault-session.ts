@@ -236,7 +236,11 @@ export function createVaultSession(input: {
           settings.zkOrigin,
         );
         assertActive();
-        const pathRendering = await vault.syncPathRendering(sessionProviders, settings.environment);
+        const pathRendering = await vault.resolveVaultDeployment(
+          sessionProviders,
+          settings.environment,
+          signal,
+        );
         assertActive();
         const environment: VaultSessionEnvironment = {
           ...settings.environment,

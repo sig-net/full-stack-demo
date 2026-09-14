@@ -6,6 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { formatUnits } from "viem";
 
+import { resolveEvmChain } from "@/lib/config/evm";
 import {
   AAVE_USDC,
   STATA_USDC,
@@ -15,7 +16,7 @@ import {
 import type { FlowKind } from "@/lib/midnight/flow";
 import { attributedLendingHistory, lendingNetCost } from "@/lib/midnight/lending-position";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
-import { useRuntimeConfig } from "@/providers/runtime-config-context";
+import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
@@ -55,7 +56,7 @@ interface VaultLendingModel {
  * @returns Current balances, independent amount inputs and session-guarded lending actions.
  */
 export function useVaultLending(): VaultLendingModel {
-  const { applied } = useRuntimeConfig();
+  const { applied } = useRuntimeConfiguration();
   const { binding } = useVault();
   const { balances } = useVaultBalances();
   const operations = useVaultOperations();
@@ -113,7 +114,7 @@ export function useVaultLending(): VaultLendingModel {
           deploymentFingerprint: applied.fingerprint,
           commitment: bytesToHex(binding.identity.commitment),
           midnightNetwork: applied.midnight.networkId,
-          chainId: applied.evm.chainId,
+          chainId: resolveEvmChain(applied.evm).chain.id,
           vaultContract: binding.environment.contractAddress,
           assetToken: AAVE_USDC,
           shareToken: STATA_USDC,

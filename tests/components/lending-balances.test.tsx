@@ -20,7 +20,10 @@ import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
-import { mockMatchingRuntimeServer } from "../config/runtime-server-fixture";
+import {
+  mockMatchingRuntimeServer,
+  testRuntimeConfiguration,
+} from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
 
 vi.mock(import("@/providers/midnight-wallet-context"), { spy: true });
@@ -137,7 +140,9 @@ it("uses asset decimals, preserves refunds, rejects excess precision and gates u
   const { rerender, unmount } = render(<LendWidget />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={query}>
-        <RuntimeConfigProvider>{children}</RuntimeConfigProvider>
+        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+          {children}
+        </RuntimeConfigProvider>
       </QueryClientProvider>
     ),
   });

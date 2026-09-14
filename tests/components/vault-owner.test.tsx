@@ -12,6 +12,7 @@ import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVault, VaultProvider } from "@/providers/vault-context";
 import { useVaultIdentity, VaultIdentityProvider } from "@/providers/vault-identity-context";
 
+import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
 
 vi.mock(import("@/lib/midnight/vault-providers"), { spy: true });
@@ -28,7 +29,7 @@ it("reconciles wallet and identity replacements through the mounted effect event
   );
   vi.stubEnv("NEXT_PUBLIC_MPC_SECP256K1_PUBKEY", fixture.environment.mpcSecpPub);
   vi.mocked(assembly.joinVault).mockResolvedValue(fixture.contract);
-  vi.mocked(vault.syncPathRendering).mockResolvedValue("utf8");
+  vi.mocked(vault.resolveVaultDeployment).mockResolvedValue("utf8");
   vi.spyOn(SeedWallet.prototype, "initialise").mockResolvedValue(undefined);
   const query = new QueryClient();
   const mounted = renderHook(
@@ -41,7 +42,7 @@ it("reconciles wallet and identity replacements through the mounted effect event
       wrapper: ({ children }) => (
         <StrictMode>
           <QueryClientProvider client={query}>
-            <RuntimeConfigProvider>
+            <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
               <MidnightWalletProvider>
                 <VaultIdentityProvider>
                   <VaultProvider>{children}</VaultProvider>

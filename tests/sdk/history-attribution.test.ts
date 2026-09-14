@@ -30,6 +30,31 @@ const record: MidnightTxRecord = {
 };
 
 describe("public history ingress and lending attribution", () => {
+  it("retains a completed local deposit with an explicitly unset explorer after reload", async () => {
+    const deposit: MidnightTxRecord = {
+      id: "3cd5333a18b35c5dab85cda8fd9471b54012dfb6180c3f50bf7d426c97ffb300",
+      type: "Deposit",
+      fromSymbol: "EVM",
+      fromAmount: "0.1 USDC",
+      toSymbol: "USDC",
+      toAmount: "0.1 USDC",
+      timestampRaw: 1,
+      status: "completed",
+      chainId: 11155111,
+      rpcUrl: "http://localhost:8545",
+      explorerUrl: "",
+      txHash: `0x${"05".repeat(32)}`,
+    };
+    localStorage.setItem("midnight-tx-history-v1", JSON.stringify([deposit]));
+    vi.resetModules();
+    const { midnightTxHistory } = await import("@/lib/midnight/tx-history");
+    const listener = vi.fn();
+    const unsubscribe = midnightTxHistory.subscribe(listener);
+    expect(listener).toHaveBeenCalledWith([deposit]);
+    unsubscribe();
+    localStorage.removeItem("midnight-tx-history-v1");
+  });
+
   it("keeps interrupted observations and rejects malformed persisted records individually", async () => {
     const pending = {
       ...record,

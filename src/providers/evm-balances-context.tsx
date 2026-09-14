@@ -9,7 +9,7 @@ import type { Wallet } from "@/lib/evm/wallet/Wallet";
 import { useEvmWallet } from "./evm-wallet-context";
 
 interface EvmBalances {
-  eth: bigint;
+  nativeUnits: bigint;
   tokens: { erc20Address: string; decimals: number; units: bigint }[];
 }
 
@@ -41,7 +41,7 @@ export function useWalletBalances(
       if (!wallet) throw new Error("Connect an EVM wallet first.");
       const account = wallet.account;
       const client = wallet.publicClient;
-      const [eth, balances] = await Promise.all([
+      const [nativeUnits, balances] = await Promise.all([
         client.getBalance({ address: account }),
         Promise.all(
           tokens.map(async (token) => {
@@ -66,7 +66,7 @@ export function useWalletBalances(
         ),
       ]);
       wallet.assertActive();
-      return { eth, tokens: balances };
+      return { nativeUnits, tokens: balances };
     },
   });
 }

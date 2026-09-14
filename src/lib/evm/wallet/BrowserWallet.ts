@@ -116,6 +116,7 @@ export class BrowserWallet implements Wallet {
    * @param onInvalidated - Notifies the connection owner when this session becomes unusable.
    * @param verifyNetwork - Optional deployment-specific fork check.
    * @param explorerUrl - Captured explorer origin for submitted transaction metadata.
+   * @param verifyRpcChain - Query the app RPC for local or explicitly overridden chains.
    */
   constructor(
     readonly chain: Chain,
@@ -124,6 +125,7 @@ export class BrowserWallet implements Wallet {
     private readonly onInvalidated: (reason?: Error) => void,
     private readonly verifyNetwork?: () => Promise<void>,
     readonly explorerUrl?: string,
+    private readonly verifyRpcChain = true,
   ) {
     choice.provider.on("accountsChanged", this.accountChanged);
     choice.provider.on("chainChanged", this.chainChanged);
@@ -190,13 +192,15 @@ export class BrowserWallet implements Wallet {
   async verify(): Promise<void> {
     this.assertActive();
     const account = this.account;
-    const chain = hexToNumber(await this.choice.provider.request({ method: "eth_chainId" }));
+    const providerChain = hexToNumber(
+      await this.choice.provider.request({ method: "eth_chainId" }),
+    );
     this.assertActive();
     const accounts = await this.choice.provider.request({
       method: "eth_accounts",
     });
     this.assertActive();
-    if (chain !== this.chain.id) {
+    if (providerChain !== this.chain.id) {
       const failure = new Error(
         `Switch the EVM wallet to ${this.chain.name} (chain ${this.chain.id.toString()}) and connect again.`,
       );
@@ -204,6 +208,14 @@ export class BrowserWallet implements Wallet {
       throw failure;
     }
     try {
+      if (this.verifyRpcChain) {
+        const rpcChain = await this.publicClient.getChainId();
+        this.assertActive();
+        if (rpcChain !== this.chain.id)
+          throw new Error(
+            `The configured EVM RPC reports chain ${rpcChain.toString()}. Select an RPC for chain ${this.chain.id.toString()} and reconnect.`,
+          );
+      }
       await this.verifyNetwork?.();
       this.assertActive();
     } catch (failure) {

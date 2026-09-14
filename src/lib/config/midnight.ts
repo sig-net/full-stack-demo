@@ -56,14 +56,11 @@ export function createMidnightChainConfig(input: {
     input.indexerUrl ?? (local ? "http://127.0.0.1:8088/api/v3/graphql" : undefined),
     "NEXT_PUBLIC_MIDNIGHT_INDEXER_URL",
   );
-  const subscription = new URL(indexerUrl);
-  subscription.protocol = subscription.protocol === "https:" ? "wss:" : "ws:";
-  subscription.pathname = `${subscription.pathname.replace(/\/$/, "")}/ws`;
   return Object.freeze({
     networkId: network.data,
     indexerUrl,
     indexerWsUrl: validateUrl(
-      input.indexerWsUrl ?? subscription.toString(),
+      input.indexerWsUrl ?? deriveIndexerWsUrl(indexerUrl),
       "NEXT_PUBLIC_MIDNIGHT_INDEXER_WS_URL",
       /^wss?$/,
     ),
@@ -120,4 +117,16 @@ export function getZkConfigOrigin(browserOrigin: string): string {
   if (!endpointSchema.safeParse(value).success)
     throw new Error("NEXT_PUBLIC_ZK_CONFIG_ORIGIN must be an absolute HTTP(S) URL");
   return value.replace(/\/$/, "");
+}
+
+/**
+ * @param indexerUrl - HTTP GraphQL endpoint, or empty to clear its twin.
+ * @returns The WS(S) endpoint with a single appended subscription path.
+ */
+export function deriveIndexerWsUrl(indexerUrl: string): string {
+  if (!indexerUrl) return "";
+  const subscription = new URL(indexerUrl);
+  subscription.protocol = subscription.protocol === "https:" ? "wss:" : "ws:";
+  subscription.pathname = `${subscription.pathname.replace(/\/$/, "")}/ws`;
+  return subscription.toString();
 }

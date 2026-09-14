@@ -4,7 +4,7 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { stataAssetsPerShare } from "@/lib/midnight/evm-stata";
-import { useRuntimeConfig } from "@/providers/runtime-config-context";
+import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
 
@@ -83,14 +83,22 @@ async function fetchTokenPrices(
  * @returns Cached display-price query state with periodic foreground refresh.
  */
 export function useTokenPrices(symbols: string[] = []): UseQueryResult<Record<string, TokenPrice>> {
-  const { applied } = useRuntimeConfig();
+  const { applied } = useRuntimeConfiguration();
   return useQuery({
-    queryKey: ["tokenPrices", applied.evm.rpcUrl, symbols.toSorted()],
+    queryKey: [
+      "tokenPrices",
+      applied.evm.chainId?.toString(),
+      applied.evm.rpcUrl,
+      symbols.toSorted(),
+    ],
     queryFn: () => fetchTokenPrices(symbols, applied.evm.rpcUrl),
     staleTime: 120000,
     refetchInterval: 300000,
     refetchIntervalInBackground: false,
-    enabled: symbols.length > 0,
+    enabled:
+      symbols.length > 0 &&
+      applied.readiness.evm.status === "ready" &&
+      applied.evm.chainId === 11155111n,
   });
 }
 

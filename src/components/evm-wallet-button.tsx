@@ -2,16 +2,20 @@
 
 import type * as React from "react";
 import { useEffect, useState } from "react";
-import { formatEther, formatUnits } from "viem";
+import { formatUnits } from "viem";
 
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Feedback } from "@/components/ui/feedback";
-import { browserWalletConnection, seedWalletConnection } from "@/lib/config/evm-wallet";
+import {
+  browserWalletConnection,
+  captureLocalForkPolicy,
+  seedWalletConnection,
+} from "@/lib/config/evm-wallet";
 import { ERC20_TOKENS } from "@/lib/constants/token-metadata";
 import { type BrowserWalletChoice, discoverBrowserWallets } from "@/lib/evm/wallet/BrowserWallet";
 import { useEvmBalances } from "@/providers/evm-balances-context";
 import { useEvmWallet } from "@/providers/evm-wallet-context";
-import { useRuntimeConfig } from "@/providers/runtime-config-context";
+import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 
 import { WalletMenu } from "./wallet-menu";
 
@@ -21,7 +25,7 @@ import { WalletMenu } from "./wallet-menu";
  * @returns The EVM wallet menu.
  */
 export function EvmWalletButton(): React.JSX.Element {
-  const { applied } = useRuntimeConfig();
+  const { applied } = useRuntimeConfiguration();
   const evm = useEvmWallet();
   const balances = useEvmBalances();
   const [open, setOpen] = useState(false);
@@ -37,6 +41,11 @@ export function EvmWalletButton(): React.JSX.Element {
       wallet={evm.wallet}
       connecting={evm.connecting}
       error={evm.error}
+      connectionUnavailable={
+        applied.readiness.evm.status === "unavailable"
+          ? applied.readiness.evm.reasons.join(" ")
+          : null
+      }
       onOpenChange={setOpen}
       refresh={() => {
         setChoices([]);
@@ -45,11 +54,23 @@ export function EvmWalletButton(): React.JSX.Element {
       choices={choices.map((choice) => ({
         ...choice,
         connect: () => {
-          void evm.connect(browserWalletConnection(choice, applied.evm));
+          void evm.connect(
+            browserWalletConnection(
+              choice,
+              applied.evm,
+              captureLocalForkPolicy(applied.midnight.networkId),
+            ),
+          );
         },
       }))}
       installSeed={(seed) => {
-        void evm.connect(seedWalletConnection(seed, applied.evm));
+        void evm.connect(
+          seedWalletConnection(
+            seed,
+            applied.evm,
+            captureLocalForkPolicy(applied.midnight.networkId),
+          ),
+        );
       }}
       disconnect={evm.disconnect}
     >
@@ -63,7 +84,10 @@ export function EvmWalletButton(): React.JSX.Element {
           )}
           {balances.isSuccess && (
             <>
-              <p>{formatEther(balances.data.eth)} ETH</p>
+              <p>
+                {formatUnits(balances.data.nativeUnits, evm.wallet.chain.nativeCurrency.decimals)}{" "}
+                {evm.wallet.chain.nativeCurrency.symbol}
+              </p>
               {balances.data.tokens.map((token) => (
                 <p key={token.erc20Address}>
                   {formatUnits(token.units, token.decimals)}{" "}

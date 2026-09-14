@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { createEvmChainConfig } from "@/lib/config/evm";
 import { browserWalletConnection } from "@/lib/config/evm-wallet";
+import * as rpc from "@/lib/rpc";
 import { useWalletBalances } from "@/providers/evm-balances-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
 
@@ -92,7 +93,8 @@ it("retains the local fork mismatch reason and reconnects after provider correct
   const f = browserWalletFixture();
   f.wallet.disconnect();
   const choice = { id: "local", name: "Local", provider: f.provider };
-  const config = createEvmChainConfig("https://fixture.invalid");
+  const config = createEvmChainConfig("http://127.0.0.1:8545");
+  vi.spyOn(rpc, "getEthereumProvider").mockReturnValue(f.publicClient);
   const { result, unmount } = renderHook(useEvmWallet, {
     wrapper: ({ children }) => (
       <StrictMode>
@@ -114,6 +116,41 @@ it("retains the local fork mismatch reason and reconnects after provider correct
     });
     expect(result.current.wallet?.account).toBe(account);
     expect(result.current.error).toBeNull();
+  } finally {
+    unmount();
+  }
+  expect(f.events.eventNames()).toHaveLength(0);
+});
+
+it("connects an independently configured EVM chain without Midnight deployment or local marker inputs", async () => {
+  const f = browserWalletFixture();
+  f.wallet.disconnect();
+  f.controls.chain = "0x1";
+  vi.mocked(f.publicClient.getChainId).mockResolvedValue(1);
+  vi.spyOn(rpc, "getEthereumProvider").mockReturnValue(f.publicClient);
+  const config = {
+    network: "mainnet" as const,
+    chainId: 1n,
+    rpcUrl: "https://fixture.invalid",
+    explorerUrl: "",
+  };
+  const connection = browserWalletConnection(
+    { id: "independent", name: "Independent", provider: f.provider },
+    config,
+    { networkId: "undeployed", markerAddress: undefined, markerCode: undefined },
+  );
+  const { result, unmount } = renderHook(useEvmWallet, {
+    wrapper: ({ children }) => <EvmWalletProvider>{children}</EvmWalletProvider>,
+  });
+  try {
+    await act(async () => {
+      await result.current.connect(connection);
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.wallet?.chain.id).toBe(1);
+    expect(result.current.wallet?.account).toBe(account);
+    expect(f.calls).not.toContain("eth_getCode");
+    expect(f.calls).not.toContain("wallet_switchEthereumChain");
   } finally {
     unmount();
   }

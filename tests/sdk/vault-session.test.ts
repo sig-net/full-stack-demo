@@ -14,7 +14,7 @@ vi.mock(import("@/lib/midnight/vault"), { spy: true });
 beforeEach(() => {
   vi.mocked(assembly.buildVaultProviders).mockReset();
   vi.mocked(assembly.joinVault).mockReset();
-  vi.mocked(vault.syncPathRendering).mockReset();
+  vi.mocked(vault.resolveVaultDeployment).mockReset();
 });
 
 it("guards a complete SDK binding and disposes its raw resources exactly once", async () => {
@@ -23,7 +23,7 @@ it("guards a complete SDK binding and disposes its raw resources exactly once", 
   const privateDispose = vi.spyOn(fixture.providers.privateStateProvider, "dispose");
   vi.mocked(assembly.buildVaultProviders).mockReturnValue(fixture.providers);
   vi.mocked(assembly.joinVault).mockResolvedValue(fixture.contract);
-  vi.mocked(vault.syncPathRendering).mockResolvedValue("utf8");
+  vi.mocked(vault.resolveVaultDeployment).mockResolvedValue("utf8");
   const query = new QueryClient();
   let current = true;
   const session = createVaultSession({
@@ -61,7 +61,7 @@ it("rejects successful reads that finish after session replacement", async () =>
   const fixture = await createVaultFixture();
   vi.mocked(assembly.buildVaultProviders).mockReturnValue(fixture.providers);
   vi.mocked(assembly.joinVault).mockResolvedValue(fixture.contract);
-  vi.mocked(vault.syncPathRendering).mockResolvedValue("utf8");
+  vi.mocked(vault.resolveVaultDeployment).mockResolvedValue("utf8");
   const query = new QueryClient();
   let current = true;
   const session = createVaultSession({
@@ -105,7 +105,7 @@ it("disposes resources while binding construction is pending and rejects the lat
     entered.resolve(undefined);
     return joined.promise;
   });
-  vi.mocked(vault.syncPathRendering).mockResolvedValue("utf8");
+  vi.mocked(vault.resolveVaultDeployment).mockResolvedValue("utf8");
   const query = new QueryClient();
   const session = createVaultSession({
     wallet: fixture.wallet,
@@ -123,7 +123,7 @@ it("disposes resources while binding construction is pending and rejects the lat
     expect(privateDispose).toHaveBeenCalledTimes(1);
     joined.resolve(fixture.contract);
     await expect(pending).rejects.toThrow("Vault loading failed");
-    expect(vault.syncPathRendering).not.toHaveBeenCalled();
+    expect(vault.resolveVaultDeployment).not.toHaveBeenCalled();
     expect(publicDispose).toHaveBeenCalledTimes(1);
     expect(privateDispose).toHaveBeenCalledTimes(1);
   } finally {

@@ -12,6 +12,8 @@ import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
+import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
+
 vi.mock(import("@/hooks/use-midnight-progress"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/vault-context"), { spy: true });
@@ -34,7 +36,9 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false 
 function Providers({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
-      <RuntimeConfigProvider>{children}</RuntimeConfigProvider>
+      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        {children}
+      </RuntimeConfigProvider>
     </QueryClientProvider>
   );
 }
@@ -115,7 +119,7 @@ describe("withdrawal routing", () => {
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <RuntimeConfigProvider>
+        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
           <WithdrawDialog
             open
             onOpenChange={onOpenChange}
@@ -208,7 +212,7 @@ describe("withdrawal routing", () => {
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <RuntimeConfigProvider>
+        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
           <WithdrawDialog
             open
             onOpenChange={onOpenChange}

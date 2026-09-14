@@ -9,6 +9,7 @@ import {
 } from "@/lib/midnight/wallet/BrowserWallet";
 import type { Wallet } from "@/lib/midnight/wallet/Wallet";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
+import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 import { useVault } from "@/providers/vault-context";
 
 import { WalletMenu } from "./wallet-menu";
@@ -19,6 +20,7 @@ import { WalletMenu } from "./wallet-menu";
  * @returns The Midnight wallet menu.
  */
 export function MidnightWalletButton(): React.JSX.Element {
+  const { applied } = useRuntimeConfiguration();
   const connection = useMidnightConnection();
   const vault = useVault();
   const [choices, setChoices] = useState<BrowserWalletChoice[]>([]);
@@ -35,6 +37,11 @@ export function MidnightWalletButton(): React.JSX.Element {
       connecting={connection.connecting}
       progress={connection.syncStatus}
       error={connection.error}
+      connectionUnavailable={
+        applied.readiness.midnight.status === "unavailable"
+          ? applied.readiness.midnight.reasons.join(" ")
+          : null
+      }
       onOpenChange={(open) => {
         if (open) refresh();
       }}

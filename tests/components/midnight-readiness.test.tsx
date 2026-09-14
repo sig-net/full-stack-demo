@@ -17,7 +17,10 @@ import {
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 
-import { mockMatchingRuntimeServer } from "../config/runtime-server-fixture";
+import {
+  mockMatchingRuntimeServer,
+  testRuntimeConfiguration,
+} from "../config/runtime-server-fixture";
 
 vi.mock(import("@/providers/midnight-wallet-context"), { spy: true });
 afterEach(cleanup);
@@ -111,7 +114,7 @@ it.each([false, true])(
       {
         wrapper: ({ children }) => (
           <QueryClientProvider client={f.client}>
-            <RuntimeConfigProvider>
+            <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
               <MidnightReadinessProvider>
                 <MidnightLocalFundingProvider>{children}</MidnightLocalFundingProvider>
               </MidnightReadinessProvider>

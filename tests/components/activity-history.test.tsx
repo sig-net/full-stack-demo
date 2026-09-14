@@ -20,6 +20,8 @@ import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { VaultProvider } from "@/providers/vault-context";
 import { VaultIdentityProvider } from "@/providers/vault-identity-context";
 
+import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -136,7 +138,7 @@ it("keeps selected details open while the selected row updates", async () => {
   const { ActivityListTable } = await import("@/components/activity-list-table");
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <RuntimeConfigProvider>
+      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
         <MidnightWalletProvider>
           <VaultIdentityProvider>
             <VaultProvider>

@@ -12,8 +12,10 @@ import * as seedlib from "@/lib/midnight/seedlib";
 import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
 import type { Wallet } from "@/lib/midnight/wallet/Wallet";
 import { MidnightWalletProvider, useMidnightConnection } from "@/providers/midnight-wallet-context";
+import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import * as vault from "@/providers/vault-context";
 
+import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
 import { createSeedWalletFixture } from "../sdk/seed-wallet-fixture";
 
 vi.mock(import("@/lib/midnight/wallet/SeedWallet"), { spy: true });
@@ -234,9 +236,11 @@ it("unmounts a pending wallet button without reporting its delayed rejection as 
   const initialise = vi.spyOn(SeedWallet.prototype, "initialise").mockReturnValue(ready.promise);
   const error = vi.spyOn(toast, "error");
   const view = render(
-    <MidnightWalletProvider configuration={createMidnightChainConfig({})}>
-      <MidnightWalletButton />
-    </MidnightWalletProvider>,
+    <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+      <MidnightWalletProvider configuration={createMidnightChainConfig({})}>
+        <MidnightWalletButton />
+      </MidnightWalletProvider>
+    </RuntimeConfigProvider>,
   );
   fireEvent.click(view.getByRole("button", { name: "Install seed" }));
   await waitFor(() => {

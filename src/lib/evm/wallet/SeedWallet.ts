@@ -22,6 +22,7 @@ export class SeedWallet implements Wallet {
    * @param seed - Disposable hexadecimal seed supplied by the user.
    * @param explorerUrl - Captured explorer origin for transaction metadata.
    * @param verifyNetwork - Optional local-fork identity check.
+   * @param verifyRpcChain - Query the app RPC for local or explicitly overridden chains.
    */
   constructor(
     readonly chain: Chain,
@@ -30,6 +31,7 @@ export class SeedWallet implements Wallet {
     private seed: string,
     readonly explorerUrl?: string,
     private readonly verifyNetwork?: () => Promise<void>,
+    private readonly verifyRpcChain = true,
   ) {}
 
   /** @inheritdoc */
@@ -79,12 +81,14 @@ export class SeedWallet implements Wallet {
   /** @inheritdoc */
   async verify(): Promise<void> {
     this.assertActive();
-    const chainId = await this.publicClient.getChainId();
-    this.assertActive();
+    if (this.verifyRpcChain) {
+      const chainId = await this.publicClient.getChainId();
+      this.assertActive();
+      if (chainId !== this.chain.id)
+        throw new Error(`EVM RPC must use chain ${this.chain.id.toString()}.`);
+    }
     await this.verifyNetwork?.();
     this.assertActive();
-    if (chainId !== this.chain.id)
-      throw new Error(`EVM RPC must use chain ${this.chain.id.toString()}.`);
   }
   /** @inheritdoc */
   transferErc20(input: Erc20Transfer): ReturnType<Wallet["transferErc20"]> {

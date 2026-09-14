@@ -10,7 +10,7 @@ import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import { discoverSwappablePairs, pairKey, quoteBestFeeExactInput } from "@/lib/midnight/evm-swap";
 import type { Token } from "@/lib/types/token.types";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
-import { useRuntimeConfig } from "@/providers/runtime-config-context";
+import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
@@ -53,7 +53,7 @@ interface VaultSwapModel {
  * @returns Current selections, derived quote output and guarded swap controls.
  */
 export function useVaultSwap(): VaultSwapModel {
-  const { applied } = useRuntimeConfig();
+  const { applied } = useRuntimeConfiguration();
   const vault = useVault();
   const { balances } = useVaultBalances();
   const operations = useVaultOperations();
@@ -78,7 +78,7 @@ export function useVaultSwap(): VaultSwapModel {
     setInputs((current) => ({ ...current, ...patch, revision: current.revision + 1 }));
   };
   const pairs = useQuery({
-    queryKey: ["vault-swap-pairs", applied.fingerprint, applied.evm.chainId, rpc],
+    queryKey: ["vault-swap-pairs", applied.fingerprint, applied.evm.chainId?.toString(), rpc],
     enabled: rpc !== null,
     retry: false,
     queryFn: ({ signal }) => {

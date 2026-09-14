@@ -43,6 +43,7 @@ import {
 } from "@sig-net/midnight-examples-erc20-vault-contract";
 import { Contract as EthersContract, type ContractMethod, type Transaction } from "ethers";
 
+import { sepolia } from "@/lib/config/evm";
 import { withEthersProvider } from "@/lib/evm/ethers-provider";
 
 import { derivePathAddress, type PathRendering, resolvePathRendering } from "./evm-addresses";
@@ -106,6 +107,7 @@ export interface Env {
   signetContractAddress: string; // Midnight central signet contract
   mpcSecpPub: string; // MPC root secp256k1 pubkey (0x hex)
   evmRpcUrl: string;
+  verifyRpcChain?: boolean;
 }
 
 const addrBytes = (hex: string): Uint8Array => hexToBytes(stripHexPrefix(hex));
@@ -169,16 +171,28 @@ export type VaultSessionEnvironment = Env & {
 };
 
 /**
- * Resolves address rendering against the deployed vault ledger before publishing a binding.
+ * Verifies captured RPC discovery policy and Midnight vault address rendering before binding.
  *
  * @param providers - Providers bound to the captured deployment.
  * @param env - Public deployment inputs.
+ * @param signal - Cancels deployment reads when their binding is superseded.
  * @returns The rendering that matches the deployed vault address.
  */
-export async function syncPathRendering(
+export async function resolveVaultDeployment(
   providers: VaultProviders,
   env: Env,
+  signal?: AbortSignal,
 ): Promise<PathRendering> {
+  if (env.verifyRpcChain !== false)
+    await withEthersProvider(
+      env.evmRpcUrl,
+      async (provider) => {
+        const network = await provider.getNetwork();
+        if (network.chainId !== BigInt(sepolia.id))
+          throw new Error("Vault operations require a Sepolia RPC with chain ID 11155111.");
+      },
+      { timeoutMs: 15_000, signal },
+    );
   const state = await readVaultLedger(providers, env);
   return resolvePathRendering(env, bytesToHex(state.vaultEvmAddress));
 }

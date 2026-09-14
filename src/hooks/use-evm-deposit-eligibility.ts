@@ -3,10 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { encodeFunctionData, erc20Abi, getAddress } from "viem";
 
+import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
 import { useEvmBalances } from "@/providers/evm-balances-context";
 import { useEvmWallet } from "@/providers/evm-wallet-context";
-import { useRuntimeConfig } from "@/providers/runtime-config-context";
 
 /**
  * Estimates fees only for valid captured transfer inputs and a compatible server deployment.
@@ -21,7 +21,7 @@ export function useEvmDepositEligibility(
   amount: string,
   destination: string | undefined,
 ): { ready: boolean; error: string | undefined } {
-  const runtime = useRuntimeConfig();
+  const compatibility = useServerRuntimeCompatibility();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
   const observed = balances.data?.tokens.find(
@@ -50,7 +50,11 @@ export function useEvmDepositEligibility(
       units?.toString(),
     ],
     enabled:
-      !!wallet && !!destination && units !== undefined && !error && !runtime.serverUnavailable,
+      !!wallet &&
+      !!destination &&
+      units !== undefined &&
+      !error &&
+      !compatibility.serverUnavailable,
     gcTime: 0,
     retry: false,
     refetchInterval: 15_000,
@@ -76,17 +80,17 @@ export function useEvmDepositEligibility(
   return {
     ready:
       !!wallet &&
-      !runtime.serverUnavailable &&
+      !compatibility.serverUnavailable &&
       !error &&
       balances.isSuccess &&
       fee.isSuccess &&
-      balances.data.eth >= fee.data,
+      balances.data.nativeUnits >= fee.data,
     error:
-      runtime.serverUnavailable ??
+      compatibility.serverUnavailable ??
       error ??
       (fee.isError
         ? "Network fee estimate is unavailable."
-        : fee.isSuccess && balances.data && balances.data.eth < fee.data
+        : fee.isSuccess && balances.data && balances.data.nativeUnits < fee.data
           ? "Insufficient native balance for network fees."
           : undefined),
   };

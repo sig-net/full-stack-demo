@@ -22,7 +22,7 @@ const transaction: ActivityTransaction = {
 describe("EVM explorer links", () => {
   it("omits explorer links for local RPC configuration", () => {
     const local = createEvmChainConfig(undefined);
-    expect(local.explorerUrl).toBeUndefined();
+    expect(local.explorerUrl).toBe("");
     render(
       <TransactionDetailsDialog transaction={transaction} open onOpenChange={() => undefined} />,
     );
@@ -40,7 +40,7 @@ describe("EVM explorer links", () => {
     const hosted = createEvmChainConfig("https://rpc.example.invalid");
     const explorer = hosted.explorerUrl;
     expect(explorer).toBe("https://sepolia.etherscan.io");
-    if (explorer === undefined) throw new Error("Hosted configuration has no explorer URL");
+
     const explorerUrl = `${explorer}/tx/${transactionHash}`;
     render(
       <TransactionDetailsDialog

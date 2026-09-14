@@ -21,12 +21,15 @@ import type { LendingPosition, MidnightTxRecord } from "@/lib/midnight/tx-histor
 import { deriveIdentity } from "@/lib/midnight/vault";
 import type { VaultBalances } from "@/lib/midnight/vault-balances";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
-import { RuntimeConfigProvider, useRuntimeConfig } from "@/providers/runtime-config-context";
+import { RuntimeConfigProvider, useRuntimeConfiguration } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
-import { mockMatchingRuntimeServer } from "../config/runtime-server-fixture";
+import {
+  mockMatchingRuntimeServer,
+  testRuntimeConfiguration,
+} from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
 
 vi.mock(import("@/hooks/use-midnight-history"), { spy: true });
@@ -131,7 +134,9 @@ async function fixture(): Promise<WidgetFixture> {
   });
   const wrapper = ({ children }: PropsWithChildren): React.JSX.Element => (
     <QueryClientProvider client={query}>
-      <RuntimeConfigProvider>{children}</RuntimeConfigProvider>
+      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        {children}
+      </RuntimeConfigProvider>
     </QueryClientProvider>
   );
   return {
@@ -167,7 +172,7 @@ it.each(["amount", "token", "network", "identity"] as const)(
     vi.mocked(quoteBestFeeExactInput)
       .mockReturnValueOnce(quote.promise)
       .mockResolvedValue({ fee: 3000n, amountOut: 300_000_000n });
-    const hook = renderHook(() => ({ swap: useVaultSwap(), runtime: useRuntimeConfig() }), {
+    const hook = renderHook(() => ({ swap: useVaultSwap(), runtime: useRuntimeConfiguration() }), {
       wrapper: f.wrapper,
     });
     try {
@@ -187,8 +192,8 @@ it.each(["amount", "token", "network", "identity"] as const)(
         if (change === "amount") hook.result.current.swap.setFromAmount("2");
         if (change === "token") hook.result.current.swap.setToTokenAddress(f.third.erc20Address);
         if (change === "network") {
-          hook.result.current.runtime.edit("rpcUrl", "https://network.example.invalid");
-          applied = hook.result.current.runtime.apply();
+          hook.result.current.runtime.owner.setEvm("rpcUrl", "https://network.example.invalid");
+          applied = true;
         }
         if (change === "identity")
           f.replace({
@@ -235,7 +240,7 @@ it.each(
     const completion = Promise.withResolvers<{ refunded: boolean }>();
     f.swap.mockReturnValueOnce(completion.promise);
     const error = vi.spyOn(toast, "error");
-    const hook = renderHook(() => ({ swap: useVaultSwap(), runtime: useRuntimeConfig() }), {
+    const hook = renderHook(() => ({ swap: useVaultSwap(), runtime: useRuntimeConfiguration() }), {
       wrapper: f.wrapper,
     });
     try {
@@ -261,8 +266,8 @@ it.each(
         }
         if (change === "token") hook.result.current.swap.setToTokenAddress(f.third.erc20Address);
         if (change === "network") {
-          hook.result.current.runtime.edit("rpcUrl", "https://other.example.invalid");
-          applied = hook.result.current.runtime.apply();
+          hook.result.current.runtime.owner.setEvm("rpcUrl", "https://other.example.invalid");
+          applied = true;
         }
         if (change === "identity")
           f.replace({
@@ -332,7 +337,7 @@ it("uses only attributed exact lending legs with unequal decimals and keeps fail
     deploymentFingerprint: applied.fingerprint,
     commitment: bytesToHex(f.binding.identity.commitment),
     midnightNetwork: applied.midnight.networkId,
-    chainId: applied.evm.chainId,
+    chainId: Number(applied.evm.chainId),
     vaultContract: f.binding.environment.contractAddress,
     assetToken: AAVE_USDC,
     shareToken: STATA_USDC,
@@ -398,9 +403,12 @@ it.each(["supply", "redeem"] as const)(
     f[kind].mockReturnValueOnce(completion.promise);
     const success = vi.spyOn(toast, "success");
     const error = vi.spyOn(toast, "error");
-    const hook = renderHook(() => ({ lending: useVaultLending(), runtime: useRuntimeConfig() }), {
-      wrapper: f.wrapper,
-    });
+    const hook = renderHook(
+      () => ({ lending: useVaultLending(), runtime: useRuntimeConfiguration() }),
+      {
+        wrapper: f.wrapper,
+      },
+    );
     try {
       act(() => {
         if (kind === "supply") hook.result.current.lending.setSupplyAmount("1");
@@ -417,8 +425,10 @@ it.each(["supply", "redeem"] as const)(
       act(() => {
         hook.result.current.lending.setSupplyAmount("2");
         hook.result.current.lending.setRedeemAmount("3");
-        hook.result.current.runtime.edit("rpcUrl", "https://replacement.example.invalid");
-        expect(hook.result.current.runtime.apply()).toBe(true);
+        hook.result.current.runtime.owner.setEvm("rpcUrl", "https://replacement.example.invalid");
+        expect(hook.result.current.runtime.owner.getSnapshot().applied.evm.rpcUrl).toBe(
+          "https://replacement.example.invalid",
+        );
       });
       expect(hook.result.current.lending.disabled).toBe(true);
       await act(async () => {

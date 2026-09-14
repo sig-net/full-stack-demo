@@ -13,7 +13,10 @@ import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
-import { mockMatchingRuntimeServer } from "../config/runtime-server-fixture";
+import {
+  mockMatchingRuntimeServer,
+  testRuntimeConfiguration,
+} from "../config/runtime-server-fixture";
 import { browserWalletFixture, hash } from "../evm/browser-wallet-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
 import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
@@ -87,7 +90,7 @@ it("serialises EVM deposit preflight and preserves confirmed transfer state", as
       wrapper: ({ children }) => (
         <StrictMode>
           <QueryClientProvider client={queryClient}>
-            <RuntimeConfigProvider>
+            <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
               <EvmWalletProvider>
                 <EvmBalancesProvider tokens={[token.erc20Address]}>
                   <EvmDepositProvider>{children}</EvmDepositProvider>

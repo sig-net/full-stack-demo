@@ -19,7 +19,7 @@ import { createVaultSession, type VaultBinding } from "@/lib/midnight/vault-sess
 import type { Wallet } from "@/lib/midnight/wallet/Wallet";
 
 import { useMidnightConnection } from "./midnight-wallet-context";
-import { useRuntimeConfig } from "./runtime-config-context";
+import { useRuntimeConfiguration } from "./runtime-config-context";
 import { useVaultIdentity } from "./vault-identity-context";
 
 type VaultSession = ReturnType<typeof createVaultSession>;
@@ -51,7 +51,7 @@ const VaultContext = createContext<VaultContextValue | null>(null);
  */
 export function VaultProvider({ children }: { children: ReactNode }): JSX.Element {
   const connection = useMidnightConnection();
-  const runtime = useRuntimeConfig();
+  const runtime = useRuntimeConfiguration();
   const queryClient = useQueryClient();
   const identity = useVaultIdentity();
   const { identitySecret } = identity;
@@ -101,12 +101,11 @@ export function VaultProvider({ children }: { children: ReactNode }): JSX.Elemen
     clearSession();
     if (!identity.getIdentitySecret()) throw new Error("Enter a vault secret first.");
     const captured = runtime.owner.getSnapshot().applied;
-    const { midnight, environment } = captured;
+    const { midnight, readiness } = captured;
+    if (readiness.vault.status === "unavailable")
+      throw new Error(readiness.vault.reasons.join(" "));
+    const environment = readiness.vault.value;
     const zkOrigin = getZkConfigOrigin(window.location.origin);
-    // Force lazy deployment validation before acquiring private state or an indexer.
-    void environment.contractAddress;
-    void environment.signetContractAddress;
-    void environment.mpcSecpPub;
     const attempt = revision.current;
     const next = createVaultSession({
       wallet,
@@ -197,8 +196,12 @@ export function VaultProvider({ children }: { children: ReactNode }): JSX.Elemen
     if (!wallet || !identity.getIdentitySecret()) return;
     try {
       startSession(wallet);
-    } catch {
-      setDeploymentError("Vault deployment configuration is missing or invalid.");
+    } catch (error) {
+      setDeploymentError(
+        error instanceof Error
+          ? error.message
+          : "Vault deployment configuration is missing or invalid.",
+      );
     }
   });
   useEffect(() => {

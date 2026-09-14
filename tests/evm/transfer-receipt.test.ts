@@ -327,3 +327,25 @@ it("keeps browser signing consumers independent of app credentials and persisten
     );
   }
 });
+
+it("rejects an app RPC chain mismatch even when the extension reports the selected chain", async () => {
+  const f = browserWalletFixture();
+  vi.mocked(f.publicClient.getChainId).mockResolvedValue(1);
+  await expect(f.wallet.connect()).rejects.toThrow(/RPC reports chain 1/);
+  expect(f.controls.chain).toBe("0xaa36a7");
+  assertRemoved(f.events);
+});
+
+it("discards an RPC verification response arriving after wallet disconnection", async () => {
+  const f = browserWalletFixture();
+  const gate = Promise.withResolvers<number>();
+  vi.mocked(f.publicClient.getChainId).mockReturnValue(gate.promise);
+  const connection = f.wallet.connect();
+  await vi.waitFor(() => {
+    expect(f.publicClient.getChainId).toHaveBeenCalledTimes(1);
+  });
+  f.wallet.disconnect();
+  gate.resolve(11155111);
+  await expect(connection).rejects.toThrow(/session changed/);
+  assertRemoved(f.events);
+});

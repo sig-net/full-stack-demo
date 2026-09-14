@@ -8,7 +8,10 @@ import { EvmBalancesProvider } from "@/providers/evm-balances-context";
 import { useEvmWallet } from "@/providers/evm-wallet-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 
-import { mockMatchingRuntimeServer } from "../config/runtime-server-fixture";
+import {
+  mockMatchingRuntimeServer,
+  testRuntimeConfiguration,
+} from "../config/runtime-server-fixture";
 import { browserWalletFixture } from "../evm/browser-wallet-fixture";
 
 vi.mock(import("@/providers/evm-wallet-context"), { spy: true });
@@ -49,7 +52,7 @@ it("computes EVM deposit eligibility from observed decimals, balances and fee es
   const wrapper = ({ children }: { children: React.ReactNode }): React.JSX.Element => {
     return (
       <QueryClientProvider client={queryClient}>
-        <RuntimeConfigProvider>
+        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
           <EvmBalancesProvider tokens={[token]}>{children}</EvmBalancesProvider>
         </RuntimeConfigProvider>
       </QueryClientProvider>

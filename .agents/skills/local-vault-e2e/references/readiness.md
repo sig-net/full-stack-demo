@@ -22,7 +22,9 @@ short timeout. Return only public status fields, never full environment or log o
 For server-assisted operations, compare the applied runtime snapshot with the server compatibility
 result. The app reports unavailable compatibility separately from differing fields. Independent
 wallet connection does not establish eligibility for local funding or relayer assistance. Inspect
-`src/providers/runtime-config-context.tsx` for the current comparison and request-header boundary.
+`src/hooks/use-server-runtime-compatibility.ts` for the comparison and request-header boundary.
+The public DTO contains nested `config.midnight`, `config.evm` and `config.vault` sections, with
+EVM chain ID encoded as a decimal string or null, plus the server fingerprint.
 Do not reset intentional runtime overrides or retry funding to resolve a configuration mismatch.
 
 For block progress use `{"query":"{ block { height } }"}`. For each configured public contract

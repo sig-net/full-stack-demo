@@ -18,14 +18,26 @@ import { MidnightLocalFundingProvider } from "./midnight-local-funding-context";
 import { MidnightReadinessProvider } from "./midnight-readiness-context";
 import { useMidnightConnection } from "./midnight-wallet-context";
 import { MidnightWalletProvider } from "./midnight-wallet-context";
-import { RuntimeConfigProvider, useRuntimeConfig } from "./runtime-config-context";
+import { RuntimeConfigProvider, useRuntimeConfiguration } from "./runtime-config-context";
 import { VaultBalancesProvider } from "./vault-balances-context";
 import { VaultProvider } from "./vault-context";
 import { VaultIdentityProvider } from "./vault-identity-context";
 import { VaultOperationsProvider } from "./vault-operations-context";
 
+function ConfiguredEvmBalances({ children }: { children: React.ReactNode }): React.JSX.Element {
+  const { applied } = useRuntimeConfiguration();
+  return (
+    <EvmBalancesProvider
+      tokens={
+        applied.evm.chainId === 11155111n ? ERC20_TOKENS.map((token) => token.erc20Address) : []
+      }
+    >
+      {children}
+    </EvmBalancesProvider>
+  );
+}
 function RuntimeWallets({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const runtime = useRuntimeConfig();
+  const runtime = useRuntimeConfiguration();
   return (
     <MidnightWalletProvider configuration={runtime.applied.midnight}>
       <RuntimeWalletInvalidation />
@@ -34,7 +46,7 @@ function RuntimeWallets({ children }: { children: React.ReactNode }): React.JSX.
   );
 }
 function RuntimeWalletInvalidation(): null {
-  const { owner } = useRuntimeConfig();
+  const { owner } = useRuntimeConfiguration();
   const evm = useEvmWallet();
   const midnight = useMidnightConnection();
   useLayoutEffect(() =>
@@ -58,7 +70,7 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
     <QueryClientProvider client={queryClient}>
       <RuntimeConfigProvider>
         <EvmWalletProvider>
-          <EvmBalancesProvider tokens={ERC20_TOKENS.map((token) => token.erc20Address)}>
+          <ConfiguredEvmBalances>
             <EvmLocalFundingProvider>
               <RuntimeWallets>
                 <MidnightReadinessProvider>
@@ -79,7 +91,7 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
                 </MidnightReadinessProvider>
               </RuntimeWallets>
             </EvmLocalFundingProvider>
-          </EvmBalancesProvider>
+          </ConfiguredEvmBalances>
           <ReactQueryDevtools initialIsOpen={false} />
         </EvmWalletProvider>
       </RuntimeConfigProvider>

@@ -1,4 +1,5 @@
 "use client";
+
 import "./buffer-shim";
 
 import { bytesToHex } from "@sig-net/midnight";
@@ -13,6 +14,8 @@ import {
 } from "react";
 import { formatUnits } from "viem";
 
+import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
+import { resolveEvmChain } from "@/lib/config/evm";
 import type { RuntimeSnapshot } from "@/lib/config/runtime";
 import { fetchErc20Decimals } from "@/lib/constants/token-metadata";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
@@ -34,7 +37,7 @@ import type { VaultBinding } from "@/lib/midnight/vault-session";
 import { fundingErrorSchema } from "@/lib/wallet-funding";
 
 import { useMidnightReadiness } from "./midnight-readiness-context";
-import { useRuntimeConfig } from "./runtime-config-context";
+import { useRuntimeConfiguration } from "./runtime-config-context";
 import { useVaultBalances } from "./vault-balances-context";
 import { useVault } from "./vault-context";
 const DEAD_ADDRESS = "0x000000000000000000000000000000000000dEaD";
@@ -142,9 +145,10 @@ interface CapturedOperation {
 
 function useVaultOperationOwner(): VaultOperationState {
   const vaultOwner = useVault();
-  const runtime = useRuntimeConfig();
+  const runtime = useRuntimeConfiguration();
+  const compatibility = useServerRuntimeCompatibility();
   const topUpGas = (request: GasTopUpRequest): Promise<void> =>
-    requestGasTopUp(request, runtime.requireServerHeaders());
+    requestGasTopUp(request, compatibility.requireServerHeaders());
   const readiness = useMidnightReadiness();
   const { refresh } = useVaultBalances();
   const { binding } = vaultOwner;
@@ -207,7 +211,7 @@ function useVaultOperationOwner(): VaultOperationState {
     deploymentFingerprint: operation.configuration.fingerprint,
     commitment: bytesToHex(operation.binding.identity.commitment),
     midnightNetwork: operation.configuration.midnight.networkId,
-    chainId: operation.configuration.evm.chainId,
+    chainId: resolveEvmChain(operation.configuration.evm).chain.id,
     vaultContract: operation.binding.environment.contractAddress,
     assetToken: AAVE_USDC,
     shareToken: STATA_USDC,
@@ -313,10 +317,10 @@ function useVaultOperationOwner(): VaultOperationState {
       operation.recordId = rid;
       midnightTxHistory.add({
         networkId: operation.configuration.midnight.networkId,
-        chainId: operation.configuration.evm.chainId,
+        chainId: resolveEvmChain(operation.configuration.evm).chain.id,
         rpcUrl: operation.configuration.evm.rpcUrl,
         explorerUrl: operation.configuration.evm.explorerUrl,
-        vaultContractAddress: operation.configuration.environment.contractAddress,
+        vaultContractAddress: operation.configuration.vault.contractAddress,
         id: rid,
         ...base,
         txHash: evmTxHash,
@@ -441,10 +445,10 @@ function useVaultOperationOwner(): VaultOperationState {
       operation.recordId = rid;
       midnightTxHistory.add({
         networkId: operation.configuration.midnight.networkId,
-        chainId: operation.configuration.evm.chainId,
+        chainId: resolveEvmChain(operation.configuration.evm).chain.id,
         rpcUrl: operation.configuration.evm.rpcUrl,
         explorerUrl: operation.configuration.evm.explorerUrl,
-        vaultContractAddress: operation.configuration.environment.contractAddress,
+        vaultContractAddress: operation.configuration.vault.contractAddress,
         id: rid,
         type: "Swap",
         fromSymbol: tokenMeta(operation, tokenInErc20).symbol,
@@ -513,10 +517,10 @@ function useVaultOperationOwner(): VaultOperationState {
       operation.recordId = rid;
       midnightTxHistory.add({
         networkId: operation.configuration.midnight.networkId,
-        chainId: operation.configuration.evm.chainId,
+        chainId: resolveEvmChain(operation.configuration.evm).chain.id,
         rpcUrl: operation.configuration.evm.rpcUrl,
         explorerUrl: operation.configuration.evm.explorerUrl,
-        vaultContractAddress: operation.configuration.environment.contractAddress,
+        vaultContractAddress: operation.configuration.vault.contractAddress,
         id: rid,
         type: "Supply",
         position: position(operation),
@@ -595,10 +599,10 @@ function useVaultOperationOwner(): VaultOperationState {
       operation.recordId = rid;
       midnightTxHistory.add({
         networkId: operation.configuration.midnight.networkId,
-        chainId: operation.configuration.evm.chainId,
+        chainId: resolveEvmChain(operation.configuration.evm).chain.id,
         rpcUrl: operation.configuration.evm.rpcUrl,
         explorerUrl: operation.configuration.evm.explorerUrl,
-        vaultContractAddress: operation.configuration.environment.contractAddress,
+        vaultContractAddress: operation.configuration.vault.contractAddress,
         id: rid,
         type: "Redeem",
         position: position(operation),
@@ -665,7 +669,7 @@ function useVaultOperationOwner(): VaultOperationState {
     retainDepositRequest = false,
   ): Promise<OperationResult> => {
     if (locked.current) throw new Error("A vault operation is already in progress.");
-    runtime.requireServerHeaders();
+    compatibility.requireServerHeaders();
     const active = vaultOwner.requireBinding();
     const operation: CapturedOperation = {
       id: crypto.randomUUID(),
@@ -747,8 +751,8 @@ function useVaultOperationOwner(): VaultOperationState {
     currentDeposit,
     log,
     busy,
-    ready: readiness.ready && !runtime.serverUnavailable,
-    unavailable: runtime.serverUnavailable,
+    ready: readiness.ready && !compatibility.serverUnavailable,
+    unavailable: compatibility.serverUnavailable,
     deposit: (erc20: string, amount: bigint) =>
       execute("deposit", [erc20], (operation) => runFlow(operation, "deposit", erc20, amount)),
     recoverDeposit: (erc20: string, requestId: string) =>

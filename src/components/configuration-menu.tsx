@@ -112,7 +112,9 @@ export function ConfigurationMenu(): React.JSX.Element {
                             <TooltipContent side="left">{field.help}</TooltipContent>
                           </Tooltip>
                         </div>
-                        {(field.key === "contractAddress" || field.key === "mpcSecpPub") && (
+                        {(field.key === "contractAddress" ||
+                          field.key === "mpcPubkey" ||
+                          field.key === "signetContractAddress") && (
                           <div className="ds-before-control">
                             <p className="ds-caption">Applied {field.label}</p>
                             <PublicIdentifier
@@ -122,16 +124,16 @@ export function ConfigurationMenu(): React.JSX.Element {
                           </div>
                         )}
                         <div id={`${fieldId}-feedback`} className="ds-caption break-words">
-                          {field.error && (
-                            <Feedback tone="error" role="alert">
-                              {field.error}
-                            </Feedback>
-                          )}
                           {field.difference && (
                             <p className="ds-warning">
                               {field.difference.message} Wallet value:{" "}
                               {field.difference.walletValue}
                             </p>
+                          )}
+                          {field.error && (
+                            <Feedback tone="error" role="alert">
+                              {field.error}
+                            </Feedback>
                           )}
                         </div>
                       </div>
@@ -140,6 +142,16 @@ export function ConfigurationMenu(): React.JSX.Element {
                 </div>
               </section>
             ))}
+            {model.pending && (
+              <p role="status">
+                Unapplied draft changes. Connected network: {model.applied.midnight.networkId}.
+              </p>
+            )}
+            {model.failure && (
+              <Feedback tone="error" role="alert">
+                {model.failure}
+              </Feedback>
+            )}
             {model.walletError && (
               <Feedback tone="error" role="alert">
                 {model.walletError}
@@ -176,10 +188,10 @@ export function ConfigurationMenu(): React.JSX.Element {
                 size="sm"
                 onClick={() => {
                   model.reset();
-                  setResult("Startup defaults restored.");
+                  setResult("Network defaults prepared. Apply to commit them.");
                 }}
               >
-                Reset to defaults
+                Reset to network defaults
               </Button>
             </div>
           </form>

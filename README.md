@@ -62,7 +62,25 @@ yarn dev
 
 The asset command verifies complete vault and Signet trees in staging before replacing `public/zk`. The vault uses `/zk/{keys,zkir,compiler}` and Signet uses `/zk/signet/{keys,zkir,compiler}`. A failed or incomplete preparation preserves the serving tree. The package manifests and browser-pinned hashes must agree. `NEXT_PUBLIC_ZK_CONFIG_ORIGIN` defaults to this app's `/zk` URL.
 
-Open [the local app](http://localhost:3000). Connect a Midnight seed wallet with a fresh hexadecimal seed, or manually paste the testing seed from the private output. Wallet synchronisation completes even when the fresh wallet has no funds. Select or generate a separate 32-byte vault identity. Keep that secret outside the app if you want to return to the same identity.
+Open [the local app](http://localhost:3000). The browser starts with **undeployed** and EVM **Local testnet** selected. Midnight connection/deployment fields are empty, and the local EVM chain ID is discovered from Anvil. Open the header **Configuration** gear and enter the generated public values from the UI `.env.local`:
+
+| Section | Field | Generated value |
+| --- | --- | --- |
+| ERC20 vault | MPC public key | `NEXT_PUBLIC_MPC_SECP256K1_PUBKEY` |
+| ERC20 vault | Contract address | `NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS` |
+| ERC20 vault | Signet contract address | `NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS` |
+| Midnight | Network | `undeployed` |
+| Midnight | Indexer URL | `NEXT_PUBLIC_MIDNIGHT_INDEXER_URL` |
+| Midnight | Indexer WebSocket URL | `NEXT_PUBLIC_MIDNIGHT_INDEXER_WS_URL` |
+| Midnight | Node URL | `NEXT_PUBLIC_MIDNIGHT_NODE_URL` |
+| Midnight | Proof server URL | `NEXT_PUBLIC_MIDNIGHT_PROOF_SERVER_URL` |
+| EVM | Chain | `11155111` |
+| EVM | RPC URL | `NEXT_PUBLIC_SEPOLIA_RPC_URL` |
+| EVM | Explorer URL | Leave empty |
+
+Select Midnight **undeployed** and EVM **Local testnet**, then enter the generated endpoints and deployment values. Wait for local chain discovery, or enter the generated chain ID, and choose **Apply**. Keep the EVM RPC local and its explorer empty for this stack. Refresh requires entering this configuration again. Only copy the public values above into the editor. The generated server credentials remain in `.env.local`.
+
+Connect a Midnight seed wallet with a fresh hexadecimal seed, or manually paste the testing seed from the private output. Wallet synchronisation completes even when the fresh wallet has no funds. Select or generate a separate 32-byte vault identity. Keep that secret outside the app if you want to return to the same identity.
 
 For an EVM extension, configure a local network with RPC `http://127.0.0.1:8545`, chain ID `11155111`, and ETH as its currency. Select this local network before connecting. Public Sepolia shares that chain ID, so the app also checks the generated fork marker through the extension. A public Sepolia connection cannot pass that local marker check. Local transaction hashes remain visible without links to a public explorer.
 
@@ -102,33 +120,26 @@ change at settlement. Completed Activity and the resulting balances establish su
 
 ## Runtime configuration
 
-Public configuration starts from the generated environment and package deployment defaults.
-The header gear opens **Configuration**, grouped into ERC20 vault, Midnight and EVM fields.
-Edits stay in page memory until **Apply** validates the whole draft. Invalid values remain
-editable. **Discard** restores the applied values in the inputs. **Reset to defaults** applies
-the startup defaults, and reloading the page discards overrides. Field information buttons
-explain each value. Wallet endpoint differences and server incompatibility appear in the panel.
+The header gear opens **Configuration**, grouped into ERC20 vault, Midnight and EVM. Browser initialisation uses the selected Midnight network's defaults. `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID` selects that initial network. Generated endpoint, address and MPC environment values configure the server. Enter those public values explicitly in the browser for a local stack.
 
-The supported selections are Sepolia and the startup Midnight network. Applying EVM RPC changes
-requires EVM reconnection. Applying Midnight endpoint changes requires Midnight reconnection.
-Either change invalidates the vault binding. Vault address and MPC key edits rebind the vault
-while retaining the independent caller identity. Explorer edits preserve signing sessions.
-Submitted transfers and Activity records keep their captured destination and explorer metadata.
-Local fork receipts accept an empty explorer or a local explorer. Records without captured
-explorer metadata display their hash without inventing a destination link.
+| Midnight network | Connection defaults | EVM and vault defaults |
+| --- | --- | --- |
+| undeployed | Empty node and indexer endpoints | Local Anvil RPC with chain discovery, empty explorer and vault deployment |
+| stagenet | Stagenet node and v4 indexer endpoints | Sepolia public endpoints and installed package deployments |
+| preview, preprod | Their published node and v4 indexer endpoints | Sepolia public endpoints and any published deployment values |
+| mainnet | Mainnet node and v4 indexer endpoints | Ethereum mainnet public endpoints and any published deployment values |
 
-Server-assisted funding and vault operations require compatibility with the server's public
-configuration. The app shows unavailable compatibility separately from named field differences.
-Independent wallet connection and balance reads remain available. Browser overrides cannot
-change server RPCs, deployment addresses, private keys or funding policy. The server derives
-operation funding recipients from its own vault configuration and ledger.
+Every network defaults to the local proof server at `http://127.0.0.1:6300`. Each published vault address, Signet address and MPC key resolves independently. Missing values stay empty and prevent dependent operations. The installed packages currently publish all three only for Stagenet. Transport probes accepted HTTP GraphQL and WebSocket connection negotiation on all four public networks. These probes do not establish contract or proof compatibility on those networks.
 
-GET `/api/runtime-config` returns the public fields, Signet address and their fingerprint.
-The app verifies that fingerprint and sends it in the `x-vault-configuration` header to all
-three funding POST routes. The routes reject missing or incompatible fingerprints before
-privileged work. Custom clients must compare their effective configuration with this response
-before using its fingerprint. The fingerprint is a compatibility check, not a secret or an
-authorisation credential. Restart Next.js after changing generated server environment values.
+Edits remain an unapplied local draft until **Apply** validates and commits all sections together. **Discard** reloads applied values. **Reset to network defaults** prepares a fresh draft for the selected network and requires Apply. Selecting a different network resets all three draft sections. Returning to a network uses its defaults, without remembering overrides. Selecting the current network preserves edits. Applied configuration and wallet sessions change only after Apply. A stale editor cannot overwrite a newer applied revision and offers Discard to reload.
+
+Clearing a field means unset. Missing inputs keep setup and the independent vault identity available. A malformed non-empty field prevents Apply. Contract addresses and valid compressed/uncompressed secp256k1 keys are normalised. Editing the HTTP indexer URL also replaces its WebSocket twin. An explicit WebSocket edit lasts until the next HTTP edit.
+
+EVM **Local testnet** selects Anvil at `http://127.0.0.1:8545`, discovers its chain ID and leaves the explorer empty. **Sepolia testnet** uses chain `11155111`, `https://ethereum-sepolia-rpc.publicnode.com` and `https://sepolia.etherscan.io`. **Mainnet** uses chain `1`, `https://ethereum-rpc.publicnode.com` and `https://etherscan.io`. Selecting EVM local/mainnet prepares Midnight undeployed/mainnet. Selecting Sepolia preserves Midnight Stagenet, Preview or Preprod when already selected, otherwise it prepares Stagenet. Subsequent URL and chain overrides remain editable without another automatic network selection. Chain-only overrides preserve endpoints. Clearing the chain clears both endpoints. Generic EVM wallets can use an independently configured chain. Number-based wallet APIs require a safely representable chain ID. Public presets use fixed chain IDs for connection without requiring application RPC chain discovery. Browser extensions still verify their reported chain. Local and explicit nonstandard chain overrides require RPC verification. Failed local discovery leaves EVM unavailable while other configuration edits remain applicable. Vault asset routing requires Sepolia, with each operation checking its required assets and contracts.
+
+Applying an EVM chain/RPC change requires EVM reconnection. Applying Midnight network/endpoints requires Midnight reconnection. Either change invalidates the vault binding, and a network change invalidates both wallet sessions. Vault address, Signet address and MPC edits rebind the vault while retaining the independent caller identity. Explorer-only edits preserve signing sessions and the operational fingerprint. Submitted transfers and Activity retain captured identifiers, destination and explorer metadata. Local receipts require an empty or local explorer.
+
+Server-assisted funding and vault operations require complete browser configuration matching the server's deployment. Unavailable server observations and named field differences are distinct. Browser edits cannot change server endpoints, keys or funding authority. GET `/api/runtime-config` returns a nested `config` record and its versioned operational `fingerprint`. Wire EVM chain IDs are canonical decimal strings or null. The fingerprint includes the EVM network selection and Signet, and excludes the explorer. Funding POST routes require that fingerprint in `x-vault-configuration`. It establishes configuration compatibility, not authorisation. Restart Next.js after changing server environment values.
 
 ## Reuse and reset
 

@@ -1,7 +1,5 @@
 "use client";
 
-import { MidnightNetwork } from "@sig-net/midnight";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import {
   createContext,
   type JSX,
@@ -10,110 +8,173 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { z } from "zod";
+import { toast } from "sonner";
 
+import type { EvmNetwork } from "@/lib/config/evm";
+import type { NetworkId } from "@/lib/config/midnight";
 import {
   createRuntimeConfiguration,
+  type ERC20VaultConfig,
+  type EvmChainConfig,
+  type MidnightChainConfig,
+  type RuntimeConfig,
   type RuntimeConfiguration,
-  runtimeFields,
-  runtimeFingerprint,
+  type RuntimeSnapshot,
 } from "@/lib/config/runtime";
 
-const serverConfigurationSchema = z.object({
-  fields: z
-    .record(z.enum(runtimeFields.map((field) => field.key)), z.string())
-    .and(z.object({ networkId: z.enum(MidnightNetwork) })),
-  signetContractAddress: z.string(),
-  fingerprint: z.string(),
-});
-
-interface RuntimeConfigState
-  extends
-    ReturnType<RuntimeConfiguration["getSnapshot"]>,
-    Pick<RuntimeConfiguration, "edit" | "apply" | "reset" | "discard"> {
+/** Immediate setters share the composed configuration transaction owner. */
+export interface MidnightChainConfigContextValue {
+  readonly config: MidnightChainConfig;
+  readonly setNetworkId: (networkId: NetworkId) => void;
+  readonly setIndexerUrl: (indexerUrl: string) => void;
+  readonly setIndexerWsUrl: (indexerWsUrl: string) => void;
+  readonly setNodeUrl: (nodeUrl: string) => void;
+  readonly setProofServerUrl: (proofServerUrl: string) => void;
+}
+/** Generic wallet configuration remains independent of vault deployment. */
+export interface EVMChainConfigContextValue {
+  readonly config: EvmChainConfig;
+  readonly caip2Id: string | null;
+  readonly setNetwork: (network: EvmNetwork) => void;
+  readonly setChainId: (chainId: bigint | null) => void;
+  readonly setRpcUrl: (rpcUrl: string) => void;
+  readonly setExplorerUrl: (explorerUrl: string) => void;
+}
+/** Deployment edits preserve the independent caller identity. */
+export interface ERC20VaultConfigContextValue {
+  readonly config: ERC20VaultConfig;
+  readonly setContractAddress: (address: string) => void;
+  readonly setSignetContractAddress: (address: string) => void;
+  readonly setMpcPubkey: (pubkeyHex: string) => void;
+}
+interface RuntimeConfigurationContextValue {
   owner: RuntimeConfiguration;
-  differences: string[];
-  serverUnavailable: string | null;
-  requireServerHeaders: () => Record<string, string>;
-  server: UseQueryResult<z.infer<typeof serverConfigurationSchema>>;
+  applied: RuntimeSnapshot;
 }
+const RuntimeConfigContext = createContext<RuntimeConfigurationContextValue | null>(null);
 
-function useRuntimeOwner(): RuntimeConfigState {
-  const [owner] = useState(() => createRuntimeConfiguration());
+/**
+ * @param root0 - Provider content and optional injected configuration.
+ * @param root0.children - Consumers sharing one transaction owner.
+ * @param root0.initialConfiguration - Explicit configuration for an isolated provider lifetime.
+ * @returns Context backed by immutable external-store snapshots.
+ */
+export function RuntimeConfigProvider({
+  children,
+  initialConfiguration,
+}: {
+  children: ReactNode;
+  initialConfiguration?: RuntimeConfig;
+}): JSX.Element {
+  const [owner] = useState(() => createRuntimeConfiguration(initialConfiguration));
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot, owner.getSnapshot);
-  const server = useQuery({
-    queryKey: ["server-runtime-configuration"],
-    queryFn: async () => {
-      const response = await fetch("/api/runtime-config", {
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error("Server deployment configuration is unavailable.");
-      const input: unknown = await response.json();
-      const result = serverConfigurationSchema.parse(input);
-      if (runtimeFingerprint(result.fields, result.signetContractAddress) !== result.fingerprint)
-        throw new Error("Server configuration verification failed.");
-      return result;
-    },
-    retry: false,
-    refetchInterval: 30_000,
-  });
-  const differences = server.data
-    ? runtimeFields
-        .filter(
-          (field) =>
-            field.scope !== null &&
-            server.data.fields[field.key] !== state.applied.fields[field.key],
-        )
-        .map((field) => field.label)
-    : [];
-  if (server.data && server.data.signetContractAddress !== owner.defaults.signetContractAddress)
-    differences.push("Signet contract address");
-  const serverUnavailable =
-    server.isError || !server.data
-      ? "Server deployment compatibility is unavailable. Independent wallet actions remain available."
-      : differences.length
-        ? `Server-assisted actions are unavailable: ${differences.join(", ")} differ from the server.`
-        : null;
-  const requireServerHeaders = (): Record<string, string> => {
-    if (serverUnavailable || !server.data)
-      throw new Error(serverUnavailable ?? "Server configuration is unavailable.");
-    if (owner.getSnapshot().applied.fingerprint !== state.applied.fingerprint)
-      throw new Error("Configuration changed. Retry the action.");
-    return { "x-vault-configuration": state.applied.fingerprint };
-  };
-  return {
-    ...state,
-    owner,
-    edit: owner.edit,
-    apply: owner.apply,
-    reset: owner.reset,
-    discard: owner.discard,
-    differences,
-    serverUnavailable,
-    requireServerHeaders,
-    server,
-  };
-}
-const RuntimeConfigContext = createContext<ReturnType<typeof useRuntimeOwner> | null>(null);
-/**
- * Owns editable deployment inputs and their server-compatibility observation.
- *
- * @param props - Provider content.
- * @param props.children - Components sharing applied configuration and its draft.
- * @returns The runtime configuration context.
- */
-export function RuntimeConfigProvider({ children }: { children: ReactNode }): JSX.Element {
-  const value = useRuntimeOwner();
-  return <RuntimeConfigContext.Provider value={value}>{children}</RuntimeConfigContext.Provider>;
+  return (
+    <RuntimeConfigContext.Provider value={{ owner, ...state }}>
+      {children}
+    </RuntimeConfigContext.Provider>
+  );
 }
 /**
- * Reads the shared draft, applied revision and assisted-action compatibility state.
- *
- * @returns Configuration state and explicit edit/apply/reset actions.
- * @throws {Error} If the configuration provider is missing.
+ * @returns The shared owner and currently applied snapshot.
+ * @throws {Error} If the configuration provider is absent.
  */
-export function useRuntimeConfig(): RuntimeConfigState {
+export function useRuntimeConfiguration(): RuntimeConfigurationContextValue {
   const context = useContext(RuntimeConfigContext);
-  if (!context) throw new Error("useRuntimeConfig requires RuntimeConfigProvider.");
+  if (!context) throw new Error("useRuntimeConfiguration requires RuntimeConfigProvider.");
   return context;
+}
+function applyWithFeedback(action: () => void): void {
+  try {
+    action();
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Invalid configuration.");
+  }
+}
+/**
+ * @returns Applied Midnight values and immediate atomic setters with shared feedback.
+ */
+export function useMidnightChainConfig(): MidnightChainConfigContextValue {
+  const { applied, owner } = useRuntimeConfiguration();
+  return {
+    config: applied.midnight,
+    setNetworkId: (value) => {
+      applyWithFeedback(() => {
+        owner.setMidnight("networkId", value);
+      });
+    },
+    setIndexerUrl: (value) => {
+      applyWithFeedback(() => {
+        owner.setMidnight("indexerUrl", value);
+      });
+    },
+    setIndexerWsUrl: (value) => {
+      applyWithFeedback(() => {
+        owner.setMidnight("indexerWsUrl", value);
+      });
+    },
+    setNodeUrl: (value) => {
+      applyWithFeedback(() => {
+        owner.setMidnight("nodeUrl", value);
+      });
+    },
+    setProofServerUrl: (value) => {
+      applyWithFeedback(() => {
+        owner.setMidnight("proofServerUrl", value);
+      });
+    },
+  };
+}
+/**
+ * @returns Applied EVM values, nullable CAIP-2 identity and immediate setters.
+ */
+export function useEVMChainConfig(): EVMChainConfigContextValue {
+  const { applied, owner } = useRuntimeConfiguration();
+  return {
+    config: applied.evm,
+    caip2Id: applied.evm.chainId === null ? null : `eip155:${applied.evm.chainId.toString()}`,
+    setNetwork: (value) => {
+      applyWithFeedback(() => {
+        owner.setEvm("network", value);
+      });
+    },
+    setChainId: (value) => {
+      applyWithFeedback(() => {
+        owner.setEvm("chainId", value);
+      });
+    },
+    setRpcUrl: (value) => {
+      applyWithFeedback(() => {
+        owner.setEvm("rpcUrl", value);
+      });
+    },
+    setExplorerUrl: (value) => {
+      applyWithFeedback(() => {
+        owner.setEvm("explorerUrl", value);
+      });
+    },
+  };
+}
+/**
+ * @returns Applied vault deployment values and immediate binding-invalidating setters.
+ */
+export function useERC20VaultConfig(): ERC20VaultConfigContextValue {
+  const { applied, owner } = useRuntimeConfiguration();
+  return {
+    config: applied.vault,
+    setContractAddress: (value) => {
+      applyWithFeedback(() => {
+        owner.setVault("contractAddress", value);
+      });
+    },
+    setSignetContractAddress: (value) => {
+      applyWithFeedback(() => {
+        owner.setVault("signetContractAddress", value);
+      });
+    },
+    setMpcPubkey: (value) => {
+      applyWithFeedback(() => {
+        owner.setVault("mpcPubkey", value);
+      });
+    },
+  };
 }

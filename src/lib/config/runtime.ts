@@ -1,344 +1,450 @@
+import { secp256k1 } from "@noble/curves/secp256k1";
+import { getMpcRootPublicKey, getSignetContractAddress, MidnightNetwork } from "@sig-net/midnight";
+import { getVaultContractAddress } from "@sig-net/midnight-examples-erc20-vault-contract";
 import { type Hex, keccak256, toBytes } from "viem";
 import { z } from "zod";
 
-import { createVaultEnvironment } from "../midnight/env";
-import { createEvmChainConfig, type EvmChainConfig, getEvmChainConfig } from "./evm";
-import { isLoopbackEndpoint } from "./loopback-endpoint";
+import type { Env } from "../midnight/vault";
 import {
-  createMidnightChainConfig,
-  getMidnightChainConfig,
-  type MidnightNodeConfig,
-} from "./midnight";
+  EVM_NETWORKS,
+  type EvmChainConfig,
+  evmNetworkForMidnight,
+  getEvmNetworkDefaults,
+  requiresRpcChainVerification,
+  type ResolvedEvmChainConfig,
+  resolveEvmChain,
+  selectEvmChain,
+  sepolia,
+} from "./evm";
+import { isLoopbackEndpoint } from "./loopback-endpoint";
+import { deriveIndexerWsUrl, type MidnightNodeConfig, type NetworkId } from "./midnight";
 
-/** Text values shared by the editable draft and server deployment attestation. */
-export interface RuntimeFields {
+/** The shared endpoint contract retains one definition in midnight.ts. */
+export type MidnightChainConfig = MidnightNodeConfig;
+export type { EvmChainConfig } from "./evm";
+/** Deployment identities are independent of wallet credentials. */
+export interface ERC20VaultConfig {
   readonly contractAddress: string;
-  readonly mpcSecpPub: string;
-  readonly networkId: string;
-  readonly indexerUrl: string;
-  readonly indexerWsUrl: string;
-  readonly nodeUrl: string;
-  readonly proofServerUrl: string;
-  readonly chainId: string;
-  readonly rpcUrl: string;
-  readonly explorerUrl: string;
-}
-/** Keys accepted by configuration edits and field-level validation errors. */
-export type RuntimeField = keyof RuntimeFields;
-/** Resource owners invalidated when a captured configuration changes. */
-export type RuntimeScope = "evm" | "midnight" | "vault";
-/** Presentation and invalidation policy for one editable deployment field. */
-export interface RuntimeFieldDefinition {
-  readonly key: RuntimeField;
-  readonly label: string;
-  readonly help: string;
-  readonly section: "Vault" | "Midnight" | "EVM";
-  readonly scope: RuntimeScope | null;
-}
-/** Ordered fields used by both the editor and deployment fingerprint. Null scopes are presentation-only. */
-export const runtimeFields: readonly RuntimeFieldDefinition[] = [
-  {
-    key: "mpcSecpPub",
-    label: "MPC public key",
-    section: "Vault",
-    scope: "vault",
-    help: "A 0x-prefixed secp256k1 public key. Applying it rebinds the vault and changes derived EVM destinations.",
-  },
-  {
-    key: "contractAddress",
-    label: "Contract address",
-    section: "Vault",
-    scope: "vault",
-    help: "The 32-byte Midnight vault address. Applying it rebinds the vault using your independent caller identity.",
-  },
-  {
-    key: "networkId",
-    label: "Network",
-    section: "Midnight",
-    scope: "midnight",
-    help: "This deployment supports the startup Midnight network. Apply endpoints and deployment fields together.",
-  },
-  {
-    key: "indexerUrl",
-    label: "Indexer URL",
-    section: "Midnight",
-    scope: "midnight",
-    help: "Absolute HTTP(S) GraphQL URL. Edit its WebSocket endpoint in the same draft when changing indexers.",
-  },
-  {
-    key: "indexerWsUrl",
-    label: "Indexer WebSocket URL",
-    section: "Midnight",
-    scope: "midnight",
-    help: "Absolute WS(S) GraphQL subscription URL. Applying endpoints requires explicit Midnight reconnection.",
-  },
-  {
-    key: "nodeUrl",
-    label: "Node URL",
-    section: "Midnight",
-    scope: "midnight",
-    help: "Absolute HTTP(S) or WS(S) node endpoint. Applying it requires explicit Midnight reconnection.",
-  },
-  {
-    key: "proofServerUrl",
-    label: "Proof server URL",
-    section: "Midnight",
-    scope: "midnight",
-    help: "Absolute HTTP(S) proof endpoint. It receives private witness data. Applying it requires explicit Midnight reconnection.",
-  },
-  {
-    key: "chainId",
-    label: "Chain",
-    section: "EVM",
-    scope: "evm",
-    help: "Sepolia (11155111), including the verified local fork. The vault routing and token contracts use this chain.",
-  },
-  {
-    key: "rpcUrl",
-    label: "RPC URL",
-    section: "EVM",
-    scope: "evm",
-    help: "Absolute HTTP(S) endpoint for app reads and seed submissions. Browser wallets use their own RPC, which MetaMask does not report.",
-  },
-  {
-    key: "explorerUrl",
-    label: "Explorer URL",
-    section: "EVM",
-    scope: null,
-    help: "Optional HTTP(S) transaction explorer. Empty disables links. Local fork receipts require a local explorer. Signing sessions remain connected.",
-  },
-];
-
-/** Startup values shared by browser configuration and server attestation. */
-export interface RuntimeDefaults {
-  readonly fields: RuntimeFields & MidnightNodeConfig;
   readonly signetContractAddress: string;
+  readonly mpcPubkey: string;
 }
+/** One transaction captures all three configuration sections. */
+export interface RuntimeConfig {
+  readonly midnight: MidnightChainConfig;
+  readonly evm: EvmChainConfig;
+  readonly vault: ERC20VaultConfig;
+}
+/** Incomplete input remains editable without constructing SDK resources. */
+export type ConfigurationReadiness<T> =
+  | { readonly status: "ready"; readonly value: T }
+  | { readonly status: "unavailable"; readonly reasons: readonly string[] };
+/** Owners invalidated by changes to operational configuration. */
+export type RuntimeScope = keyof RuntimeConfig;
+
+// Stagenet literals mirror midnight-integration/packages/signet-contract-deploy/src/plumbing/midnight-node-config.ts.
+// Replace this intentional duplication when an equivalent stable shared export is available and its adoption is authorised.
+const midnightEndpoints: Record<NetworkId, readonly [string, string, string]> = {
+  undeployed: ["", "", ""],
+  stagenet: [
+    "https://indexer.stagenet.shielded.tools/api/v4/graphql",
+    "wss://indexer.stagenet.shielded.tools/api/v4/graphql/ws",
+    "https://rpc.stagenet.shielded.tools",
+  ],
+  preview: [
+    "https://indexer.preview.midnight.network/api/v4/graphql",
+    "wss://indexer.preview.midnight.network/api/v4/graphql/ws",
+    "https://rpc.preview.midnight.network",
+  ],
+  preprod: [
+    "https://indexer.preprod.midnight.network/api/v4/graphql",
+    "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
+    "https://rpc.preprod.midnight.network",
+  ],
+  mainnet: [
+    "https://indexer.mainnet.midnight.network/api/v4/graphql",
+    "wss://indexer.mainnet.midnight.network/api/v4/graphql/ws",
+    "https://rpc.mainnet.midnight.network",
+  ],
+};
 
 /**
- * Captures startup endpoints, retaining empty deployment fields when they cannot yet resolve.
- *
- * @returns Immutable defaults for a configuration owner.
- * @throws {Error} If public endpoint configuration is invalid.
+ * @param networkId - Selected network, defaulting only from its public startup selector.
+ * @returns Independently resolved deployment publications and network endpoint defaults.
  */
-export function getRuntimeDefaults(): RuntimeDefaults {
-  const midnight = getMidnightChainConfig();
-  const evm = getEvmChainConfig();
-  const environment = createVaultEnvironment(midnight, evm);
-  const optional = (read: () => string): string => {
+export function getRuntimeDefaults(
+  networkId: NetworkId = z
+    .enum(MidnightNetwork)
+    .parse(process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID ?? "undeployed"),
+): RuntimeConfig {
+  const [indexerUrl, indexerWsUrl, nodeUrl] = midnightEndpoints[networkId];
+  const optional = (lookup: () => string): string => {
     try {
-      return read();
+      return lookup();
     } catch {
       return "";
     }
   };
-  return Object.freeze({
-    fields: Object.freeze({
-      ...midnight,
-      chainId: String(evm.chainId),
-      rpcUrl: evm.rpcUrl,
-      explorerUrl: evm.explorerUrl ?? "",
-      contractAddress: optional(() => environment.contractAddress),
-      mpcSecpPub: optional(() => environment.mpcSecpPub),
-    }),
-    signetContractAddress: optional(() => environment.signetContractAddress),
+  const network = z.enum(MidnightNetwork).parse(networkId);
+  return validateRuntimeConfig({
+    midnight: {
+      networkId,
+      indexerUrl,
+      indexerWsUrl,
+      nodeUrl,
+      proofServerUrl: "http://127.0.0.1:6300",
+    },
+    evm: getEvmNetworkDefaults(evmNetworkForMidnight(networkId)),
+    vault:
+      network === MidnightNetwork.Undeployed
+        ? { contractAddress: "", signetContractAddress: "", mpcPubkey: "" }
+        : {
+            contractAddress: optional(() => getVaultContractAddress(network)),
+            signetContractAddress: optional(() => getSignetContractAddress(network)),
+            mpcPubkey: optional(() => getMpcRootPublicKey(network)),
+          },
   });
 }
+
+const httpEndpoint = z.union([z.literal(""), z.url({ protocol: /^https?$/ })]);
+const wsEndpoint = z.union([z.literal(""), z.url({ protocol: /^wss?$/ })]);
+const nodeEndpoint = z.union([z.literal(""), z.url({ protocol: /^(https?|wss?)$/ })]);
+const address = z
+  .string()
+  .refine(
+    (value) => value === "" || /^(?:0x)?[a-fA-F0-9]{64}$/.test(value),
+    "Enter a 32-byte hexadecimal contract address.",
+  )
+  .transform((value) => value.replace(/^0x/, "").toLowerCase());
+const pubkey = z.string().transform((value, context) => {
+  if (!value) return "";
+  try {
+    return `0x${secp256k1.Point.fromHex(value.replace(/^0x/, "")).toHex(true)}`;
+  } catch {
+    context.addIssue({ code: "custom", message: "Enter a valid secp256k1 public key." });
+    return z.NEVER;
+  }
+});
+const midnightSchema = z.object({
+  networkId: z.enum(MidnightNetwork),
+  indexerUrl: httpEndpoint,
+  indexerWsUrl: wsEndpoint,
+  nodeUrl: nodeEndpoint,
+  proofServerUrl: httpEndpoint,
+});
+const evmSchema = z.object({
+  network: z.enum(EVM_NETWORKS),
+  chainId: z.bigint().positive().nullable(),
+  rpcUrl: httpEndpoint,
+  explorerUrl: httpEndpoint,
+});
+const vaultSchema = z.object({
+  contractAddress: address,
+  signetContractAddress: address,
+  mpcPubkey: pubkey,
+});
+const runtimeSchema = z
+  .object({ midnight: midnightSchema, evm: evmSchema, vault: vaultSchema })
+  .superRefine((config, context) => {
+    if (
+      config.evm.explorerUrl &&
+      isLoopbackEndpoint(config.evm.rpcUrl) &&
+      !isLoopbackEndpoint(config.evm.explorerUrl)
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["evm", "explorerUrl"],
+        message: "Use a local explorer for local fork receipts, or leave this empty.",
+      });
+  });
+/** Validates canonical public wire values before they enter application configuration. */
+export const runtimeConfigurationSchema = z
+  .object({
+    midnight: midnightSchema,
+    evm: evmSchema.extend({
+      chainId: z
+        .string()
+        .regex(/^[1-9][0-9]*$/)
+        .transform(BigInt)
+        .nullable(),
+    }),
+    vault: vaultSchema,
+  })
+  .pipe(runtimeSchema);
+
 /**
- * Identifies operational configuration while excluding presentation-only fields.
- *
- * @param fields - Applied browser fields or server startup fields.
- * @param signetContractAddress - Protocol deployment paired with the vault.
- * @returns The hash used for server-assisted action attestation.
+ * @param config - Applied public configuration.
+ * @returns Nested wire values with canonical decimal chain IDs.
  */
-export function runtimeFingerprint(fields: RuntimeFields, signetContractAddress: string): Hex {
+export function createRuntimeConfigDto(config: RuntimeConfig): {
+  midnight: MidnightChainConfig;
+  evm: Omit<EvmChainConfig, "chainId"> & { chainId: string | null };
+  vault: ERC20VaultConfig;
+} {
+  return {
+    midnight: config.midnight,
+    evm: { ...config.evm, chainId: config.evm.chainId?.toString() ?? null },
+    vault: config.vault,
+  };
+}
+/**
+ * @param config - Candidate applied configuration.
+ * @returns Normalised values, retaining explicitly empty fields.
+ */
+export function validateRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
+  return runtimeSchema.parse(config);
+}
+/**
+ * @param config - Syntactically validated endpoint record.
+ * @returns Complete wallet inputs or concrete missing-field reasons.
+ */
+export function resolveMidnightConfiguration(
+  config: MidnightChainConfig,
+): ConfigurationReadiness<MidnightNodeConfig> {
+  const reasons = Object.entries(config)
+    .filter(([, value]) => !value)
+    .map(([key]) => `Configure Midnight ${key}.`);
+  return reasons.length ? { status: "unavailable", reasons } : { status: "ready", value: config };
+}
+/**
+ * @param config - Applied chain and endpoint record.
+ * @returns Number-safe wallet inputs or a configuration reason.
+ */
+export function resolveEvmConfiguration(
+  config: EvmChainConfig,
+): ConfigurationReadiness<ResolvedEvmChainConfig> {
+  try {
+    return { status: "ready", value: resolveEvmChain(config) };
+  } catch (error) {
+    return {
+      status: "unavailable",
+      reasons: [error instanceof Error ? error.message : "EVM configuration is unavailable."],
+    };
+  }
+}
+/**
+ * @param config - Syntactically validated composed configuration.
+ * @returns Complete SDK environment inputs or missing/capability reasons.
+ */
+export function resolveVaultConfiguration(config: RuntimeConfig): ConfigurationReadiness<Env> {
+  const reasons = Object.entries(config.vault)
+    .filter(([, value]) => !value)
+    .map(([key]) => `Configure vault ${key}.`);
+  const midnight = resolveMidnightConfiguration(config.midnight);
+  const evm = resolveEvmConfiguration(config.evm);
+  if (midnight.status === "unavailable") reasons.push(...midnight.reasons);
+  if (evm.status === "unavailable") reasons.push(...evm.reasons);
+  if (config.evm.chainId !== BigInt(sepolia.id))
+    reasons.push("Vault asset routing requires Sepolia (11155111).");
+  return reasons.length
+    ? { status: "unavailable", reasons }
+    : {
+        status: "ready",
+        value: Object.freeze({
+          contractAddress: config.vault.contractAddress,
+          signetContractAddress: config.vault.signetContractAddress,
+          mpcSecpPub: config.vault.mpcPubkey,
+          evmRpcUrl: config.evm.rpcUrl,
+          verifyRpcChain: requiresRpcChainVerification(config.evm),
+        }),
+      };
+}
+/**
+ * @param config - Normalised composed configuration.
+ * @returns Versioned operational hash excluding explorer presentation.
+ */
+export function runtimeFingerprint(config: RuntimeConfig): Hex {
+  const { midnight: m, evm: e, vault: v } = config;
   return keccak256(
     toBytes(
       JSON.stringify([
-        ...runtimeFields.filter((field) => field.scope !== null).map((field) => fields[field.key]),
-        signetContractAddress,
+        "vault-runtime-v3",
+        m.networkId,
+        m.indexerUrl,
+        m.indexerWsUrl,
+        m.nodeUrl,
+        m.proofServerUrl,
+        e.network,
+        e.chainId?.toString() ?? null,
+        e.rpcUrl,
+        v.contractAddress,
+        v.signetContractAddress,
+        v.mpcPubkey,
       ]),
     ),
   );
 }
-/** Immutable inputs captured together by wallet and vault resource owners. */
-export interface RuntimeSnapshot {
-  readonly revision: number;
-  readonly fields: RuntimeFields;
-  readonly evm: EvmChainConfig;
-  readonly midnight: MidnightNodeConfig;
-  readonly environment: ReturnType<typeof createVaultEnvironment>;
-  readonly fingerprint: Hex;
-}
-
-function createRuntimeSnapshot(
-  fields: RuntimeFields,
-  defaults: RuntimeDefaults,
-  revision = 0,
-): RuntimeSnapshot {
-  const evm = Object.freeze({
-    ...createEvmChainConfig(fields.rpcUrl),
-    explorerUrl: fields.explorerUrl || undefined,
-  });
-  const midnight = createMidnightChainConfig(fields);
-  const environment = createVaultEnvironment(midnight, evm, {
-    contractAddress: fields.contractAddress || undefined,
-    signetContractAddress: defaults.signetContractAddress || undefined,
-    mpcSecpPub: fields.mpcSecpPub || undefined,
-  });
-  return Object.freeze({
-    revision,
-    fields: Object.freeze({ ...fields }),
-    evm,
-    midnight,
-    environment,
-    fingerprint: runtimeFingerprint(fields, defaults.signetContractAddress),
-  });
+/**
+ * @param config - Current composed configuration.
+ * @param key - Selected Midnight property.
+ * @param value - Replacement value before full-record validation.
+ * @returns Candidate preserving atomic network resets and HTTP/WebSocket pairing.
+ */
+export function updateMidnightConfig<K extends keyof MidnightChainConfig>(
+  config: RuntimeConfig,
+  key: K,
+  value: MidnightChainConfig[K],
+): RuntimeConfig {
+  if (key === "networkId") {
+    const network = z.enum(MidnightNetwork).parse(value);
+    return network === z.enum(MidnightNetwork).parse(config.midnight.networkId)
+      ? config
+      : getRuntimeDefaults(network);
+  }
+  return {
+    ...config,
+    midnight: {
+      ...config.midnight,
+      [key]: value,
+      ...(key === "indexerUrl" ? { indexerWsUrl: deriveIndexerWsUrl(value) } : {}),
+    },
+  };
 }
 /**
- * Checks an editable deployment against the startup network and supported endpoint protocols.
- *
- * @param fields - Candidate draft values.
- * @param defaults - Captured startup network and Signet deployment.
- * @returns Field-specific errors, empty when the draft can be applied.
+ * @param config - Current composed configuration.
+ * @param key - Selected EVM property.
+ * @param value - Replacement value before full-record validation.
+ * @returns Candidate with chain-dependent endpoint defaults.
+ * @throws {Error} If a supplied chain ID is invalid.
  */
-export function validateRuntimeFields(
-  fields: RuntimeFields,
-  defaults: RuntimeDefaults,
-): Partial<Record<RuntimeField, string>> {
-  const errors: Partial<Record<RuntimeField, string>> = {};
-  if (fields.chainId !== defaults.fields.chainId)
-    errors.chainId = "Only Sepolia (11155111) is supported by this vault.";
-  if (fields.networkId !== defaults.fields.networkId)
-    errors.networkId = `Only the startup network ${defaults.fields.networkId} is supported by this deployment.`;
-  for (const key of [
-    "rpcUrl",
-    "indexerUrl",
-    "indexerWsUrl",
-    "nodeUrl",
-    "proofServerUrl",
-    "explorerUrl",
-  ] as const) {
-    if (key === "explorerUrl" && fields[key] === "") continue;
-    const protocol =
-      key === "indexerWsUrl" ? /^wss?$/ : key === "nodeUrl" ? /^(https?|wss?)$/ : /^https?$/;
-    if (!z.url({ protocol }).safeParse(fields[key]).success)
-      errors[key] = `Enter an absolute URL with protocol ${protocol.source}.`;
+export function updateEvmConfig<K extends keyof EvmChainConfig>(
+  config: RuntimeConfig,
+  key: K,
+  value: EvmChainConfig[K],
+): RuntimeConfig {
+  if (key === "network") {
+    const network = z.enum(EVM_NETWORKS).parse(value);
+    if (network === config.evm.network) return config;
+    const midnightNetwork =
+      network === "local"
+        ? "undeployed"
+        : network === "mainnet"
+          ? "mainnet"
+          : config.midnight.networkId === "stagenet" ||
+              config.midnight.networkId === "preview" ||
+              config.midnight.networkId === "preprod"
+            ? config.midnight.networkId
+            : "stagenet";
+    const base =
+      midnightNetwork === config.midnight.networkId ? config : getRuntimeDefaults(midnightNetwork);
+    return { ...base, evm: getEvmNetworkDefaults(network) };
   }
-  if (
-    !errors.rpcUrl &&
-    !errors.explorerUrl &&
-    fields.explorerUrl &&
-    (fields.networkId === "undeployed" || isLoopbackEndpoint(fields.rpcUrl)) &&
-    !isLoopbackEndpoint(fields.explorerUrl)
-  )
-    errors.explorerUrl = "Use a local explorer for local fork receipts, or leave this empty.";
-  if (!/^(?:0x)?[0-9a-fA-F]{64}$/.test(fields.contractAddress))
-    errors.contractAddress = "Enter a 32-byte hexadecimal vault address.";
-  try {
-    const environment = createVaultEnvironment(
-      createMidnightChainConfig(defaults.fields),
-      createEvmChainConfig(defaults.fields.rpcUrl),
-      {
-        mpcSecpPub: fields.mpcSecpPub,
-        contractAddress: fields.contractAddress,
-        signetContractAddress: defaults.signetContractAddress,
-      },
-    );
-    void environment.mpcSecpPub;
-  } catch {
-    errors.mpcSecpPub = "Enter a valid 0x-prefixed secp256k1 public key.";
+  if (key === "chainId") {
+    if (typeof value !== "bigint" && value !== null) throw new Error("Invalid chain ID.");
+    return { ...config, evm: selectEvmChain(config.evm, value) };
   }
-  return errors;
+  return { ...config, evm: { ...config.evm, [key]: value } };
 }
-
-interface RuntimeState {
-  readonly applied: RuntimeSnapshot;
-  readonly draft: RuntimeFields;
-  readonly errors: Partial<Record<RuntimeField, string>>;
+/** Applied inputs carry their revision and validated construction eligibility. */
+export interface RuntimeSnapshot extends RuntimeConfig {
+  readonly revision: number;
+  readonly fingerprint: Hex;
+  readonly readiness: {
+    readonly midnight: ConfigurationReadiness<MidnightNodeConfig>;
+    readonly evm: ConfigurationReadiness<ResolvedEvmChainConfig>;
+    readonly vault: ConfigurationReadiness<Env>;
+  };
 }
-
-/** Owns draft edits and invalidates captured resources before publishing an applied revision. */
+/** Changes invalidate affected owners synchronously before publication. */
 export interface RuntimeConfiguration {
-  defaults: RuntimeDefaults;
-  getSnapshot: () => RuntimeState;
+  getSnapshot: () => { readonly applied: RuntimeSnapshot };
   subscribe: (listener: () => void) => () => void;
   onInvalidate: (listener: (scopes: ReadonlySet<RuntimeScope>) => void) => () => void;
-  edit: (key: RuntimeField, value: string) => void;
-  apply: () => boolean;
-  reset: () => boolean;
-  discard: () => void;
+  applyConfiguration: (config: RuntimeConfig, expectedRevision?: number) => void;
+  setMidnight: <K extends keyof MidnightChainConfig>(key: K, value: MidnightChainConfig[K]) => void;
+  setEvm: <K extends keyof EvmChainConfig>(key: K, value: EvmChainConfig[K]) => void;
+  setVault: <K extends keyof ERC20VaultConfig>(key: K, value: ERC20VaultConfig[K]) => void;
+  reset: () => void;
 }
-
+function snapshot(config: RuntimeConfig, revision: number): RuntimeSnapshot {
+  const frozen = {
+    midnight: Object.freeze({ ...config.midnight }),
+    evm: Object.freeze({ ...config.evm }),
+    vault: Object.freeze({ ...config.vault }),
+  };
+  return Object.freeze({
+    ...frozen,
+    revision,
+    fingerprint: runtimeFingerprint(config),
+    readiness: Object.freeze({
+      midnight: resolveMidnightConfiguration(frozen.midnight),
+      evm: resolveEvmConfiguration(frozen.evm),
+      vault: resolveVaultConfiguration(frozen),
+    }),
+  });
+}
 /**
- * Creates an isolated draft owner with synchronous invalidation before each applied revision.
- *
- * @param suppliedDefaults - Startup values retained for reset and deployment attestation.
- * @returns The owner consumed through React's external-store subscription contract.
+ * @param config - Explicit initial configuration or browser network defaults.
+ * @returns An immutable snapshot owner that validates and invalidates before publishing.
  */
-export function createRuntimeConfiguration(
-  suppliedDefaults = getRuntimeDefaults(),
-): RuntimeConfiguration {
-  const defaults = Object.freeze({
-    ...suppliedDefaults,
-    fields: Object.freeze({ ...suppliedDefaults.fields }),
-  });
-  let applied = createRuntimeSnapshot(defaults.fields, defaults);
-  let state: RuntimeState = Object.freeze({
-    applied,
-    draft: applied.fields,
-    errors: validateRuntimeFields(defaults.fields, defaults),
-  });
+export function createRuntimeConfiguration(config = getRuntimeDefaults()): RuntimeConfiguration {
+  let state = Object.freeze({ applied: snapshot(validateRuntimeConfig(config), 0) });
   const listeners = new Set<() => void>();
   const invalidators = new Set<(scopes: ReadonlySet<RuntimeScope>) => void>();
-  const publish = (): void => {
+  const applyConfiguration = (candidate: RuntimeConfig, expectedRevision?: number): void => {
+    const previous = state.applied;
+    if (expectedRevision !== undefined && previous.revision !== expectedRevision)
+      throw new Error("Configuration changed while editing. Discard to reload applied values.");
+    const next = snapshot(validateRuntimeConfig(candidate), previous.revision + 1);
+    if (
+      next.fingerprint === previous.fingerprint &&
+      next.evm.explorerUrl === previous.evm.explorerUrl
+    )
+      return;
+    const scopes = new Set<RuntimeScope>();
+    if (next.midnight.networkId !== previous.midnight.networkId) {
+      scopes.add("midnight");
+      scopes.add("evm");
+    }
+    if (
+      next.midnight.indexerUrl !== previous.midnight.indexerUrl ||
+      next.midnight.indexerWsUrl !== previous.midnight.indexerWsUrl ||
+      next.midnight.nodeUrl !== previous.midnight.nodeUrl ||
+      next.midnight.proofServerUrl !== previous.midnight.proofServerUrl
+    )
+      scopes.add("midnight");
+    if (
+      next.evm.network !== previous.evm.network ||
+      next.evm.chainId !== previous.evm.chainId ||
+      next.evm.rpcUrl !== previous.evm.rpcUrl
+    )
+      scopes.add("evm");
+    if (
+      scopes.size ||
+      next.vault.contractAddress !== previous.vault.contractAddress ||
+      next.vault.signetContractAddress !== previous.vault.signetContractAddress ||
+      next.vault.mpcPubkey !== previous.vault.mpcPubkey
+    )
+      scopes.add("vault");
+    for (const invalidate of invalidators) invalidate(scopes);
+    state = Object.freeze({ applied: next });
     for (const listener of listeners) listener();
   };
-  const commit = (fields: RuntimeFields, resetting = false): boolean => {
-    const errors = validateRuntimeFields(fields, defaults);
-    if (!resetting && Object.keys(errors).length) {
-      state = Object.freeze({ ...state, errors });
-      publish();
-      return false;
-    }
-    const scopes = new Set<RuntimeScope>();
-    for (const field of runtimeFields)
-      if (field.scope && fields[field.key] !== applied.fields[field.key]) scopes.add(field.scope);
-    if (scopes.size) scopes.add("vault");
-    const next = createRuntimeSnapshot(fields, defaults, applied.revision + 1);
-    for (const invalidate of invalidators) invalidate(scopes);
-    applied = next;
-    state = Object.freeze({ applied, draft: applied.fields, errors });
-    publish();
-    return true;
-  };
   return {
-    defaults,
     getSnapshot: () => state,
-    subscribe: (listener: () => void) => {
+    subscribe: (listener) => {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
       };
     },
-    onInvalidate: (listener: (scopes: ReadonlySet<RuntimeScope>) => void) => {
+    onInvalidate: (listener) => {
       invalidators.add(listener);
       return () => {
         invalidators.delete(listener);
       };
     },
-    edit: (key: RuntimeField, value: string) => {
-      state = Object.freeze({
-        ...state,
-        draft: Object.freeze({ ...state.draft, [key]: value }),
-      });
-      publish();
+    applyConfiguration,
+    setMidnight: (key, value) => {
+      applyConfiguration(updateMidnightConfig(state.applied, key, value));
     },
-    apply: () => commit(state.draft),
-    reset: () => commit(defaults.fields, true),
-    discard: () => {
-      state = Object.freeze({ applied, draft: applied.fields, errors: {} });
-      publish();
+    setEvm: (key, value) => {
+      applyConfiguration(updateEvmConfig(state.applied, key, value));
+    },
+    setVault: (key, value) => {
+      applyConfiguration({ ...state.applied, vault: { ...state.applied.vault, [key]: value } });
+    },
+    reset: () => {
+      applyConfiguration(getRuntimeDefaults(state.applied.midnight.networkId));
     },
   };
 }

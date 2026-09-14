@@ -44,7 +44,7 @@ const transactionRecordSchema = z
     networkId: z.string().optional(),
     chainId: z.number().int().positive().optional(),
     rpcUrl: z.url({ protocol: /^https?$/ }).optional(),
-    explorerUrl: z.url({ protocol: /^https?$/ }).optional(),
+    explorerUrl: z.union([z.literal(""), z.url({ protocol: /^https?$/ })]).optional(),
     vaultContractAddress: z.string().optional(),
     failureReason: z.string().optional(),
     position: positionSchema.optional(),

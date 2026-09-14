@@ -9,11 +9,11 @@ import {
 import { createContext, type JSX, type ReactNode, useContext, useEffect, useRef } from "react";
 import { z } from "zod";
 
+import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
 import { fundingErrorSchema, LOCAL_NIGHT_GRANT, MINIMUM_MIDNIGHT_DUST } from "@/lib/wallet-funding";
 
 import { useMidnightReadiness } from "./midnight-readiness-context";
 import { useMidnightConnection } from "./midnight-wallet-context";
-import { useRuntimeConfig } from "./runtime-config-context";
 
 interface LocalFundingState {
   eligibility: UseQueryResult<boolean>;
@@ -23,7 +23,7 @@ interface LocalFundingState {
 }
 
 function useLocalFundingOwner(): LocalFundingState {
-  const runtime = useRuntimeConfig();
+  const compatibility = useServerRuntimeCompatibility();
   const connection = useMidnightConnection();
   const { wallet, balances } = useMidnightReadiness();
   const pending = useRef<Promise<void> | null>(null);
@@ -45,7 +45,7 @@ function useLocalFundingOwner(): LocalFundingState {
         if (!connection.isCurrent(wallet)) throw new Error("Wallet session changed.");
       };
       assertCurrent();
-      runtime.requireServerHeaders();
+      compatibility.requireServerHeaders();
       if (!wallet.ensureFeeReady || !wallet.unshieldedPublicKey)
         throw new Error(
           wallet.fundingUnavailable ?? "Local Midnight funding is unavailable for this wallet.",
@@ -57,7 +57,7 @@ function useLocalFundingOwner(): LocalFundingState {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            ...runtime.requireServerHeaders(),
+            ...compatibility.requireServerHeaders(),
           },
           body: JSON.stringify({
             address: wallet.unshieldedAddress,
@@ -99,7 +99,7 @@ function useLocalFundingOwner(): LocalFundingState {
     eligibility,
     funding,
     fund,
-    fundingUnavailable: runtime.serverUnavailable ?? wallet?.fundingUnavailable,
+    fundingUnavailable: compatibility.serverUnavailable ?? wallet?.fundingUnavailable,
   };
 }
 

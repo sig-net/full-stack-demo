@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { createRuntimeConfigDto } from "@/lib/config/runtime";
 import { serverRuntimeConfiguration } from "@/lib/config/server-runtime";
 
 /** Resolves the deployment from the Node server environment. */
@@ -13,7 +14,8 @@ export const dynamic = "force-dynamic";
  */
 export function GET(): Response {
   try {
-    return NextResponse.json(serverRuntimeConfiguration());
+    const { config, fingerprint } = serverRuntimeConfiguration();
+    return NextResponse.json({ config: createRuntimeConfigDto(config), fingerprint });
   } catch {
     return NextResponse.json(
       { error: "Server deployment configuration is unavailable." },

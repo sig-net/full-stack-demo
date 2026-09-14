@@ -19,7 +19,10 @@ import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations, VaultOperationsProvider } from "@/providers/vault-operations-context";
 
-import { mockMatchingRuntimeServer } from "../config/runtime-server-fixture";
+import {
+  mockMatchingRuntimeServer,
+  testRuntimeConfiguration,
+} from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
 import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 
@@ -207,7 +210,7 @@ it.each(scenarios)(
       wrapper: ({ children }) => (
         <StrictMode>
           <QueryClientProvider client={query}>
-            <RuntimeConfigProvider>
+            <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
               <VaultOperationsProvider>{children}</VaultOperationsProvider>
             </RuntimeConfigProvider>
           </QueryClientProvider>
@@ -413,7 +416,7 @@ it("retains the confirmed deposit when manual recovery fails validation", async 
   const view = renderHook(() => useVaultOperations(), {
     wrapper: ({ children }) => (
       <QueryClientProvider client={query}>
-        <RuntimeConfigProvider>
+        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
           <VaultOperationsProvider>{children}</VaultOperationsProvider>
         </RuntimeConfigProvider>
       </QueryClientProvider>

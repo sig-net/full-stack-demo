@@ -1,14 +1,39 @@
 import { vi } from "vitest";
 
-import { createRuntimeConfiguration, type RuntimeConfiguration } from "@/lib/config/runtime";
+import { getEvmChainConfig } from "@/lib/config/evm";
+import { getMidnightChainConfig } from "@/lib/config/midnight";
+import {
+  createRuntimeConfigDto,
+  createRuntimeConfiguration,
+  getRuntimeDefaults,
+  type RuntimeConfig,
+  type RuntimeConfiguration,
+  validateRuntimeConfig,
+} from "@/lib/config/runtime";
+
+/** @returns Explicit deployment inputs for a browser fixture with local environment stubs. */
+export function testRuntimeConfiguration(): RuntimeConfig {
+  const defaults = getRuntimeDefaults("stagenet");
+  return validateRuntimeConfig({
+    midnight: getMidnightChainConfig(),
+    evm: getEvmChainConfig(),
+    vault: {
+      contractAddress:
+        process.env.NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS ?? defaults.vault.contractAddress,
+      signetContractAddress:
+        process.env.NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS ??
+        defaults.vault.signetContractAddress,
+      mpcPubkey: process.env.NEXT_PUBLIC_MPC_SECP256K1_PUBKEY ?? defaults.vault.mpcPubkey,
+    },
+  });
+}
 
 /**
- * Answers the runtime attestation endpoint with the actual local configuration snapshot.
- *
- * @returns The owner used to derive the server response and fingerprint.
+ * @returns A configuration owner matching the fixture's attestation response.
  */
 export function mockMatchingRuntimeServer(): RuntimeConfiguration {
-  const owner = createRuntimeConfiguration();
+  const config = testRuntimeConfiguration();
+  const owner = createRuntimeConfiguration(config);
   const snapshot = owner.getSnapshot();
   vi.stubGlobal(
     "fetch",
@@ -17,8 +42,7 @@ export function mockMatchingRuntimeServer(): RuntimeConfiguration {
         return Promise.reject(new Error("Unexpected fetch outside runtime configuration fixture"));
       return Promise.resolve(
         Response.json({
-          fields: snapshot.applied.fields,
-          signetContractAddress: owner.defaults.signetContractAddress,
+          config: createRuntimeConfigDto(config),
           fingerprint: snapshot.applied.fingerprint,
         }),
       );

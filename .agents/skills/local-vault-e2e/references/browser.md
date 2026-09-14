@@ -100,6 +100,14 @@ Choose signing interactions from the connected adapter kind. EVM seed wallets si
 so they do not require a MetaMask approval step. The extension procedure below applies to browser
 wallets. Connecting either kind does not add a transfer to a smoke test's acceptance scope.
 
+Before restoring wallets or identity, apply the intended public deployment through Configuration.
+The browser starts with undeployed Midnight and local EVM defaults. Generated `.env.local` values configure the
+server, while GET `/api/runtime-config` supplies its public nested config for comparison. Use
+the README field mapping and select the Midnight and EVM networks before entering endpoint
+overrides. A local RPC edit clears the discovered chain. Wait for discovery or enter the generated
+chain ID after the RPC, then Apply. Repeat this after a page refresh before re-entering credentials. Verify restored
+on-chain balances separately from Activity history.
+
 When full deposit or low-funds acceptance is in scope, open the local app and connect the EVM
 wallet through its chooser. Verify local fork identity. Restore the Midnight seed and independent
 vault secret through the product controls. For the low-funds scenario, a new wallet should
@@ -171,3 +179,8 @@ wallet state or a signer.
 Store only disposable credentials required for the requested test, in ignored mode-0600 files.
 Their paths may enter the session record, their values may not. A new page, MCP restart or HMR
 can erase browser memory. Automatically generated `.playwright-mcp` captures remain private.
+
+For request-ID copy/paste acceptance, wait until the recovery input contains the exact full ID.
+Clipboard paste completes asynchronously after the button click. Capture the settlement-stage
+request display promptly: successful completion can close the deposit dialog before a queued
+copy action runs. A later successful copy proves the completed-state control, not the pending one.

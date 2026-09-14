@@ -4,18 +4,22 @@ import { StrictMode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { EvmDepositTransfer } from "@/components/deposit-dialog/evm-deposit-transfer";
+import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
 import { EvmBalancesProvider, useEvmBalances } from "@/providers/evm-balances-context";
 import { EvmDepositProvider, useEvmDeposit } from "@/providers/evm-deposit-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
-import { RuntimeConfigProvider, useRuntimeConfig } from "@/providers/runtime-config-context";
+import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
-import { mockMatchingRuntimeServer } from "../config/runtime-server-fixture";
+import {
+  mockMatchingRuntimeServer,
+  testRuntimeConfiguration,
+} from "../config/runtime-server-fixture";
 import { browserWalletFixture, hash } from "../evm/browser-wallet-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
 import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
@@ -95,14 +99,14 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
     () => ({
       connection: useEvmWallet(),
       balances: useEvmBalances(),
-      runtime: useRuntimeConfig(),
+      runtime: useServerRuntimeCompatibility(),
       deposit: useEvmDeposit(),
     }),
     {
       wrapper: ({ children }) => (
         <StrictMode>
           <QueryClientProvider client={query}>
-            <RuntimeConfigProvider>
+            <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
               <EvmWalletProvider>
                 <EvmBalancesProvider tokens={[token.erc20Address]}>
                   <EvmDepositProvider>

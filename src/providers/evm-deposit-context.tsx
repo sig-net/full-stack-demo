@@ -12,6 +12,7 @@ import {
 } from "react";
 import { erc20Abi, getAddress, type Hash } from "viem";
 
+import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
 import { isErc20Allowed } from "@/lib/constants/token-metadata";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
@@ -19,7 +20,7 @@ import { parseTokenAmount } from "@/lib/utils/token-amount";
 import { useEvmBalances } from "./evm-balances-context";
 import { useEvmWallet } from "./evm-wallet-context";
 import { useMidnightReadiness } from "./midnight-readiness-context";
-import { useRuntimeConfig } from "./runtime-config-context";
+import { useRuntimeConfiguration } from "./runtime-config-context";
 import { useVaultBalances } from "./vault-balances-context";
 import { useVault } from "./vault-context";
 import { useVaultOperations } from "./vault-operations-context";
@@ -46,7 +47,8 @@ interface EvmDepositState {
 }
 
 function useEvmDepositOwner(): EvmDepositState {
-  const runtime = useRuntimeConfig();
+  const runtime = useRuntimeConfiguration();
+  const compatibility = useServerRuntimeCompatibility();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
   const queries = useQueryClient();
@@ -64,7 +66,7 @@ function useEvmDepositOwner(): EvmDepositState {
     amount: string,
   ): Promise<void> => {
     if (busy.current || transferRef.current?.sweep === "pending") return;
-    runtime.requireServerHeaders();
+    compatibility.requireServerHeaders();
     const owner = wallet;
     if (!owner) throw new Error("Connect an EVM wallet first.");
     binding.assertActive();
@@ -113,7 +115,7 @@ function useEvmDepositOwner(): EvmDepositState {
         beforeSubmit: () => {
           if (!mounted.current) throw new Error("Deposit workflow closed.");
           binding.assertActive();
-          runtime.requireServerHeaders();
+          compatibility.requireServerHeaders();
         },
         submitted: (hash) => {
           record.hash = hash;

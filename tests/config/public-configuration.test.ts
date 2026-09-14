@@ -14,19 +14,19 @@ import { getEthereumProvider } from "@/lib/rpc";
 
 it("preserves endpoint validation, deployment identity and immutable snapshots", () => {
   const evm = createEvmChainConfig("https://rpc.example.invalid");
-  expect(evm.chainId).toBe(sepolia.id);
+  expect(evm.chainId).toBe(BigInt(sepolia.id));
   expect(evm.explorerUrl).toBe(sepolia.blockExplorers.default.url);
   const firstClient = getEthereumProvider(evm);
   const secondClient = getEthereumProvider({ ...evm });
   expect(firstClient).not.toBe(secondClient);
-  expect(firstClient.chain?.id).toBe(evm.chainId);
+  expect(firstClient.chain?.id).toBe(Number(evm.chainId));
   expect(firstClient.transport.url).toBe(evm.rpcUrl);
   expect(secondClient.transport.url).toBe(evm.rpcUrl);
   expect(
     getEthereumProvider(createEvmChainConfig("https://other.example.invalid")).transport.url,
   ).toBe("https://other.example.invalid");
   for (const invalid of ["", "relative", "ws://example.invalid", "file:///etc/passwd"])
-    expect(() => createEvmChainConfig(invalid)).toThrow(/NEXT_PUBLIC_SEPOLIA_RPC_URL/);
+    expect(() => createEvmChainConfig(invalid)).toThrow(/URL/i);
   expect(createEvmChainConfig(undefined).rpcUrl).toBe("http://127.0.0.1:8545");
   for (const rpc of [
     undefined,
@@ -34,7 +34,7 @@ it("preserves endpoint validation, deployment identity and immutable snapshots",
     "http://localhost:8545",
     "http://[::1]:8545",
   ])
-    expect(createEvmChainConfig(rpc).explorerUrl).toBe(undefined);
+    expect(createEvmChainConfig(rpc).explorerUrl).toBe("");
   const local = createMidnightChainConfig({});
   expect(local.networkId).toBe("undeployed");
   expect(local.indexerWsUrl).toBe("ws://127.0.0.1:8088/api/v3/graphql/ws");
@@ -80,11 +80,7 @@ it("preserves endpoint validation, deployment identity and immutable snapshots",
   expect(published.contractAddress).toBe(getVaultContractAddress(MidnightNetwork.Stagenet));
   expect(published.signetContractAddress).toBe(getSignetContractAddress(MidnightNetwork.Stagenet));
   expect(published.mpcSecpPub).toBe(key);
-  const unresolved = createVaultEnvironment(local, evm, inputs);
-  expect(() => unresolved.contractAddress).toThrow(/NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS/);
-  expect(() => unresolved.signetContractAddress).toThrow(
-    /NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS/,
-  );
+  expect(() => createVaultEnvironment(local, evm, inputs)).toThrow(/Configure vault/);
   const override = createVaultEnvironment(local, evm, {
     ...inputs,
     contractAddress: "ab".repeat(32),
@@ -95,16 +91,18 @@ it("preserves endpoint validation, deployment identity and immutable snapshots",
   for (const contractAddress of ["", "bad", "aa".repeat(31)])
     expect(
       () => createVaultEnvironment(local, evm, { ...inputs, contractAddress }).contractAddress,
-    ).toThrow(/NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS/);
+    ).toThrow(/contractAddress|contract address/);
   for (const mpcSecpPub of ["", "0x02" + "00".repeat(32), "nothex"])
     expect(() => createVaultEnvironment(local, evm, { ...inputs, mpcSecpPub }).mpcSecpPub).toThrow(
-      /NEXT_PUBLIC_MPC_SECP256K1_PUBKEY/,
+      /mpcPubkey|public key|Configure vault/,
     );
   inputs.mpcSecpPub = "invalid";
   expect(published.mpcSecpPub).toBe(key);
   vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_NETWORK_ID", "undeployed");
   vi.stubEnv("NEXT_PUBLIC_SEPOLIA_RPC_URL", evm.rpcUrl);
   process.env.NEXT_PUBLIC_MPC_SECP256K1_PUBKEY = key;
+  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS", "ab".repeat(32));
+  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS", "cd".repeat(32));
   const snapshot = createVaultEnvironment(getMidnightChainConfig(), getEvmChainConfig());
   process.env.NEXT_PUBLIC_MPC_SECP256K1_PUBKEY = "invalid";
   expect(snapshot.mpcSecpPub).toBe(key);

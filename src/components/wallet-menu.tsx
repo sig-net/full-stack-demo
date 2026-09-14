@@ -27,6 +27,7 @@ export interface WalletMenuProps {
   wallet: WalletMetadata | null;
   connecting: boolean;
   error?: string | null;
+  connectionUnavailable?: string | null;
   progress?: string;
   choices: readonly {
     id: string;
@@ -49,6 +50,7 @@ export interface WalletMenuProps {
  * @param root0.wallet - Connected wallet metadata.
  * @param root0.connecting - Connection state.
  * @param root0.error - Connection error text.
+ * @param root0.connectionUnavailable - Configuration reason disabling connection actions.
  * @param root0.progress - Optional progress text.
  * @param root0.choices - Browser wallet choices.
  * @param root0.onOpenChange - Menu state callback.
@@ -63,6 +65,7 @@ export function WalletMenu({
   wallet,
   connecting,
   error,
+  connectionUnavailable,
   progress,
   choices,
   onOpenChange,
@@ -108,6 +111,11 @@ export function WalletMenu({
               Connecting… {progress}
             </p>
           )}
+          {connectionUnavailable && (
+            <Feedback tone="warning" role="status">
+              {connectionUnavailable}
+            </Feedback>
+          )}
           {error && (
             <Feedback tone="error" role="alert">
               {error}
@@ -137,7 +145,7 @@ export function WalletMenu({
           {choices.map((choice) => (
             <DropdownMenuItem
               key={choice.id}
-              disabled={connecting}
+              disabled={connecting || !!connectionUnavailable}
               onSelect={(event) => {
                 event.preventDefault();
                 choice.connect();
@@ -148,7 +156,7 @@ export function WalletMenu({
             </DropdownMenuItem>
           ))}
           <DropdownMenuItem
-            disabled={connecting}
+            disabled={connecting || !!connectionUnavailable}
             onSelect={() => {
               setSeedOpen(true);
             }}

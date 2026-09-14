@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { getMidnightChainConfig, type MidnightNodeConfig } from "@/lib/config/midnight";
+import { resolveMidnightConfiguration } from "@/lib/config/runtime";
 import type { BrowserWalletChoice } from "@/lib/midnight/wallet/BrowserWallet";
 import type { Wallet } from "@/lib/midnight/wallet/Wallet";
 
@@ -97,6 +98,8 @@ export function MidnightWalletProvider({
     setSyncStatus("starting wallet…");
     const promise = (async () => {
       configuration.current = suppliedConfiguration ?? getMidnightChainConfig();
+      const configured = resolveMidnightConfiguration(configuration.current);
+      if (configured.status === "unavailable") throw new Error(configured.reasons.join(" "));
       const { SeedWallet } = await import("@/lib/midnight/wallet/SeedWallet");
       if (attempt !== generation.current) throw new Error("Wallet connection superseded.");
       const candidate = new SeedWallet(configuration.current, seed);
@@ -143,6 +146,8 @@ export function MidnightWalletProvider({
     setConnecting(true);
     const promise = (async () => {
       configuration.current = suppliedConfiguration ?? getMidnightChainConfig();
+      const configured = resolveMidnightConfiguration(configuration.current);
+      if (configured.status === "unavailable") throw new Error(configured.reasons.join(" "));
       const { BrowserWallet } = await import("@/lib/midnight/wallet/BrowserWallet");
       if (attempt !== generation.current) throw new Error("Wallet connection superseded.");
       const candidate = new BrowserWallet(choice, configuration.current, (error) => {

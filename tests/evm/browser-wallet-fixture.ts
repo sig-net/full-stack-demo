@@ -94,6 +94,7 @@ export const browserWalletFixture = (): WalletFixture => {
     chain: sepolia,
     transport: http("https://fixture.invalid"),
   });
+  vi.spyOn(publicClient, "getChainId").mockResolvedValue(sepolia.id);
   const invalidated = vi.fn();
   const wallet = new BrowserWallet(
     sepolia,

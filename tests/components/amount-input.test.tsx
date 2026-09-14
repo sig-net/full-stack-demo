@@ -7,6 +7,8 @@ import type { WithdrawToken } from "@/components/withdraw-dialog";
 import { AmountInput } from "@/components/withdraw-dialog/amount-input";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 
+import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
+
 afterEach(cleanup);
 
 const tokenA: WithdrawToken = {
@@ -34,7 +36,9 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false 
 function TestProviders({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
-      <RuntimeConfigProvider>{children}</RuntimeConfigProvider>
+      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        {children}
+      </RuntimeConfigProvider>
     </QueryClientProvider>
   );
 }
