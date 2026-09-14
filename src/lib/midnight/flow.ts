@@ -16,35 +16,50 @@ export interface FlowState {
 
 type Listener = (s: FlowState) => void;
 
+/**
+ * Identity of the work allowed to publish into the shared progress owner.
+ *
+ * Object identity is the whole contract: a caller holds its own token and loses the right to
+ * publish the moment another caller starts, so an abandoned operation can never overwrite the
+ * progress of the one that replaced it.
+ */
+export type FlowOwner = object;
+
 class Flow {
   kind: FlowKind | null = null;
   phase: FlowPhase | null = null;
   error: string | null = null;
   refunded = false;
+  private owner: FlowOwner | null = null;
   private listeners = new Set<Listener>();
 
-  start(kind: FlowKind): void {
+  start(kind: FlowKind, owner: FlowOwner): void {
+    this.owner = owner;
     this.kind = kind;
     this.phase = "preparing";
     this.error = null;
     this.refunded = false;
     this.emit();
   }
-  set(phase: FlowPhase): void {
+  set(phase: FlowPhase, owner: FlowOwner): void {
+    if (this.owner !== owner) return;
     this.phase = phase;
     this.error = null;
     this.emit();
   }
-  fail(message: string): void {
+  fail(message: string, owner: FlowOwner): void {
+    if (this.owner !== owner) return;
     this.error = message;
     this.emit();
   }
-  finishRefunded(): void {
+  finishRefunded(owner: FlowOwner): void {
+    if (this.owner !== owner) return;
     this.phase = "done";
     this.refunded = true;
     this.emit();
   }
   reset(): void {
+    this.owner = null;
     this.kind = null;
     this.phase = null;
     this.error = null;

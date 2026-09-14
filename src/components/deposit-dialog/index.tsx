@@ -52,6 +52,8 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
     setSelectedNetwork(network);
   };
 
+  // An unresolved transfer stays the route for this token, so the address continuation cannot
+  // start a second deposit while its submitted transaction can still settle.
   const recordedTransfer =
     evm.transfer &&
     vault.binding &&
@@ -59,7 +61,7 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
     evm.transfer.binding === vault.binding &&
     evm.transfer.destination === vault.binding.depositAddress &&
     evm.transfer.token === selectedToken.erc20Address &&
-    evm.transfer.status !== "error" &&
+    (evm.transfer.status !== "error" || evm.unresolved) &&
     evm.transfer.sweep !== "complete"
       ? evm.transfer
       : null;

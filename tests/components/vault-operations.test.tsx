@@ -4,6 +4,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import * as tokens from "@/lib/constants/token-metadata";
 import {
   flow,
@@ -191,6 +192,8 @@ it.each(scenarios)(
     const execute = executions[kind];
     const history = vi.spyOn(midnightTxHistory, "add");
     const terminal = vi.spyOn(midnightTxHistory, "update");
+    // A later operation claiming shared progress, which the abandoned one may never overwrite.
+    const takeover = {};
     const snapshots = vi.fn<(state: FlowState) => void>();
     const unsubscribe = flow.subscribe(snapshots);
     const query = new QueryClient();
@@ -258,7 +261,7 @@ it.each(scenarios)(
         vi.spyOn(binding, "assertActive").mockImplementation(() => {
           throw new Error("Vault session superseded.");
         });
-        flow.start("swap");
+        flow.start("swap", takeover);
         const progress = deposit.mock.calls[0]?.[0];
         const log = deposit.mock.calls[0]?.[7];
         progress?.set("refunding");
@@ -275,7 +278,7 @@ it.each(scenarios)(
             vi.spyOn(binding, "assertActive").mockImplementation(() => {
               throw new Error("Vault session superseded.");
             });
-            flow.start("swap");
+            flow.start("swap", takeover);
           } else {
             rebuild.mock.lastCall?.[1]?.(new Error(failure));
           }
@@ -425,3 +428,86 @@ it("retains the confirmed deposit when manual recovery fails validation", async 
     await binding.providers.publicDataProvider.dispose();
   }
 });
+
+it.each(["failed", "completed"] as const)(
+  "settles shared progress when the captured session is replaced during a %s operation",
+  async (outcome) => {
+    const binding = await createVaultFixture();
+    const token = tokens.MIDNIGHT_TOKENS[0];
+    if (!token) throw new Error("Expected supported token");
+    vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS", binding.environment.contractAddress);
+    vi.stubEnv(
+      "NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS",
+      binding.environment.signetContractAddress,
+    );
+    vi.stubEnv("NEXT_PUBLIC_MPC_SECP256K1_PUBKEY", binding.environment.mpcSecpPub);
+    mockMatchingRuntimeServer();
+    vi.mocked(tokens.fetchErc20Decimals).mockResolvedValue(6);
+    vi.mocked(useVault).mockReturnValue({
+      status: "ready",
+      error: null,
+      binding,
+      requireBinding: () => binding,
+      retry: vi.fn(),
+      rebuild: vi.fn(),
+      disconnect: vi.fn(),
+    });
+    vi.mocked(useVaultBalances).mockReturnValue({
+      balances: null,
+      loading: false,
+      error: null,
+      refresh: vi.fn().mockResolvedValue(undefined),
+    });
+    vi.mocked(useMidnightReadiness).mockImplementation(function useFixtureReadiness() {
+      return useReadyMidnightFixture(binding.wallet);
+    });
+    const execution = Promise.withResolvers<VaultExecutionResult>();
+    vi.mocked(vault.runDeposit).mockImplementation(() => execution.promise);
+    const query = new QueryClient();
+    const mounted = renderHook(
+      () => ({ operations: useVaultOperations(), progress: useMidnightProgress() }),
+      {
+        wrapper: ({ children }) => (
+          <StrictMode>
+            <QueryClientProvider client={query}>
+              <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+                <VaultOperationsProvider>{children}</VaultOperationsProvider>
+              </RuntimeConfigProvider>
+            </QueryClientProvider>
+          </StrictMode>
+        ),
+      },
+    );
+    try {
+      await waitFor(() => {
+        expect(mounted.result.current.operations.ready).toBe(true);
+      });
+      let sweep: Promise<{ refunded: boolean }> | undefined;
+      act(() => {
+        sweep = mounted.result.current.operations.deposit(token.erc20Address, 1000000n);
+      });
+      await waitFor(() => {
+        expect(vi.mocked(vault.runDeposit)).toHaveBeenCalledTimes(1);
+      });
+      expect(mounted.result.current.progress.active).toBe(true);
+      vi.spyOn(binding, "assertActive").mockImplementation(() => {
+        throw new Error("Vault session superseded.");
+      });
+      await act(async () => {
+        if (outcome === "failed") execution.reject(new Error("Fixture proof rejected"));
+        else execution.resolve({ status: "settled", outputUnits: null });
+        await Promise.allSettled([sweep]);
+      });
+      expect(mounted.result.current.progress.active).toBe(false);
+      expect(mounted.result.current.operations.busy).toBe(false);
+      expect(flow.phase).toBe(outcome === "failed" ? "preparing" : "done");
+      expect(flow.error).toBe(outcome === "failed" ? "Vault session superseded." : null);
+    } finally {
+      mounted.unmount();
+      query.clear();
+      binding.providers.privateStateProvider.dispose();
+      await binding.providers.publicDataProvider.dispose();
+      await binding.wallet.disconnect();
+    }
+  },
+);

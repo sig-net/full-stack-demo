@@ -2,11 +2,15 @@ import type { Account, Address, Chain, Hash, PublicClient, Transport, WalletClie
 
 import type { WalletMetadata } from "@/lib/wallet-metadata";
 
-/** Captured transfer inputs and callbacks that keep submitted hashes observable across session changes. */
-export interface Erc20Transfer {
+/** The exact transfer a mined receipt has to satisfy before it counts as confirmed. */
+export interface Erc20TransferReceipt {
   token: Address;
   destination: Address;
   units: bigint;
+}
+
+/** Captured transfer inputs and callbacks that keep submitted hashes observable across session changes. */
+export interface Erc20Transfer extends Erc20TransferReceipt {
   beforeSubmit?: () => void;
   submitted: (hash: Hash) => void;
 }
@@ -47,6 +51,16 @@ export interface Wallet extends WalletMetadata {
    * @throws {Error} If eligibility, signing, settlement or receipt identity checks fail.
    */
   transferErc20(input: Erc20Transfer): Promise<{ hash: Hash; units: bigint }>;
+  /**
+   * Establishes the outcome of an already submitted transfer without signing or sending anything.
+   *
+   * @param input - The submitted hash and the exact transfer its receipt has to satisfy.
+   * @returns The mined hash and the transferred units once the receipt confirms this transfer.
+   * @throws {Error} If the transaction is still pending, reverted or replaced.
+   */
+  recheckErc20Transfer(
+    input: Erc20TransferReceipt & { hash: Hash },
+  ): Promise<{ hash: Hash; units: bigint }>;
   /** Releases this session's listeners and app-owned signing references. */
   disconnect(): void;
 }

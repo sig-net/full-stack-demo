@@ -205,8 +205,8 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
     expect(firstSweepCount).toBe(superseded ? 0 : 1);
     expect(failedSweep).toBe("ready");
     expect(result.current.deposit.transfer?.sweep).toBe(superseded ? "ready" : "complete");
-    expect(result.current.deposit.transfer?.error).toBe(
-      superseded ? "Vault session changed" : undefined,
+    expect(result.current.deposit.transfer?.sweepError).toBe(
+      superseded ? "Vault session changed" : null,
     );
     expect(deposit).toHaveBeenCalledTimes(superseded ? 0 : 2);
   } finally {

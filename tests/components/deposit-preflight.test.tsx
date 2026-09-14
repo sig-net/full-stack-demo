@@ -150,7 +150,8 @@ it("serialises EVM deposit preflight and preserves confirmed transfer state", as
       await result.current.deposit.sendDeposit(binding, token.erc20Address, "0.1");
     });
     expect(transfer).toHaveBeenCalledTimes(1);
-    expect(result.current.deposit.transfer?.error).toContain("decimals are unavailable");
+    expect(result.current.deposit.transfer?.failure?.detail).toContain("decimals are unavailable");
+    expect(result.current.deposit.transfer?.failure?.recovery).toBe("send-again");
   } finally {
     unmount();
     queryClient.clear();

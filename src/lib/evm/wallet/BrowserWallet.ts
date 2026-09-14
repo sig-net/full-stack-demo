@@ -10,8 +10,8 @@ import {
 } from "viem";
 import { z } from "zod";
 
-import { transferErc20 } from "../erc20-transfer";
-import type { Erc20Transfer, Wallet } from "./Wallet";
+import { recheckErc20Transfer, transferErc20 } from "../erc20-transfer";
+import type { Erc20Transfer, Erc20TransferReceipt, Wallet } from "./Wallet";
 
 /** EIP-6963 metadata paired with the validated extension provider object. */
 export interface BrowserWalletChoice {
@@ -234,6 +234,13 @@ export class BrowserWallet implements Wallet {
   /** @inheritdoc */
   transferErc20(input: Erc20Transfer): ReturnType<Wallet["transferErc20"]> {
     return transferErc20(this, input);
+  }
+
+  /** @inheritdoc */
+  recheckErc20Transfer(
+    input: Erc20TransferReceipt & { hash: `0x${string}` },
+  ): ReturnType<Wallet["recheckErc20Transfer"]> {
+    return recheckErc20Transfer(this, input);
   }
 
   /** @inheritdoc */

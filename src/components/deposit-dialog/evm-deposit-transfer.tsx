@@ -7,6 +7,7 @@ import { formatUnits, getAddress } from "viem";
 
 import { EvmWalletButton } from "@/components/evm-wallet-button";
 import { Button } from "@/components/ui/button";
+import { DisabledReason } from "@/components/ui/disabled-reason";
 import { Feedback } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,15 @@ import { useEvmLocalFunding } from "@/providers/evm-local-funding-context";
 import { useEvmWallet } from "@/providers/evm-wallet-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { useVault } from "@/providers/vault-context";
+
+const SEND_GATE_ID = "deposit-transfer-send-gate";
+const CONTINUE_GATE_ID = "deposit-transfer-continue-gate";
+
+interface ControlGate {
+  reason: string;
+  nextAction: string;
+  tone: "neutral" | "warning" | "error";
+}
 
 /**
  * Owns the EVM transfer amount and continues a matching vault deposit session.
@@ -65,14 +75,66 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
   const tokenBalance = balances.data?.tokens.find(
     (value) => value.erc20Address === token.erc20Address,
   );
-  const pending =
-    transfer?.status === "approving" ||
-    transfer?.status === "confirming" ||
-    transfer?.sweep === "pending";
+  const inFlight = transfer?.status === "approving" || transfer?.status === "confirming";
+  const sweeping = transfer?.sweep === "pending";
   const currentTransfer =
     transfer !== null &&
     transfer.binding === vault.binding &&
     transfer.token === token.erc20Address;
+  const failure = transfer?.failure ?? null;
+  const sendGate: ControlGate | null = inFlight
+    ? {
+        reason:
+          transfer.status === "approving"
+            ? "This transfer is waiting for approval in your wallet."
+            : "This transfer is submitted and waiting for its receipt.",
+        nextAction:
+          transfer.status === "approving"
+            ? "Approve or reject the request in your wallet."
+            : "Wait for the receipt, or open the transaction in the explorer.",
+        tone: "neutral",
+      }
+    : sweeping
+      ? {
+          reason: "The confirmed transfer is being continued on Midnight.",
+          nextAction: "Wait for the Midnight deposit to finish before sending more tokens.",
+          tone: "neutral",
+        }
+      : deposit.unresolved && failure
+        ? {
+            reason: failure.message,
+            nextAction: failure.nextAction,
+            tone: "warning",
+          }
+        : null;
+  const continueGate: ControlGate | null = sweeping
+    ? {
+        reason: "This deposit is already being continued on Midnight.",
+        nextAction: "Wait for the running continuation rather than starting a second one.",
+        tone: "neutral",
+      }
+    : !readiness.ready
+      ? {
+          reason: "Midnight transaction prerequisites are not ready.",
+          nextAction: "Restore Midnight readiness, then continue this deposit.",
+          tone: "warning",
+        }
+      : progress.active
+        ? {
+            reason: "Another vault operation owns the Midnight connection.",
+            nextAction: "Wait for the running operation to finish, then continue this deposit.",
+            tone: "neutral",
+          }
+        : null;
+  const sendDisabled =
+    !eligibility.ready ||
+    !readiness.ready ||
+    !evm.wallet ||
+    !vault.binding ||
+    inFlight ||
+    sweeping ||
+    deposit.unresolved ||
+    !amount.trim();
   return (
     <div className="ds-stack-control ds-divider-top ds-top-inset-content">
       <p className="ds-label">Transfer from your Sepolia wallet</p>
@@ -102,17 +164,11 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
         onChange={(event) => {
           setAmount(event.target.value);
         }}
-        disabled={pending}
+        disabled={inFlight || sweeping || deposit.unresolved}
       />
       <Button
-        disabled={
-          !eligibility.ready ||
-          !readiness.ready ||
-          !evm.wallet ||
-          !vault.binding ||
-          pending ||
-          !amount.trim()
-        }
+        disabled={sendDisabled}
+        aria-describedby={sendGate ? SEND_GATE_ID : undefined}
         onClick={() => {
           try {
             void deposit
@@ -123,12 +179,44 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
           }
         }}
       >
-        {transfer?.sweep === "pending"
+        {sweeping
           ? "Transfer confirmed"
-          : pending
+          : inFlight
             ? "Transfer pending…"
             : "Send tokens to deposit address"}
       </Button>
+      {sendGate && (
+        <DisabledReason
+          id={SEND_GATE_ID}
+          label="Deposit transfer availability"
+          reason={sendGate.reason}
+          nextAction={sendGate.nextAction}
+          tone={sendGate.tone}
+          action={
+            <div className="ds-actions">
+              {transfer?.status === "approving" && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    deposit.abandonApproval();
+                  }}
+                >
+                  Stop waiting for wallet approval
+                </Button>
+              )}
+              {transfer?.hash && (
+                <Button
+                  variant="outline"
+                  disabled={deposit.rechecking}
+                  onClick={() => void deposit.recheckTransfer()}
+                >
+                  {deposit.rechecking ? "Rechecking transfer…" : "Recheck transfer receipt"}
+                </Button>
+              )}
+            </div>
+          }
+        />
+      )}
       {amount.trim() && eligibility.error && (
         <Feedback tone="error" role="alert">
           {eligibility.error}
@@ -156,7 +244,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
             <div className="ds-actions">
               <Button
                 variant="outline"
-                disabled={fundingAddress !== null || pending}
+                disabled={fundingAddress !== null || inFlight || sweeping}
                 onClick={() => {
                   void fundAddress(binding.depositAddress);
                 }}
@@ -165,7 +253,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
               </Button>
               <Button
                 variant="outline"
-                disabled={fundingAddress !== null || pending}
+                disabled={fundingAddress !== null || inFlight || sweeping}
                 onClick={() => {
                   void fundAddress(binding.vaultAddress);
                 }}
@@ -195,32 +283,69 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
               />
             </>
           )}
-          {transfer.error && (
+          {failure && !sendGate && (
             <Feedback tone="error" role="alert">
-              {transfer.error}
+              <p className="ds-label">{failure.message}</p>
+              <p>{failure.nextAction}</p>
+              {failure.detail && (
+                <details>
+                  <summary>Transfer failure detail</summary>
+                  <p>{failure.detail}</p>
+                </details>
+              )}
+              <div className="ds-actions">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    deposit.dismissTransfer();
+                  }}
+                >
+                  Dismiss this transfer
+                </Button>
+              </div>
+            </Feedback>
+          )}
+          {failure?.detail && sendGate && (
+            <details>
+              <summary>Transfer failure detail</summary>
+              <p>{failure.detail}</p>
+            </details>
+          )}
+          {transfer.sweepError && (
+            <Feedback tone="error" role="alert">
+              Midnight deposit: {transfer.sweepError}
             </Feedback>
           )}
           {transfer.status === "confirmed" &&
             (currentTransfer ? (
-              <Button
-                disabled={!readiness.ready || progress.active || transfer.sweep !== "ready"}
-                onClick={() => void deposit.continueDeposit()}
-              >
-                {transfer.sweep === "complete"
-                  ? "Midnight deposit complete"
-                  : transfer.sweep === "pending"
-                    ? "Midnight deposit pending…"
-                    : "Continue with Midnight deposit"}
-              </Button>
+              <>
+                <Button
+                  disabled={transfer.sweep === "complete" || continueGate !== null}
+                  aria-describedby={continueGate ? CONTINUE_GATE_ID : undefined}
+                  onClick={() => void deposit.continueDeposit()}
+                >
+                  {transfer.sweep === "complete"
+                    ? "Midnight deposit complete"
+                    : transfer.sweep === "pending"
+                      ? "Midnight deposit pending…"
+                      : "Continue with Midnight deposit"}
+                </Button>
+                {continueGate && (
+                  <DisabledReason
+                    id={CONTINUE_GATE_ID}
+                    label="Midnight continuation availability"
+                    reason={continueGate.reason}
+                    nextAction={continueGate.nextAction}
+                    tone={continueGate.tone}
+                  />
+                )}
+              </>
             ) : (
               <p>
                 This transfer belongs to another vault session. Its tokens remain at the destination
                 shown.
               </p>
             ))}
-          {transfer.hash && transfer.status === "error" && (
-            <p>Check the submitted transaction before sending again.</p>
-          )}
         </div>
       )}
     </div>

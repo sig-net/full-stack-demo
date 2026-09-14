@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { DepositDialog } from "@/components/deposit-dialog";
 import { NETWORKS_WITH_TOKENS } from "@/lib/constants/token-metadata";
+import { describeTransferFailure, Erc20TransferError } from "@/lib/evm/transfer-failure";
 import { useEvmDeposit } from "@/providers/evm-deposit-context";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
@@ -52,7 +53,12 @@ vi.mock(import("@/components/deposit-dialog/pending-deposit-recovery"), () => ({
 }));
 afterEach(cleanup);
 
-it.each(["error", "confirmed", "fresh-binding", "complete"] as const)(
+const UNKNOWN_OUTCOME = describeTransferFailure(
+  new Erc20TransferError("unknown", "Receipt wait timed out."),
+  { submitted: true, sessionChanged: false },
+);
+
+it.each(["error", "unresolved-error", "confirmed", "fresh-binding", "complete"] as const)(
   "routes address continuation for %s",
   async (scenario) => {
     const binding = await createVaultFixture();
@@ -119,6 +125,7 @@ it.each(["error", "confirmed", "fresh-binding", "complete"] as const)(
       supply: vi.fn(),
       redeem: vi.fn(),
     });
+    const failed = scenario === "error" || scenario === "unresolved-error";
     vi.mocked(useEvmDeposit).mockReturnValue({
       transfer: {
         binding,
@@ -129,11 +136,19 @@ it.each(["error", "confirmed", "fresh-binding", "complete"] as const)(
         amount: "0.000005",
         hash,
         units: 5n,
-        status: scenario === "error" ? "error" : "confirmed",
+        status: failed ? "error" : "confirmed",
+        failure: failed ? UNKNOWN_OUTCOME : null,
+        sweepError: null,
+        abandoned: false,
         sweep: scenario === "complete" ? "complete" : "ready",
       },
+      rechecking: false,
+      unresolved: scenario === "unresolved-error",
       sendDeposit: vi.fn(),
       continueDeposit: continued,
+      recheckTransfer: vi.fn(),
+      abandonApproval: vi.fn(),
+      dismissTransfer: vi.fn(),
     });
     const onOpenChange = vi.fn();
     const { unmount } = render(<DepositDialog open onOpenChange={onOpenChange} />);
@@ -141,16 +156,18 @@ it.each(["error", "confirmed", "fresh-binding", "complete"] as const)(
       fireEvent.click(screen.getByRole("button", { name: "Select fixture token" }));
       const continuation = screen.getByRole("button", { name: "Address continuation" });
       expect(continuation.getAttribute("data-deposit-address")).toBe(active.depositAddress);
+      // An unresolved submitted transfer keeps the route, so neither a fresh deposit nor a
+      // continuation starts while its transaction can still settle.
+      const routed = scenario === "confirmed";
+      const held = scenario === "unresolved-error";
       expect(continuation.getAttribute("data-show-continue")).toBe(
-        scenario === "confirmed" ? "false" : "true",
+        routed || held ? "false" : "true",
       );
       fireEvent.click(continuation);
       await waitFor(() => {
-        expect(manual.mock.calls).toEqual(
-          scenario === "confirmed" ? [] : [[token.erc20Address, 5n]],
-        );
-        expect(continued).toHaveBeenCalledTimes(scenario === "confirmed" ? 1 : 0);
-        expect(onOpenChange.mock.calls).toEqual(scenario === "confirmed" ? [] : [[false]]);
+        expect(manual.mock.calls).toEqual(routed || held ? [] : [[token.erc20Address, 5n]]);
+        expect(continued).toHaveBeenCalledTimes(routed ? 1 : 0);
+        expect(onOpenChange.mock.calls).toEqual(routed || held ? [] : [[false]]);
       });
     } finally {
       unmount();

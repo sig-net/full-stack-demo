@@ -1,8 +1,8 @@
 import { type Chain, createWalletClient, hexToBytes, http, type PublicClient } from "viem";
 import { HDKey, hdKeyToAccount } from "viem/accounts";
 
-import { transferErc20 } from "../erc20-transfer";
-import type { Erc20Transfer, Wallet } from "./Wallet";
+import { recheckErc20Transfer, transferErc20 } from "../erc20-transfer";
+import type { Erc20Transfer, Erc20TransferReceipt, Wallet } from "./Wallet";
 
 /** Keeps seed-derived signing material within a disposable page-memory session. */
 export class SeedWallet implements Wallet {
@@ -93,6 +93,13 @@ export class SeedWallet implements Wallet {
   /** @inheritdoc */
   transferErc20(input: Erc20Transfer): ReturnType<Wallet["transferErc20"]> {
     return transferErc20(this, input);
+  }
+
+  /** @inheritdoc */
+  recheckErc20Transfer(
+    input: Erc20TransferReceipt & { hash: `0x${string}` },
+  ): ReturnType<Wallet["recheckErc20Transfer"]> {
+    return recheckErc20Transfer(this, input);
   }
   /** @inheritdoc */
   disconnect(): void {

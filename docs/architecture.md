@@ -22,14 +22,28 @@ wallet. Wallet replacement and configuration invalidation continue to guard depe
 
 `VaultOperationsProvider` captures a binding, configuration snapshot, token decimals and operation
 identity before execution. Its synchronous lock covers the readiness, metadata and funding stages
-as well as transaction execution. A captured progress capability publishes only while its operation
-still owns the current presentation. Low-level vault functions accept that capability and return a
-settled or refunded result, including attested output units where available.
+as well as transaction execution. The shared progress owner holds the identity of the operation that
+started it, so only that operation publishes phases and terminals and a later operation silently
+supersedes an abandoned one. Every operation that stops publishes a terminal state, whatever happened
+to its captured binding, so no surface keeps reporting work in flight after the work has ended. Low-level
+vault functions accept the progress capability and return a settled or refunded result, including
+attested output units where available.
 
 History outcomes belong to the captured operation. A successful settlement remains successful if a
-subsequent balance refresh fails. Replacing the visible session suppresses obsolete progress and logs,
-while preserving captured settlement evidence. Interrupted observation is distinct from confirmed
-failure. Continuation uses retained request identifiers and checks the request on the ledger.
+subsequent balance refresh fails. Replacing the visible session suppresses obsolete logs and deposit
+request attribution, while preserving captured settlement evidence. Interrupted observation is
+distinct from confirmed failure. Continuation uses retained request identifiers and checks the
+request on the ledger.
+
+## Deposit preparation transfer
+
+`EvmDepositProvider` owns the preparation ERC-20 transfer separately from the later MPC-signed sweep.
+Each terminal outcome is classified once into a recoverable state carrying its message, next action,
+optional provider detail and the one recovery a surface may offer. The submitted/unsubmitted split is
+the safety boundary: a transfer that could still settle offers a receipt recheck and never another
+send, and a released local wait still accepts the late submitted hash. Continuation ownership is a
+reference acquired before any await, so repeated clicks, duplicate mounts and a delayed preflight
+cannot reach the sweep twice.
 
 ## History and lending attribution
 

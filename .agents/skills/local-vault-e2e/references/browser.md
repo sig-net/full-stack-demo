@@ -150,19 +150,26 @@ DUST, unregistered NIGHT, a failed balance read), build an ignored Vite fixture 
 `.local-vault/taskNN-fixture` that imports the real widgets, the real gate wiring and the app's
 global stylesheet, and aliases only the provider and remote-read modules to fixture exports. Alias
 `next/image` to a plain image element, or the Next image runtime crashes with process is not
-defined. Read the newest `taskNN-fixture-notes.md` in the ignored verification directory before
-building one, and write your own notes there. Vite is a project devDependency, so nothing is
+defined. Provider modules import each other by relative path, so aliases keyed on import specifiers
+miss those edges and the Midnight runtime still loads. Redirect by resolved file path with a
+resolveId plugin. Read the newest `taskNN-fixture-notes.md` in the ignored verification
+directory before building one, and write your own notes there. Vite is a project devDependency, so nothing is
 installed. Stop the fixture server when done and label its evidence as fixture evidence.
 
 Restoring the applied deployment after a page load means refilling every field of the
 Configuration dialog from the saved public deployment file, then Apply. The Contract address
 field collides with Signet contract address under a non-exact role query, so use exact names.
 
-Reading the clipboard from a run-code call hangs when it sits inside a long chained script, and
-the hang can leave the application tab on about:blank. Grant clipboard-read on the app origin
-through the browser context first, then read it in its own short call. The run-code tool's file
-option accepts only paths under its own allowed roots, so a restore script kept in this repository
-cannot be loaded by file and is pasted inline instead.
+A long run-code call, whether a clipboard read or a polling loop, can navigate the application
+tab to about:blank and destroy page memory, including during a funded operation. Keep every
+run-code call short and poll with repeated short calls. Grant clipboard-read on the app origin
+through the browser context before reading the clipboard. The run-code and screenshot tools accept
+file paths only under their own allowed roots: a restore script kept in this repository is pasted
+inline, and a screenshot saved by name lands outside the repository and is moved into the
+verification directory afterwards.
+
+The token chooser's accessible name is the concatenation of symbol and name, and an exact role
+query on it does not match. Filter the role query by visible text instead.
 
 ## Credentials and captures
 

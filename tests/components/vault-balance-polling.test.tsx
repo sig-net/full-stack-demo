@@ -51,16 +51,17 @@ it("suspends actual balance polling during proving and resumes after settlement"
       await vi.advanceTimersByTimeAsync(5000);
     });
     expect(read).toHaveBeenCalledTimes(2);
+    const operation = {};
     act(() => {
-      flow.start("deposit");
-      flow.set("proving");
+      flow.start("deposit", operation);
+      flow.set("proving", operation);
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(15000);
     });
     expect(read).toHaveBeenCalledTimes(2);
     act(() => {
-      flow.set("done");
+      flow.set("done", operation);
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);

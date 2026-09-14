@@ -158,8 +158,8 @@ function useVaultOperationOwner(): VaultOperationState {
   };
   const progressFor = (operation: CapturedOperation, binding: VaultBinding): OperationProgress => ({
     set: (phase) => {
-      if (!ownsPresentation(operation) || operation.binding !== binding) return;
-      flow.set(phase);
+      if (!mounted.current || operation.binding !== binding) return;
+      flow.set(phase, operation);
     },
   });
   const append = (operation: CapturedOperation, m: string): void => {
@@ -208,7 +208,7 @@ function useVaultOperationOwner(): VaultOperationState {
       append(operation, "Wallet state drifted behind the chain. Resynchronising from scratch...");
       const recovered = await vaultOwner.rebuild(captured, (error) => {
         operation.recoveryError = describeFlowError(error);
-        if (ownsPresentation(operation)) flow.fail(operation.recoveryError);
+        if (mounted.current) flow.fail(operation.recoveryError, operation);
       });
       operation.binding = recovered;
       operation.progress = progressFor(operation, recovered);
@@ -258,8 +258,11 @@ function useVaultOperationOwner(): VaultOperationState {
           : current,
       );
       console.error(`[midnight] operation failed: ${reason}`, error);
-      flow.fail(reason);
     }
+    // The shared progress owner must settle whenever its owning operation stops. A replaced
+    // binding changes who the result belongs to, never whether the page may keep claiming that
+    // work is still in flight.
+    if (mounted.current) flow.fail(reason, operation);
   };
 
   const runFlow = async (
@@ -606,8 +609,8 @@ function useVaultOperationOwner(): VaultOperationState {
       configuration: runtime.applied,
       progress: {
         set: (phase) => {
-          if (operation.binding !== active || !ownsPresentation(operation)) return;
-          flow.set(phase);
+          if (!mounted.current || operation.binding !== active) return;
+          flow.set(phase, operation);
         },
       },
     };
@@ -623,7 +626,7 @@ function useVaultOperationOwner(): VaultOperationState {
     locked.current = true;
     setBusy(true);
     setLog([]);
-    flow.start(kind);
+    flow.start(kind, operation);
     try {
       await readiness.requireReady();
       active.assertActive();
@@ -639,23 +642,13 @@ function useVaultOperationOwner(): VaultOperationState {
       active.assertActive();
       operation.metadata = Object.fromEntries(entries);
       const result = await run(operation);
-      if (currentOperation.current === operation && mounted.current) {
-        try {
-          operation.binding.assertActive();
-          if (result.status === "refunded") flow.finishRefunded();
-          else flow.set("done");
-        } catch {
-          /* Captured evidence remains available after replacement. */
-        }
+      if (mounted.current) {
+        if (result.status === "refunded") flow.finishRefunded(operation);
+        else flow.set("done", operation);
       }
       return { refunded: result.status === "refunded" };
     } catch (error) {
-      try {
-        active.assertActive();
-        if (ownsPresentation(operation) && !flow.error) flow.fail(describeFlowError(error));
-      } catch {
-        /* Superseded work cannot publish a terminal state. */
-      }
+      if (mounted.current && !flow.error) flow.fail(describeFlowError(error), operation);
       throw error;
     } finally {
       if (currentOperation.current === operation) {
