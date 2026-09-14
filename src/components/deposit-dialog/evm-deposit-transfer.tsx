@@ -131,7 +131,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
           {localFunding.fundingUnavailable ? (
             <p>Fund these addresses directly for the selected network.</p>
           ) : (
-            <div className="ds-row ds-control-gap">
+            <div className="ds-actions">
               <Button
                 variant="outline"
                 disabled={fundingAddress !== null || pending}

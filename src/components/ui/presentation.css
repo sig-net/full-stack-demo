@@ -103,6 +103,21 @@
 @utility ds-stack-section {
   @apply flex flex-col gap-(--space-section);
 }
+@utility ds-deposit-layout {
+  @apply grid min-w-0 items-start gap-(--space-section);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+
+  & > * {
+    min-width: 0;
+  }
+
+  & [data-slot="button"]:not([data-size^="icon"]) {
+    max-width: 100%;
+    min-height: 2rem;
+    height: auto;
+    white-space: normal;
+  }
+}
 @utility ds-dot-error {
   @apply bg-destructive;
 }

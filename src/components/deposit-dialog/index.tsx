@@ -1,7 +1,7 @@
 "use client";
 
 import type * as React from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingState } from "@/components/states/LoadingState";
@@ -35,6 +35,7 @@ interface DepositDialogProps {
 export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React.JSX.Element {
   const [selectedToken, setSelectedToken] = useState<TokenConfig | null>(null);
   const [selectedNetwork, setSelectedNetwork] = useState<NetworkData | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
 
   const balances = useVaultBalances();
   const operations = useVaultOperations();
@@ -106,7 +107,19 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent>
+      <DialogContent
+        size={step === "show-address" ? "wide" : "default"}
+        onOpenAutoFocus={() => {
+          const activeElement = document.activeElement;
+          opener.current = activeElement instanceof HTMLElement ? activeElement : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          const activeOpener = opener.current;
+          opener.current = null;
+          if (activeOpener?.isConnected) activeOpener.focus();
+        }}
+      >
         {step === "select-token" && (
           <div className="ds-stack-content">
             <DialogHeader>
@@ -121,31 +134,33 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
             <DialogHeader>
               <DialogTitle>Deposit Address</DialogTitle>
             </DialogHeader>
-            {selectedNetwork.chain === "ethereum" && (
-              <>
-                <EvmDepositTransfer token={selectedToken} />
-                <PendingDepositRecovery token={selectedToken} />
-              </>
-            )}
-            {isVaultEvmDeposit && progress.active ? (
-              <LoadingState message={progress.message} />
-            ) : (
-              <DepositAddress
-                token={selectedToken}
-                network={selectedNetwork}
-                depositAddress={
-                  selectedNetwork.chain === "midnight"
-                    ? (connection.wallet?.shieldedAddress ?? "")
-                    : (vault.binding?.depositAddress ?? "")
-                }
-                isSubmitting={progress.active}
-                showContinue={!recordedTransfer}
-                canContinue={operations.ready}
-                onContinue={() => {
-                  void handleContinue();
-                }}
-              />
-            )}
+            <div className="ds-deposit-layout">
+              {selectedNetwork.chain === "ethereum" && (
+                <>
+                  <EvmDepositTransfer token={selectedToken} />
+                  <PendingDepositRecovery token={selectedToken} />
+                </>
+              )}
+              {isVaultEvmDeposit && progress.active ? (
+                <LoadingState message={progress.message} />
+              ) : (
+                <DepositAddress
+                  token={selectedToken}
+                  network={selectedNetwork}
+                  depositAddress={
+                    selectedNetwork.chain === "midnight"
+                      ? (connection.wallet?.shieldedAddress ?? "")
+                      : (vault.binding?.depositAddress ?? "")
+                  }
+                  isSubmitting={progress.active}
+                  showContinue={!recordedTransfer}
+                  canContinue={operations.ready}
+                  onContinue={() => {
+                    void handleContinue();
+                  }}
+                />
+              )}
+            </div>
           </div>
         )}
       </DialogContent>

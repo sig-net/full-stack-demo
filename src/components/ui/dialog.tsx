@@ -76,7 +76,7 @@ function DialogOverlay(
 }
 
 /**
- * Places modal content in the portal and optionally adds the shared close control.
+ * Places modal content in the portal with a bounded width variant and optional close control.
  *
  * @param properties - Content properties and close control preference.
  * @returns The portalled dialog content.
@@ -84,16 +84,18 @@ function DialogOverlay(
 function DialogContent(
   properties: React.ComponentProps<typeof DialogPrimitive.Content> & {
     showCloseButton?: boolean;
+    size?: "default" | "wide";
   },
 ): React.JSX.Element {
-  const { className, children, showCloseButton = true, ...props } = properties;
+  const { className, children, showCloseButton = true, size = "default", ...props } = properties;
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-popover text-popover-foreground ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl p-4 text-sm ring-1 duration-100 outline-none sm:max-w-md",
+          "bg-popover text-popover-foreground ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl p-4 text-sm ring-1 duration-100 outline-none",
+          size === "wide" ? "sm:max-w-6xl" : "sm:max-w-md",
           className,
         )}
         {...props}
