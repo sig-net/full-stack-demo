@@ -145,6 +145,17 @@ describe("wallet controls", () => {
     const connectedTrigger = screen.getByRole("button", { name: "EVM wallet: connected" });
     fireEvent.pointerDown(connectedTrigger, { button: 0 });
     expect(screen.getByText("Fixture seed")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Copy EVM wallet address" })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Show full EVM wallet address" }), {
+      key: "Enter",
+    });
+    expect(screen.getByRole("dialog", { name: "Full EVM wallet address" }).textContent).toContain(
+      "0x1234",
+    );
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Full EVM wallet address" }), {
+      key: "Escape",
+    });
+
     fireEvent.click(screen.getByRole("menuitem", { name: "Disconnect EVM wallet" }));
     expect(disconnect).toHaveBeenCalledTimes(1);
     fireEvent.pointerDown(connectedTrigger, { button: 0 });

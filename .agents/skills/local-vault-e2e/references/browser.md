@@ -47,6 +47,11 @@ Close any reopened wallet menu before checking the banner, as modal menus hide i
 queries. Wait for the connected control and spendable readiness before testing connected-state
 transitions or submitting a deposit.
 
+After an arrow key in a Radix menu, wait until the expected action owns focus before pressing
+Enter or Space. Roving focus can advance asynchronously, so consecutive presses in one run-code
+call can activate the preceding item. Wait for a nested popover to close before sending the next
+Escape to its parent menu.
+
 For wallet-menu presentation changes, traverse every actionable item with the keyboard, including
 identity and balance actions embedded in menu content. Ordinary buttons inside a Radix menu were
 skipped by arrow navigation during task16. After a menu opens a dialog, wait for its close animation

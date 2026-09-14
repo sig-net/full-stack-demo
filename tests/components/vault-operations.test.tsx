@@ -246,6 +246,11 @@ it.each(scenarios)(
         "progress",
       );
       expect(execute).not.toHaveBeenCalled();
+      expect(mounted.result.current[0].currentDeposit).toEqual(
+        kind === "deposit"
+          ? { token: token.erc20Address, requestId: null, status: "pending" }
+          : null,
+      );
       act(() => {
         funding.resolve(Response.json({ ok: true }));
       });
@@ -253,6 +258,11 @@ it.each(scenarios)(
         expect(execute).toHaveBeenCalledTimes(1);
       });
       expect(mounted.result.current[0].busy).toBe(true);
+      expect(mounted.result.current[0].currentDeposit).toEqual(
+        kind === "deposit"
+          ? { token: token.erc20Address, requestId: recordId, status: "pending" }
+          : null,
+      );
       await expect(mounted.result.current[1].deposit(token.erc20Address, 1000000n)).rejects.toThrow(
         "progress",
       );
@@ -322,6 +332,17 @@ it.each(scenarios)(
         ),
       );
       expect(mounted.result.current[0].busy).toBe(unmounted === true);
+      {
+        expect(mounted.result.current[0].currentDeposit).toEqual(
+          kind !== "deposit" || replacedAfterSubmission || recovery === "superseded"
+            ? null
+            : { token: token.erc20Address, requestId: recordId, status: outcome },
+        );
+        act(() => {
+          deposit.mock.calls[0]?.[8]?.(parseRequestIdHex("02".repeat(32)));
+        });
+        expect(mounted.result.current[0].currentDeposit?.requestId).not.toBe("02".repeat(32));
+      }
     } finally {
       unsubscribe();
       mounted.unmount();
@@ -331,3 +352,99 @@ it.each(scenarios)(
     }
   },
 );
+
+it("retains the confirmed deposit when manual recovery fails validation", async () => {
+  const binding = await createVaultFixture();
+  const token = tokens.MIDNIGHT_TOKENS[0];
+  if (!token) throw new Error("Expected supported token");
+  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS", binding.environment.contractAddress);
+  vi.stubEnv(
+    "NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS",
+    binding.environment.signetContractAddress,
+  );
+  vi.stubEnv("NEXT_PUBLIC_MPC_SECP256K1_PUBKEY", binding.environment.mpcSecpPub);
+  mockMatchingRuntimeServer();
+  const serverFetch = globalThis.fetch;
+  vi.stubGlobal(
+    "fetch",
+    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+      input === "/api/midnight/gas-topup"
+        ? Promise.resolve(Response.json({ ok: true }))
+        : serverFetch(input, init),
+  );
+  vi.mocked(tokens.fetchErc20Decimals).mockResolvedValue(6);
+  vi.mocked(useVault).mockReturnValue({
+    status: "ready",
+    error: null,
+    binding,
+    requireBinding: () => binding,
+    retry: vi.fn(),
+    rebuild: vi.fn(),
+    disconnect: vi.fn(),
+  });
+  vi.mocked(useVaultBalances).mockReturnValue({
+    balances: null,
+    loading: false,
+    error: null,
+    refresh: vi.fn().mockResolvedValue(undefined),
+  });
+  vi.mocked(useMidnightReadiness).mockImplementation(() => useReadyMidnightFixture(binding.wallet));
+  const id = parseRequestIdHex("ab".repeat(32));
+  vi.mocked(vault.runDeposit).mockImplementation(
+    (
+      _progress,
+      _providers,
+      _contract,
+      _environment,
+      _identity,
+      _token,
+      _amount,
+      _log,
+      onRecord,
+    ) => {
+      onRecord?.(id);
+      return Promise.resolve({ status: "settled", outputUnits: null });
+    },
+  );
+  vi.mocked(vault.readPendingDeposit).mockRejectedValue(
+    new Error("This pending deposit uses a different token."),
+  );
+  const query = new QueryClient();
+  const view = renderHook(() => useVaultOperations(), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={query}>
+        <RuntimeConfigProvider>
+          <VaultOperationsProvider>{children}</VaultOperationsProvider>
+        </RuntimeConfigProvider>
+      </QueryClientProvider>
+    ),
+  });
+  try {
+    await waitFor(() => {
+      expect(view.result.current.ready).toBe(true);
+    });
+    await act(async () => {
+      await view.result.current.deposit(token.erc20Address, 100000n);
+    });
+    expect(view.result.current.currentDeposit).toEqual({
+      token: token.erc20Address,
+      requestId: id,
+      status: "completed",
+    });
+    await act(async () => {
+      await expect(
+        view.result.current.recoverDeposit(token.erc20Address, "cd".repeat(32)),
+      ).rejects.toThrow("different token");
+    });
+    expect(view.result.current.currentDeposit).toEqual({
+      token: token.erc20Address,
+      requestId: id,
+      status: "completed",
+    });
+  } finally {
+    view.unmount();
+    query.clear();
+    binding.providers.privateStateProvider.dispose();
+    await binding.providers.publicDataProvider.dispose();
+  }
+});

@@ -1,7 +1,8 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { TruncatedText } from "@/components/ui/truncated-text";
+import { PublicIdentifier } from "@/components/ui/public-identifier";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 
 afterEach(() => {
@@ -62,8 +63,8 @@ it.each(["insecure", "unavailable", "denied"] as const)(
       .mockRejectedValue(new Error("Clipboard permission denied"));
     vi.stubGlobal("isSecureContext", mode !== "insecure");
     vi.stubGlobal("navigator", { clipboard: mode === "unavailable" ? undefined : { writeText } });
-    render(<TruncatedText text="0x123456" copyable />);
-    fireEvent.click(screen.getByRole("button", { name: "Copy 0x123456" }));
+    render(<PublicIdentifier value="0x123456" label="address" />);
+    fireEvent.click(screen.getByRole("button", { name: "Copy address" }));
     const feedback = await screen.findByRole("alert");
     expect(feedback.textContent).toBe(
       mode === "denied"
@@ -74,3 +75,80 @@ it.each(["insecure", "unavailable", "denied"] as const)(
     expect(document.querySelector("textarea")).toBeNull();
   },
 );
+
+it.each([
+  "0xFBdC76c2aaB313484d1b8E63B75D38efD0537680",
+  `mn_shield-addr_undeployed1${"abc012".repeat(25)}`,
+  `0x${"AB12".repeat(16)}`,
+  "ab12".repeat(16),
+  "0x1234",
+])("copies the complete public value and reveals selectable text: %s", async (value) => {
+  vi.stubGlobal("isSecureContext", true);
+  const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { clipboard: { writeText } });
+  render(<PublicIdentifier value={value} label="identifier" />);
+  fireEvent.click(screen.getByRole("button", { name: "Copy identifier" }));
+  expect((await screen.findByRole("status")).textContent).toBe("Copied identifier");
+  expect(writeText).toHaveBeenCalledWith(value);
+  fireEvent.click(screen.getByRole("button", { name: "Show full identifier" }));
+  expect(screen.getByRole("dialog", { name: "Full identifier" }).textContent).toContain(value);
+});
+
+it("does not render copy controls for an absent value", () => {
+  render(<PublicIdentifier value="" label="identifier" />);
+  expect(screen.getByText("Not available")).toBeTruthy();
+  expect(screen.queryByRole("button")).toBeNull();
+});
+
+it("clears copied feedback and rejects late clipboard completion when the value changes", async () => {
+  vi.stubGlobal("isSecureContext", true);
+  const pending = Promise.withResolvers<undefined>();
+  const writeText = vi
+    .fn<(text: string) => Promise<void>>()
+    .mockResolvedValueOnce(undefined)
+    .mockReturnValueOnce(pending.promise);
+  vi.stubGlobal("navigator", { clipboard: { writeText } });
+  const view = render(<PublicIdentifier value="first" label="identifier" />);
+  fireEvent.click(screen.getByRole("button", { name: "Copy identifier" }));
+  await screen.findByRole("status");
+  view.rerender(<PublicIdentifier value="second" label="identifier" />);
+  expect(screen.queryByRole("status")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Copy identifier" }));
+  view.rerender(<PublicIdentifier value="third" label="identifier" />);
+  await act(async () => {
+    pending.resolve(undefined);
+    await pending.promise;
+  });
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("isolates identifier copy and reveal from Activity row activation and form submission", async () => {
+  vi.stubGlobal("isSecureContext", true);
+  const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { clipboard: { writeText } });
+  const rowClick = vi.fn();
+  const submit = vi.fn();
+  render(
+    <form onSubmit={submit}>
+      <Table>
+        <TableBody>
+          <TableRow onClick={rowClick}>
+            <TableCell>
+              <PublicIdentifier value="0xabcdef1234567890" label="address" />
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </form>,
+  );
+  const copy = screen.getByRole("button", { name: "Copy address" });
+  copy.focus();
+  expect(document.activeElement).toBe(copy);
+  fireEvent.keyDown(copy, { key: "Enter" });
+  fireEvent.click(copy);
+  await screen.findByRole("status");
+  fireEvent.click(screen.getByRole("button", { name: "Show full address" }));
+  expect(screen.getByRole("dialog", { name: "Full address" })).toBeTruthy();
+  expect(rowClick).not.toHaveBeenCalled();
+  expect(submit).not.toHaveBeenCalled();
+});

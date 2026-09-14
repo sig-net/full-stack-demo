@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { PublicIdentifier } from "@/components/ui/public-identifier";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRuntimeConfigSections } from "@/hooks/use-runtime-config-sections";
 
@@ -111,6 +112,15 @@ export function ConfigurationMenu(): React.JSX.Element {
                             <TooltipContent side="left">{field.help}</TooltipContent>
                           </Tooltip>
                         </div>
+                        {(field.key === "contractAddress" || field.key === "mpcSecpPub") && (
+                          <div className="ds-before-control">
+                            <p className="ds-caption">Applied {field.label}</p>
+                            <PublicIdentifier
+                              value={field.appliedValue}
+                              label={`Applied ${field.label}`}
+                            />
+                          </div>
+                        )}
                         <div id={`${fieldId}-feedback`} className="ds-caption break-words">
                           {field.error && (
                             <Feedback tone="error" role="alert">

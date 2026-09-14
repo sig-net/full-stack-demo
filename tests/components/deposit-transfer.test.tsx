@@ -64,6 +64,7 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
   let sweepGate = Promise.withResolvers<{ refunded: boolean }>();
   const deposit = vi.fn<ReturnType<typeof useVaultOperations>["deposit"]>(() => sweepGate.promise);
   vi.mocked(useVaultOperations).mockReturnValue({
+    currentDeposit: null,
     log: [],
     busy: false,
     ready: true,
@@ -145,9 +146,12 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
     expect(result.current.deposit.transfer?.destination).toBe(binding.depositAddress);
     expect(result.current.deposit.transfer?.status).toBe("confirmed");
     expect(refresh).toHaveBeenCalledTimes(superseded ? 0 : 1);
-    const hashNode = screen.getByText(hash);
-    expect(hashNode.tagName).toBe(superseded ? "A" : "P");
-    expect(hashNode.getAttribute("href")).toBe(
+    expect(screen.getByRole("button", { name: "Copy Transaction hash" })).toHaveProperty(
+      "disabled",
+      false,
+    );
+    const explorerLink = screen.queryByRole("link", { name: "View transaction in explorer" });
+    expect(explorerLink?.getAttribute("href") ?? null).toBe(
       superseded ? `https://sepolia.etherscan.io/tx/${hash}` : null,
     );
     let failedSweep: string | undefined = "ready";
@@ -165,6 +169,11 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
         await result.current.deposit.continueDeposit();
       });
       firstSweepCount = deposit.mock.calls.length;
+      const transferButton = screen.getByRole("button", {
+        name: "Transfer confirmed",
+      });
+      if (!transferButton.hasAttribute("disabled"))
+        throw new Error("Pending continuation must block another transfer");
       sweepGate.reject(new Error("Midnight failed"));
       await act(async () => {
         await first;

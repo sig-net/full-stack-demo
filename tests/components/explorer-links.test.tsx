@@ -1,4 +1,4 @@
-import { act, cleanup, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ActivityTransaction } from "@/components/activity-list-table";
@@ -27,9 +27,12 @@ describe("EVM explorer links", () => {
       <TransactionDetailsDialog transaction={transaction} open onOpenChange={() => undefined} />,
     );
 
-    expect(
-      screen.getByText((content) => content.includes(transaction.transactionHash ?? "")),
-    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /view sepolia transaction/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy Transaction hash" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show full Transaction hash" }));
+    expect(screen.getByRole("dialog", { name: "Full Transaction hash" }).textContent).toContain(
+      transactionHash,
+    );
     expect(screen.queryByRole("link", { name: /view sepolia transaction/i })).toBeNull();
   });
 

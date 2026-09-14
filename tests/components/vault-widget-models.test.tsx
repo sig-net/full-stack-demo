@@ -117,6 +117,7 @@ async function fixture(): Promise<WidgetFixture> {
     .fn<ReturnType<typeof useVaultOperations>["redeem"]>()
     .mockResolvedValue({ refunded: false });
   vi.mocked(useVaultOperations).mockReturnValue({
+    currentDeposit: null,
     log: [],
     busy: false,
     ready: true,

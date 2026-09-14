@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { StatusDot } from "@/components/ui/feedback";
+import { PublicIdentifier } from "@/components/ui/public-identifier";
 import {
   Table,
   TableBody,
@@ -12,7 +13,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TruncatedText } from "@/components/ui/truncated-text";
 import { useMidnightTransactions } from "@/hooks/use-midnight-transactions";
 import type { MidnightTxRecord } from "@/lib/midnight/tx-history";
 import { cn } from "@/lib/utils";
@@ -84,7 +84,7 @@ function TokenDisplay(properties: TokenDisplayProps): React.JSX.Element | null {
         <WalletIcon className="ds-muted h-4 w-4 flex-shrink-0 sm:h-5 sm:w-5" />
         <div className="ds-tight flex min-w-0 flex-col">
           <div className="ds-caption ds-label ds-muted sm:ds-body">
-            <TruncatedText text={token.amount} prefixLength={4} suffixLength={3} copyable={true} />
+            <PublicIdentifier value={token.amount} label="Wallet address" />
           </div>
           <div className="ds-caption ds-label ds-muted">Wallet</div>
         </div>
@@ -132,12 +132,7 @@ function DetailsCell(properties: DetailsCellProps): React.JSX.Element {
           <WalletIcon className="ds-muted h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
           <div className="ds-caption ds-label ds-muted sm:ds-body min-w-0">
             {transaction.address ? (
-              <TruncatedText
-                text={transaction.address}
-                prefixLength={4}
-                suffixLength={3}
-                copyable={true}
-              />
+              <PublicIdentifier value={transaction.address} label="Recipient address" />
             ) : (
               "Unknown"
             )}

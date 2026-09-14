@@ -30,6 +30,8 @@ A menu action composed with `DropdownMenuItem asChild` uses `Button variant='men
 
 Use `Feedback` for inline errors, warnings and operation feedback. `StatusDot` accompanies textual status, and Activity uses semantic Badge variants. The root imports the themed local `Toaster`. Features can call Sonner's toast functions, while the local component and semantic CSS own toast rendering.
 
+`PublicIdentifier` displays public addresses, hashes and request IDs with a six-character prefix and four-character suffix. Its independent copy action preserves the complete value and reports success or failure. The full-value popover supports keyboard and touch access and selectable text. The `inMenu` variant participates in menu keyboard navigation. Empty values have no copy action. Editable configuration, recipient and recovery inputs retain full values, and signing credentials use their dedicated masked controls.
+
 `TokenAmountDisplay` uses the shared Input and Button. Read-only computed amounts preserve token selection while hiding the maximum shortcut. Disabled amounts use native disabled inputs and disabled token selection. Maximum values keep their exact decimal string.
 
 ## Upstream sources

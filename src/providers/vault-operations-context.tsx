@@ -28,6 +28,7 @@ import {
   type LendingPosition,
   midnightTxHistory,
   type MidnightTxRecord,
+  type MidnightTxStatus,
 } from "@/lib/midnight/tx-history";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
 import { fundingErrorSchema } from "@/lib/wallet-funding";
@@ -105,7 +106,13 @@ async function requestGasTopUp(
 interface OperationResult {
   refunded: boolean;
 }
+interface DepositRequest {
+  token: string;
+  requestId: string | null;
+  status: MidnightTxStatus;
+}
 interface VaultOperationState {
+  currentDeposit: DepositRequest | null;
   log: string[];
   busy: boolean;
   ready: boolean;
@@ -143,6 +150,10 @@ function useVaultOperationOwner(): VaultOperationState {
   const { binding } = vaultOwner;
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [depositRequest, setDepositRequest] = useState<{
+    operation: CapturedOperation;
+    request: DepositRequest;
+  } | null>(null);
   const locked = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -154,7 +165,9 @@ function useVaultOperationOwner(): VaultOperationState {
   const currentOperation = useRef<CapturedOperation | null>(null);
   useEffect(() => {
     if (!binding && !locked.current) flow.reset();
-  }, [binding]);
+    if (!locked.current)
+      setDepositRequest((current) => (current?.operation.binding === binding ? current : null));
+  }, [binding, busy]);
 
   const ownsPresentation = (operation: CapturedOperation): boolean => {
     if (!mounted.current || currentOperation.current !== operation) return false;
@@ -231,6 +244,12 @@ function useVaultOperationOwner(): VaultOperationState {
     result: VaultExecutionResult,
     patch: Partial<MidnightTxRecord> = {},
   ): VaultExecutionResult => {
+    if (ownsPresentation(operation))
+      setDepositRequest((current) =>
+        current?.operation === operation
+          ? { ...current, request: { ...current.request, status: "completed" } }
+          : current,
+      );
     if (operation.recordId)
       midnightTxHistory.update(operation.recordId, {
         ...patch,
@@ -255,6 +274,11 @@ function useVaultOperationOwner(): VaultOperationState {
           : reason,
       });
     if (ownsPresentation(operation)) {
+      setDepositRequest((current) =>
+        current?.operation === operation
+          ? { ...current, request: { ...current.request, status: "failed" } }
+          : current,
+      );
       console.error(`[midnight] operation failed: ${reason}`, error);
       flow.fail(reason);
     }
@@ -322,6 +346,12 @@ function useVaultOperationOwner(): VaultOperationState {
               if (active === operation.binding) appendActive(message);
             },
             (rid, hash) => {
+              if (currentOperation.current !== operation || active !== operation.binding) return;
+              if (ownsPresentation(operation))
+                setDepositRequest({
+                  operation,
+                  request: { token: erc20Address, requestId: rid, status: "pending" },
+                });
               record(
                 rid,
                 {
@@ -632,6 +662,7 @@ function useVaultOperationOwner(): VaultOperationState {
     kind: FlowKind,
     tokens: string[],
     run: (operation: CapturedOperation) => Promise<VaultExecutionResult>,
+    retainDepositRequest = false,
   ): Promise<OperationResult> => {
     if (locked.current) throw new Error("A vault operation is already in progress.");
     runtime.requireServerHeaders();
@@ -650,6 +681,14 @@ function useVaultOperationOwner(): VaultOperationState {
       },
     };
     currentOperation.current = operation;
+    if (kind === "deposit" && !retainDepositRequest) {
+      const token = tokens[0];
+      if (!token) throw new Error("A deposit requires a token.");
+      setDepositRequest({
+        operation,
+        request: { token, requestId: null, status: "pending" },
+      });
+    }
     locked.current = true;
     setBusy(true);
     setLog([]);
@@ -695,7 +734,17 @@ function useVaultOperationOwner(): VaultOperationState {
       }
     }
   };
+  let currentDeposit: DepositRequest | null = null;
+  if (depositRequest?.operation.binding === binding) {
+    try {
+      binding.assertActive();
+      currentDeposit = depositRequest.request;
+    } catch {
+      /* A disposed binding cannot attribute a request to the replacement identity. */
+    }
+  }
   return {
+    currentDeposit,
     log,
     busy,
     ready: readiness.ready && !runtime.serverUnavailable,
@@ -703,19 +752,24 @@ function useVaultOperationOwner(): VaultOperationState {
     deposit: (erc20: string, amount: bigint) =>
       execute("deposit", [erc20], (operation) => runFlow(operation, "deposit", erc20, amount)),
     recoverDeposit: (erc20: string, requestId: string) =>
-      execute("deposit", [erc20], async (operation) => {
-        const active = operation.binding;
-        const { readPendingDeposit } = await import("@/lib/midnight/vault");
-        const view = await readPendingDeposit(
-          active.providers,
-          active.environment,
-          active.identity,
-          erc20,
-          requestId,
-        );
-        active.assertActive();
-        return runFlow(operation, "deposit", erc20, view.amount, undefined, requestId);
-      }),
+      execute(
+        "deposit",
+        [erc20],
+        async (operation) => {
+          const active = operation.binding;
+          const { readPendingDeposit } = await import("@/lib/midnight/vault");
+          const view = await readPendingDeposit(
+            active.providers,
+            active.environment,
+            active.identity,
+            erc20,
+            requestId,
+          );
+          active.assertActive();
+          return runFlow(operation, "deposit", erc20, view.amount, undefined, requestId);
+        },
+        true,
+      ),
     withdraw: (erc20: string, amount: bigint, receiver?: string) =>
       execute("withdraw", [erc20], (operation) =>
         runFlow(operation, "withdraw", erc20, amount, receiver),

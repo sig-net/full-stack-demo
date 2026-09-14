@@ -59,6 +59,7 @@ it("serialises EVM deposit preflight and preserves confirmed transfer state", as
     refresh,
   });
   vi.mocked(useVaultOperations).mockReturnValue({
+    currentDeposit: null,
     log: [],
     busy: false,
     ready: true,

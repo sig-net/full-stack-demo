@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Feedback } from "@/components/ui/feedback";
+import { PublicIdentifier } from "@/components/ui/public-identifier";
 
 import type { ActivityTransaction } from "./index";
 
@@ -41,18 +42,48 @@ export function TransactionDetailsDialog(
         </DialogHeader>
         <div className="ds-stack-control ds-body">
           <p>{transaction.timestamp}</p>
-          {transaction.fromToken && <p>From: {transaction.fromToken.amount}</p>}
-          {transaction.toToken && <p>To: {transaction.toToken.amount}</p>}
+          {transaction.fromToken && (
+            <div>
+              From:{" "}
+              {transaction.fromToken.symbol === "WALLET" ? (
+                <PublicIdentifier
+                  value={transaction.fromToken.amount}
+                  label="Source wallet address"
+                />
+              ) : (
+                transaction.fromToken.amount
+              )}
+            </div>
+          )}
+          {transaction.toToken && (
+            <div>
+              To:{" "}
+              {transaction.toToken.symbol === "WALLET" ? (
+                <PublicIdentifier
+                  value={transaction.toToken.amount}
+                  label="Destination wallet address"
+                />
+              ) : (
+                transaction.toToken.amount
+              )}
+            </div>
+          )}
           {transaction.failureReason && (
             <Feedback tone={transaction.status === "interrupted" ? "warning" : "error"}>
               {transaction.failureReason}
             </Feedback>
           )}
           {transaction.requestId && (
-            <p className="break-all">Request ID: {transaction.requestId}</p>
+            <div>
+              <p>Request ID</p>
+              <PublicIdentifier value={transaction.requestId} label="Request ID" />
+            </div>
           )}
           {transaction.transactionHash && (
-            <p className="break-all">Transaction: {transaction.transactionHash}</p>
+            <div>
+              <p>Transaction</p>
+              <PublicIdentifier value={transaction.transactionHash} label="Transaction hash" />
+            </div>
           )}
           {transaction.explorerUrl && (
             <a

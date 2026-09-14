@@ -102,7 +102,7 @@
       "disposition": "added"
     }
   ],
-  "bespoke": ["empty-state", "token-amount-display", "qr-code", "truncated-text"],
+  "bespoke": ["empty-state", "token-amount-display", "qr-code", "public-identifier"],
   "adaptations": [
     "Registry cn placeholder resolves to the existing clsx/tailwind-merge helper.",
     "Icon placeholders resolve to selected Lucide exports.",

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { StatusDot } from "@/components/ui/feedback";
 import { Feedback } from "@/components/ui/feedback";
+import { PublicIdentifier } from "@/components/ui/public-identifier";
 import type { WalletMetadata } from "@/lib/wallet-metadata";
 
 import { SeedWalletDialog } from "./seed-wallet-dialog";
@@ -119,7 +120,11 @@ export function WalletMenu({
                 <span className="break-all">{wallet.name}</span>
               </p>
               <p>{wallet.kind === "seed" ? "Seed wallet" : "Browser wallet"} · Connected</p>
-              <p className="ds-value ds-caption break-all">{wallet.accountDetail}</p>
+              <PublicIdentifier
+                inMenu
+                value={wallet.accountDetail}
+                label={`${chainName} wallet address`}
+              />
             </div>
           )}
           {children}

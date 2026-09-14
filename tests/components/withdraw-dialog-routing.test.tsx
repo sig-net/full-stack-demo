@@ -101,6 +101,7 @@ describe("withdrawal routing", () => {
       refresh: vi.fn(),
     });
     vi.mocked(useVaultOperations).mockReturnValue({
+      currentDeposit: null,
       log: [],
       busy: false,
       ready: true,
@@ -193,6 +194,7 @@ describe("withdrawal routing", () => {
       refresh: vi.fn(),
     });
     vi.mocked(useVaultOperations).mockReturnValue({
+      currentDeposit: null,
       log: [],
       busy: false,
       ready: true,

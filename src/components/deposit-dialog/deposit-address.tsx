@@ -1,16 +1,14 @@
 "use client";
 
 import { NetworkIcon } from "@web3icons/react";
-import { Check, Copy, Info, Loader2 } from "lucide-react";
+import { Info, Loader2 } from "lucide-react";
 import type * as React from "react";
 import type { ReactElement } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Feedback } from "@/components/ui/feedback";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { PublicIdentifier } from "@/components/ui/public-identifier";
 import { QRCode } from "@/components/ui/qr-code";
-import { useCopyToClipboard } from "@/hooks";
-import { formatAddress } from "@/lib/address-utils";
 import type { NetworkData, TokenConfig } from "@/lib/constants/token-metadata";
 
 interface DepositAddressProps {
@@ -39,12 +37,6 @@ export function DepositAddress(properties: DepositAddressProps): React.JSX.Eleme
     canContinue,
     onContinue,
   } = properties;
-  const { isCopied, copyToClipboard, error } = useCopyToClipboard();
-
-  const handleCopy = (): void => {
-    void copyToClipboard(depositAddress);
-  };
-
   // The QR helper takes a file asset via iconUrl (it only serializes SVG elements).
   const qrIconProps: { iconUrl: string } | { icon: ReactElement } =
     network.chain === "midnight"
@@ -73,25 +65,8 @@ export function DepositAddress(properties: DepositAddressProps): React.JSX.Eleme
           margin={16}
         />
 
-        <div className="ds-surface-muted ds-control-gap ds-inline-inset-control ds-block-inset-control mx-auto flex w-fit items-center">
-          <span className="ds-muted ds-label">{formatAddress(depositAddress)}</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleCopy}
-            className="w-full"
-            aria-label="Copy deposit address"
-          >
-            {isCopied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
-          </Button>
-        </div>
+        <PublicIdentifier value={depositAddress} label="deposit address" className="mx-auto" />
       </div>
-
-      {error && (
-        <Feedback tone="error" role="alert">
-          {error.message}
-        </Feedback>
-      )}
 
       <div className="ds-row ds-control-gap justify-center">
         <p className="ds-muted ds-body text-center">Use this address to deposit {token.name}</p>
@@ -120,18 +95,7 @@ export function DepositAddress(properties: DepositAddressProps): React.JSX.Eleme
             )}
             <div className="ds-round ds-surface-muted ds-before-control ds-inline-inset-control ds-block-inset-control">
               <p className="ds-caption ds-muted">Contract Address</p>
-              <div className="ds-row ds-tight">
-                <code className="ds-caption ds-text break-all">{token.erc20Address}</code>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    void copyToClipboard(token.erc20Address);
-                  }}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
+              <PublicIdentifier value={token.erc20Address} label="Token contract address" />
             </div>
           </PopoverContent>
         </Popover>

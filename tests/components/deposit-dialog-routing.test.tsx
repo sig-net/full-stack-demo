@@ -106,6 +106,7 @@ it.each(["error", "confirmed", "fresh-binding", "complete"] as const)(
       refresh: vi.fn(),
     });
     vi.mocked(useVaultOperations).mockReturnValue({
+      currentDeposit: null,
       log: [],
       busy: false,
       ready: true,

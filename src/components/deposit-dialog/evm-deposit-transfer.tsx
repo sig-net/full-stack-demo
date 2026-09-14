@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Feedback } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PublicIdentifier } from "@/components/ui/public-identifier";
 import { useEvmDepositEligibility } from "@/hooks/use-evm-deposit-eligibility";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import type { TokenConfig } from "@/lib/constants/token-metadata";
@@ -56,7 +57,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
     <div className="ds-stack-control ds-divider-top ds-top-inset-content">
       <p className="ds-label">Transfer from your Sepolia wallet</p>
       <EvmWalletButton />
-      {evm.wallet && <p className="ds-body break-all">{evm.wallet.account}</p>}
+      {evm.wallet && <PublicIdentifier value={evm.wallet.account} label="EVM wallet address" />}
       {tokenBalance && (
         <p>
           Available: {formatUnits(tokenBalance.units, tokenBalance.decimals)} {token.symbol}
@@ -96,7 +97,11 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
           }
         }}
       >
-        {pending ? "Transfer pending…" : "Send tokens to deposit address"}
+        {transfer?.sweep === "pending"
+          ? "Transfer confirmed"
+          : pending
+            ? "Transfer pending…"
+            : "Send tokens to deposit address"}
       </Button>
       {amount.trim() && eligibility.error && (
         <Feedback tone="error" role="alert">
@@ -109,20 +114,24 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
       {transfer && (
         <div className="ds-stack-control ds-body">
           <p>Transfer: {transfer.status}</p>
-          <p className="break-all">Destination: {transfer.destination}</p>
-          {transfer.hash &&
-            (explorer ? (
-              <a
-                className="block break-all"
-                href={`${explorer}/tx/${transfer.hash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {transfer.hash}
-              </a>
-            ) : (
-              <p className="break-all">{transfer.hash}</p>
-            ))}
+          <p>Destination</p>
+          <PublicIdentifier value={transfer.destination} label="Deposit destination" />
+          {transfer.hash && (
+            <>
+              <p>Transaction</p>
+              <PublicIdentifier value={transfer.hash} label="Transaction hash" />
+              {explorer && (
+                <a
+                  className="ds-link"
+                  href={`${explorer}/tx/${transfer.hash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View transaction in explorer
+                </a>
+              )}
+            </>
+          )}
           {transfer.error && (
             <Feedback tone="error" role="alert">
               {transfer.error}

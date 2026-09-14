@@ -120,6 +120,7 @@ it("uses asset decimals, preserves refunds, rejects excess precision and gates u
     Promise.resolve({ refunded }),
   );
   vi.mocked(useVaultOperations).mockReturnValue({
+    currentDeposit: null,
     log: [],
     busy: false,
     ready: true,

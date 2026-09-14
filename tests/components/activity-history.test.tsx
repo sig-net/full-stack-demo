@@ -111,7 +111,8 @@ describe("activity history", () => {
     expect(screen.getByText("Supply Details")).toBeTruthy();
     expect(screen.getByText("Status: refunded")).toBeTruthy();
     expect(screen.getByText("Fixture proof failed")).toBeTruthy();
-    expect(screen.getByText("Transaction: 0xabc")).toBeTruthy();
+    expect(screen.getByText("0xabc")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy Transaction hash" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /view sepolia transaction/i })).toBeTruthy();
   });
 });
