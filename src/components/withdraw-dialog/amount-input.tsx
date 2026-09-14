@@ -23,6 +23,8 @@ interface AmountInputProps {
   transactionReady: boolean;
   onSubmit: (data: { token: WithdrawToken; amount: string; receiverAddress: string }) => void;
   preSelectedToken?: WithdrawToken | null;
+  disabledReason?: React.ReactNode;
+  disabledReasonId?: string;
 }
 
 /**
@@ -33,6 +35,8 @@ interface AmountInputProps {
  * @param root0.transactionReady - Whether withdrawal prerequisites are ready.
  * @param root0.onSubmit - Validated withdrawal callback.
  * @param root0.preSelectedToken - Optional token selected by the parent.
+ * @param root0.disabledReason - Panel explaining why submission is blocked.
+ * @param root0.disabledReasonId - Id of that panel, required whenever the panel is supplied.
  * @returns The withdrawal amount form.
  */
 export function AmountInput({
@@ -40,6 +44,8 @@ export function AmountInput({
   transactionReady,
   onSubmit,
   preSelectedToken,
+  disabledReason,
+  disabledReasonId,
 }: AmountInputProps): React.JSX.Element {
   const [selection, setSelection] = useState<{
     selectedToken: WithdrawToken | undefined;
@@ -169,12 +175,15 @@ export function AmountInput({
         </div>
       )}
 
+      {disabledReason}
+
       <Button
         type="submit"
         variant="secondary"
         disabled={
           !transactionReady || isSubmitting || !selectedToken || !watchedAmount || !watchedAddress
         }
+        aria-describedby={disabledReasonId}
         className="w-full"
         size="lg"
       >

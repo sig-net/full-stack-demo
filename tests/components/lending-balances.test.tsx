@@ -14,6 +14,7 @@ import {
   stataSupplyApy,
 } from "@/lib/midnight/evm-stata";
 import type { VaultBalances } from "@/lib/midnight/vault-balances";
+import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
@@ -25,7 +26,9 @@ import {
   testRuntimeConfiguration,
 } from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
+import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 
+vi.mock(import("@/providers/midnight-readiness-context"), { spy: true });
 vi.mock(import("@/providers/midnight-wallet-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/vault-context"), { spy: true });
@@ -136,6 +139,7 @@ it("uses asset decimals, preserves refunds, rejects excess precision and gates u
     supply,
     redeem: vi.fn(),
   });
+  vi.mocked(useMidnightReadiness).mockImplementation(() => useReadyMidnightFixture(binding.wallet));
   const success = vi.spyOn(toast, "success");
   const error = vi.spyOn(toast, "error");
   const { rerender, unmount } = render(<LendWidget />, {

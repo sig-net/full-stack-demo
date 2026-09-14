@@ -46,8 +46,9 @@ observed URL, and capture a fresh snapshot. Use observed role/name locators. Sco
 connection buttons to the banner or active dialog. A click can return before React completes its
 state transition: wait for the expected control rather than interpreting an immediate false
 visibility result as failure. Seed installation can close its dialog before synchronisation finishes.
-Close any reopened wallet menu before checking the banner, as modal menus hide it from role
-queries. Wait for the connected control and spendable readiness before testing connected-state
+Close any open Radix menu or dialog before any later role query, not only before checking
+the banner: a modal menu hides toolbar roles from every subsequent query, and the locator
+then waits its full timeout before failing. Wait for the connected control and spendable readiness before testing connected-state
 transitions or submitting a deposit.
 
 After an arrow key in a Radix menu, wait until the expected action owns focus before pressing
@@ -140,6 +141,21 @@ browser without sending the password. Keep any required transaction authorisatio
 For a deposit, select the token, enter the exact amount, approve the EVM transfer, capture its
 confirmed hash and click the explicit Midnight continuation once. Observe stage changes without
 reloading during proving. A small deposit is still a real sequence of transactions.
+
+## Controlled-state fixtures
+
+When acceptance needs a wallet state that no disposable local wallet can safely reach (depleted
+DUST, unregistered NIGHT, a failed balance read), build an ignored Vite fixture under
+`.local-vault/taskNN-fixture` that imports the real widgets, the real gate wiring and the app's
+global stylesheet, and aliases only the provider and remote-read modules to fixture exports. Alias
+`next/image` to a plain image element, or the Next image runtime crashes with process is not
+defined. Read the newest `taskNN-fixture-notes.md` in the ignored verification directory before
+building one, and write your own notes there. Vite is a project devDependency, so nothing is
+installed. Stop the fixture server when done and label its evidence as fixture evidence.
+
+Restoring the applied deployment after a page load means refilling every field of the
+Configuration dialog from the saved public deployment file, then Apply. The Contract address
+field collides with Signet contract address under a non-exact role query, so use exact names.
 
 ## Credentials and captures
 

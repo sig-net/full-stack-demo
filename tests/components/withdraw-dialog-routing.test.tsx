@@ -7,14 +7,17 @@ import type { WithdrawToken } from "@/components/withdraw-dialog";
 import { WithdrawDialog } from "@/components/withdraw-dialog";
 import { AmountInput } from "@/components/withdraw-dialog/amount-input";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
+import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
 import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
+import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 
 vi.mock(import("@/hooks/use-midnight-progress"), { spy: true });
+vi.mock(import("@/providers/midnight-readiness-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/vault-context"), { spy: true });
 vi.mock(import("@/providers/vault-operations-context"), { spy: true });
@@ -78,6 +81,9 @@ describe("withdrawal routing", () => {
       .mockResolvedValue({ refunded: false });
     const onOpenChange = vi.fn();
     vi.mocked(useMidnightProgress).mockReturnValue({ active: false, message: "", error: null });
+    vi.mocked(useMidnightReadiness).mockImplementation(() =>
+      useReadyMidnightFixture(binding.wallet),
+    );
     vi.mocked(useVault).mockReturnValue({
       status: "ready",
       error: null,
@@ -171,6 +177,9 @@ describe("withdrawal routing", () => {
     const withdraw = vi.fn<ReturnType<typeof useVaultOperations>["withdraw"]>();
     const onOpenChange = vi.fn();
     vi.mocked(useMidnightProgress).mockReturnValue({ active: false, message: "", error: null });
+    vi.mocked(useMidnightReadiness).mockImplementation(() =>
+      useReadyMidnightFixture(binding.wallet),
+    );
     vi.mocked(useVault).mockReturnValue({
       status: "ready",
       error: null,

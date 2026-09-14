@@ -1,9 +1,11 @@
 "use client";
 import type * as React from "react";
 
+import { MidnightDustGate } from "@/components/midnight-dust-gate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useMidnightDustGate } from "@/hooks/use-midnight-dust-gate";
 import { useVaultLending } from "@/hooks/use-vault-lending";
 
 import { Button } from "../ui/button";
@@ -11,6 +13,8 @@ import { Button } from "../ui/button";
 interface LendWidgetProps {
   className?: string;
 }
+
+const LENDING_DUST_GATE_ID = "lending-dust-gate";
 
 /**
  * Tracks the vault's Aave lending position and submits supply or redeem operations.
@@ -38,6 +42,7 @@ export function LendWidget({ className }: LendWidgetProps): React.JSX.Element {
     positionAssets,
     earnings,
   } = useVaultLending();
+  const dustGate = useMidnightDustGate();
 
   return (
     <Card className={className}>
@@ -57,6 +62,14 @@ export function LendWidget({ className }: LendWidgetProps): React.JSX.Element {
               {earnings.toFixed(6)} USDC.a
             </span>
           </div>
+        )}
+
+        {dustGate && (
+          <MidnightDustGate
+            gate={dustGate}
+            id={LENDING_DUST_GATE_ID}
+            label="Midnight fee readiness for lending"
+          />
         )}
 
         <div className="ds-stack-control">
@@ -81,6 +94,7 @@ export function LendWidget({ className }: LendWidgetProps): React.JSX.Element {
                 void runSupply();
               }}
               disabled={disabled || !supplyReady || !supplyAmount}
+              aria-describedby={dustGate ? LENDING_DUST_GATE_ID : undefined}
             >
               {busy === "supply" ? "Supplying…" : "Supply"}
             </Button>
@@ -112,6 +126,7 @@ export function LendWidget({ className }: LendWidgetProps): React.JSX.Element {
                 void runRedeem();
               }}
               disabled={disabled || !redeemReady || !redeemAmount}
+              aria-describedby={dustGate ? LENDING_DUST_GATE_ID : undefined}
             >
               {busy === "redeem" ? "Redeeming…" : "Redeem"}
             </Button>

@@ -3,7 +3,9 @@
 import type * as React from "react";
 import { toast } from "sonner";
 
+import { MidnightDustGate } from "@/components/midnight-dust-gate";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { useMidnightDustGate } from "@/hooks/use-midnight-dust-gate";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
 import { useVaultBalances } from "@/providers/vault-balances-context";
@@ -25,6 +27,8 @@ export interface WithdrawToken {
   decimals: number;
 }
 
+const WITHDRAW_DUST_GATE_ID = "withdraw-dust-gate";
+
 interface WithdrawDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -45,6 +49,7 @@ function WithdrawDialogContent({
   const balances = useVaultBalances();
   const vault = useVault();
   const midnight = useMidnightProgress();
+  const dustGate = useMidnightDustGate();
 
   const handleAmountSubmit = (data: {
     token: WithdrawToken;
@@ -84,6 +89,16 @@ function WithdrawDialogContent({
           transactionReady={operations.ready}
           onSubmit={handleAmountSubmit}
           preSelectedToken={preSelectedToken}
+          disabledReason={
+            dustGate ? (
+              <MidnightDustGate
+                gate={dustGate}
+                id={WITHDRAW_DUST_GATE_ID}
+                label="Midnight fee readiness for sending"
+              />
+            ) : null
+          }
+          disabledReasonId={dustGate ? WITHDRAW_DUST_GATE_ID : undefined}
         />
       </div>
     </>

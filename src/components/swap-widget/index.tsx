@@ -5,9 +5,11 @@ import type * as React from "react";
 import { useState } from "react";
 import { formatUnits } from "viem";
 
+import { MidnightDustGate } from "@/components/midnight-dust-gate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Feedback } from "@/components/ui/feedback";
 import { TokenAmountDisplay } from "@/components/ui/token-amount-display";
+import { useMidnightDustGate } from "@/hooks/use-midnight-dust-gate";
 import { useVaultSwap } from "@/hooks/use-vault-swap";
 
 import { Button } from "../ui/button";
@@ -18,6 +20,7 @@ interface SwapWidgetProps {
 }
 
 const SLIPPAGE_PRESETS = [10n, 50n, 100n];
+const SWAP_DUST_GATE_ID = "swap-dust-gate";
 /**
  * Captures maximum spend and displays the quote used to choose a guaranteed swap output.
  *
@@ -46,6 +49,7 @@ export function SwapWidget({ className }: SwapWidgetProps): React.JSX.Element {
     retryQuote,
     handleSwap,
   } = useVaultSwap();
+  const dustGate = useMidnightDustGate();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
@@ -130,11 +134,19 @@ export function SwapWidget({ className }: SwapWidgetProps): React.JSX.Element {
             </Button>
           </Feedback>
         )}
+        {dustGate && (
+          <MidnightDustGate
+            gate={dustGate}
+            id={SWAP_DUST_GATE_ID}
+            label="Midnight fee readiness for swapping"
+          />
+        )}
         <Button
           onClick={() => {
             void handleSwap();
           }}
           disabled={!canSwap}
+          aria-describedby={dustGate ? SWAP_DUST_GATE_ID : undefined}
           variant="secondary"
           size="lg"
           className="w-full"
