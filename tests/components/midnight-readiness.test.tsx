@@ -35,6 +35,7 @@ function fixture(): {
   vi.spyOn(wallet, "unshieldedAddress", "get").mockReturnValue("mn_addr_undeployed_test");
   const register = vi.spyOn(wallet, "registerNightForDust").mockResolvedValue();
   vi.mocked(useMidnightConnection).mockReturnValue({
+    addresses: null,
     wallet,
     session: 1,
     connecting: false,

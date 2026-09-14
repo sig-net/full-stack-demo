@@ -47,6 +47,7 @@ it.each(["missing", "loading", "error"])(
       disconnect: vi.fn(),
     });
     vi.mocked(useMidnightConnection).mockReturnValue({
+      addresses: null,
       wallet: null,
       connecting: false,
       error: null,

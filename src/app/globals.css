@@ -49,6 +49,10 @@
   --space-control: 0.5rem;
   --space-content: 1rem;
   --space-section: 1.5rem;
+  --scrollbar-track: var(--muted);
+  --scrollbar-thumb: var(--muted-foreground);
+  --scrollbar-thumb-hover: var(--foreground);
+  --scrollbar-fallback-size: 1rem;
   --page-gradient: linear-gradient(180deg, #f9f8f1 0%, #f1f9f8 50%, #f8f1f9 100%);
   --background: #fdfcfc;
   --foreground: #4c4646;
@@ -75,6 +79,8 @@
   --ring: #476d59;
   --link: #245fa0;
   --overlay: #625757;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: auto;
 }
 @layer base {
   * {
@@ -120,6 +126,33 @@
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+@supports not (scrollbar-color: red blue) {
+  @media (forced-colors: none) {
+    *::-webkit-scrollbar {
+      width: var(--scrollbar-fallback-size);
+      height: var(--scrollbar-fallback-size);
+    }
+    *::-webkit-scrollbar-track {
+      background-color: var(--scrollbar-track);
+    }
+    *::-webkit-scrollbar-thumb {
+      background-color: var(--scrollbar-thumb);
+      border: 0.25rem solid var(--scrollbar-track);
+      border-radius: 9999px;
+    }
+    *::-webkit-scrollbar-thumb:hover {
+      background-color: var(--scrollbar-thumb-hover);
+    }
+    *::-webkit-scrollbar-corner {
+      background-color: var(--scrollbar-track);
+    }
+  }
+}
+@media (forced-colors: active) {
+  :root {
+    scrollbar-color: auto;
   }
 }
 @layer components {

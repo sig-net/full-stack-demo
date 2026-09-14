@@ -76,6 +76,7 @@ it.each(["error", "confirmed", "fresh-binding", "complete"] as const)(
       disconnect: vi.fn(),
     });
     vi.mocked(useMidnightConnection).mockReturnValue({
+      addresses: null,
       wallet: null,
       connecting: false,
       error: null,

@@ -38,6 +38,7 @@ it("renders the non-zero USDC balance using six asset decimals", () => {
     disconnect: vi.fn(),
   });
   vi.mocked(useMidnightConnection).mockReturnValue({
+    addresses: null,
     wallet: null,
     connecting: false,
     error: null,
@@ -91,6 +92,7 @@ it("renders the connected Home sections and refunded activity on the server", as
     disconnect: vi.fn(),
   });
   vi.mocked(useMidnightConnection).mockReturnValue({
+    addresses: null,
     wallet: null,
     connecting: false,
     error: null,

@@ -2,21 +2,28 @@ import type { ConnectedAPI, InitialAPI } from "@midnight-ntwrk/dapp-connector-ap
 import { setNetworkId } from "@midnight-ntwrk/midnight-js/network-id";
 import { Transaction } from "@midnightntwrk/ledger-v9";
 import {
+  DustAddress,
   MidnightBech32m,
+  ShieldedAddress,
   ShieldedCoinPublicKey,
   ShieldedEncryptionPublicKey,
+  UnshieldedAddress,
 } from "@midnightntwrk/wallet-sdk-address-format";
 import { z } from "zod";
 
 import { createMidnightChainConfig, type MidnightNodeConfig } from "@/lib/config/midnight";
 
-import type { Wallet, WalletTransactions } from "./Wallet";
+import type { Wallet, WalletAddressSnapshot, WalletTransactions } from "./Wallet";
 
 /** Injected connector identity and its protocol-defined connection capability. */
 export type BrowserWalletChoice = Omit<InitialAPI, "connect"> & {
   key: string;
   connector: InitialAPI;
 };
+
+type ShieldedAddresses = Awaited<ReturnType<ConnectedAPI["getShieldedAddresses"]>>;
+type AddressListener = (snapshot: WalletAddressSnapshot) => void;
+type DustAddressCapability = Pick<ConnectedAPI, "getDustAddress">;
 
 const injectedConnectorSchema = z.custom<InitialAPI>(
   (value) =>
@@ -67,8 +74,11 @@ export class BrowserWallet implements Wallet {
   private active = true;
   private api?: ConnectedAPI;
   private pending?: Promise<void>;
-  private addresses?: Awaited<ReturnType<ConnectedAPI["getShieldedAddresses"]>>;
+  private shieldedAddresses?: ShieldedAddresses;
   private unshielded = "";
+  private dust = "";
+  private dustUnavailable?: string;
+  private addressListener?: AddressListener;
   private config?: MidnightNodeConfig;
   private transactionProvider?: WalletTransactions;
   private unsupported?: string;
@@ -115,12 +125,17 @@ export class BrowserWallet implements Wallet {
   /** @inheritdoc */
   get shieldedAddress(): string {
     this.assertActive();
-    return this.addresses?.shieldedAddress ?? "";
+    return this.shieldedAddresses?.shieldedAddress ?? "";
   }
   /** @inheritdoc */
   get unshieldedAddress(): string {
     this.assertActive();
     return this.unshielded;
+  }
+  /** @inheritdoc */
+  get dustAddress(): string | undefined {
+    this.assertActive();
+    return this.dust || undefined;
   }
   private assertActive(): void {
     if (!this.active) throw new Error("Midnight wallet session changed. Connect again.");
@@ -128,15 +143,19 @@ export class BrowserWallet implements Wallet {
   /**
    * Coalesces extension approval and validates reported network and transaction capabilities.
    *
+   * @param onAddresses - Receives immutable cumulative address availability for this connection.
    * @returns Completion after addresses and available capabilities are captured.
    * @throws {Error} If approval, network validation or session ownership fails.
    */
-  connect(): Promise<void> {
+  connect(onAddresses: AddressListener = () => undefined): Promise<void> {
     this.assertActive();
-    this.pending ??= this.start().catch((error: unknown) => {
-      void this.disconnect();
-      throw error;
-    });
+    if (!this.pending) {
+      this.addressListener = onAddresses;
+      this.pending = this.start().catch((error: unknown) => {
+        void this.disconnect();
+        throw error;
+      });
+    }
     return this.pending;
   }
   private async start(): Promise<void> {
@@ -160,19 +179,26 @@ export class BrowserWallet implements Wallet {
       nodeUrl: configuration.substrateNodeUri,
       proofServerUrl: this.expected.proofServerUrl,
     });
-    const [addresses, unshielded] = await Promise.all([
-      api.getShieldedAddresses(),
-      api.getUnshieldedAddress(),
+    await Promise.all([
+      this.captureShieldedAddress(api, configuration.networkId),
+      this.captureUnshieldedAddress(api, configuration.networkId),
+      this.captureDustAddress(api, configuration.networkId),
     ]);
     this.assertActive();
     setNetworkId(configuration.networkId);
-    this.addresses = addresses;
-    this.unshielded = unshielded.unshieldedAddress;
+    const shieldedAddresses = this.shieldedAddresses;
+    if (!shieldedAddresses) throw new Error("The connector did not provide a shielded address.");
     const coinKey = ShieldedCoinPublicKey.codec
-      .decode(configuration.networkId, MidnightBech32m.parse(addresses.shieldedCoinPublicKey))
+      .decode(
+        configuration.networkId,
+        MidnightBech32m.parse(shieldedAddresses.shieldedCoinPublicKey),
+      )
       .toHexString();
     const encryptionKey = ShieldedEncryptionPublicKey.codec
-      .decode(configuration.networkId, MidnightBech32m.parse(addresses.shieldedEncryptionPublicKey))
+      .decode(
+        configuration.networkId,
+        MidnightBech32m.parse(shieldedAddresses.shieldedEncryptionPublicKey),
+      )
       .toHexString();
     if (
       typeof api.balanceUnsealedTransaction !== "function" ||
@@ -216,6 +242,90 @@ export class BrowserWallet implements Wallet {
       },
     };
   }
+  private publishAddressSnapshot(networkId: MidnightNodeConfig["networkId"]): void {
+    if (!this.active || !this.addressListener) return;
+    this.addressListener(
+      Object.freeze({
+        networkId,
+        ...(this.shieldedAddresses
+          ? { shieldedAddress: this.shieldedAddresses.shieldedAddress }
+          : {}),
+        ...(this.unshielded ? { unshieldedAddress: this.unshielded } : {}),
+        ...(this.dust ? { dustAddress: this.dust } : {}),
+        ...(this.dustUnavailable ? { dustUnavailable: this.dustUnavailable } : {}),
+      }),
+    );
+  }
+  private clearAddressSnapshot(): void {
+    const listener = this.addressListener;
+    const networkId = this.config?.networkId;
+    this.shieldedAddresses = undefined;
+    this.unshielded = "";
+    this.dust = "";
+    this.dustUnavailable = undefined;
+    this.addressListener = undefined;
+    if (listener && networkId) listener(Object.freeze({ networkId }));
+  }
+  private async captureShieldedAddress(
+    api: ConnectedAPI,
+    networkId: MidnightNodeConfig["networkId"],
+  ): Promise<void> {
+    const shieldedAddresses = await api.getShieldedAddresses();
+    const coinPublicKey = ShieldedCoinPublicKey.codec.decode(
+      networkId,
+      MidnightBech32m.parse(shieldedAddresses.shieldedCoinPublicKey),
+    );
+    const encryptionPublicKey = ShieldedEncryptionPublicKey.codec.decode(
+      networkId,
+      MidnightBech32m.parse(shieldedAddresses.shieldedEncryptionPublicKey),
+    );
+    const expectedAddress = MidnightBech32m.encode(
+      networkId,
+      new ShieldedAddress(coinPublicKey, encryptionPublicKey),
+    ).toString();
+    if (expectedAddress !== shieldedAddresses.shieldedAddress)
+      throw new Error(
+        "The connector returned shielded keys that do not match its shielded address.",
+      );
+    this.assertActive();
+    this.shieldedAddresses = shieldedAddresses;
+    this.publishAddressSnapshot(networkId);
+  }
+  private async captureUnshieldedAddress(
+    api: ConnectedAPI,
+    networkId: MidnightNodeConfig["networkId"],
+  ): Promise<void> {
+    const { unshieldedAddress } = await api.getUnshieldedAddress();
+    MidnightBech32m.parse(unshieldedAddress).decode(UnshieldedAddress, networkId);
+    this.assertActive();
+    this.unshielded = unshieldedAddress;
+    this.publishAddressSnapshot(networkId);
+  }
+  private async captureDustAddress(
+    api: ConnectedAPI,
+    networkId: MidnightNodeConfig["networkId"],
+  ): Promise<void> {
+    const getDustAddress = (api as Partial<DustAddressCapability>).getDustAddress;
+    if (typeof getDustAddress !== "function") {
+      this.assertActive();
+      this.dustUnavailable = "This connector does not expose a DUST address.";
+      this.publishAddressSnapshot(networkId);
+      return;
+    }
+    try {
+      const { dustAddress } = await getDustAddress.call(api);
+      MidnightBech32m.parse(dustAddress).decode(DustAddress, networkId);
+      this.assertActive();
+      this.dust = dustAddress;
+      this.dustUnavailable = undefined;
+      this.publishAddressSnapshot(networkId);
+    } catch {
+      this.assertActive();
+      this.dust = "";
+      this.dustUnavailable = "This connector could not provide a valid DUST address.";
+      this.publishAddressSnapshot(networkId);
+    }
+  }
   private async requireApi(): Promise<ConnectedAPI> {
     this.assertActive();
     const api = this.api;
@@ -258,8 +368,7 @@ export class BrowserWallet implements Wallet {
     this.active = false;
     this.api = undefined;
     this.pending = undefined;
-    this.addresses = undefined;
-    this.unshielded = "";
+    this.clearAddressSnapshot();
     this.config = undefined;
     this.transactionProvider = undefined;
     return Promise.resolve();

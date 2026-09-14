@@ -1,12 +1,21 @@
 import { LedgerParameters } from "@midnightntwrk/ledger-v9";
+import {
+  DustAddress,
+  MidnightBech32m,
+  ShieldedAddress,
+  ShieldedCoinPublicKey,
+  ShieldedEncryptionPublicKey,
+} from "@midnightntwrk/wallet-sdk-address-format";
 import type { FacadeState } from "@midnightntwrk/wallet-sdk-facade";
 import { HDWallet } from "@midnightntwrk/wallet-sdk-hd";
+import { MidnightNetwork } from "@sig-net/midnight";
 import { Subject } from "rxjs";
 import { expect, it, vi } from "vitest";
 
 import { createMidnightChainConfig } from "@/lib/config/midnight";
 import * as seedlib from "@/lib/midnight/seedlib";
 import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
+import type { WalletAddressSnapshot } from "@/lib/midnight/wallet/Wallet";
 
 import { createSeedWalletFixture } from "./seed-wallet-fixture";
 import { createWalletFacadeFixture } from "./wallet-facade-fixture";
@@ -19,6 +28,58 @@ it("accepts every SDK seed length from 16 through 64 bytes and rejects values ou
   for (const length of [0, 15, 65])
     expect(HDWallet.fromSeed(new Uint8Array(length)).type).toBe("seedError");
   expect(LedgerParameters.initialParameters().dust).toBeDefined();
+});
+
+it("publishes all encoded addresses before facade construction across every network", async () => {
+  const seed = "07".repeat(32);
+  for (const networkId of Object.values(MidnightNetwork)) {
+    const configuration = createMidnightChainConfig({
+      networkId,
+      indexerUrl: "http://127.0.0.1:8088/api/v3/graphql",
+      indexerWsUrl: "ws://127.0.0.1:8088/api/v3/graphql/ws",
+      nodeUrl: "http://127.0.0.1:9944",
+      proofServerUrl: "http://127.0.0.1:6300",
+    });
+    const { facade, keys } = await createWalletFacadeFixture(configuration, seed);
+    const construction = Promise.withResolvers<seedlib.WalletFacade>();
+    vi.mocked(seedlib.initialiseWalletFacade).mockReturnValueOnce(construction.promise);
+    const wallet = new SeedWallet(configuration, seed);
+    const onAddresses = vi.fn<(snapshot: WalletAddressSnapshot) => void>();
+    const pending = wallet.initialise(undefined, onAddresses);
+
+    expect(onAddresses).toHaveBeenCalledTimes(1);
+    const snapshotCall = onAddresses.mock.calls[0];
+    if (!snapshotCall) throw new Error("Address callback did not receive a snapshot.");
+    const [snapshot] = snapshotCall;
+    expect(snapshot).toStrictEqual({
+      networkId,
+      shieldedAddress: wallet.shieldedAddress,
+      unshieldedAddress: wallet.unshieldedAddress,
+      dustAddress: wallet.dustAddress,
+    });
+    expect(Object.isFrozen(snapshot)).toBe(true);
+
+    const shielded = new ShieldedAddress(
+      ShieldedCoinPublicKey.fromHexString(keys.shieldedSecretKeys.coinPublicKey),
+      ShieldedEncryptionPublicKey.fromHexString(keys.shieldedSecretKeys.encryptionPublicKey),
+    );
+    const shieldedEncoded = MidnightBech32m.encode(networkId, shielded);
+    expect(ShieldedAddress.codec.decode(networkId, shieldedEncoded).equals(shielded)).toBe(true);
+    expect(snapshot.shieldedAddress).toBe(shieldedEncoded.toString());
+
+    const unshieldedEncoded = keys.unshieldedKeystore.getBech32Address().toString();
+    expect(snapshot.unshieldedAddress).toBe(unshieldedEncoded);
+
+    const dust = new DustAddress(keys.dustSecretKey.publicKey);
+    const dustEncoded = MidnightBech32m.encode(networkId, dust);
+    expect(DustAddress.codec.decode(networkId, dustEncoded).equals(dust)).toBe(true);
+    expect(snapshot.dustAddress).toBe(dustEncoded.toString());
+
+    const disconnect = wallet.disconnect();
+    construction.resolve(facade);
+    await expect(pending).rejects.toThrow("disconnected");
+    await disconnect;
+  }
 });
 
 it.each(["construction", "start", "sync", "connected"] as const)(

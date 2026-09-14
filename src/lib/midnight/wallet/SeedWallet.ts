@@ -1,5 +1,11 @@
 import { setNetworkId } from "@midnight-ntwrk/midnight-js/network-id";
-import { MidnightBech32m } from "@midnightntwrk/wallet-sdk-address-format";
+import {
+  DustAddress,
+  MidnightBech32m,
+  ShieldedAddress,
+  ShieldedCoinPublicKey,
+  ShieldedEncryptionPublicKey,
+} from "@midnightntwrk/wallet-sdk-address-format";
 
 import type { MidnightNodeConfig } from "@/lib/config/midnight";
 
@@ -10,7 +16,7 @@ import {
   initialiseWalletFacade,
   type WalletFacade,
 } from "../seedlib";
-import type { Wallet, WalletTransactions } from "./Wallet";
+import type { Wallet, WalletAddressSnapshot, WalletTransactions } from "./Wallet";
 
 type State = Awaited<ReturnType<WalletFacade["waitForSyncedState"]>>;
 
@@ -40,7 +46,9 @@ export class SeedWallet implements Wallet {
   private stopping?: Promise<void>;
   private stopped = false;
   private cancel?: () => void;
-  private address = "";
+  private shielded = "";
+  private unshielded = "";
+  private dust = "";
   private keys?: AccountKeys;
   private funding?: Promise<void>;
 
@@ -59,10 +67,14 @@ export class SeedWallet implements Wallet {
    * Coalesces concurrent initialisation while allowing disconnect to reject pending callers.
    *
    * @param onProgress - Receives synchronisation progress for this session.
+   * @param onAddresses - Receives the public addresses derived for this session.
    * @returns Completion once addresses and balances have synchronised.
    * @throws {Error} If seed derivation, synchronisation or ownership fails.
    */
-  initialise(onProgress: (status: string) => void = () => undefined): Promise<void> {
+  initialise(
+    onProgress: (status: string) => void = () => undefined,
+    onAddresses: (snapshot: WalletAddressSnapshot) => void = () => undefined,
+  ): Promise<void> {
     if (this.stopped) return Promise.reject(new Error("Wallet disconnected."));
     if (this.initialising) return this.initialising;
     const cancelled = new Promise<never>((_resolve, reject) => {
@@ -70,7 +82,7 @@ export class SeedWallet implements Wallet {
         reject(new Error("Wallet disconnected."));
       };
     });
-    this.work = this.start(onProgress);
+    this.work = this.start(onProgress, onAddresses);
     this.initialising = Promise.race([this.work, cancelled]);
     return this.initialising;
   }
@@ -79,12 +91,34 @@ export class SeedWallet implements Wallet {
     if (this.stopped) throw new Error("Wallet disconnected.");
   }
 
-  private async start(onProgress: (status: string) => void): Promise<void> {
+  private async start(
+    onProgress: (status: string) => void,
+    onAddresses: (snapshot: WalletAddressSnapshot) => void,
+  ): Promise<void> {
     try {
       setNetworkId(this.config.networkId);
       const keys = deriveAccountKeys(this.seed, this.config.networkId);
       this.keys = keys;
+      const shieldedAddress = new ShieldedAddress(
+        ShieldedCoinPublicKey.fromHexString(keys.shieldedSecretKeys.coinPublicKey),
+        ShieldedEncryptionPublicKey.fromHexString(keys.shieldedSecretKeys.encryptionPublicKey),
+      );
+      this.shielded = MidnightBech32m.encode(this.config.networkId, shieldedAddress).toString();
+      this.unshielded = keys.unshieldedKeystore.getBech32Address().toString();
+      this.dust = MidnightBech32m.encode(
+        this.config.networkId,
+        new DustAddress(keys.dustSecretKey.publicKey),
+      ).toString();
       this.seed = "";
+      this.assertActive();
+      onAddresses(
+        Object.freeze({
+          networkId: this.config.networkId,
+          shieldedAddress: this.shielded,
+          unshieldedAddress: this.unshielded,
+          dustAddress: this.dust,
+        }),
+      );
       const facade = await initialiseWalletFacade(keys, this.config);
       this.facade = facade;
       this.assertActive();
@@ -121,10 +155,6 @@ export class SeedWallet implements Wallet {
         };
       });
       this.assertActive();
-      this.address = MidnightBech32m.encode(
-        this.config.networkId,
-        this.state().shielded.address,
-      ).toString();
     } catch (error) {
       this.stopped = true;
       this.seed = "";
@@ -139,7 +169,9 @@ export class SeedWallet implements Wallet {
     this.provider = undefined;
     this.latestState = undefined;
     this.keys = undefined;
-    this.address = "";
+    this.shielded = "";
+    this.unshielded = "";
+    this.dust = "";
     if (!this.facade) return Promise.resolve();
     this.stopping ??= this.facade.stop();
     return this.stopping;
@@ -155,7 +187,9 @@ export class SeedWallet implements Wallet {
     this.provider = undefined;
     this.latestState = undefined;
     this.keys = undefined;
-    this.address = "";
+    this.shielded = "";
+    this.unshielded = "";
+    this.dust = "";
     // A start already in flight can open connections after stop, so teardown awaits it.
     return (this.work ?? Promise.resolve()).catch(() => undefined).then(() => this.stopFacade());
   }
@@ -169,7 +203,7 @@ export class SeedWallet implements Wallet {
   /** @inheritdoc */
   get shieldedAddress(): string {
     this.assertActive();
-    return this.address;
+    return this.shielded;
   }
   getCoinPublicKey: WalletTransactions["getCoinPublicKey"] = () =>
     this.requireProvider().getCoinPublicKey();
@@ -188,8 +222,15 @@ export class SeedWallet implements Wallet {
   /** @inheritdoc */
   get unshieldedAddress(): string {
     this.assertActive();
-    if (!this.keys) throw new Error("Wallet is still synchronising.");
-    return this.keys.unshieldedKeystore.getBech32Address().toString();
+    if (!this.unshielded) throw new Error("Wallet is still synchronising.");
+    return this.unshielded;
+  }
+
+  /** @inheritdoc */
+  get dustAddress(): string {
+    this.assertActive();
+    if (!this.dust) throw new Error("Wallet is still synchronising.");
+    return this.dust;
   }
 
   /** @inheritdoc */

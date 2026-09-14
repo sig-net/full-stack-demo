@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, renderHook, waitFor } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
 import { JSDOM } from "jsdom";
@@ -10,7 +11,12 @@ import { WalletMenu } from "@/components/wallet-menu";
 import { createMidnightChainConfig } from "@/lib/config/midnight";
 import * as seedlib from "@/lib/midnight/seedlib";
 import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
-import type { Wallet } from "@/lib/midnight/wallet/Wallet";
+import type { Wallet, WalletAddressSnapshot } from "@/lib/midnight/wallet/Wallet";
+import { MINIMUM_MIDNIGHT_DUST } from "@/lib/wallet-funding";
+import {
+  MidnightReadinessProvider,
+  useMidnightReadiness,
+} from "@/providers/midnight-readiness-context";
 import { MidnightWalletProvider, useMidnightConnection } from "@/providers/midnight-wallet-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import * as vault from "@/providers/vault-context";
@@ -39,6 +45,74 @@ afterEach(() => {
   dom.window.close();
 });
 
+it.each(["synced", "funded", "failed"] as const)(
+  "publishes addresses before SDK startup while readiness stays unavailable until %s",
+  async (settlement) => {
+    const fixture = await createSeedWalletFixture();
+    const configuration = createMidnightChainConfig({});
+    const query = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result, unmount } = renderHook(
+      () => ({ connection: useMidnightConnection(), readiness: useMidnightReadiness() }),
+      {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={query}>
+            <MidnightWalletProvider configuration={configuration}>
+              <MidnightReadinessProvider>{children}</MidnightReadinessProvider>
+            </MidnightWalletProvider>
+          </QueryClientProvider>
+        ),
+      },
+    );
+    let pending: Promise<Wallet | null> | undefined;
+    act(() => {
+      pending = result.current.connection.installSeedWallet("07".repeat(32)).catch(() => null);
+    });
+    await waitFor(() => {
+      expect(result.current.connection.addresses?.dustAddress).toBeTruthy();
+    });
+    const addresses = result.current.connection.addresses;
+    expect(addresses?.shieldedAddress).toBeTruthy();
+    expect(addresses?.unshieldedAddress).toBeTruthy();
+    expect(result.current.connection.wallet).toBeNull();
+    expect(result.current.readiness.ready).toBe(false);
+    expect(result.current.readiness.balances.fetchStatus).toBe("idle");
+    const dustRead = vi.spyOn(SeedWallet.prototype, "getDustBalance");
+    if (settlement === "funded") dustRead.mockResolvedValue(MINIMUM_MIDNIGHT_DUST);
+    else dustRead.mockRejectedValue(new Error("balance unavailable"));
+    await act(async () => {
+      fixture.construction.resolve(fixture.facade);
+      await fixture.startEntered.promise;
+      fixture.starting.resolve(undefined);
+      await fixture.subscribed.promise;
+    });
+    expect(result.current.connection.addresses).toEqual(addresses);
+    expect(result.current.connection.wallet).toBeNull();
+    expect(dustRead).not.toHaveBeenCalled();
+    await act(async () => {
+      if (settlement === "failed") fixture.states.error(new Error("sync failed"));
+      else {
+        vi.spyOn(fixture.state, "isSynced", "get").mockReturnValue(true);
+        fixture.states.next(fixture.state);
+      }
+      await pending;
+    });
+    const failed = settlement === "failed";
+    expect(result.current.connection.addresses).toEqual(failed ? null : addresses);
+    expect(result.current.connection.wallet === null).toBe(failed);
+    expect(result.current.connection.error).toBe(failed ? "sync failed" : null);
+    await waitFor(() => {
+      expect(result.current.readiness.balances.isError).toBe(settlement === "synced");
+      expect(result.current.readiness.balances.isSuccess).toBe(settlement === "funded");
+    });
+    expect(result.current.readiness.ready).toBe(settlement === "funded");
+    unmount();
+    query.clear();
+    await waitFor(() => {
+      expect(fixture.stop).toHaveBeenCalledTimes(1);
+    });
+  },
+);
+
 it.each(["resolve", "reject"] as const)(
   "keeps the current wallet after an obsolete connection's late %s",
   async (settlement) => {
@@ -47,13 +121,15 @@ it.each(["resolve", "reject"] as const)(
       wallet: SeedWallet;
       ready: PromiseWithResolvers<undefined>;
       progress: ((status: string) => void) | undefined;
+      addresses: ((snapshot: WalletAddressSnapshot) => void) | undefined;
     }[] = [];
     vi.spyOn(SeedWallet.prototype, "initialise").mockImplementation(function (
       this: SeedWallet,
       progress,
+      addresses,
     ) {
       const ready = Promise.withResolvers<undefined>();
-      builds.push({ wallet: this, ready, progress });
+      builds.push({ wallet: this, ready, progress, addresses });
       return ready.promise;
     });
     const stops = vi.spyOn(SeedWallet.prototype, "disconnect");
@@ -84,7 +160,14 @@ it.each(["resolve", "reject"] as const)(
     await waitFor(() => {
       expect(builds).toHaveLength(1);
     });
+    act(() => {
+      builds[0]?.addresses?.({ networkId: configuration.networkId, shieldedAddress: "first" });
+    });
+    expect(result.current.addresses?.shieldedAddress).toBe("first");
+    expect(result.current.wallet).toBeNull();
+    expect(result.current.connecting).toBe(true);
     const second = begin("08".repeat(32));
+    expect(result.current.addresses).toBeNull();
     expect(result.current.getGeneration()).toBeGreaterThan(firstGeneration);
     await waitFor(() => {
       expect(builds).toHaveLength(2);
@@ -94,6 +177,7 @@ it.each(["resolve", "reject"] as const)(
     if (!previous || !current) throw new Error("Expected both connection generations");
     expect(stops.mock.contexts).toContain(previous.wallet);
     await act(async () => {
+      current.addresses?.({ networkId: configuration.networkId, shieldedAddress: "current" });
       current.ready.resolve(undefined);
       await second;
     });
@@ -106,8 +190,10 @@ it.each(["resolve", "reject"] as const)(
     expect(result.current.connecting).toBe(false);
     act(() => {
       previous.progress?.("obsolete");
+      previous.addresses?.({ networkId: configuration.networkId, shieldedAddress: "obsolete" });
     });
     expect(result.current.syncStatus).not.toBe("obsolete");
+    expect(result.current.addresses?.shieldedAddress).toBe("current");
     let rebuilding: Promise<Wallet> | undefined;
     act(() => {
       rebuilding = result.current.rebuild();
@@ -121,6 +207,15 @@ it.each(["resolve", "reject"] as const)(
     if (!recovery) throw new Error("Expected recovery wallet");
     expect(vi.mocked(SeedWallet).mock.calls[2]?.[1]).toBe("08".repeat(32));
     expect(stops.mock.contexts).toContain(current.wallet);
+    expect(result.current.addresses).toBeNull();
+    act(() => {
+      recovery.addresses?.({ networkId: configuration.networkId, shieldedAddress: "recovery" });
+      current.addresses?.({
+        networkId: configuration.networkId,
+        shieldedAddress: "obsolete same seed",
+      });
+    });
+    expect(result.current.addresses?.shieldedAddress).toBe("recovery");
     const recoveryGeneration = result.current.getGeneration();
     act(() => {
       result.current.disconnect();
@@ -132,6 +227,7 @@ it.each(["resolve", "reject"] as const)(
     });
     await expect(rebuilding).rejects.toThrow("superseded");
     expect(result.current.wallet).toBeNull();
+    expect(result.current.addresses).toBeNull();
     await expect(result.current.rebuild()).rejects.toThrow("Connect");
     unmount();
     const fresh = renderHook(useMidnightConnection, {
@@ -140,6 +236,10 @@ it.each(["resolve", "reject"] as const)(
       ),
     });
     expect(fresh.result.current.wallet).toBeNull();
+    act(() => {
+      recovery.addresses?.({ networkId: configuration.networkId, shieldedAddress: "late" });
+    });
+    expect(fresh.result.current.addresses).toBeNull();
     const before = builds.length;
     await act(async () => {
       await expect(fresh.result.current.installSeedWallet("not a seed")).rejects.toThrow(

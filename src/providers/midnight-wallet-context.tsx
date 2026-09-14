@@ -15,10 +15,11 @@ import {
 import { getMidnightChainConfig, type MidnightNodeConfig } from "@/lib/config/midnight";
 import { resolveMidnightConfiguration } from "@/lib/config/runtime";
 import type { BrowserWalletChoice } from "@/lib/midnight/wallet/BrowserWallet";
-import type { Wallet } from "@/lib/midnight/wallet/Wallet";
+import type { Wallet, WalletAddressSnapshot } from "@/lib/midnight/wallet/Wallet";
 
 interface MidnightWalletContextValue {
   wallet: Wallet | null;
+  addresses: WalletAddressSnapshot | null;
   connecting: boolean;
   error: string | null;
   syncStatus: string;
@@ -49,6 +50,7 @@ export function MidnightWalletProvider({
   configuration?: MidnightNodeConfig;
 }): JSX.Element {
   const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [addresses, setAddresses] = useState<WalletAddressSnapshot | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState("");
@@ -76,6 +78,7 @@ export function MidnightWalletProvider({
     void active.current?.disconnect().catch(() => undefined);
     active.current = null;
     setWallet(null);
+    setAddresses(null);
     setConnecting(false);
     setSyncStatus("");
     setError(null);
@@ -104,11 +107,20 @@ export function MidnightWalletProvider({
       if (attempt !== generation.current) throw new Error("Wallet connection superseded.");
       const candidate = new SeedWallet(configuration.current, seed);
       active.current = candidate;
-      await candidate.initialise((status) => {
-        if (attempt === generation.current) setSyncStatus(status);
-      });
+      await candidate.initialise(
+        (status) => {
+          if (attempt === generation.current) setSyncStatus(status);
+        },
+        (snapshot) => {
+          if (
+            attempt === generation.current &&
+            active.current === candidate &&
+            snapshot.networkId === configuration.current?.networkId
+          )
+            setAddresses(snapshot);
+        },
+      );
       if (attempt !== generation.current) {
-        await candidate.disconnect();
         throw new Error("Wallet connection superseded.");
       }
       setWallet(candidate);
@@ -119,6 +131,8 @@ export function MidnightWalletProvider({
           void active.current?.disconnect().catch(() => undefined);
           active.current = null;
           installedSeed.current = null;
+          setWallet(null);
+          setAddresses(null);
           setSyncStatus("");
           setError(
             error instanceof Error ? error.message : "Midnight seed wallet connection failed.",
@@ -156,9 +170,15 @@ export function MidnightWalletProvider({
         setError(error.message);
       });
       active.current = candidate;
-      await candidate.connect();
+      await candidate.connect((snapshot) => {
+        if (
+          attempt === generation.current &&
+          active.current === candidate &&
+          snapshot.networkId === configuration.current?.networkId
+        )
+          setAddresses(snapshot);
+      });
       if (attempt !== generation.current) {
-        await candidate.disconnect();
         throw new Error("Wallet connection superseded.");
       }
       setWallet(candidate);
@@ -209,6 +229,10 @@ export function MidnightWalletProvider({
     <MidnightWalletContext.Provider
       value={{
         wallet,
+        addresses:
+          suppliedConfiguration && addresses?.networkId !== suppliedConfiguration.networkId
+            ? null
+            : addresses,
         connecting,
         error,
         syncStatus,

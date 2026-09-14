@@ -25,6 +25,7 @@ import { WalletMark } from "./wallet-mark";
 export interface WalletMenuProps {
   chainName: string;
   wallet: WalletMetadata | null;
+  accountDetails?: ReactNode;
   connecting: boolean;
   error?: string | null;
   connectionUnavailable?: string | null;
@@ -48,6 +49,7 @@ export interface WalletMenuProps {
  * @param root0 - Wallet menu properties.
  * @param root0.chainName - Chain label.
  * @param root0.wallet - Connected wallet metadata.
+ * @param root0.accountDetails - Optional replacement for the connected account identifier.
  * @param root0.connecting - Connection state.
  * @param root0.error - Connection error text.
  * @param root0.connectionUnavailable - Configuration reason disabling connection actions.
@@ -63,6 +65,7 @@ export interface WalletMenuProps {
 export function WalletMenu({
   chainName,
   wallet,
+  accountDetails,
   connecting,
   error,
   connectionUnavailable,
@@ -128,11 +131,15 @@ export function WalletMenu({
                 <span className="break-all">{wallet.name}</span>
               </p>
               <p>{wallet.kind === "seed" ? "Seed wallet" : "Browser wallet"} · Connected</p>
-              <PublicIdentifier
-                inMenu
-                value={wallet.accountDetail}
-                label={`${chainName} wallet address`}
-              />
+              {accountDetails === undefined ? (
+                <PublicIdentifier
+                  inMenu
+                  value={wallet.accountDetail}
+                  label={`${chainName} wallet address`}
+                />
+              ) : (
+                accountDetails
+              )}
             </div>
           )}
           {children}

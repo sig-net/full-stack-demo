@@ -12,6 +12,7 @@ import { useMidnightConnection } from "@/providers/midnight-wallet-context";
 import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 import { useVault } from "@/providers/vault-context";
 
+import { PublicIdentifier } from "./ui/public-identifier";
 import { WalletMenu } from "./wallet-menu";
 
 /**
@@ -30,10 +31,36 @@ export function MidnightWalletButton(): React.JSX.Element {
   const refresh = (): void => {
     setChoices(discoverBrowserWallets());
   };
+  const snapshot = connection.addresses;
+  const showAddresses = connection.connecting || snapshot !== null || connection.wallet !== null;
+  const addressRows = [
+    {
+      key: "shielded",
+      label: "Shielded",
+      copyLabel: "Midnight shielded address",
+      value: snapshot?.shieldedAddress ?? connection.wallet?.shieldedAddress,
+      unavailable: undefined,
+    },
+    {
+      key: "unshielded",
+      label: "Unshielded",
+      copyLabel: "Midnight unshielded address",
+      value: snapshot?.unshieldedAddress ?? connection.wallet?.unshieldedAddress,
+      unavailable: undefined,
+    },
+    {
+      key: "dust",
+      label: "DUST",
+      copyLabel: "Midnight DUST address",
+      value: snapshot?.dustAddress ?? connection.wallet?.dustAddress,
+      unavailable: snapshot?.dustUnavailable,
+    },
+  ] as const;
   return (
     <WalletMenu
       chainName="Midnight"
       wallet={connection.wallet}
+      accountDetails={null}
       connecting={connection.connecting}
       progress={connection.syncStatus}
       error={connection.error}
@@ -59,11 +86,30 @@ export function MidnightWalletButton(): React.JSX.Element {
       }}
       disconnect={vault.disconnect}
     >
-      <div className="ds-menu-section">
-        {connection.wallet?.transactionUnavailable && (
-          <p>{connection.wallet.transactionUnavailable}</p>
-        )}
-      </div>
+      {showAddresses && (
+        <div className="ds-menu-section">
+          <div className="ds-stack-control">
+            {addressRows.map((address) => (
+              <div key={address.key}>
+                <p className="ds-label">{address.label}</p>
+                {address.value ? (
+                  <PublicIdentifier inMenu value={address.value} label={address.copyLabel} />
+                ) : (
+                  <p className="ds-muted">
+                    {address.unavailable ??
+                      (connection.wallet
+                        ? "Not available from this wallet."
+                        : "Not available yet.")}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+          {connection.wallet?.transactionUnavailable && (
+            <p>{connection.wallet.transactionUnavailable}</p>
+          )}
+        </div>
+      )}
     </WalletMenu>
   );
 }
