@@ -3,10 +3,13 @@
 #   -> europe-west1-docker.pkg.dev/near-cs-dev/midnight/full-stack-demo-ui:v1.2.0-rc.1
 # Stable tags (v1.2.0) must point at a commit on main; -rc tags may come from any branch.
 #
-# Each architecture builds on its native runner and pushes by digest; the merge job stitches the
-# two digests into one multi-architecture manifest under the tag. Every job that touches the
-# registry runs in the reviewer-gated `deploy` environment, which holds the service-account key
-# and the deployment's public NEXT_PUBLIC_ variables (inlined into the browser bundle at build).
+# One reviewer approval, at the start: `publish` is the only job in the reviewer-gated `deploy`
+# environment, and it pends for approval as soon as the tag checks pass. It holds the
+# service-account key and the deployment's public NEXT_PUBLIC_ variables (inlined into the
+# browser bundle at build). It builds linux/amd64 natively, while `build-arm64` builds
+# linux/arm64 on its native runner in parallel without credentials and hands the image over
+# as a run artifact. `publish` then pushes both architectures under `<tag>-linux-<arch>` and
+# combines them into the multi-architecture manifest `<tag>`.
 # Layers are not cached between runs: a publish job must not consume a poisonable cache.
 
 name: docker-publish
@@ -54,19 +57,55 @@ jobs:
             exit 1
           }
 
-  build:
+  # Builds without credentials, so it needs no approval. Its output is an image tarball that
+  # only the approved `publish` job can push.
+  build-arm64:
     needs: verify-tag
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-24.04
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Collect the deployment's public configuration as build arguments
+        id: public-config
+        env:
+          DEPLOY_VARIABLES: ${{ toJSON(vars) }}
+        run: |
+          {
+            echo 'build-args<<END_OF_BUILD_ARGS'
+            printf '%s' "$DEPLOY_VARIABLES" |
+              jq -r 'to_entries[] | select(.key | startswith("NEXT_PUBLIC_")) | select(.value != "") | "\(.key)=\(.value)"'
+            echo 'END_OF_BUILD_ARGS'
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Build the linux/arm64 image into a tarball
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/arm64
+          build-args: ${{ steps.public-config.outputs.build-args }}
+          tags: ${{ env.IMAGE }}:${{ github.ref_name }}-linux-arm64
+          outputs: type=docker,dest=/tmp/image-linux-arm64.tar
+          provenance: false
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-linux-arm64
+          path: /tmp/image-linux-arm64.tar
+          if-no-files-found: error
+          retention-days: 1
+          # Prover keys dominate the image and do not compress.
+          compression-level: 0
+
+  publish:
+    needs: verify-tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
     environment: deploy
+    permissions:
+      contents: read
+      # Polls this run's jobs for the arm64 build and downloads its artifact.
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -88,56 +127,51 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: _json_key
           password: ${{ secrets.GOOGLE_CREDENTIALS }}
-      - name: Build and push by digest
-        id: build
+      - name: Build and push the linux/amd64 image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64
           build-args: ${{ steps.public-config.outputs.build-args }}
-          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
-      - name: Export digest
+          tags: ${{ env.IMAGE }}:${{ github.ref_name }}-linux-amd64
+          push: true
+          provenance: false
+      - name: Free the build cache before loading the arm64 image
+        run: docker buildx prune --all --force
+      - name: Wait for the arm64 build
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${DIGEST#sha256:}"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: digest-${{ matrix.runner }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  merge:
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    environment: deploy
-    steps:
+          deadline=$(( $(date +%s) + 5400 ))
+          while :; do
+            state="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "build-arm64") | "\(.status) \(.conclusion)"')"
+            case "$state" in
+              "completed success") break ;;
+              completed*)
+                echo "::error::build-arm64 ended with ${state#completed }"
+                exit 1
+                ;;
+            esac
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::build-arm64 did not finish within 90 minutes (state: ${state:-not started})"
+              exit 1
+            fi
+            sleep 30
+          done
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: /tmp/digests
-          pattern: digest-*
-          merge-multiple: true
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: _json_key
-          password: ${{ secrets.GOOGLE_CREDENTIALS }}
-      - name: Create and push the multi-architecture manifest
-        working-directory: /tmp/digests
+          name: image-linux-arm64
+          path: /tmp
+      - name: Push the linux/arm64 image
         run: |
-          set -eu
-          set --
-          for digest in *; do
-            set -- "$@" "$IMAGE@sha256:$digest"
-          done
-          if [ "$#" -ne 2 ]; then
-            echo "::error::expected one digest per architecture, found $#"
-            exit 1
-          fi
-          docker buildx imagetools create --tag "$IMAGE:$GITHUB_REF_NAME" "$@"
+          docker load --input /tmp/image-linux-arm64.tar
+          rm /tmp/image-linux-arm64.tar
+          docker push "$IMAGE:$GITHUB_REF_NAME-linux-arm64"
+      - name: Create and push the multi-architecture manifest
+        run: |
+          docker buildx imagetools create --tag "$IMAGE:$GITHUB_REF_NAME" \
+            "$IMAGE:$GITHUB_REF_NAME-linux-amd64" \
+            "$IMAGE:$GITHUB_REF_NAME-linux-arm64"
       - name: Inspect the published manifest
         run: docker buildx imagetools inspect "$IMAGE:$GITHUB_REF_NAME"
