@@ -1,10 +1,11 @@
 "use client";
 
-import { Check, Copy, Expand } from "lucide-react";
+import { Check, Copy, Expand, ExternalLink } from "lucide-react";
 import type * as React from "react";
 
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { formatAddress } from "@/lib/address-utils";
+import type { ExplorerAvailability } from "@/lib/explorer";
 import { cn } from "@/lib/utils";
 
 import { Button } from "./button";
@@ -17,13 +18,15 @@ interface PublicIdentifierProps {
   label: string;
   className?: string;
   inMenu?: boolean;
+  explorer?: ExplorerAvailability;
 }
 
 /**
  * Value changes remount clipboard feedback so an earlier copy cannot label its replacement copied.
  *
- * @param properties - Public value and its semantic label. Never supply signing credentials.
- * @returns Truncated public value with independent copy and full-value controls.
+ * @param properties - Public value, its semantic label and any explorer destination the caller
+ *   resolved for this exact value. Never supply signing credentials.
+ * @returns Truncated public value with independent copy, full-value and explorer controls.
  */
 export function PublicIdentifier(properties: PublicIdentifierProps): React.JSX.Element {
   return <IdentifierValue key={properties.value} {...properties} />;
@@ -34,6 +37,7 @@ function IdentifierValue({
   label,
   className,
   inMenu = false,
+  explorer,
 }: PublicIdentifierProps): React.JSX.Element {
   const { isCopied, copyToClipboard, error } = useCopyToClipboard();
   if (!value) return <span className="ds-muted">Not available</span>;
@@ -81,8 +85,33 @@ function IdentifierValue({
           >
             <p className="ds-label">{label}</p>
             <p className="ds-value ds-body break-all select-text">{value}</p>
+            {explorer?.status === "unavailable" && (
+              <p className="ds-caption ds-muted">{explorer.reason}</p>
+            )}
           </PopoverContent>
         </Popover>
+        {explorer?.status === "available" && (
+          <IdentifierAction inMenu={inMenu}>
+            <Button
+              asChild
+              variant={inMenu ? "menu" : "ghost"}
+              className={inMenu ? "w-9 shrink-0 justify-center" : undefined}
+              size="icon-sm"
+            >
+              <a
+                href={explorer.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${explorer.label}: ${label}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+              >
+                <ExternalLink aria-hidden="true" />
+              </a>
+            </Button>
+          </IdentifierAction>
+        )}
       </div>
       {isCopied && (
         <span role="status" className="ds-caption">

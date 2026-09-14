@@ -120,6 +120,7 @@ export function ConfigurationMenu(): React.JSX.Element {
                             <PublicIdentifier
                               value={field.appliedValue}
                               label={`Applied ${field.label}`}
+                              explorer={field.appliedExplorer}
                             />
                           </div>
                         )}

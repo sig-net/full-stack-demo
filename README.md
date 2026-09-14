@@ -139,6 +139,14 @@ EVM **Local testnet** selects Anvil at `http://127.0.0.1:8545`, discovers its ch
 
 Applying an EVM chain/RPC change requires EVM reconnection. Applying Midnight network/endpoints requires Midnight reconnection. Either change invalidates the vault binding, and a network change invalidates both wallet sessions. Vault address, Signet address and MPC edits rebind the vault while retaining the independent caller identity. Explorer-only edits preserve signing sessions and the operational fingerprint. Submitted transfers and Activity retain captured identifiers, destination and explorer metadata. Local receipts require an empty or local explorer.
 
+## Explorer links
+
+Every displayed public address or hash offers copy and full-value controls, and adds an external link when its network publishes a route for that identifier. Each Activity row, receipt and deposit display uses the chain captured when it was submitted, so changing the configuration never sends a settled record to a different chain. An identifier with no route stays copyable and explains why inside its full-value panel.
+
+The EVM explorer comes from the **Explorer URL** field, using `/tx/<hash>` and `/address/<address>`. A local Anvil fork keeps that field empty even though it reports chain `11155111`, so its receipts and balances are never linked to public Sepolia. Enter a local explorer origin to link local records.
+
+The Midnight explorer follows the selected Midnight network and needs no configuration. Preview, preprod and mainnet use Midnight Explorer, which publishes `/transactions/<hash>` and `/contracts/<address>`. The applied vault and Signet contract addresses therefore link on those networks. Undeployed and stagenet publish no explorer. No Midnight explorer offers a wallet address page, so shielded, unshielded and DUST addresses remain copy-only on every network. A vault request ID identifies MPC request state rather than a settled transaction and is never linked.
+
 The server provides local development NIGHT, ETH and ERC-20 faucets only. It fixes Midnight to undeployed, EVM to chain `11155111`, and uses the canonical local genesis wallet for NIGHT. Its endpoint overrides are server-only and can point only to local services. The app receives a public descriptor containing those endpoint settings and development availability. A local funding action requires exact applied endpoint matches, while vault addresses and presentation fields do not affect eligibility. Client configuration, wallets, registration and vault operations remain independent. Restart Next.js after changing server faucet endpoint overrides.
 
 ## Reuse and reset

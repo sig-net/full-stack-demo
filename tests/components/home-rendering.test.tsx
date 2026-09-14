@@ -128,6 +128,12 @@ it("renders the connected Home sections and refunded activity on the server", as
       type: "Supply",
       timestamp: "fixture",
       status: "refunded",
+      explorer: {
+        transaction: { status: "unavailable", reason: "No settled EVM transaction is recorded." },
+        fromAddress: { status: "unavailable", reason: "No counterparty address is recorded." },
+        toAddress: { status: "unavailable", reason: "No counterparty address is recorded." },
+        vaultContract: { status: "unavailable", reason: "No vault contract is recorded." },
+      },
     },
   ]);
   try {

@@ -16,6 +16,11 @@ import {
   updateEvmConfig,
   validateRuntimeConfig,
 } from "@/lib/config/runtime";
+import {
+  type ExplorerAvailability,
+  midnightExplorerLink,
+  PUBLIC_KEY_UNSUPPORTED,
+} from "@/lib/explorer";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
 import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 
@@ -146,6 +151,7 @@ interface ConfigurationSections {
     fields: (FieldDefinition & {
       value: string;
       appliedValue: string;
+      appliedExplorer: ExplorerAvailability | undefined;
       error: string | undefined;
       difference: { message: string; walletValue: string } | undefined;
       options: { value: string; label: string }[] | undefined;
@@ -305,6 +311,21 @@ export function useRuntimeConfigSections(): ConfigurationSections {
     }
   };
   const appliedDraft = draftOf(applied);
+  const appliedExplorer = (key: FieldKey): ExplorerAvailability | undefined => {
+    switch (key) {
+      case "contractAddress":
+      case "signetContractAddress":
+        return midnightExplorerLink(
+          applied.midnight.networkId,
+          "contract",
+          valueOf(appliedDraft, key),
+        );
+      case "mpcPubkey":
+        return PUBLIC_KEY_UNSUPPORTED;
+      default:
+        return undefined;
+    }
+  };
   const walletDifference = (
     key: FieldKey,
   ): { message: string; walletValue: string } | undefined => {
@@ -355,6 +376,7 @@ export function useRuntimeConfigSections(): ConfigurationSections {
           ...field,
           value: valueOf(resolvedDraft, field.key),
           appliedValue: valueOf(appliedDraft, field.key),
+          appliedExplorer: appliedExplorer(field.key),
           error:
             errors[section]?.[field.key] ??
             (section === "evm" &&

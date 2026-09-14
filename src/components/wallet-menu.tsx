@@ -14,6 +14,7 @@ import {
 import { StatusDot } from "@/components/ui/feedback";
 import { Feedback } from "@/components/ui/feedback";
 import { PublicIdentifier } from "@/components/ui/public-identifier";
+import type { ExplorerAvailability } from "@/lib/explorer";
 import type { WalletMetadata } from "@/lib/wallet-metadata";
 
 import { SeedWalletDialog } from "./seed-wallet-dialog";
@@ -26,6 +27,7 @@ export interface WalletMenuProps {
   chainName: string;
   wallet: WalletMetadata | null;
   accountDetails?: ReactNode;
+  accountExplorer?: ExplorerAvailability;
   connecting: boolean;
   error?: string | null;
   connectionUnavailable?: string | null;
@@ -50,6 +52,7 @@ export interface WalletMenuProps {
  * @param root0.chainName - Chain label.
  * @param root0.wallet - Connected wallet metadata.
  * @param root0.accountDetails - Optional replacement for the connected account identifier.
+ * @param root0.accountExplorer - Explorer destination for the default connected account identifier.
  * @param root0.connecting - Connection state.
  * @param root0.error - Connection error text.
  * @param root0.connectionUnavailable - Configuration reason disabling connection actions.
@@ -66,6 +69,7 @@ export function WalletMenu({
   chainName,
   wallet,
   accountDetails,
+  accountExplorer,
   connecting,
   error,
   connectionUnavailable,
@@ -136,6 +140,7 @@ export function WalletMenu({
                   inMenu
                   value={wallet.accountDetail}
                   label={`${chainName} wallet address`}
+                  explorer={accountExplorer}
                 />
               ) : (
                 accountDetails

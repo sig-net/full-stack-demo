@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PublicIdentifier } from "@/components/ui/public-identifier";
 import { QRCode } from "@/components/ui/qr-code";
+import { useAppliedExplorerLinks } from "@/hooks/use-explorer-links";
 import type { NetworkData, TokenConfig } from "@/lib/constants/token-metadata";
+import { MIDNIGHT_ADDRESS_UNSUPPORTED } from "@/lib/explorer";
 
 interface DepositAddressProps {
   token: TokenConfig;
@@ -37,6 +39,11 @@ export function DepositAddress(properties: DepositAddressProps): React.JSX.Eleme
     canContinue,
     onContinue,
   } = properties;
+  const explorers = useAppliedExplorerLinks();
+  const addressExplorer =
+    network.chain === "midnight"
+      ? MIDNIGHT_ADDRESS_UNSUPPORTED
+      : explorers.evmAddress(depositAddress);
   // The QR helper takes a file asset via iconUrl (it only serializes SVG elements).
   const qrIconProps: { iconUrl: string } | { icon: ReactElement } =
     network.chain === "midnight"
@@ -65,7 +72,12 @@ export function DepositAddress(properties: DepositAddressProps): React.JSX.Eleme
           margin={16}
         />
 
-        <PublicIdentifier value={depositAddress} label="deposit address" className="mx-auto" />
+        <PublicIdentifier
+          value={depositAddress}
+          label="deposit address"
+          className="mx-auto"
+          explorer={addressExplorer}
+        />
       </div>
 
       <div className="ds-row ds-control-gap justify-center">
@@ -95,7 +107,11 @@ export function DepositAddress(properties: DepositAddressProps): React.JSX.Eleme
             )}
             <div className="ds-round ds-surface-muted ds-before-control ds-inline-inset-control ds-block-inset-control">
               <p className="ds-caption ds-muted">Contract Address</p>
-              <PublicIdentifier value={token.erc20Address} label="Token contract address" />
+              <PublicIdentifier
+                value={token.erc20Address}
+                label="Token contract address"
+                explorer={explorers.evmAddress(token.erc20Address)}
+              />
             </div>
           </PopoverContent>
         </Popover>

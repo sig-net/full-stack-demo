@@ -3,6 +3,7 @@ import type * as React from "react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/feedback";
 import { PublicIdentifier } from "@/components/ui/public-identifier";
 import {
@@ -14,12 +15,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useMidnightTransactions } from "@/hooks/use-midnight-transactions";
+import type { ExplorerAvailability } from "@/lib/explorer";
 import type { MidnightTxRecord } from "@/lib/midnight/tx-history";
 import { cn } from "@/lib/utils";
 import { useVault } from "@/providers/vault-context";
 
 import { CryptoIcon } from "../balance-display/crypto-icon";
 import { TransactionDetailsDialog } from "./transaction-details-dialog";
+
+/** Explorer destination of each captured leg, resolved once from the record's own chain. */
+export interface ActivityExplorerLinks {
+  readonly transaction: ExplorerAvailability;
+  readonly fromAddress: ExplorerAvailability;
+  readonly toAddress: ExplorerAvailability;
+  readonly vaultContract: ExplorerAvailability;
+}
 
 /** Transaction record shape consumed by the activity table and details dialog. */
 export interface ActivityTransaction {
@@ -43,7 +53,7 @@ export interface ActivityTransaction {
   status: MidnightTxRecord["status"];
   transactionHash?: string;
   requestId?: string;
-  explorerUrl?: string;
+  explorer: ActivityExplorerLinks;
   failureReason?: string;
 }
 
@@ -58,6 +68,7 @@ interface TokenDisplayProps {
     amount: string;
     usdValue: string;
   };
+  explorer: ExplorerAvailability;
 }
 
 interface DetailsCellProps {
@@ -71,11 +82,11 @@ interface StatusBadgeProps {
 /**
  * Displays a token amount with its asset or wallet identity.
  *
- * @param properties - Token display data.
+ * @param properties - Token display data and the explorer destination of its wallet leg.
  * @returns The token display or nothing when no token is present.
  */
 function TokenDisplay(properties: TokenDisplayProps): React.JSX.Element | null {
-  const { token } = properties;
+  const { token, explorer } = properties;
   if (!token) return null;
 
   if (token.symbol === "WALLET") {
@@ -84,7 +95,7 @@ function TokenDisplay(properties: TokenDisplayProps): React.JSX.Element | null {
         <WalletIcon className="ds-muted h-4 w-4 flex-shrink-0 sm:h-5 sm:w-5" />
         <div className="ds-tight flex min-w-0 flex-col">
           <div className="ds-caption ds-label ds-muted sm:ds-body">
-            <PublicIdentifier value={token.amount} label="Wallet address" />
+            <PublicIdentifier value={token.amount} label="Wallet address" explorer={explorer} />
           </div>
           <div className="ds-caption ds-label ds-muted">Wallet</div>
         </div>
@@ -118,21 +129,25 @@ function DetailsCell(properties: DetailsCellProps): React.JSX.Element {
   return (
     <div className="ds-control-gap sm:ds-content-gap flex max-w-full min-w-0 items-center">
       <div className="flex-shrink-0">
-        <TokenDisplay token={transaction.fromToken} />
+        <TokenDisplay token={transaction.fromToken} explorer={transaction.explorer.fromAddress} />
       </div>
 
       <ArrowRight className="ds-muted h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
 
       {showsTokenDestination ? (
         <div className="flex-shrink-0">
-          <TokenDisplay token={transaction.toToken} />
+          <TokenDisplay token={transaction.toToken} explorer={transaction.explorer.toAddress} />
         </div>
       ) : (
         <div className="ds-tight sm:ds-control-gap flex min-w-0 items-center">
           <WalletIcon className="ds-muted h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
           <div className="ds-caption ds-label ds-muted sm:ds-body min-w-0">
             {transaction.address ? (
-              <PublicIdentifier value={transaction.address} label="Recipient address" />
+              <PublicIdentifier
+                value={transaction.address}
+                label="Recipient address"
+                explorer={transaction.explorer.toAddress}
+              />
             ) : (
               "Unknown"
             )}
@@ -251,19 +266,21 @@ export function ActivityListTable(properties: ActivityListTableProps): React.JSX
                   <StatusBadge status={transaction.status} />
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
-                  {transaction.explorerUrl ? (
-                    <a
-                      href={transaction.explorerUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block h-5 w-5"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                    >
-                      <ExternalLink className="ds-muted h-5 w-5" />
-                    </a>
-                  ) : null}
+                  {transaction.explorer.transaction.status === "available" && (
+                    <Button asChild variant="ghost" size="icon-sm">
+                      <a
+                        href={transaction.explorer.transaction.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${transaction.explorer.transaction.label}: ${transaction.type} ${transaction.timestamp}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                        }}
+                      >
+                        <ExternalLink aria-hidden="true" />
+                      </a>
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))

@@ -12,8 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PublicIdentifier } from "@/components/ui/public-identifier";
 import { useEvmDepositEligibility } from "@/hooks/use-evm-deposit-eligibility";
+import { useAppliedExplorerLinks } from "@/hooks/use-explorer-links";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import type { TokenConfig } from "@/lib/constants/token-metadata";
+import { evmExplorerLink, type EvmExplorerSource } from "@/lib/explorer";
 import { useEvmBalances } from "@/providers/evm-balances-context";
 import { useEvmDeposit } from "@/providers/evm-deposit-context";
 import { useEvmLocalFunding } from "@/providers/evm-local-funding-context";
@@ -52,8 +54,14 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
     }
   };
   const eligibility = useEvmDepositEligibility(token.erc20Address, amount, binding?.depositAddress);
+  const explorers = useAppliedExplorerLinks();
   const transfer = deposit.transfer;
-  const explorer = transfer !== null ? transfer.explorerUrl : evm.wallet?.explorerUrl;
+  // A submitted transfer keeps the explorer and chain applied when it was sent, so its receipt
+  // stays on the chain that produced it after the configuration changes.
+  const transferExplorer: EvmExplorerSource = {
+    explorerUrl: transfer?.explorerUrl ?? "",
+    chainId: transfer === null ? null : BigInt(transfer.chainId),
+  };
   const tokenBalance = balances.data?.tokens.find(
     (value) => value.erc20Address === token.erc20Address,
   );
@@ -69,7 +77,13 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
     <div className="ds-stack-control ds-divider-top ds-top-inset-content">
       <p className="ds-label">Transfer from your Sepolia wallet</p>
       <EvmWalletButton />
-      {evm.wallet && <PublicIdentifier value={evm.wallet.account} label="EVM wallet address" />}
+      {evm.wallet && (
+        <PublicIdentifier
+          value={evm.wallet.account}
+          label="EVM wallet address"
+          explorer={explorers.evmAddress(evm.wallet.account)}
+        />
+      )}
       {tokenBalance && (
         <p>
           Available: {formatUnits(tokenBalance.units, tokenBalance.decimals)} {token.symbol}
@@ -126,8 +140,16 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
       {binding && (
         <div className="ds-stack-control ds-body">
           <p>Funding addresses</p>
-          <PublicIdentifier value={binding.depositAddress} label="Deposit address" />
-          <PublicIdentifier value={binding.vaultAddress} label="Vault address" />
+          <PublicIdentifier
+            value={binding.depositAddress}
+            label="Deposit address"
+            explorer={explorers.evmAddress(binding.depositAddress)}
+          />
+          <PublicIdentifier
+            value={binding.vaultAddress}
+            label="Vault address"
+            explorer={explorers.evmAddress(binding.vaultAddress)}
+          />
           {localFunding.fundingUnavailable ? (
             <p>Fund these addresses directly for the selected network.</p>
           ) : (
@@ -158,21 +180,19 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
         <div className="ds-stack-control ds-body">
           <p>Transfer: {transfer.status}</p>
           <p>Destination</p>
-          <PublicIdentifier value={transfer.destination} label="Deposit destination" />
+          <PublicIdentifier
+            value={transfer.destination}
+            label="Deposit destination"
+            explorer={evmExplorerLink(transferExplorer, "address", transfer.destination)}
+          />
           {transfer.hash && (
             <>
               <p>Transaction</p>
-              <PublicIdentifier value={transfer.hash} label="Transaction hash" />
-              {explorer && (
-                <a
-                  className="ds-link"
-                  href={`${explorer}/tx/${transfer.hash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  View transaction in explorer
-                </a>
-              )}
+              <PublicIdentifier
+                value={transfer.hash}
+                label="Transaction hash"
+                explorer={evmExplorerLink(transferExplorer, "transaction", transfer.hash)}
+              />
             </>
           )}
           {transfer.error && (

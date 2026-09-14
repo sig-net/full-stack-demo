@@ -158,7 +158,9 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
       "disabled",
       false,
     );
-    const explorerLink = screen.queryByRole("link", { name: "View transaction in explorer" });
+    const explorerLink = screen.queryByRole("link", {
+      name: "View this transaction on the Sepolia explorer: Transaction hash",
+    });
     expect(explorerLink?.getAttribute("href") ?? null).toBe(
       superseded ? `https://sepolia.etherscan.io/tx/${hash}` : null,
     );

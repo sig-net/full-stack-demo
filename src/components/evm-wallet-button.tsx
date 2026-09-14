@@ -6,6 +6,7 @@ import { formatUnits } from "viem";
 
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Feedback } from "@/components/ui/feedback";
+import { useAppliedExplorerLinks } from "@/hooks/use-explorer-links";
 import { browserWalletConnection, seedWalletConnection } from "@/lib/config/evm-wallet";
 import { ERC20_TOKENS } from "@/lib/constants/token-metadata";
 import { type BrowserWalletChoice, discoverBrowserWallets } from "@/lib/evm/wallet/BrowserWallet";
@@ -24,6 +25,7 @@ export function EvmWalletButton(): React.JSX.Element {
   const { applied } = useRuntimeConfiguration();
   const evm = useEvmWallet();
   const balances = useEvmBalances();
+  const explorers = useAppliedExplorerLinks();
   const [open, setOpen] = useState(false);
   const [revision, setRevision] = useState(0);
   const [choices, setChoices] = useState<BrowserWalletChoice[]>([]);
@@ -35,6 +37,7 @@ export function EvmWalletButton(): React.JSX.Element {
     <WalletMenu
       chainName="EVM"
       wallet={evm.wallet}
+      accountExplorer={evm.wallet ? explorers.evmAddress(evm.wallet.accountDetail) : undefined}
       connecting={evm.connecting}
       error={evm.error}
       connectionUnavailable={

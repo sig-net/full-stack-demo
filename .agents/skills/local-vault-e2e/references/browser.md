@@ -34,7 +34,8 @@ messages to recover those bodies. Revalidate any future tool upgrade before wall
 ## Browser procedure
 
 Before a relayed browser check or deposit, agree a stable application-file window with the
-implementing agent.
+implementing agent. HMR clears in-memory credentials and the applied configuration on every
+source edit, including a comment-only tidy-up, so finish every edit before restoring.
 Wait for their acknowledgement that writes and formatting have stopped before restoring credentials.
 They can continue fixture and documentation work while the browser owner checks the UI. Resume
 application edits after the browser owner releases the window. HMR can
@@ -156,6 +157,12 @@ installed. Stop the fixture server when done and label its evidence as fixture e
 Restoring the applied deployment after a page load means refilling every field of the
 Configuration dialog from the saved public deployment file, then Apply. The Contract address
 field collides with Signet contract address under a non-exact role query, so use exact names.
+
+Reading the clipboard from a run-code call hangs when it sits inside a long chained script, and
+the hang can leave the application tab on about:blank. Grant clipboard-read on the app origin
+through the browser context first, then read it in its own short call. The run-code tool's file
+option accepts only paths under its own allowed roots, so a restore script kept in this repository
+cannot be loaded by file and is pasted inline instead.
 
 ## Credentials and captures
 

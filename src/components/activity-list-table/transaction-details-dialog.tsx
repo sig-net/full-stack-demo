@@ -1,6 +1,5 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
 import type * as React from "react";
 
 import {
@@ -12,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Feedback } from "@/components/ui/feedback";
 import { PublicIdentifier } from "@/components/ui/public-identifier";
+import { REQUEST_ID_UNSUPPORTED } from "@/lib/explorer";
 
 import type { ActivityTransaction } from "./index";
 
@@ -49,6 +49,7 @@ export function TransactionDetailsDialog(
                 <PublicIdentifier
                   value={transaction.fromToken.amount}
                   label="Source wallet address"
+                  explorer={transaction.explorer.fromAddress}
                 />
               ) : (
                 transaction.fromToken.amount
@@ -62,6 +63,7 @@ export function TransactionDetailsDialog(
                 <PublicIdentifier
                   value={transaction.toToken.amount}
                   label="Destination wallet address"
+                  explorer={transaction.explorer.toAddress}
                 />
               ) : (
                 transaction.toToken.amount
@@ -76,25 +78,38 @@ export function TransactionDetailsDialog(
           {transaction.requestId && (
             <div>
               <p>Request ID</p>
-              <PublicIdentifier value={transaction.requestId} label="Request ID" />
+              <PublicIdentifier
+                value={transaction.requestId}
+                label="Request ID"
+                explorer={REQUEST_ID_UNSUPPORTED}
+              />
             </div>
           )}
           {transaction.transactionHash && (
             <div>
-              <p>Transaction</p>
-              <PublicIdentifier value={transaction.transactionHash} label="Transaction hash" />
+              <p>EVM settlement transaction</p>
+              <PublicIdentifier
+                value={transaction.transactionHash}
+                label="Transaction hash"
+                explorer={transaction.explorer.transaction}
+              />
             </div>
           )}
-          {transaction.explorerUrl && (
-            <a
-              href={transaction.explorerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ds-row ds-tight ds-link"
-            >
-              View Sepolia transaction
-              <ExternalLink className="h-3 w-3" />
-            </a>
+          {transaction.explorer.transaction.status === "unavailable" && (
+            <p className="ds-caption ds-muted">{transaction.explorer.transaction.reason}</p>
+          )}
+          {transaction.explorer.vaultContract.status === "available" && (
+            <div>
+              <p>Midnight vault contract</p>
+              <a
+                href={transaction.explorer.vaultContract.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ds-row ds-tight ds-link"
+              >
+                {transaction.explorer.vaultContract.label}
+              </a>
+            </div>
           )}
         </div>
       </DialogContent>

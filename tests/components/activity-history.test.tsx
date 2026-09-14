@@ -27,6 +27,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const settledHash = `0x${"ab".repeat(32)}`;
+
 const record = (id: string): MidnightTxRecord => ({
   id,
   type: "Deposit",
@@ -36,6 +38,7 @@ const record = (id: string): MidnightTxRecord => ({
   toAmount: "10 USDC",
   status: "pending",
   timestampRaw: 1,
+  chainId: 11155111,
   explorerUrl: "https://sepolia.etherscan.io",
 });
 
@@ -79,7 +82,20 @@ describe("activity history", () => {
     });
     await waitFor(() => {
       expect(result.current[0]?.status).toBe("completed");
-      expect(result.current[0]?.explorerUrl).toBe("https://sepolia.etherscan.io/tx/0xabc");
+    });
+    expect(result.current[0]?.explorer.transaction).toEqual({
+      status: "unavailable",
+      reason: "This value is not an EVM transaction identifier.",
+    });
+    act(() => {
+      midnightTxHistory.update(fixture.id, { txHash: settledHash });
+    });
+    await waitFor(() => {
+      expect(result.current[0]?.explorer.transaction).toEqual({
+        status: "available",
+        href: `https://sepolia.etherscan.io/tx/${settledHash}`,
+        label: "View this transaction on the Sepolia explorer",
+      });
     });
     act(() => {
       midnightTxHistory.update(fixture.id, { status: "refunded", type: "Supply" });
@@ -106,16 +122,30 @@ describe("activity history", () => {
       timestamp: "fixture time",
       status: "refunded",
       failureReason: "Fixture proof failed",
-      transactionHash: "0xabc",
-      explorerUrl: "https://sepolia.etherscan.io/tx/0xabc",
+      transactionHash: settledHash,
+      explorer: {
+        transaction: {
+          status: "available",
+          href: `https://sepolia.etherscan.io/tx/${settledHash}`,
+          label: "View this transaction on the Sepolia explorer",
+        },
+        fromAddress: { status: "unavailable", reason: "No counterparty address is recorded." },
+        toAddress: { status: "unavailable", reason: "No counterparty address is recorded." },
+        vaultContract: { status: "unavailable", reason: "No vault contract is recorded." },
+      },
     };
     render(<TransactionDetailsDialog transaction={transaction} open onOpenChange={vi.fn()} />);
     expect(screen.getByText("Supply Details")).toBeTruthy();
     expect(screen.getByText("Status: refunded")).toBeTruthy();
     expect(screen.getByText("Fixture proof failed")).toBeTruthy();
-    expect(screen.getByText("0xabc")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Copy Transaction hash" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /view sepolia transaction/i })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", {
+          name: "View this transaction on the Sepolia explorer: Transaction hash",
+        })
+        .getAttribute("href"),
+    ).toBe(`https://sepolia.etherscan.io/tx/${settledHash}`);
   });
 });
 

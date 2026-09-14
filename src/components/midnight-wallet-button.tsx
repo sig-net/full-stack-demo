@@ -3,6 +3,7 @@
 import type * as React from "react";
 import { useState } from "react";
 
+import { MIDNIGHT_ADDRESS_UNSUPPORTED } from "@/lib/explorer";
 import {
   type BrowserWalletChoice,
   discoverBrowserWallets,
@@ -93,7 +94,12 @@ export function MidnightWalletButton(): React.JSX.Element {
               <div key={address.key}>
                 <p className="ds-label">{address.label}</p>
                 {address.value ? (
-                  <PublicIdentifier inMenu value={address.value} label={address.copyLabel} />
+                  <PublicIdentifier
+                    inMenu
+                    value={address.value}
+                    label={address.copyLabel}
+                    explorer={MIDNIGHT_ADDRESS_UNSUPPORTED}
+                  />
                 ) : (
                   <p className="ds-muted">
                     {address.unavailable ??

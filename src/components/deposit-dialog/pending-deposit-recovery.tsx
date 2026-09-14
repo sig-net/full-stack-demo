@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PublicIdentifier } from "@/components/ui/public-identifier";
 import type { TokenConfig } from "@/lib/constants/token-metadata";
+import { REQUEST_ID_UNSUPPORTED } from "@/lib/explorer";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
@@ -75,7 +76,11 @@ function DepositRecoveryForm({ token }: { token: TokenConfig }): React.JSX.Eleme
       <p className="ds-label">Current deposit request ID</p>
       {current?.requestId ? (
         <>
-          <PublicIdentifier value={current.requestId} label="Deposit request ID" />
+          <PublicIdentifier
+            value={current.requestId}
+            label="Deposit request ID"
+            explorer={REQUEST_ID_UNSUPPORTED}
+          />
           <p className="ds-body">
             Confirmed request{current.status === "completed" ? ", deposit completed" : ""}.
           </p>
