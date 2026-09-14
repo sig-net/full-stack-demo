@@ -118,3 +118,24 @@ Keep setup instructions and application reference material in README.md and docs
   or non-obvious failure modes at their definition, without narrating mechanics or duplicating
   callee documentation. Keep human instructions self-contained, update stale references and verify
   durable factual claims by execution. Run documented commands verbatim before publishing them.
+
+## NEVER BREAK: Skills are written in agent-agnostic prose.
+
+- A skill is a single copy under `.agents/skills/<name>/` that every coding agent reads.
+  Agent-specific entries such as `.claude/skills/<name>` are committed symlinks to that copy,
+  never a second copy. Creating, editing or reviewing a skill triggers this rule.
+- Name no agent in a skill body or its reference files: not Codex, Claude Code or any other.
+  Name no agent-specific tool, command, panel or configuration file, such as a tool-loading
+  helper, a slash-command form, an MCP toggle, a config file path or an argument placeholder.
+  Describe the mechanism instead ("load the browser tool schemas from the current environment",
+  "reconnect the Playwright server through the agent's own MCP controls") so each agent maps the
+  sentence onto its own facilities.
+- Frontmatter uses only the Agent Skills specification fields: `name`, `description`,
+  `license`, `compatibility`, `metadata` and `allowed-tools`. Agent-only fields fail other
+  agents' validators and belong nowhere in a shared skill.
+- Relative links between a skill and its reference files stay relative, so they resolve from
+  every entry path, including through a symlink.
+- Agent-specific invocation syntax belongs in human-facing documentation, listed for each
+  supported agent side by side, or in that agent's own manifest inside the skill folder, such as
+  `agents/openai.yaml`. Such a manifest holds only that agent's display and invocation defaults.
+  It never carries procedure, and no other agent reads it.

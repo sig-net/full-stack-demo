@@ -8,18 +8,21 @@ installed Chrome and prepared test profile. Select seed or extension wallets acc
 Seed-wallet acceptance does not require installing or unlocking MetaMask.
 Do not run a global browser installer.
 
-Configure the Playwright MCP command as the absolute path to the tested Node executable, with
-arguments containing the absolute UI path to `scripts/local-vault/playwright-launcher.mjs`, then
-`--user-data-dir` and the explicitly selected prepared profile path. Find that profile from the
-current session or observed Chrome process arguments. Do not guess a cache suffix or print all
-process environments. Preserve other MCP settings. Updating configuration requires the user's
-scope to include that change.
+Configure the Playwright MCP entry in the executing agent's own MCP configuration. Its command
+is the absolute path to the tested Node executable, with arguments containing the absolute UI
+path to `scripts/local-vault/playwright-launcher.mjs`, then `--user-data-dir` and the explicitly
+selected prepared profile path. The launcher and profile paths are machine-specific, so the entry
+belongs in user-level rather than repository configuration. Find that profile from the current
+session or observed Chrome process arguments. Do not guess a cache suffix or print all process
+environments. Preserve other MCP settings. Updating configuration requires the user's scope to
+include that change.
 
 After restarting the connection, verify the active process arguments and MCP stderr marker:
 `local-vault: Chromium Network.enable post-data cap applied`. A successful tab list alone does
-not prove the patched launcher was loaded. Codex can retain the existing MCP until its connection
-is restarted. If no restart tool is available, ask the user to toggle Playwright off and on.
-Computer-use control of Codex itself may be blocked. Do not route around that restriction.
+not prove the patched launcher was loaded. The agent retains the existing MCP process until its
+connection is restarted. If the current session exposes no restart control, ask the user to
+reconnect or toggle the Playwright server through the agent's own MCP controls. Computer-use
+control of the agent's own application may be blocked. Do not route around that restriction.
 
 The launcher changes the tested Chromium Network.enable call in memory to cap captured POST data
 at one byte. Version/source guards fail closed. Public 117 MB proving-key uploads otherwise

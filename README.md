@@ -261,9 +261,11 @@ Executed validation covered a clean scoped reset and deployment, kept-stack reus
 
 ## Agent browser verification
 
-**TIP:** Ask Codex to use `$local-vault-e2e` for local browser verification. It handles stack checks,
-Playwright ownership, MetaMask interaction and deposit evidence within the requested scope.
-A wallet refactor smoke check does not require a new deposit or chain reset.
+**TIP:** Ask your coding agent to use the `local-vault-e2e` skill for local browser verification:
+`$local-vault-e2e` in Codex, `/local-vault-e2e` in Claude Code. It handles stack checks, Playwright
+ownership, MetaMask interaction and deposit evidence within the requested scope. A wallet refactor
+smoke check does not require a new deposit or chain reset. One copy of the skill lives in
+`.agents/skills/local-vault-e2e`, and `.claude/skills/local-vault-e2e` is a committed symlink to it.
 
 Playwright MCP is pinned as a project development dependency. After the immutable dependency
 installation above, verify the guarded launcher and its public upload fixture from this checkout:
