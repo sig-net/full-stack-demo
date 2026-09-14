@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
 
   reactStrictMode: true,
 
+  // The Dockerfile runs the traced server at .next/standalone/server.js
+  output: "standalone",
+
   // Optimize package imports
   experimental: {
     optimizePackageImports: [

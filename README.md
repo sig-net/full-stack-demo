@@ -144,6 +144,64 @@ The reset option archives the saved configuration and clears only generated chai
 
 If setup fails, inspect the private setup log and rerun after resolving the reported prerequisite or service failure. A compiler or release mismatch needs matching installed dependencies. A fork identity error needs reconciled local configuration. A DUST wait needs registration and indexer progress. A transaction submission error requires checking actual chain confirmation before retrying.
 
+## Production container
+
+The root `Dockerfile` packages the application for a Kubernetes cluster. Its stages install the
+locked dependencies with the pinned Yarn launcher, regenerate and verify the vault and Signet zk
+asset trees with the pinned Compact toolchain, run the standalone Next.js production build, and
+copy only the traced server, static output and `public` tree into a `node` runtime image that
+runs as the unprivileged `node` user. The image serves `/zk/{keys,zkir,compiler}` and
+`/zk/signet/{keys,zkir,compiler}` from `public/zk` exactly as local development does. The
+build works with BuildKit and the legacy builder on `linux/arm64` and `linux/amd64`, and needs
+network access to the npm registry, GitHub releases and Google Fonts.
+`.dockerignore` keeps every `.env` file except `.env.example`, the local `public/zk` tree and
+`node_modules` out of the build context.
+
+```bash
+docker build -t full-stack-demo:local .
+```
+
+Next.js inlines `NEXT_PUBLIC_` values into the browser bundle at build time. Pass the
+deployment's public configuration as build arguments: every `NEXT_PUBLIC_` variable in
+`.env.example` has a `--build-arg` of the same name. Unset arguments keep the application
+defaults, which select the undeployed network on loopback endpoints. Server-only values
+(`RELAYER_PRIVATE_KEY` and the local genesis and Anvil identifiers) are runtime environment for
+the container, supplied through Kubernetes secrets. The API routes read public values from the
+runtime environment as well, so give the container the same public values the image was built
+with. Local wallet funding requires development mode and is unavailable in the production image.
+
+The server listens on `PORT` (3000 by default) on every interface. This runs it on host port 3030:
+
+```bash
+docker run --rm -p 3030:3000 full-stack-demo:local
+```
+
+Open [the container app](http://localhost:3030). Both zk manifests are then available at
+`/zk/compiler/contract-manifest.json` and `/zk/signet/compiler/contract-manifest.json`.
+
+### Publish the image
+
+The `docker-publish` workflow in `.github/workflows` publishes the image to Google Artifact
+Registry as `europe-west1-docker.pkg.dev/near-cs-dev/midnight/full-stack-demo-ui:<tag>` for a
+pushed tag of the form `vX.Y.Z` (stable) or `vX.Y.Z-rc.N` (release candidate). The image tag is
+the git tag, including the `v`. Any other tag shape fails the first job. A stable tag must point
+at a commit on `main`, while release candidates may come from any branch. Each architecture
+(`linux/amd64`, `linux/arm64`) builds on its own native runner and pushes by digest, and the final
+job combines both digests into one multi-architecture manifest. Layers are rebuilt from scratch on
+every run, so a publish takes roughly the length of one image build.
+
+The workflow needs a repository environment named `deploy` with required reviewers. Every job
+that touches the registry runs in it, so reviewers approve the two build jobs first and the
+manifest job afterwards. Configure the environment with:
+
+| Environment setting         | Purpose                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Secret `GOOGLE_CREDENTIALS` | The Google Cloud service account JSON bundle (`"type": "service_account"`, project `near-cs-dev`) with write access to the `midnight` Artifact Registry repository |
+| Variables `NEXT_PUBLIC_*`   | The deployment's public configuration. Each non-empty variable becomes a build argument of the same name                                                            |
+
+Pushing a tag such as `v0.1.0-rc.1` starts the run. Dispatching the workflow manually works only
+from a release tag ref.
+
 ## Configuration and checks
 
 `.env.example` lists the local defaults and generated fields. Hosted operation remains configurable through validated EVM and Midnight endpoint overrides and compatible deployment values. Local funding requires development mode, Midnight `undeployed`, loopback services, and matching live Anvil metadata and marker. The operation-specific relayer gas top-up route retains its separate contract and derives its recipient from the vault operation.
