@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
   // The Dockerfile runs the traced server at .next/standalone/server.js
   output: "standalone",
 
+  // The deploy package locates the signet contract's zk assets with a module-level
+  // createRequire(...).resolve(), which a bundled build turns into a module id and breaks.
+  // Node loads it from node_modules at runtime instead.
+  serverExternalPackages: ["@sig-net/midnight-contract-deploy"],
+
   // Optimize package imports
   experimental: {
     optimizePackageImports: [
