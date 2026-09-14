@@ -1,7 +1,6 @@
 "use client";
 
-import { parseRequestIdHex } from "@sig-net/midnight";
-import { ClipboardPaste } from "lucide-react";
+import { ClipboardPaste, Copy } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 
@@ -10,19 +9,100 @@ import { Feedback } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PublicIdentifier } from "@/components/ui/public-identifier";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import type { TokenConfig } from "@/lib/constants/token-metadata";
 import { REQUEST_ID_UNSUPPORTED } from "@/lib/explorer";
+import { type DepositLookup, describeDepositLookup } from "@/lib/midnight/deposit-lookup";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
+/**
+ * Asks for the confirmed request ID to be stored outside the page while the deposit can still
+ * need it, and states the prerequisites recovery actually enforces.
+ *
+ * Copy feedback reports the clipboard write only. Storing the ID durably stays with the user, so
+ * a pressed control never claims the ID is saved.
+ *
+ * @param properties - Confirmed request and its settlement status.
+ * @param properties.requestId - Ledger-confirmed deposit request ID.
+ * @param properties.completed - Whether this deposit has already settled.
+ * @returns The safekeeping panel with its own copy action and feedback.
+ */
+function SaveRequestIdWarning(properties: {
+  requestId: string;
+  completed: boolean;
+}): React.JSX.Element {
+  const { requestId, completed } = properties;
+  const { isCopied, copyToClipboard, error } = useCopyToClipboard();
+  return (
+    <Feedback
+      tone={completed ? "neutral" : "warning"}
+      role="status"
+      aria-label="Deposit request ID safekeeping"
+    >
+      <p className="ds-label">
+        {completed
+          ? "Deposit completed. Keep this request ID for your records."
+          : "Save this deposit request ID."}
+      </p>
+      <p>
+        {completed
+          ? "Resuming this deposit does not need it. Activity keeps the request and its transactions for this browser."
+          : "Copy it somewhere safe before closing or refreshing this page. You may need it to resume this deposit."}
+      </p>
+      <p>
+        Resuming a deposit by its ID needs the same vault secret, network, vault deployment and
+        token, so keep your vault secret safe as well. The deposit dialog also lists pending
+        requests for this identity, so the ID is one route back to a deposit rather than the only
+        one.
+      </p>
+      <Button
+        variant="outline"
+        onClick={() => {
+          void copyToClipboard(requestId);
+        }}
+      >
+        <Copy aria-hidden="true" /> Copy request ID
+      </Button>
+      {isCopied && (
+        <p className="ds-caption">
+          Copied to the clipboard. Store it somewhere that survives closing this page.
+        </p>
+      )}
+      {error && (
+        <Feedback tone="error" role="alert">
+          {error.message}
+        </Feedback>
+      )}
+    </Feedback>
+  );
+}
+
+function DepositLookupOutcome({ lookup }: { lookup: DepositLookup }): React.JSX.Element {
+  const { summary, nextAction, tone } = describeDepositLookup(lookup);
+  return (
+    <Feedback
+      tone={tone}
+      role={tone === "error" ? "alert" : "status"}
+      aria-label="Deposit request lookup"
+    >
+      <p className="ds-label">{summary}</p>
+      <p>{nextAction}</p>
+    </Feedback>
+  );
+}
+
 function DepositRecoveryForm({ token }: { token: TokenConfig }): React.JSX.Element {
   const [recoveryRequestId, setRecoveryRequestId] = useState("");
+  const [lookup, setLookup] = useState<DepositLookup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const clipboardAttempt = useRef(0);
+  const recoveryAttempt = useRef(0);
   useEffect(
     () => () => {
       clipboardAttempt.current += 1;
+      recoveryAttempt.current += 1;
     },
     [],
   );
@@ -35,7 +115,9 @@ function DepositRecoveryForm({ token }: { token: TokenConfig }): React.JSX.Eleme
       : null;
   const changeDraft = (value: string): void => {
     clipboardAttempt.current += 1;
+    recoveryAttempt.current += 1;
     setRecoveryRequestId(value);
+    setLookup(null);
     setError(null);
   };
   const paste = async (): Promise<void> => {
@@ -63,11 +145,20 @@ function DepositRecoveryForm({ token }: { token: TokenConfig }): React.JSX.Eleme
     }
   };
   const recover = async (): Promise<void> => {
+    const attempt = ++recoveryAttempt.current;
     setError(null);
+    setLookup({ kind: "looking-up" });
+    const outcome = await operations.lookupDepositRequest(
+      token.erc20Address,
+      recoveryRequestId.trim(),
+    );
+    if (attempt !== recoveryAttempt.current) return;
+    setLookup(outcome);
+    if (outcome.kind !== "recoverable") return;
     try {
-      const id = parseRequestIdHex(recoveryRequestId.trim());
-      await operations.recoverDeposit(token.erc20Address, id);
+      await operations.recoverDeposit(token.erc20Address, outcome.requestId);
     } catch (failure) {
+      if (attempt !== recoveryAttempt.current) return;
       setError(failure instanceof Error ? failure.message : "Deposit recovery failed.");
     }
   };
@@ -84,6 +175,10 @@ function DepositRecoveryForm({ token }: { token: TokenConfig }): React.JSX.Eleme
           <p className="ds-body">
             Confirmed request{current.status === "completed" ? ", deposit completed" : ""}.
           </p>
+          <SaveRequestIdWarning
+            requestId={current.requestId}
+            completed={current.status === "completed"}
+          />
         </>
       ) : (
         <p className="ds-body">
@@ -133,6 +228,7 @@ function DepositRecoveryForm({ token }: { token: TokenConfig }): React.JSX.Eleme
           confirmed request ID.
         </p>
       )}
+      {lookup && <DepositLookupOutcome lookup={lookup} />}
       {error && (
         <Feedback tone="error" role="alert">
           {error}

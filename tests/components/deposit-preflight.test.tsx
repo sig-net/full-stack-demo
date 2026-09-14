@@ -69,6 +69,7 @@ it("serialises EVM deposit preflight and preserves confirmed transfer state", as
     ready: true,
     unavailable: null,
     deposit: vi.fn(),
+    lookupDepositRequest: vi.fn(),
     recoverDeposit: vi.fn(),
     withdraw: vi.fn(),
     swap: vi.fn(),

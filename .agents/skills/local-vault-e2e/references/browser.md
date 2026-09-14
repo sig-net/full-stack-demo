@@ -220,9 +220,11 @@ Their paths may enter the session record, their values may not. A new page, MCP 
 can erase browser memory. Automatically generated `.playwright-mcp` captures remain private.
 
 For request-ID copy/paste acceptance, wait until the recovery input contains the exact full ID.
-Clipboard paste completes asynchronously after the button click. Capture the settlement-stage
-request display promptly: successful completion can close the deposit dialog before a queued
-copy action runs. A later successful copy proves the completed-state control, not the pending one.
+Clipboard paste completes asynchronously after the button click. The copy success line clears
+after two seconds, so click and read it inside one page evaluation. Starting a deposit from the
+deposit-address entry point closes the dialog, so reopen it to capture the settlement-stage
+request display, and capture promptly: successful completion can close the deposit dialog
+before a queued copy action runs. A later successful copy proves the completed-state control, not the pending one.
 
 Stop the identified UI process before deleting generated Next cache or route metadata. Clearing
 `.next` while Turbopack is running produced missing SST files and wallet chunk-load failures.

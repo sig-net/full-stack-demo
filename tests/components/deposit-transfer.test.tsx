@@ -77,6 +77,7 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
     ready: true,
     unavailable: null,
     deposit,
+    lookupDepositRequest: vi.fn(),
     recoverDeposit: vi.fn(),
     withdraw: vi.fn(),
     swap: vi.fn(),

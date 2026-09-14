@@ -127,6 +127,7 @@ async function fixture(): Promise<WidgetFixture> {
     ready: true,
     unavailable: null,
     deposit: vi.fn(),
+    lookupDepositRequest: vi.fn(),
     recoverDeposit: vi.fn(),
     withdraw: vi.fn(),
     swap,

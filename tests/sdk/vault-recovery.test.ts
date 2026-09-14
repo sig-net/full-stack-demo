@@ -26,7 +26,7 @@ import {
   ERC20_TRANSFER_MAX_PRIORITY_FEE_PER_GAS,
 } from "@/lib/midnight/evm-envelope";
 import * as observation from "@/lib/midnight/observed-execution";
-import { readPendingDeposit, runDeposit } from "@/lib/midnight/vault";
+import { lookupDepositRequest, runDeposit } from "@/lib/midnight/vault";
 import type { StandaloneVaultContract } from "@/lib/midnight/vault-providers";
 
 import { createPendingDeposit, createVaultCircuitFixture } from "./vault-circuit-fixture";
@@ -60,10 +60,9 @@ it("recovers a generated pending deposit without creating a request or reading a
     "getVerifiedSignatureRespondedEvent",
   ).mockResolvedValue({ verified: signature, verdicts: [] });
   vi.spyOn(SignetRequestResponseReader.prototype, "getSignatureRequest").mockResolvedValue(request);
-  vi.spyOn(
-    SignetRequestResponseReader.prototype,
-    "getRespondBidirectionalEvents",
-  ).mockResolvedValue([response]);
+  const respondEvents = vi
+    .spyOn(SignetRequestResponseReader.prototype, "getRespondBidirectionalEvents")
+    .mockResolvedValue([response]);
   vi.spyOn(
     SignetRequestResponseReader.prototype,
     "getVerifiedRespondBidirectionalEvent",
@@ -135,34 +134,41 @@ it("recovers a generated pending deposit without creating a request or reading a
     .mockResolvedValue(completion);
   try {
     expect(
-      (
-        await readPendingDeposit(
-          binding.providers,
-          binding.environment,
-          binding.identity,
-          tokenAddress,
-          requestId,
-        )
-      ).amount,
-    ).toBe(1000000n);
-    await expect(
-      readPendingDeposit(
+      await lookupDepositRequest(
+        binding.providers,
+        binding.environment,
+        binding.identity,
+        tokenAddress,
+        requestId,
+      ),
+    ).toEqual({ kind: "recoverable", requestId, units: 1000000n });
+    expect(
+      await lookupDepositRequest(
         binding.providers,
         binding.environment,
         { ...binding.identity, commitment: new Uint8Array(32) },
         tokenAddress,
         requestId,
       ),
-    ).rejects.toThrow("another vault identity");
-    await expect(
-      readPendingDeposit(
+    ).toEqual({ kind: "mismatched", requestId, mismatch: "identity" });
+    expect(
+      await lookupDepositRequest(
         binding.providers,
         binding.environment,
         binding.identity,
         "00".repeat(20),
         requestId,
       ),
-    ).rejects.toThrow("different token");
+    ).toEqual({ kind: "mismatched", requestId, mismatch: "token" });
+    expect(
+      await lookupDepositRequest(
+        binding.providers,
+        binding.environment,
+        binding.identity,
+        tokenAddress,
+        "not a request id",
+      ),
+    ).toEqual({ kind: "malformed" });
     await runDeposit(
       { set: vi.fn() },
       binding.providers,
@@ -231,15 +237,35 @@ it("recovers a generated pending deposit without creating a request or reading a
       ),
     ).rejects.toThrow("Multiple pending deposits");
     state.data = fixture.readyState;
-    await expect(
-      readPendingDeposit(
+    expect(
+      await lookupDepositRequest(
         binding.providers,
         binding.environment,
         binding.identity,
         tokenAddress,
         requestId,
       ),
-    ).rejects.toThrow("already be completed");
+    ).toEqual({ kind: "completed", requestId });
+    respondEvents.mockResolvedValueOnce([]);
+    expect(
+      await lookupDepositRequest(
+        binding.providers,
+        binding.environment,
+        binding.identity,
+        tokenAddress,
+        requestId,
+      ),
+    ).toEqual({ kind: "not-found", requestId });
+    respondEvents.mockRejectedValueOnce(new Error("indexer unavailable"));
+    expect(
+      await lookupDepositRequest(
+        binding.providers,
+        binding.environment,
+        binding.identity,
+        tokenAddress,
+        requestId,
+      ),
+    ).toEqual({ kind: "error", cause: "indexer unavailable" });
     await expect(
       runDeposit(
         { set: vi.fn() },
@@ -253,7 +279,7 @@ it("recovers a generated pending deposit without creating a request or reading a
         undefined,
         requestId,
       ),
-    ).rejects.toThrow("already be completed");
+    ).rejects.toThrow("Already completed");
     expect(start).not.toHaveBeenCalled();
     expect(complete).toHaveBeenCalledTimes(1);
   } finally {

@@ -61,6 +61,24 @@ most one request per address can ever be mined. `runDeposit` therefore rejects a
 any request for that identity and token is still pending, after re-reading the ledger, and the
 surface blocks the control and lists those requests with their IDs and amounts.
 
+## Deposit request lookup outcomes
+
+`lookupDepositRequest` in `src/lib/midnight/vault.ts` resolves one request ID against the bound
+session and returns a `DepositLookup` from `src/lib/midnight/deposit-lookup.ts`. The outcomes are
+`looking-up`, `recoverable` with the exact units the request settles, `completed`, `not-found`,
+`mismatched` for an identity, token or deployment the current session cannot recover, `malformed`
+and `error`. `describeDepositLookup` is the single place those outcomes become words, so the
+recovery surface and the deposit stepper render one wording.
+
+`completeDeposit` is the only circuit that removes a request from `depositEventMap` and
+`depositSettleViews`, so an attested response for a request that has no view left on this ledger is
+the evidence for `completed`. Without that response the outcome is `not-found`, which states that
+the request may already be completed or may never have been created against this vault, and never
+asserts that the deposit did not happen. A request ID carries no network tag, so a request created
+against another network or vault contract is simply absent from this ledger and reports as
+`not-found`. `runDeposit` and the operations provider both narrow the same result, so only a
+`recoverable` request reaches settlement.
+
 ## History and lending attribution
 
 History persistence validates record kinds, statuses, numeric accounting fields and optional public

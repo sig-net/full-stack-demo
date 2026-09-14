@@ -150,6 +150,7 @@ async function mountTransferSurface(): Promise<Surface> {
     ready: true,
     unavailable: null,
     deposit: sweep,
+    lookupDepositRequest: vi.fn(),
     recoverDeposit: vi.fn(),
     withdraw: vi.fn(),
     swap: vi.fn(),

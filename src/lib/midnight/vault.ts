@@ -47,6 +47,7 @@ import { sepolia } from "@/lib/config/evm";
 import { withEthersProvider } from "@/lib/evm/ethers-provider";
 import { assertGasReserve } from "@/lib/evm/gas-reserve";
 
+import { type DepositLookup, describeDepositLookup } from "./deposit-lookup";
 import type { PendingDepositRequest } from "./deposit-sweep";
 import { derivePathAddress, type PathRendering, resolvePathRendering } from "./evm-addresses";
 import {
@@ -653,35 +654,65 @@ async function settleViaMpc(
   throw new Error(`timed out waiting for respond-bidirectional attestation for ${rid}`);
 }
 
+const failureDetail = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 /**
- * Checks a recovery record against both the active identity and selected token.
+ * Resolves one request ID against the selected vault, identity and token as a distinct outcome.
  *
- * @param providers - Captured ledger read capability.
- * @param env - Session whose validity is rechecked after the read.
+ * `completeDeposit` is the only circuit that removes a settled view, so an attested response with
+ * no view left on this ledger is the evidence that the request was completed here. Without that
+ * response the outcome is `not-found`, which never asserts that the deposit did not happen.
+ *
+ * @param providers - Captured ledger and emitted-event read capabilities.
+ * @param env - Session whose validity is rechecked after every read.
  * @param identity - Expected commitment owner.
  * @param erc20Hex - Expected EVM token.
- * @param requestId - Recorded request being resumed.
- * @returns The matching settlement view.
- * @throws {Error} If the record is absent or belongs to different inputs.
+ * @param requestId - Request being resolved.
+ * @returns The outcome, including the exact units a recoverable request settles.
  */
-export async function readPendingDeposit(
+export async function lookupDepositRequest(
   providers: VaultProviders,
   env: VaultSessionEnvironment,
   identity: Identity,
   erc20Hex: string,
   requestId: string,
-): Promise<ReturnType<ReturnType<typeof ledger>["depositSettleViews"]["lookup"]>> {
-  const id = requestIdBytes(parseRequestIdHex(requestId));
-  const state = await readVaultLedger(providers, env);
+): Promise<DepositLookup> {
+  let parsed: RequestIdHex;
+  try {
+    parsed = parseRequestIdHex(requestId.trim());
+  } catch {
+    return { kind: "malformed" };
+  }
+  const id = requestIdBytes(parsed);
+  let state: ReturnType<typeof ledger>;
+  try {
+    state = await readVaultLedger(providers, env);
+  } catch (error) {
+    return { kind: "error", cause: failureDetail(error) };
+  }
   env.assertActive();
-  if (!state.depositEventMap.member(id) || !state.depositSettleViews.member(id))
-    throw new Error("Pending deposit not found. It may already be completed.");
-  const view = state.depositSettleViews.lookup(id);
-  if (bytesToHex(view.commitment) !== bytesToHex(identity.commitment))
-    throw new Error("This pending deposit belongs to another vault identity.");
-  if (bytesToHex(view.erc20) !== bytesToHex(addrBytes(erc20Hex)))
-    throw new Error("This pending deposit uses a different token.");
-  return view;
+  if (!state.initialised) return { kind: "mismatched", requestId: parsed, mismatch: "deployment" };
+  if (state.depositEventMap.member(id) && state.depositSettleViews.member(id)) {
+    const view = state.depositSettleViews.lookup(id);
+    if (bytesToHex(view.commitment) !== bytesToHex(identity.commitment))
+      return { kind: "mismatched", requestId: parsed, mismatch: "identity" };
+    if (bytesToHex(view.erc20) !== bytesToHex(addrBytes(erc20Hex)))
+      return { kind: "mismatched", requestId: parsed, mismatch: "token" };
+    return { kind: "recoverable", requestId: parsed, units: view.amount };
+  }
+  try {
+    const responded = await responseReader(
+      providers,
+      env,
+      VAULT_DEPOSIT_REQUESTS_PATH,
+    ).getRespondBidirectionalEvents(parsed);
+    env.assertActive();
+    if (responded.length > 0) return { kind: "completed", requestId: parsed };
+  } catch (error) {
+    return { kind: "error", cause: failureDetail(error) };
+  }
+  return { kind: "not-found", requestId: parsed };
 }
 
 /**
@@ -759,9 +790,19 @@ export async function runDeposit(
     );
   let rid: RequestIdHex;
   if (recoveryRequestId) {
-    const view = await readPendingDeposit(providers, env, identity, erc20Hex, recoveryRequestId);
-    if (view.amount !== amount) throw new Error("Pending deposit amount changed.");
-    rid = parseRequestIdHex(recoveryRequestId);
+    const lookup = await lookupDepositRequest(
+      providers,
+      env,
+      identity,
+      erc20Hex,
+      recoveryRequestId,
+    );
+    if (lookup.kind !== "recoverable") {
+      const described = describeDepositLookup(lookup);
+      throw new Error(`${described.summary} ${described.nextAction}`);
+    }
+    if (lookup.units !== amount) throw new Error("Pending deposit amount changed.");
+    rid = lookup.requestId;
     log(`Recovering pending deposit 0x${rid}`);
   } else if (pending[0]) {
     rid = requestIdHex(pending[0][0]);

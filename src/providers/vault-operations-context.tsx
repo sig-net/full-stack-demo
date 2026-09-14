@@ -20,6 +20,7 @@ import type { RuntimeSnapshot } from "@/lib/config/runtime";
 import { fetchErc20Decimals } from "@/lib/constants/token-metadata";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import { requireGasReserve } from "@/lib/evm/gas-reserve";
+import { type DepositLookup, describeDepositLookup } from "@/lib/midnight/deposit-lookup";
 import { MPC_OPERATION_ETH_RESERVE } from "@/lib/midnight/evm-envelope";
 import { AAVE_USDC, STATA_USDC } from "@/lib/midnight/evm-stata";
 import {
@@ -101,6 +102,7 @@ interface VaultOperationState {
   ready: boolean;
   unavailable: string | null;
   deposit: (erc20: string, amount: bigint) => Promise<OperationResult>;
+  lookupDepositRequest: (erc20: string, requestId: string) => Promise<DepositLookup>;
   recoverDeposit: (erc20: string, requestId: string) => Promise<OperationResult>;
   withdraw: (erc20: string, amount: bigint, receiver?: string) => Promise<OperationResult>;
   swap: (
@@ -692,14 +694,29 @@ function useVaultOperationOwner(): VaultOperationState {
     unavailable: null,
     deposit: (erc20: string, amount: bigint) =>
       execute("deposit", [erc20], (operation) => runFlow(operation, "deposit", erc20, amount)),
+    lookupDepositRequest: async (erc20: string, requestId: string): Promise<DepositLookup> => {
+      if (!binding) return { kind: "error", cause: "No vault session is bound." };
+      try {
+        const { lookupDepositRequest: lookup } = await import("@/lib/midnight/vault");
+        return await lookup(
+          binding.providers,
+          binding.environment,
+          binding.identity,
+          erc20,
+          requestId,
+        );
+      } catch (error) {
+        return { kind: "error", cause: describeFlowError(error) };
+      }
+    },
     recoverDeposit: (erc20: string, requestId: string) =>
       execute(
         "deposit",
         [erc20],
         async (operation) => {
           const active = operation.binding;
-          const { readPendingDeposit } = await import("@/lib/midnight/vault");
-          const view = await readPendingDeposit(
+          const { lookupDepositRequest } = await import("@/lib/midnight/vault");
+          const lookup = await lookupDepositRequest(
             active.providers,
             active.environment,
             active.identity,
@@ -707,7 +724,11 @@ function useVaultOperationOwner(): VaultOperationState {
             requestId,
           );
           active.assertActive();
-          return runFlow(operation, "deposit", erc20, view.amount, undefined, requestId);
+          if (lookup.kind !== "recoverable") {
+            const described = describeDepositLookup(lookup);
+            throw new Error(`${described.summary} ${described.nextAction}`);
+          }
+          return runFlow(operation, "deposit", erc20, lookup.units, undefined, lookup.requestId);
         },
         true,
       ),

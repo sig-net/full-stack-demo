@@ -391,9 +391,11 @@ it("retains the confirmed deposit when manual recovery fails validation", async 
       return Promise.resolve({ status: "settled", outputUnits: null });
     },
   );
-  vi.mocked(vault.readPendingDeposit).mockRejectedValue(
-    new Error("This pending deposit uses a different token."),
-  );
+  vi.mocked(vault.lookupDepositRequest).mockResolvedValue({
+    kind: "mismatched",
+    requestId: parseRequestIdHex("cd".repeat(32)),
+    mismatch: "token",
+  });
   const query = new QueryClient();
   const view = renderHook(() => useVaultOperations(), {
     wrapper: ({ children }) => (

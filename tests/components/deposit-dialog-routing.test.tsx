@@ -122,6 +122,7 @@ it.each(["error", "unresolved-error", "confirmed", "fresh-binding", "complete"] 
       ready: true,
       unavailable: null,
       deposit: manual,
+      lookupDepositRequest: vi.fn(),
       recoverDeposit: vi.fn(),
       withdraw: vi.fn(),
       swap: vi.fn(),
