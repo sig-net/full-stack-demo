@@ -33,13 +33,15 @@ vi.mock(import("@/components/deposit-dialog/token-selection"), () => ({
     </button>
   ),
 }));
-vi.mock(import("@/components/deposit-dialog/deposit-address"), () => ({
-  DepositAddress: ({ onContinue, showContinue, depositAddress }) => (
+vi.mock(import("@/components/deposit-dialog/evm-deposit-address"), () => ({
+  EvmDepositAddress: ({ onStartDeposit, showContinue, depositAddress }) => (
     <button
       type="button"
       data-show-continue={showContinue}
       data-deposit-address={depositAddress}
-      onClick={onContinue}
+      onClick={() => {
+        onStartDeposit(5n);
+      }}
     >
       Address continuation
     </button>
@@ -109,6 +111,7 @@ it.each(["error", "unresolved-error", "confirmed", "fresh-binding", "complete"] 
         },
       },
       loading: false,
+      checkedAt: null,
       error: null,
       refresh: vi.fn(),
     });
@@ -156,18 +159,16 @@ it.each(["error", "unresolved-error", "confirmed", "fresh-binding", "complete"] 
       fireEvent.click(screen.getByRole("button", { name: "Select fixture token" }));
       const continuation = screen.getByRole("button", { name: "Address continuation" });
       expect(continuation.getAttribute("data-deposit-address")).toBe(active.depositAddress);
-      // An unresolved submitted transfer keeps the route, so neither a fresh deposit nor a
-      // continuation starts while its transaction can still settle.
-      const routed = scenario === "confirmed";
-      const held = scenario === "unresolved-error";
-      expect(continuation.getAttribute("data-show-continue")).toBe(
-        routed || held ? "false" : "true",
-      );
+      // A confirmed or unresolved submitted transfer keeps the route, so the address entry point
+      // cannot start a fresh deposit while that transaction can still settle. The confirmed
+      // transfer's own Midnight continuation belongs to the transfer surface that holds its hash.
+      const held = scenario === "confirmed" || scenario === "unresolved-error";
+      expect(continuation.getAttribute("data-show-continue")).toBe(held ? "false" : "true");
       fireEvent.click(continuation);
       await waitFor(() => {
-        expect(manual.mock.calls).toEqual(routed || held ? [] : [[token.erc20Address, 5n]]);
-        expect(continued).toHaveBeenCalledTimes(routed ? 1 : 0);
-        expect(onOpenChange.mock.calls).toEqual(routed || held ? [] : [[false]]);
+        expect(manual.mock.calls).toEqual(held ? [] : [[token.erc20Address, 5n]]);
+        expect(continued).not.toHaveBeenCalled();
+        expect(onOpenChange.mock.calls).toEqual(held ? [] : [[false]]);
       });
     } finally {
       unmount();

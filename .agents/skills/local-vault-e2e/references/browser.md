@@ -47,9 +47,12 @@ observed URL, and capture a fresh snapshot. Use observed role/name locators. Sco
 connection buttons to the banner or active dialog. A click can return before React completes its
 state transition: wait for the expected control rather than interpreting an immediate false
 visibility result as failure. Seed installation can close its dialog before synchronisation finishes.
-Close any open Radix menu or dialog before any later role query, not only before checking
-the banner: a modal menu hides toolbar roles from every subsequent query, and the locator
-then waits its full timeout before failing. Wait for the connected control and spendable readiness before testing connected-state
+Close any open Radix menu or dialog before any later role query or click, not only before
+checking the banner: a modal menu hides toolbar roles from every subsequent query, the
+locator then waits its full timeout before failing, and an overlay can keep intercepting
+pointer events after a dialog closes with nothing left in the accessibility tree. Press
+Escape first. Header wallet buttons share an accessible name with a second element, so query
+them exactly and scope the query. Wait for the connected control and spendable readiness before testing connected-state
 transitions or submitting a deposit.
 
 After an arrow key in a Radix menu, wait until the expected action owns focus before pressing
@@ -164,10 +167,10 @@ A long run-code call, whether a clipboard read or a polling loop, can navigate t
 tab to about:blank and destroy page memory, including during a funded operation. A call that
 combines a click with a wait did it twice. Issue one action per run-code call during funded
 work and poll with repeated short calls. Grant clipboard-read on the app origin
-through the browser context before reading the clipboard. The run-code and screenshot tools accept
-file paths only under their own allowed roots: a restore script kept in this repository is pasted
-inline, and a screenshot saved by name lands outside the repository and is moved into the
-verification directory afterwards.
+through the browser context before reading the clipboard. The run-code tool's file option accepts only paths under its own allowed roots, so a restore
+script kept in this repository is pasted inline. Capture screenshots with page.screenshot
+inside a run-code call using an absolute path into the verification directory, which is
+accepted. The separate screenshot tool saves by name outside the repository.
 
 The token chooser's accessible name is the concatenation of symbol and name, and an exact role
 query on it does not match. Filter the role query by visible text instead.
@@ -206,8 +209,9 @@ try {
 }
 ```
 
-Use the observed field and key for wallet seeds. Keep `credentialFilePath` pointed at the
-prepared ignored file. Return public status only. Capture snapshots and screenshots only after
+Use the observed field and key for wallet seeds, and query the field by role with an exact
+name: a label query matches both the dialog and its input. Keep `credentialFilePath` pointed
+at the prepared ignored file. Return public status only. Capture snapshots and screenshots only after
 credential fields close or clear. This transfer supplies product inputs, it does not inject
 wallet state or a signer.
 

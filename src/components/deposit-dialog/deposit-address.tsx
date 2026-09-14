@@ -21,12 +21,18 @@ interface DepositAddressProps {
   showContinue?: boolean;
   canContinue: boolean;
   onContinue: () => void;
+  /** Section shown above the continuation, such as the observed deposit-address balance. */
+  preparation?: React.ReactNode;
+  /** Panel explaining the blocked continuation, rendered by the surface that derived it. */
+  continueGate?: React.ReactNode;
+  /** Id of that panel, carried by the continuation in `aria-describedby` while it is shown. */
+  continueGateId?: string;
 }
 
 /**
  * Presents the deposit address, QR code, copy action and optional continuation.
  *
- * @param properties - Address data and continuation controls.
+ * @param properties - Address data, preparation section and continuation controls.
  * @returns The deposit address surface.
  */
 export function DepositAddress(properties: DepositAddressProps): React.JSX.Element {
@@ -38,6 +44,9 @@ export function DepositAddress(properties: DepositAddressProps): React.JSX.Eleme
     showContinue = true,
     canContinue,
     onContinue,
+    preparation = null,
+    continueGate = null,
+    continueGateId,
   } = properties;
   const explorers = useAppliedExplorerLinks();
   const addressExplorer =
@@ -117,12 +126,15 @@ export function DepositAddress(properties: DepositAddressProps): React.JSX.Eleme
         </Popover>
       </div>
 
+      {preparation}
+
       {showContinue && (
         <div className="flex w-full justify-center">
           <Button
             onClick={onContinue}
             variant="secondary"
             disabled={isSubmitting || !canContinue}
+            aria-describedby={continueGate ? continueGateId : undefined}
             className="w-full"
           >
             {isSubmitting ? (
@@ -136,6 +148,8 @@ export function DepositAddress(properties: DepositAddressProps): React.JSX.Eleme
           </Button>
         </div>
       )}
+
+      {showContinue && continueGate}
     </div>
   );
 }

@@ -113,6 +113,7 @@ describe("withdrawal routing", () => {
         },
       },
       loading: false,
+      checkedAt: null,
       error: null,
       refresh: vi.fn(),
     });
@@ -209,6 +210,7 @@ describe("withdrawal routing", () => {
         },
       },
       loading: false,
+      checkedAt: null,
       error: null,
       refresh: vi.fn(),
     });

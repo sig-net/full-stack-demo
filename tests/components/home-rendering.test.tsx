@@ -65,6 +65,7 @@ it("renders the non-zero USDC balance using six asset decimals", () => {
       },
     },
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn(),
   });
@@ -119,6 +120,7 @@ it("renders the connected Home sections and refunded activity on the server", as
       },
     },
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn(),
   });

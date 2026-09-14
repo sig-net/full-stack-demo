@@ -62,7 +62,9 @@ transaction offset. Capture the pending request before claim removes it. The ins
 data provider's `queryContractState(address, { type: "blockHeight", blockHeight })` also retrieved
 the captured request at its known pending block after settlement for SDK attestation verification.
 
-Query the configured local indexer, using bounded requests. This executed query shape selects
+Query the configured local indexer, using bounded requests. The v3 schema rejects the
+contractActions and applyStage fields that older task scripts used. The query shapes in this
+file are the ones that answer. This executed query shape selects
 actual successful transaction fees, including block height:
 
 ```graphql

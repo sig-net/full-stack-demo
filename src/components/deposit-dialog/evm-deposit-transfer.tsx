@@ -7,7 +7,7 @@ import { formatUnits } from "viem";
 
 import { EvmWalletButton } from "@/components/evm-wallet-button";
 import { Button } from "@/components/ui/button";
-import { DisabledReason } from "@/components/ui/disabled-reason";
+import { type ControlGate, DisabledReason } from "@/components/ui/disabled-reason";
 import { Feedback } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,12 +30,6 @@ import { useVaultOperations } from "@/providers/vault-operations-context";
 
 const SEND_GATE_ID = "deposit-transfer-send-gate";
 const CONTINUE_GATE_ID = "deposit-transfer-continue-gate";
-
-interface ControlGate {
-  reason: string;
-  nextAction: string;
-  tone: "neutral" | "warning" | "error";
-}
 
 /**
  * Owns the EVM transfer amount and continues a matching vault deposit session.
@@ -156,7 +150,8 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
       )}
       {tokenBalance && (
         <p>
-          Available: {formatUnits(tokenBalance.units, tokenBalance.decimals)} {token.symbol}
+          Connected wallet balance: {formatUnits(tokenBalance.units, tokenBalance.decimals)}{" "}
+          {token.symbol}
         </p>
       )}
       {balances.isError && (
@@ -164,9 +159,11 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
           Wallet balances unavailable. Open the EVM wallet menu to retry.
         </Feedback>
       )}
-      <Label htmlFor={`deposit-amount-${token.symbol}`}>Amount ({token.symbol})</Label>
+      <Label htmlFor={`deposit-transfer-amount-${token.symbol}`}>
+        Amount to transfer ({token.symbol})
+      </Label>
       <Input
-        id={`deposit-amount-${token.symbol}`}
+        id={`deposit-transfer-amount-${token.symbol}`}
         inputMode="decimal"
         value={amount}
         onChange={(event) => {

@@ -47,6 +47,7 @@ import { sepolia } from "@/lib/config/evm";
 import { withEthersProvider } from "@/lib/evm/ethers-provider";
 import { assertGasReserve } from "@/lib/evm/gas-reserve";
 
+import type { PendingDepositRequest } from "./deposit-sweep";
 import { derivePathAddress, type PathRendering, resolvePathRendering } from "./evm-addresses";
 import {
   ERC20_TRANSFER_GAS_LIMIT as GAS_LIMIT,
@@ -684,6 +685,36 @@ export async function readPendingDeposit(
 }
 
 /**
+ * Lists every deposit request this identity still has to settle for one token.
+ *
+ * Each pending request already owns a sweep signed against the deposit address's current EVM
+ * nonce, so callers use this list to keep a second sweep from being created beside it.
+ *
+ * @param providers - Captured ledger read capability.
+ * @param env - Session whose validity is rechecked after the read.
+ * @param identity - Commitment owning the requests.
+ * @param erc20Hex - Token whose requests are listed.
+ * @returns Pending request identifiers with the exact units each one sweeps.
+ */
+export async function readPendingDeposits(
+  providers: VaultProviders,
+  env: VaultSessionEnvironment,
+  identity: Identity,
+  erc20Hex: string,
+): Promise<PendingDepositRequest[]> {
+  const erc20 = addrBytes(erc20Hex);
+  const state = await readVaultLedger(providers, env);
+  env.assertActive();
+  return [...state.depositSettleViews]
+    .filter(
+      ([, view]) =>
+        bytesToHex(view.commitment) === bytesToHex(identity.commitment) &&
+        bytesToHex(view.erc20) === bytesToHex(erc20),
+    )
+    .map(([id, view]) => ({ requestId: requestIdHex(id), units: view.amount }));
+}
+
+/**
  * Resumes a recorded deposit or starts one request, preserving its identifiers before continuation.
  *
  * @param progress - Captured operation checkpoint sink.
@@ -716,12 +747,12 @@ export async function runDeposit(
   const userEvm = depositAddress(env, identity);
   const before = await readVaultLedger(providers, env);
   if (!before.initialised) throw new Error("vault not initialised");
-  const pending = [...before.depositSettleViews].filter(
+  const pendingForToken = [...before.depositSettleViews].filter(
     ([, view]) =>
       bytesToHex(view.commitment) === bytesToHex(identity.commitment) &&
-      bytesToHex(view.erc20) === bytesToHex(erc20) &&
-      view.amount === amount,
+      bytesToHex(view.erc20) === bytesToHex(erc20),
   );
+  const pending = pendingForToken.filter(([, view]) => view.amount === amount);
   if (!recoveryRequestId && pending.length > 1)
     throw new Error(
       "Multiple pending deposits match this identity, token and amount. Select a specific request before continuing.",
@@ -742,6 +773,12 @@ export async function runDeposit(
       );
     await assertDepositRequestOnLedger(providers, env, rid);
     log(`Resuming pending deposit 0x${rid}`);
+  } else if (pendingForToken[0]) {
+    // Every pending request owns a sweep signed against this address's current EVM nonce, so a
+    // request created beside one of a different amount could never be mined.
+    throw new Error(
+      `Pending deposit 0x${requestIdHex(pendingForToken[0][0])} already claims the next sweep from this deposit address. Recover it by its request ID before depositing a different amount.`,
+    );
   } else {
     // Only a brand-new request signs a sweep that still has to be broadcast, so only this branch
     // requires the deposit address to hold its fee reserve. A resumed or recovered request may

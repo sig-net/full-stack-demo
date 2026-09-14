@@ -40,6 +40,8 @@ function balanceOptions(
 interface VaultBalanceState {
   balances: VaultBalances | null;
   loading: boolean;
+  /** Epoch milliseconds of the newest successful observation, absent until one succeeds. */
+  checkedAt: number | null;
   error: string | null;
   refresh: (target?: VaultBinding) => Promise<void>;
 }
@@ -78,6 +80,7 @@ function useVaultBalanceOwner(): VaultBalanceState {
   return {
     balances,
     loading: !!binding && query.isFetching,
+    checkedAt: balances && query.dataUpdatedAt > 0 ? query.dataUpdatedAt : null,
     error:
       binding && query.isError
         ? "Balance refresh failed."

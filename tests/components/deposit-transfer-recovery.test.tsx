@@ -136,6 +136,7 @@ async function mountTransferSurface(): Promise<Surface> {
   vi.mocked(useVaultBalances).mockReturnValue({
     balances: null,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn<ReturnType<typeof useVaultBalances>["refresh"]>().mockResolvedValue(undefined),
   });
@@ -309,7 +310,7 @@ it("covers every recoverable transfer outcome at the surface", () => {
 
 /** Enters an amount through the real control and waits for the send control to become usable. */
 async function enterAmount(surface: Surface, value: string): Promise<HTMLElement> {
-  const input = screen.getByLabelText(`Amount (${surface.token.symbol})`);
+  const input = screen.getByLabelText(`Amount to transfer (${surface.token.symbol})`);
   fireEvent.change(input, { target: { value } });
   const send = screen.getByRole("button", { name: "Send tokens to deposit address" });
   await waitFor(() => {
@@ -338,7 +339,7 @@ it.each(outcomes)(
       expect(record?.failure?.recovery).toBe(recovery);
       expect(record?.hash).toBe(submits ? hash : undefined);
       expect(surface.current().deposit.unresolved).toBe(recovery === "recheck");
-      const amount = screen.getByLabelText(`Amount (${surface.token.symbol})`);
+      const amount = screen.getByLabelText(`Amount to transfer (${surface.token.symbol})`);
       expect(amount.hasAttribute("disabled")).toBe(recovery === "recheck");
       expect(send.hasAttribute("disabled")).toBe(sendBlocked);
       const blocked = recovery === "recheck";

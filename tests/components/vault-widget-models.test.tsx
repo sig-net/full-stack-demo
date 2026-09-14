@@ -95,6 +95,7 @@ async function fixture(): Promise<WidgetFixture> {
   vi.mocked(useVaultBalances).mockReturnValue({
     balances,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn(),
   });

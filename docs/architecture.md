@@ -45,6 +45,22 @@ send, and a released local wait still accepts the late submitted hash. Continuat
 reference acquired before any await, so repeated clicks, duplicate mounts and a delayed preflight
 cannot reach the sweep twice.
 
+## Deposit from an existing address balance
+
+The unswept ERC-20 balance at the identity-derived deposit address is read by the binding-scoped
+vault balance owner, which polls while no vault operation is running and needs no EVM signing
+wallet. The binding is replaced whenever the applied network, deployment or identity changes, so a
+replacement session never inherits a previous observation. `describeDepositSweepBalance` turns that
+observation plus the identity's pending deposit requests into one state, keeping a pending read, a
+failed read, an empty address and reserved funds distinct.
+
+The vault contract signs `transfer(vaultEvmAddress, amount)` for the exact requested amount and mints
+that same amount on settlement, so a deposit may move part of the address balance and leave the rest
+in place. A pending request's sweep is signed against the deposit address's current EVM nonce, so at
+most one request per address can ever be mined. `runDeposit` therefore rejects a new request whenever
+any request for that identity and token is still pending, after re-reading the ledger, and the
+surface blocks the control and lists those requests with their IDs and amounts.
+
 ## History and lending attribution
 
 History persistence validates record kinds, statuses, numeric accounting fields and optional public

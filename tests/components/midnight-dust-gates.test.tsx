@@ -367,6 +367,7 @@ async function mountSurface(content: React.ReactNode): Promise<OperationSurface>
   vi.mocked(useVaultBalances).mockReturnValue({
     balances,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn(),
   });
@@ -566,6 +567,7 @@ it.each(operationCalls)(
     vi.mocked(useVaultBalances).mockReturnValue({
       balances: null,
       loading: false,
+      checkedAt: null,
       error: null,
       refresh: vi.fn(),
     });

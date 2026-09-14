@@ -2,12 +2,16 @@ import type * as React from "react";
 
 import { Feedback } from "@/components/ui/feedback";
 
-interface DisabledReasonProps {
-  id: string;
-  label: string;
+/** One condition a surface derives once to both block a control and explain the block. */
+export interface ControlGate {
   reason: string;
   nextAction: string;
   tone: "neutral" | "warning" | "error";
+}
+
+interface DisabledReasonProps extends ControlGate {
+  id: string;
+  label: string;
   action?: React.ReactNode;
 }
 

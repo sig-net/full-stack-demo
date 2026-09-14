@@ -2,7 +2,6 @@
 
 import type * as React from "react";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { LoadingState } from "@/components/states/LoadingState";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,11 +9,11 @@ import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import type { NetworkData, TokenConfig } from "@/lib/constants/token-metadata";
 import { useEvmDeposit } from "@/providers/evm-deposit-context";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
-import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
 import { DepositAddress } from "./deposit-address";
+import { EvmDepositAddress } from "./evm-deposit-address";
 import { EvmDepositTransfer } from "./evm-deposit-transfer";
 import { PendingDepositRecovery } from "./pending-deposit-recovery";
 import { TokenSelection } from "./token-selection";
@@ -37,7 +36,6 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
   const [selectedNetwork, setSelectedNetwork] = useState<NetworkData | null>(null);
   const opener = useRef<HTMLElement | null>(null);
 
-  const balances = useVaultBalances();
   const operations = useVaultOperations();
   const connection = useMidnightConnection();
   const evm = useEvmDeposit();
@@ -66,39 +64,20 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
       ? evm.transfer
       : null;
 
-  const handleContinue = async (): Promise<void> => {
-    if (!selectedToken || !selectedNetwork) return;
-    if (progress.active) return;
+  // The shielded address shown on this surface is itself the deposit destination, so the
+  // continuation here dismisses the dialog and the wallet credits the transfer.
+  const handleMidnightContinue = (): void => {
+    if (!progress.active) handleClose();
+  };
 
-    if (selectedNetwork.chain === "midnight") {
-      handleClose();
-      return;
-    }
-
-    if (isVaultEvmDeposit) {
-      if (recordedTransfer) {
-        if (recordedTransfer.status === "confirmed") await evm.continueDeposit();
-        return;
-      }
-      const erc20 = selectedToken.erc20Address;
-      const units = balances.balances?.perToken[erc20.toLowerCase()]?.depositUnits;
-      if (units == null) {
-        toast.error("Deposit balance is unavailable. Refresh balances and retry.");
-        void balances.refresh().catch(() => undefined);
-        return;
-      }
-      if (units === 0n) {
-        toast.error(`No ${selectedToken.symbol} at the deposit address`, {
-          description: `Send Sepolia ${selectedToken.symbol} to the address above first.`,
-        });
-        return;
-      }
-      void operations.deposit(erc20, units).catch(() => {
-        /* surfaced by MidnightProgressToaster via flow.fail */
-      });
-      handleClose();
-      return;
-    }
+  // The units arrive already validated against the balance the deposit surface observed, and
+  // runDeposit rereads the ledger before it signs anything.
+  const handleStartDeposit = (units: bigint): void => {
+    if (!selectedToken || progress.active || recordedTransfer) return;
+    void operations.deposit(selectedToken.erc20Address, units).catch(() => {
+      /* surfaced by MidnightProgressToaster via flow.fail */
+    });
+    handleClose();
   };
 
   const handleClose = (): void => {
@@ -145,6 +124,15 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
               )}
               {isVaultEvmDeposit && progress.active ? (
                 <LoadingState message={progress.message} />
+              ) : isVaultEvmDeposit ? (
+                <EvmDepositAddress
+                  token={selectedToken}
+                  network={selectedNetwork}
+                  depositAddress={vault.binding?.depositAddress ?? ""}
+                  isSubmitting={progress.active}
+                  showContinue={!recordedTransfer}
+                  onStartDeposit={handleStartDeposit}
+                />
               ) : (
                 <DepositAddress
                   token={selectedToken}
@@ -157,9 +145,7 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
                   isSubmitting={progress.active}
                   showContinue={!recordedTransfer}
                   canContinue={operations.ready}
-                  onContinue={() => {
-                    void handleContinue();
-                  }}
+                  onContinue={handleMidnightContinue}
                 />
               )}
             </div>

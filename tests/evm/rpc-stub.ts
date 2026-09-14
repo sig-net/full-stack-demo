@@ -8,6 +8,8 @@ export interface RpcStub {
   setBalance: (wei: bigint) => void;
   /** Answers every balance request with a transport failure until a balance is set again. */
   failBalance: () => void;
+  /** Transaction count answered for every account. */
+  setNonce: (count: bigint) => void;
   /** Accounts asked for so far, lowercased, in request order. */
   requested: string[];
   close: () => Promise<void>;
@@ -40,6 +42,7 @@ function parseRequest(body: string): RpcRequest[] {
  */
 export async function startRpcStub(chainId: bigint): Promise<RpcStub> {
   let balance: bigint | null = 0n;
+  let nonce = 0n;
   const requested: string[] = [];
   const cors = {
     "access-control-allow-origin": "*",
@@ -75,6 +78,8 @@ export async function startRpcStub(chainId: bigint): Promise<RpcStub> {
             };
           return { jsonrpc: "2.0", id: entry.id, result: `0x${balance.toString(16)}` };
         }
+        if (entry.method === "eth_getTransactionCount")
+          return { jsonrpc: "2.0", id: entry.id, result: `0x${nonce.toString(16)}` };
         return {
           jsonrpc: "2.0",
           id: entry.id,
@@ -95,6 +100,9 @@ export async function startRpcStub(chainId: bigint): Promise<RpcStub> {
     },
     failBalance: () => {
       balance = null;
+    },
+    setNonce: (count) => {
+      nonce = count;
     },
     requested,
     close: () =>

@@ -92,6 +92,7 @@ it.each(scenarios)(
     vi.mocked(useVaultBalances).mockReturnValue({
       balances: null,
       loading: false,
+      checkedAt: null,
       error: null,
       refresh,
     });
@@ -368,6 +369,7 @@ it("retains the confirmed deposit when manual recovery fails validation", async 
   vi.mocked(useVaultBalances).mockReturnValue({
     balances: null,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn().mockResolvedValue(undefined),
   });
@@ -459,6 +461,7 @@ it.each(["failed", "completed"] as const)(
     vi.mocked(useVaultBalances).mockReturnValue({
       balances: null,
       loading: false,
+      checkedAt: null,
       error: null,
       refresh: vi.fn().mockResolvedValue(undefined),
     });

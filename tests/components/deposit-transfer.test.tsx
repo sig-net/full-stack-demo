@@ -64,6 +64,7 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
   vi.mocked(useVaultBalances).mockReturnValue({
     balances: null,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh,
   });

@@ -78,6 +78,7 @@ it.each(["missing", "loading", "error"])(
     vi.mocked(useVaultBalances).mockReturnValue({
       balances: null,
       loading: mode === "loading",
+      checkedAt: null,
       error: mode === "error" ? "Some balances are unavailable." : null,
       refresh: vi.fn(),
     });
@@ -131,6 +132,7 @@ it("uses asset decimals, preserves refunds, rejects excess precision and gates u
   vi.mocked(useVaultBalances).mockReturnValue({
     balances,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn(),
   });
@@ -238,6 +240,7 @@ it("blocks supply on a vault reserve that still covers redeem", async () => {
   vi.mocked(useVaultBalances).mockReturnValue({
     balances,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn(),
   });

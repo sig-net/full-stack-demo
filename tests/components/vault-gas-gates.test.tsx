@@ -136,6 +136,7 @@ async function mountVaultSurface(content: React.ReactNode): Promise<VaultSurface
   vi.mocked(useVaultBalances).mockReturnValue({
     balances,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn(),
   });
@@ -268,6 +269,7 @@ async function mountDepositSurface(): Promise<DepositSurface> {
   vi.mocked(useVaultBalances).mockReturnValue({
     balances: null,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn<ReturnType<typeof useVaultBalances>["refresh"]>().mockResolvedValue(undefined),
   });
@@ -365,7 +367,9 @@ it.each(sweepBoundaries)(
   async ({ observed, blocked }) => {
     const surface = await mountDepositSurface();
     try {
-      const amountField = await screen.findByLabelText(`Amount (${surface.token.symbol})`);
+      const amountField = await screen.findByLabelText(
+        `Amount to transfer (${surface.token.symbol})`,
+      );
       fireEvent.change(amountField, { target: { value: "1" } });
       surface.observe(observed);
       const send = screen.getByRole("button", { name: "Send tokens to deposit address" });
@@ -386,7 +390,9 @@ const SEND_GATE_ID = "deposit-transfer-send-gate";
 it("explains an unreadable deposit reserve and keeps the entered amount", async () => {
   const surface = await mountDepositSurface();
   try {
-    const amountField = await screen.findByLabelText(`Amount (${surface.token.symbol})`);
+    const amountField = await screen.findByLabelText(
+      `Amount to transfer (${surface.token.symbol})`,
+    );
     fireEvent.change(amountField, { target: { value: "0.5" } });
     surface.observe(undefined, true);
     const send = screen.getByRole("button", { name: "Send tokens to deposit address" });
@@ -496,6 +502,7 @@ it("rechecks the vault reserve at the operation boundary and leaves the deposit 
   vi.mocked(useVaultBalances).mockReturnValue({
     balances: null,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh: vi.fn<ReturnType<typeof useVaultBalances>["refresh"]>().mockResolvedValue(undefined),
   });

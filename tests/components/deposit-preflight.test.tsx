@@ -58,6 +58,7 @@ it("serialises EVM deposit preflight and preserves confirmed transfer state", as
   vi.mocked(useVaultBalances).mockReturnValue({
     balances: null,
     loading: false,
+    checkedAt: null,
     error: null,
     refresh,
   });
