@@ -186,13 +186,15 @@ Registry as `europe-west1-docker.pkg.dev/near-cs-dev/midnight/full-stack-demo-ui
 pushed tag of the form `vX.Y.Z` (stable) or `vX.Y.Z-rc.N` (release candidate). The image tag is
 the git tag, including the `v`. Any other tag shape fails the first job. A stable tag must point
 at a commit on `main`, while release candidates may come from any branch. Each architecture
-(`linux/amd64`, `linux/arm64`) builds on its own native runner and pushes by digest, and the final
-job combines both digests into one multi-architecture manifest. Layers are rebuilt from scratch on
-every run, so a publish takes roughly the length of one image build.
+builds on its own native runner. The `publish` job builds `linux/amd64`, pushes it as
+`<tag>-linux-amd64`, waits for the parallel `build-arm64` job's image tarball, pushes that as
+`<tag>-linux-arm64`, and combines both into the multi-architecture manifest `<tag>`. Layers are
+rebuilt from scratch on every run, so a publish takes roughly the length of one image build.
 
-The workflow needs a repository environment named `deploy` with required reviewers. Every job
-that touches the registry runs in it, so reviewers approve the two build jobs first and the
-manifest job afterwards. Configure the environment with:
+The workflow needs a repository environment named `deploy` with required reviewers. Only the
+`publish` job runs in it, and it asks for approval as soon as the tag checks pass, so a release
+needs one approval at the start. The `build-arm64` job runs without credentials and publishes
+nothing. Configure the environment with:
 
 | Environment setting         | Purpose                                                                                                                                                             |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
