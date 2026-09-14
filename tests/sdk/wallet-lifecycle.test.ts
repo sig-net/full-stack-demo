@@ -179,8 +179,8 @@ it("coalesces DUST registration and disconnect prevents late signing or submissi
   });
   const register = vi.spyOn(facade, "registerNightUtxosForDustGeneration");
   const submit = vi.spyOn(facade, "submitTransaction");
-  const pending = wallet.ensureFeeReady(10000000000000000n);
-  expect(wallet.ensureFeeReady(10000000000000000n)).toBe(pending);
+  const pending = wallet.registerNightForDust(10000000000000000n);
+  expect(wallet.registerNightForDust(10000000000000000n)).toBe(pending);
   await waiting.promise;
   await wallet.disconnect();
   registration.resolve(undefined);

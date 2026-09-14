@@ -19,8 +19,6 @@ import {
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
 import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 
-import { useServerRuntimeCompatibility } from "./use-server-runtime-compatibility";
-
 type Draft = Omit<RuntimeConfig, "evm"> & {
   evm: Omit<RuntimeConfig["evm"], "chainId"> & { chainId: string };
 };
@@ -143,7 +141,6 @@ interface ConfigurationSections {
   pending: boolean;
   failure: string | null;
   walletError: string | null;
-  serverUnavailable: string | null;
   sections: {
     title: string;
     fields: (FieldDefinition & {
@@ -160,7 +157,6 @@ interface ConfigurationSections {
  */
 export function useRuntimeConfigSections(): ConfigurationSections {
   const { owner, applied } = useRuntimeConfiguration();
-  const compatibility = useServerRuntimeCompatibility();
   const connection = useMidnightConnection();
   const [editing, setEditing] = useState<{ draft: Draft; revision: number } | null>(null);
   const [errors, setErrors] = useState<
@@ -351,7 +347,6 @@ export function useRuntimeConfigSections(): ConfigurationSections {
       editing !== null || resolvedDraft.evm.chainId !== (applied.evm.chainId?.toString() ?? ""),
     failure,
     walletError: connection.error,
-    serverUnavailable: compatibility.serverUnavailable,
     sections: (["vault", "midnight", "evm"] as const).map((section) => ({
       title: section === "vault" ? "Vault" : section === "midnight" ? "Midnight" : "EVM",
       fields: definitions

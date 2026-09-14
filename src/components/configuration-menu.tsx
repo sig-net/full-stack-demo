@@ -157,11 +157,6 @@ export function ConfigurationMenu(): React.JSX.Element {
                 {model.walletError}
               </Feedback>
             )}
-            {model.serverUnavailable && (
-              <Feedback tone="warning" role="status">
-                {model.serverUnavailable}
-              </Feedback>
-            )}
             {result && (
               <p role="status" className="ds-body">
                 {result}

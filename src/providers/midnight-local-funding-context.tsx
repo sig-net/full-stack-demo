@@ -1,42 +1,25 @@
 "use client";
 
-import {
-  useMutation,
-  type UseMutationResult,
-  useQuery,
-  type UseQueryResult,
-} from "@tanstack/react-query";
+import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 import { createContext, type JSX, type ReactNode, useContext, useEffect, useRef } from "react";
-import { z } from "zod";
 
-import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
-import { fundingErrorSchema, LOCAL_NIGHT_GRANT, MINIMUM_MIDNIGHT_DUST } from "@/lib/wallet-funding";
+import { fundingErrorSchema, LOCAL_NIGHT_GRANT } from "@/lib/wallet-funding";
 
+import { useLocalFaucet } from "./local-faucet-context";
 import { useMidnightReadiness } from "./midnight-readiness-context";
 import { useMidnightConnection } from "./midnight-wallet-context";
 
 interface LocalFundingState {
-  eligibility: UseQueryResult<boolean>;
   funding: UseMutationResult<void, Error, void>;
   fund: () => Promise<void>;
   fundingUnavailable: string | undefined;
 }
 
 function useLocalFundingOwner(): LocalFundingState {
-  const compatibility = useServerRuntimeCompatibility();
+  const faucet = useLocalFaucet();
   const connection = useMidnightConnection();
   const { wallet, balances } = useMidnightReadiness();
   const pending = useRef<Promise<void> | null>(null);
-  const eligibility = useQuery({
-    queryKey: ["local-funding-eligibility"],
-    queryFn: async () => {
-      const response = await fetch("/api/local-funding/evm");
-      if (!response.ok) throw new Error("Local funding eligibility is unavailable.");
-      const input: unknown = await response.json();
-      return z.object({ eligible: z.boolean() }).parse(input).eligible;
-    },
-    refetchInterval: 30_000,
-  });
   const funding = useMutation({
     mutationKey: ["midnight-funding", connection.session],
     mutationFn: async () => {
@@ -45,24 +28,15 @@ function useLocalFundingOwner(): LocalFundingState {
         if (!connection.isCurrent(wallet)) throw new Error("Wallet session changed.");
       };
       assertCurrent();
-      compatibility.requireServerHeaders();
-      if (!wallet.ensureFeeReady || !wallet.unshieldedPublicKey)
-        throw new Error(
-          wallet.fundingUnavailable ?? "Local Midnight funding is unavailable for this wallet.",
-        );
+      faucet.requireEligible();
       const unshielded = await wallet.getUnshieldedBalances();
       assertCurrent();
+      faucet.requireEligible();
       if (Object.values(unshielded).reduce((sum, value) => sum + value, 0n) < LOCAL_NIGHT_GRANT) {
-        const response = await fetch("/api/local-funding/midnight", {
+        const response = await fetch("/api/midnight/night-faucet", {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...compatibility.requireServerHeaders(),
-          },
-          body: JSON.stringify({
-            address: wallet.unshieldedAddress,
-            publicKey: wallet.unshieldedPublicKey,
-          }),
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ address: wallet.unshieldedAddress }),
         });
         assertCurrent();
         const body: unknown = await response.json();
@@ -76,17 +50,16 @@ function useLocalFundingOwner(): LocalFundingState {
           );
         }
       }
-      await wallet.ensureFeeReady(MINIMUM_MIDNIGHT_DUST);
       assertCurrent();
       await balances.refetch({ throwOnError: true });
       assertCurrent();
     },
   });
-  const { reset } = funding;
+  const { reset: resetFunding } = funding;
   useEffect(() => {
-    reset();
+    resetFunding();
     pending.current = null;
-  }, [connection.session, reset]);
+  }, [connection.session, resetFunding]);
   const fund = (): Promise<void> => {
     if (pending.current) return pending.current;
     const operation = funding.mutateAsync().finally(() => {
@@ -96,10 +69,11 @@ function useLocalFundingOwner(): LocalFundingState {
     return operation;
   };
   return {
-    eligibility,
     funding,
     fund,
-    fundingUnavailable: compatibility.serverUnavailable ?? wallet?.fundingUnavailable,
+    fundingUnavailable: faucet.eligible
+      ? undefined
+      : "Local funding requires the exact local faucet configuration.",
   };
 }
 

@@ -12,7 +12,6 @@ import {
 } from "react";
 import { erc20Abi, getAddress, type Hash } from "viem";
 
-import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
 import { isErc20Allowed } from "@/lib/constants/token-metadata";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
@@ -48,7 +47,6 @@ interface EvmDepositState {
 
 function useEvmDepositOwner(): EvmDepositState {
   const runtime = useRuntimeConfiguration();
-  const compatibility = useServerRuntimeCompatibility();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
   const queries = useQueryClient();
@@ -66,7 +64,6 @@ function useEvmDepositOwner(): EvmDepositState {
     amount: string,
   ): Promise<void> => {
     if (busy.current || transferRef.current?.sweep === "pending") return;
-    compatibility.requireServerHeaders();
     const owner = wallet;
     if (!owner) throw new Error("Connect an EVM wallet first.");
     binding.assertActive();
@@ -115,7 +112,6 @@ function useEvmDepositOwner(): EvmDepositState {
         beforeSubmit: () => {
           if (!mounted.current) throw new Error("Deposit workflow closed.");
           binding.assertActive();
-          compatibility.requireServerHeaders();
         },
         submitted: (hash) => {
           record.hash = hash;

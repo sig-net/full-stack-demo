@@ -12,12 +12,12 @@ import {
 } from "react";
 import type { Address } from "viem";
 
-import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
 import { ERC20_TOKENS } from "@/lib/constants/token-metadata";
-import { fundingErrorSchema, hasLocalEvmFunds } from "@/lib/wallet-funding";
+import { fundingErrorSchema, hasLocalEvmFunds, MINIMUM_EVM_ETH } from "@/lib/wallet-funding";
 
 import { useEvmBalances } from "./evm-balances-context";
 import { useEvmWallet } from "./evm-wallet-context";
+import { useLocalFaucet } from "./local-faucet-context";
 
 interface FundingRecipient {
   address: Address;
@@ -33,6 +33,7 @@ interface AddressFundingState {
 interface EvmLocalFundingState extends AddressFundingState {
   ready: boolean;
   fundingUnavailable: string | null;
+  fundLocalEthAddress: (address: Address) => Promise<void>;
 }
 
 /**
@@ -41,14 +42,30 @@ interface EvmLocalFundingState extends AddressFundingState {
  * @param address - Current signing account.
  * @param session - Identity of the current signing session.
  * @param refresh - Reloads balances after successful funding.
- * @param requireHeaders - Supplies the captured server configuration attestation.
+ * @param fundRecipient - Starts the caller-selected local faucet requests.
  * @returns Funding mutation state and its recipient-scoped action.
  */
 export function useAddressFunding(
   address: Address | undefined,
   session: string | undefined,
   refresh: () => Promise<void>,
-  requireHeaders: () => Record<string, string> = () => ({}),
+  fundRecipient: (
+    recipient: FundingRecipient,
+    assertRecipient: () => void,
+  ) => Promise<void> = async (recipient) => {
+    const response = await fetch("/api/evm/eth-faucet", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ address: recipient.address }),
+    });
+    if (!response.ok) {
+      const body: unknown = await response.json();
+      const parsed = fundingErrorSchema.safeParse(body);
+      throw new Error(
+        parsed.success ? (parsed.data.error ?? "EVM funding failed.") : "EVM funding failed.",
+      );
+    }
+  },
 ): AddressFundingState {
   const current = useRef({ address, session });
   const pending = useRef<{
@@ -67,19 +84,8 @@ export function useAddressFunding(
           throw new Error("EVM funding recipient changed.");
       };
       assertRecipient();
-      const response = await fetch("/api/local-funding/evm", {
-        method: "POST",
-        headers: { "content-type": "application/json", ...requireHeaders() },
-        body: JSON.stringify({ address: recipient.address }),
-      });
-      const body: unknown = await response.json();
+      await fundRecipient(recipient, assertRecipient);
       assertRecipient();
-      if (!response.ok) {
-        const parsed = fundingErrorSchema.safeParse(body);
-        throw new Error(
-          parsed.success ? (parsed.data.error ?? "EVM funding failed.") : "EVM funding failed.",
-        );
-      }
       try {
         await refresh();
         assertRecipient();
@@ -117,16 +123,62 @@ export function useAddressFunding(
 }
 
 function useEvmLocalFundingOwner(): EvmLocalFundingState {
-  const compatibility = useServerRuntimeCompatibility();
+  const faucet = useLocalFaucet();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
+  const usdcToken = ERC20_TOKENS.find((token) => token.symbol === "USDC");
+  if (!usdcToken) throw new Error("USDC configuration is unavailable.");
   const funding = useAddressFunding(
     wallet?.account,
     wallet?.sessionId,
     async () => {
       await balances.refetch({ throwOnError: true });
     },
-    compatibility.requireServerHeaders,
+    async (recipient, assertRecipient) => {
+      faucet.requireEligible();
+      assertRecipient();
+      const current = balances.data;
+      if (!current) throw new Error("Wallet balances are unavailable. Refresh balances and retry.");
+      if (current.nativeUnits < MINIMUM_EVM_ETH) {
+        const response = await fetch("/api/evm/eth-faucet", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ address: recipient.address }),
+        });
+        const body: unknown = await response.json();
+        if (!response.ok) {
+          const parsed = fundingErrorSchema.safeParse(body);
+          throw new Error(
+            parsed.success
+              ? (parsed.data.error ?? "Local ETH funding failed.")
+              : "Local ETH funding failed.",
+          );
+        }
+      }
+      assertRecipient();
+      const usdc = current.tokens.find((token) => token.erc20Address === usdcToken.erc20Address);
+      if (!usdc || usdc.units < 10n ** BigInt(usdc.decimals)) {
+        faucet.requireEligible();
+        assertRecipient();
+        const response = await fetch("/api/evm/erc20-faucet", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            address: recipient.address,
+            tokenAddress: usdcToken.erc20Address,
+          }),
+        });
+        const body: unknown = await response.json();
+        if (!response.ok) {
+          const parsed = fundingErrorSchema.safeParse(body);
+          throw new Error(
+            parsed.success
+              ? (parsed.data.error ?? "Local ERC-20 funding failed.")
+              : "Local ERC-20 funding failed.",
+          );
+        }
+      }
+    },
   );
   const usdc = balances.data?.tokens.find(
     (token) =>
@@ -136,7 +188,31 @@ function useEvmLocalFundingOwner(): EvmLocalFundingState {
     !!wallet &&
     balances.isSuccess &&
     hasLocalEvmFunds(balances.data.nativeUnits, usdc?.units, usdc?.decimals);
-  return { ...funding, ready, fundingUnavailable: compatibility.serverUnavailable };
+  const fundLocalEthAddress = async (address: Address): Promise<void> => {
+    faucet.requireEligible();
+    const response = await fetch("/api/evm/eth-faucet", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ address }),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) {
+      const parsed = fundingErrorSchema.safeParse(body);
+      throw new Error(
+        parsed.success
+          ? (parsed.data.error ?? "Local ETH funding failed.")
+          : "Local ETH funding failed.",
+      );
+    }
+  };
+  return {
+    ...funding,
+    ready,
+    fundingUnavailable: faucet.eligible
+      ? null
+      : "Local funding requires the exact local faucet configuration.",
+    fundLocalEthAddress,
+  };
 }
 const EvmLocalFundingContext = createContext<ReturnType<typeof useEvmLocalFundingOwner> | null>(
   null,

@@ -13,6 +13,8 @@ import { Providers } from "@/providers/providers";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 
+import { LOCAL_FAUCET_DESCRIPTOR_FIXTURE } from "../config/local-faucet-fixture";
+
 vi.mock(import("@/providers/midnight-wallet-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/vault-context"), { spy: true });
@@ -66,7 +68,7 @@ it("renders the non-zero USDC balance using six asset decimals", () => {
     refresh: vi.fn(),
   });
   render(
-    <Providers>
+    <Providers localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
       <BalanceSection />
     </Providers>,
   );
@@ -128,7 +130,7 @@ it("renders the connected Home sections and refunded activity on the server", as
   ]);
   try {
     const html = renderToStaticMarkup(
-      <Providers>
+      <Providers localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
         <Home />
       </Providers>,
     );
@@ -158,7 +160,7 @@ it("orders the five activation rows and keeps identity outside the wallet menu",
     disconnect: vi.fn(),
   });
   render(
-    <Providers>
+    <Providers localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
       <Home />
     </Providers>,
   );
@@ -200,7 +202,7 @@ it("returns home activation focus to the persistent identity control as the dash
   };
   vi.mocked(useVault).mockReturnValue({ ...actions, status: "missing-identity", binding: null });
   const view = render(
-    <Providers>
+    <Providers localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
       <Home />
     </Providers>,
   );
@@ -212,7 +214,7 @@ it("returns home activation focus to the persistent identity control as the dash
     fireEvent.click(screen.getByRole("button", { name: "Use vault secret" }));
     vi.mocked(useVault).mockReturnValue({ ...actions, status: "ready", binding });
     view.rerender(
-      <Providers>
+      <Providers localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
         <Home />
       </Providers>,
     );

@@ -6,11 +6,7 @@ import { formatUnits } from "viem";
 
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Feedback } from "@/components/ui/feedback";
-import {
-  browserWalletConnection,
-  captureLocalForkPolicy,
-  seedWalletConnection,
-} from "@/lib/config/evm-wallet";
+import { browserWalletConnection, seedWalletConnection } from "@/lib/config/evm-wallet";
 import { ERC20_TOKENS } from "@/lib/constants/token-metadata";
 import { type BrowserWalletChoice, discoverBrowserWallets } from "@/lib/evm/wallet/BrowserWallet";
 import { useEvmBalances } from "@/providers/evm-balances-context";
@@ -54,23 +50,11 @@ export function EvmWalletButton(): React.JSX.Element {
       choices={choices.map((choice) => ({
         ...choice,
         connect: () => {
-          void evm.connect(
-            browserWalletConnection(
-              choice,
-              applied.evm,
-              captureLocalForkPolicy(applied.midnight.networkId),
-            ),
-          );
+          void evm.connect(browserWalletConnection(choice, applied.evm));
         },
       }))}
       installSeed={(seed) => {
-        void evm.connect(
-          seedWalletConnection(
-            seed,
-            applied.evm,
-            captureLocalForkPolicy(applied.midnight.networkId),
-          ),
-        );
+        void evm.connect(seedWalletConnection(seed, applied.evm));
       }}
       disconnect={evm.disconnect}
     >

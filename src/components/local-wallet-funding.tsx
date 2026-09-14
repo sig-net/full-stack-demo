@@ -3,6 +3,7 @@
 import type * as React from "react";
 
 import { Feedback } from "@/components/ui/feedback";
+import { LOCAL_NIGHT_GRANT, MINIMUM_EVM_ETH } from "@/lib/wallet-funding";
 import { useEvmBalances } from "@/providers/evm-balances-context";
 import { useEvmLocalFunding } from "@/providers/evm-local-funding-context";
 import { useEvmWallet } from "@/providers/evm-wallet-context";
@@ -22,30 +23,41 @@ export function LocalWalletFunding(): React.JSX.Element | null {
   const evm = useEvmWallet();
   const localEvm = useEvmLocalFunding();
   const evmBalances = useEvmBalances();
-  const pending = localMidnight.funding.isPending || localEvm.funding.isPending;
+  const pending =
+    localMidnight.funding.isPending ||
+    midnight.registration.isPending ||
+    localEvm.funding.isPending;
   if (!midnight.wallet && !evm.wallet) return null;
   const needsMidnight = !!midnight.wallet && !midnight.resourcesReady;
-  const needsEvm = !!evm.wallet && !localEvm.ready;
+  const evmResourcesReady = localEvm.fundingUnavailable
+    ? evmBalances.isSuccess && evmBalances.data.nativeUnits >= MINIMUM_EVM_ETH
+    : localEvm.ready;
+  const needsEvm = !!evm.wallet && !evmResourcesReady;
   const canFundMidnight =
-    needsMidnight && midnight.balances.isSuccess && !localMidnight.fundingUnavailable;
+    needsMidnight &&
+    midnight.balances.isSuccess &&
+    midnight.balances.data.night < LOCAL_NIGHT_GRANT &&
+    !localMidnight.fundingUnavailable;
   const canFundEvm = needsEvm && evmBalances.isSuccess && !localEvm.fundingUnavailable;
+  const canRegisterNight =
+    !!midnight.wallet?.registerNightForDust &&
+    (midnight.balances.data?.unregisteredNight ?? 0n) > 0n;
   return (
     <div className="ds-stack-control ds-round ds-frame ds-surface ds-inset-content ds-body mx-auto max-w-3xl">
       <p role="status">
         {midnight.wallet &&
           `Midnight: ${midnight.transactionUnavailable ?? (midnight.balances.isPending ? "checking resources" : midnight.ready ? "DUST ready" : midnight.balances.isError ? "balance unavailable" : "DUST below transaction threshold")}. `}
         {evm.wallet &&
-          `EVM: ${evmBalances.isPending ? "checking balances" : localEvm.ready ? "local funding reserve ready" : evmBalances.isError ? "balances unavailable" : "funds below local funding reserve"}.`}
+          `EVM: ${evmBalances.isPending ? "checking balances" : evmResourcesReady ? "gas reserve ready" : evmBalances.isError ? "balances unavailable" : "funds below the required reserve"}.`}
       </p>
-      {localMidnight.fundingUnavailable && <p>{localMidnight.fundingUnavailable}</p>}
-      {localEvm.fundingUnavailable && <p>{localEvm.fundingUnavailable}</p>}
       {(needsMidnight || needsEvm) && (
         <>
           <p>
-            Fund the connected wallets and wait for spendable DUST before starting a transaction.
-            Local EVM funding targets 1 ETH and 100 USDC.
+            {localMidnight.fundingUnavailable || localEvm.fundingUnavailable
+              ? "Fund the configured wallets and vault addresses directly before starting a transaction."
+              : "Fund local wallets. Local EVM funding targets 1 ETH and 100 USDC."}
           </p>
-          {localMidnight.eligibility.data === true && (
+          {!localMidnight.fundingUnavailable && (
             <Button
               disabled={pending || (!canFundMidnight && !canFundEvm)}
               onClick={() => {
@@ -55,17 +67,27 @@ export function LocalWalletFunding(): React.JSX.Element | null {
                 ]);
               }}
             >
-              {pending ? "Funding and waiting for spendable resources…" : "Fund local wallets"}
+              {pending ? "Funding local wallets…" : "Fund local wallets"}
             </Button>
-          )}
-          {localMidnight.eligibility.data === false && (
-            <p>
-              Local funding is unavailable. Check the local setup configuration or fund your
-              configured network wallet.
-            </p>
           )}
         </>
       )}
+      {canRegisterNight && (
+        <Button
+          disabled={pending}
+          onClick={() => {
+            void midnight.registerNight().catch(() => undefined);
+          }}
+        >
+          {midnight.registration.isPending
+            ? "Registering NIGHT for DUST…"
+            : "Register NIGHT for DUST"}
+        </Button>
+      )}
+      {midnight.registrationUnavailable &&
+        (midnight.balances.data?.unregisteredNight ?? midnight.balances.data?.night ?? 0n) > 0n && (
+          <p>{midnight.registrationUnavailable}</p>
+        )}
       {localMidnight.funding.error && (
         <Feedback tone="error" role="alert">
           Midnight: {localMidnight.funding.error.message}
@@ -81,15 +103,14 @@ export function LocalWalletFunding(): React.JSX.Element | null {
           EVM: {localEvm.refreshError}
         </Feedback>
       )}
-      {localMidnight.eligibility.isError && (
+      {midnight.registration.error && (
         <Feedback tone="error" role="alert">
-          Funding eligibility could not be checked.
+          NIGHT registration: {midnight.registration.error.message}
         </Feedback>
       )}
       <Button
         variant="outline"
         onClick={() => {
-          void localMidnight.eligibility.refetch();
           if (midnight.wallet) void midnight.balances.refetch();
           if (evm.wallet) void evmBalances.refetch();
         }}

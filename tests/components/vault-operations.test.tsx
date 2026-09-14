@@ -67,14 +67,6 @@ it.each(scenarios)(
     if (!token) throw new Error("Expected supported token");
     vi.mocked(tokens.fetchErc20Decimals).mockResolvedValue(6);
     mockMatchingRuntimeServer();
-    const serverFetch = globalThis.fetch;
-    const funding = Promise.withResolvers<Response>();
-    const funded = vi.fn(() => funding.promise);
-    vi.stubGlobal(
-      "fetch",
-      (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
-        input === "/api/midnight/gas-topup" ? funded() : serverFetch(input, init),
-    );
     const rebuilding = Promise.withResolvers<typeof binding>();
     const rebuildEntered = Promise.withResolvers<undefined>();
     const rebuild = vi.fn<ReturnType<typeof useVault>["rebuild"]>().mockImplementation(() => {
@@ -142,7 +134,6 @@ it.each(scenarios)(
           _amount,
           _receiver,
           _log,
-          _fund,
           onRecord,
         ) => record(onRecord),
       );
@@ -161,7 +152,6 @@ it.each(scenarios)(
           _log,
           _fee,
           _slippage,
-          _fund,
           onRecord,
         ) => record(onRecord),
       );
@@ -176,7 +166,6 @@ it.each(scenarios)(
           _identity,
           _amount,
           _log,
-          _fund,
           onRecord,
         ) => {
           return record(onRecord);
@@ -193,7 +182,6 @@ it.each(scenarios)(
           _identity,
           _amount,
           _log,
-          _fund,
           onRecord,
         ) => {
           return record(onRecord);
@@ -242,9 +230,6 @@ it.each(scenarios)(
             break;
         }
       });
-      await waitFor(() => {
-        expect(funded).toHaveBeenCalledTimes(1);
-      });
       await expect(mounted.result.current[1].deposit(token.erc20Address, 1000000n)).rejects.toThrow(
         "progress",
       );
@@ -254,9 +239,6 @@ it.each(scenarios)(
           ? { token: token.erc20Address, requestId: null, status: "pending" }
           : null,
       );
-      act(() => {
-        funding.resolve(Response.json({ ok: true }));
-      });
       await waitFor(() => {
         expect(execute).toHaveBeenCalledTimes(1);
       });
@@ -367,14 +349,6 @@ it("retains the confirmed deposit when manual recovery fails validation", async 
   );
   vi.stubEnv("NEXT_PUBLIC_MPC_SECP256K1_PUBKEY", binding.environment.mpcSecpPub);
   mockMatchingRuntimeServer();
-  const serverFetch = globalThis.fetch;
-  vi.stubGlobal(
-    "fetch",
-    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
-      input === "/api/midnight/gas-topup"
-        ? Promise.resolve(Response.json({ ok: true }))
-        : serverFetch(input, init),
-  );
   vi.mocked(tokens.fetchErc20Decimals).mockResolvedValue(6);
   vi.mocked(useVault).mockReturnValue({
     status: "ready",

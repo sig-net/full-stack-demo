@@ -6,6 +6,7 @@ import type * as React from "react";
 
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Toaster } from "@/components/ui/sonner";
+import { getLocalFaucetConfiguration } from "@/lib/config/local-faucet-server";
 import { Providers } from "@/providers/providers";
 
 const inter = Inter({
@@ -40,10 +41,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>): React.JSX.Element {
+  const { descriptor } = getLocalFaucetConfiguration();
   return (
     <html lang="en">
       <body className={` ${inter.variable} ${jetbrainsMono.variable}antialiased `}>
-        <Providers>
+        <Providers localFaucet={descriptor}>
           <ErrorBoundary>{children}</ErrorBoundary>
           <Toaster richColors position="bottom-right" />
         </Providers>

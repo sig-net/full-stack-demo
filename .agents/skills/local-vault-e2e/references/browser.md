@@ -101,9 +101,8 @@ so they do not require a MetaMask approval step. The extension procedure below a
 wallets. Connecting either kind does not add a transfer to a smoke test's acceptance scope.
 
 Before restoring wallets or identity, apply the intended public deployment through Configuration.
-The browser starts with undeployed Midnight and local EVM defaults. Generated `.env.local` values configure the
-server, while GET `/api/runtime-config` supplies its public nested config for comparison. Use
-the README field mapping and select the Midnight and EVM networks before entering endpoint
+The browser starts with undeployed Midnight and local EVM defaults. Read generated public
+deployment values from the local setup output using the README field mapping and select the Midnight and EVM networks before entering endpoint
 overrides. A local RPC edit clears the discovered chain. Wait for discovery or enter the generated
 chain ID after the RPC, then Apply. Repeat this after a page refresh before re-entering credentials. Verify restored
 on-chain balances separately from Activity history.
@@ -111,8 +110,10 @@ on-chain balances separately from Activity history.
 When full deposit or low-funds acceptance is in scope, open the local app and connect the EVM
 wallet through its chooser. Verify local fork identity. Restore the Midnight seed and independent
 vault secret through the product controls. For the low-funds scenario, a new wallet should
-synchronise with zero funds, render the app and offer local funding. Click funding once and wait
-for spendable DUST/readiness. Do not infer readiness from NIGHT alone.
+synchronise with zero funds, render the app and offer local funding. Click funding once and
+observe separate ETH, ERC-20 and NIGHT faucet responses. Then click Register NIGHT for DUST
+through the connected user wallet and wait for spendable DUST/readiness. Funding NIGHT does not
+register it. Use explicit deposit/vault ETH funding controls when needed before the operation.
 
 Keep the app page alive when MetaMask needs approval. Extension sidepanels may be absent from
 both normal tab enumeration and `page.context().pages()`. The following bounded lookup was used
@@ -184,3 +185,7 @@ For request-ID copy/paste acceptance, wait until the recovery input contains the
 Clipboard paste completes asynchronously after the button click. Capture the settlement-stage
 request display promptly: successful completion can close the deposit dialog before a queued
 copy action runs. A later successful copy proves the completed-state control, not the pending one.
+
+Stop the identified UI process before deleting generated Next cache or route metadata. Clearing
+`.next` while Turbopack is running produced missing SST files and wallet chunk-load failures.
+After restarting, wait for hydration and the actual configuration dialog before editing fields.

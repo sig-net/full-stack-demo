@@ -86,10 +86,7 @@ it("discards pending connections and evicts late balances after disconnect", asy
   }
 });
 
-it("retains the local fork mismatch reason and reconnects after provider correction", async () => {
-  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_NETWORK_ID", "undeployed");
-  vi.stubEnv("NEXT_PUBLIC_LOCAL_EVM_MARKER_ADDRESS", account);
-  vi.stubEnv("NEXT_PUBLIC_LOCAL_EVM_MARKER_CODE", "0x1234");
+it("connects a local wallet without a deployment marker", async () => {
   const f = browserWalletFixture();
   f.wallet.disconnect();
   const choice = { id: "local", name: "Local", provider: f.provider };
@@ -106,16 +103,9 @@ it("retains the local fork mismatch reason and reconnects after provider correct
     await act(async () => {
       await result.current.connect(browserWalletConnection(choice, config));
     });
-    expect(result.current.error).toMatch(/local fork marker/);
-    expect(result.current.error).toContain(config.rpcUrl);
-    expect(result.current.wallet).toBeNull();
-    expect(result.current.connecting).toBe(false);
-    f.controls.markerCode = "0x1234";
-    await act(async () => {
-      await result.current.connect(browserWalletConnection(choice, config));
-    });
     expect(result.current.wallet?.account).toBe(account);
     expect(result.current.error).toBeNull();
+    expect(result.current.connecting).toBe(false);
   } finally {
     unmount();
   }
@@ -137,7 +127,6 @@ it("connects an independently configured EVM chain without Midnight deployment o
   const connection = browserWalletConnection(
     { id: "independent", name: "Independent", provider: f.provider },
     config,
-    { networkId: "undeployed", markerAddress: undefined, markerCode: undefined },
   );
   const { result, unmount } = renderHook(useEvmWallet, {
     wrapper: ({ children }) => <EvmWalletProvider>{children}</EvmWalletProvider>,

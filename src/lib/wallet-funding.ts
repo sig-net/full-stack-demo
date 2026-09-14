@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Error payload accepted from local and relayer funding endpoints. */
+/** Error payload accepted from local funding endpoints. */
 export const fundingErrorSchema = z.object({ error: z.string().optional() });
 
 /** DUST reserve required by the local readiness gate, in ledger units. */

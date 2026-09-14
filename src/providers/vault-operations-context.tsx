@@ -14,12 +14,10 @@ import {
 } from "react";
 import { formatUnits } from "viem";
 
-import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
 import { resolveEvmChain } from "@/lib/config/evm";
 import type { RuntimeSnapshot } from "@/lib/config/runtime";
 import { fetchErc20Decimals } from "@/lib/constants/token-metadata";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
-import type { GasTopUpRequest } from "@/lib/evm/gas-topup-request";
 import { AAVE_USDC, STATA_USDC } from "@/lib/midnight/evm-stata";
 import {
   flow,
@@ -34,7 +32,6 @@ import {
   type MidnightTxStatus,
 } from "@/lib/midnight/tx-history";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
-import { fundingErrorSchema } from "@/lib/wallet-funding";
 
 import { useMidnightReadiness } from "./midnight-readiness-context";
 import { useRuntimeConfiguration } from "./runtime-config-context";
@@ -86,26 +83,6 @@ function describeFlowError(error: unknown): string {
   );
 }
 
-async function requestGasTopUp(
-  request: GasTopUpRequest,
-  headers: Record<string, string>,
-): Promise<void> {
-  const res = await fetch("/api/midnight/gas-topup", {
-    method: "POST",
-    headers: { "content-type": "application/json", ...headers },
-    body: JSON.stringify(request),
-  });
-  if (!res.ok) {
-    const body: unknown = await res.json().catch(() => ({}));
-    const parsed = fundingErrorSchema.safeParse(body);
-    throw new Error(
-      parsed.success
-        ? (parsed.data.error ?? `Gas top-up failed (${res.status.toString()})`)
-        : `Gas top-up failed (${res.status.toString()})`,
-    );
-  }
-}
-
 interface OperationResult {
   refunded: boolean;
 }
@@ -146,9 +123,6 @@ interface CapturedOperation {
 function useVaultOperationOwner(): VaultOperationState {
   const vaultOwner = useVault();
   const runtime = useRuntimeConfiguration();
-  const compatibility = useServerRuntimeCompatibility();
-  const topUpGas = (request: GasTopUpRequest): Promise<void> =>
-    requestGasTopUp(request, compatibility.requireServerHeaders());
   const readiness = useMidnightReadiness();
   const { refresh } = useVaultBalances();
   const { binding } = vaultOwner;
@@ -331,12 +305,6 @@ function useVaultOperationOwner(): VaultOperationState {
     try {
       let result: VaultExecutionResult;
       if (kind === "deposit") {
-        append(operation, "Requesting gas top-up from relayer...");
-        captured.assertActive();
-        await topUpGas({
-          operation: "deposit",
-          recipient: { kind: "deposit", path: captured.identity.pathHex },
-        });
         result = await withStaleStateRecovery(operation, (active) =>
           runDeposit(
             operation.progress,
@@ -375,9 +343,6 @@ function useVaultOperationOwner(): VaultOperationState {
       } else {
         const hex = (receiver ?? "").trim().replace(/^0x/, "");
         const destHex = hex.length === 40 ? `0x${hex}` : DEAD_ADDRESS;
-        append(operation, "Requesting gas top-up from relayer...");
-        captured.assertActive();
-        await topUpGas({ operation: "withdraw", recipient: { kind: "vault" } });
         result = await withStaleStateRecovery(operation, (active) =>
           runWithdraw(
             operation.progress,
@@ -390,13 +355,6 @@ function useVaultOperationOwner(): VaultOperationState {
             destHex,
             (message) => {
               if (active === operation.binding) appendActive(message);
-            },
-            () => {
-              active.assertActive();
-              return topUpGas({
-                operation: "withdraw",
-                recipient: { kind: "vault" },
-              });
             },
             (rid, hash) => {
               record(
@@ -461,9 +419,6 @@ function useVaultOperationOwner(): VaultOperationState {
       });
     };
     try {
-      append(operation, "Requesting gas top-up from relayer...");
-      captured.assertActive();
-      await topUpGas({ operation: "swap", recipient: { kind: "vault" } });
       const result = await withStaleStateRecovery(operation, (active) =>
         runSwap(
           operation.progress,
@@ -479,13 +434,6 @@ function useVaultOperationOwner(): VaultOperationState {
           },
           fee,
           slippageBps,
-          () => {
-            active.assertActive();
-            return topUpGas({
-              operation: "swap",
-              recipient: { kind: "vault" },
-            });
-          },
           (rid, hash) => {
             record(rid, hash);
           },
@@ -536,9 +484,6 @@ function useVaultOperationOwner(): VaultOperationState {
       });
     };
     try {
-      append(operation, "Requesting gas top-up from relayer...");
-      captured.assertActive();
-      await topUpGas({ operation: "supply", recipient: { kind: "vault" } });
       const result = await withStaleStateRecovery(operation, (active) =>
         runSupply(
           operation.progress,
@@ -549,13 +494,6 @@ function useVaultOperationOwner(): VaultOperationState {
           amountUnits,
           (message) => {
             if (active === operation.binding) appendActive(message);
-          },
-          () => {
-            active.assertActive();
-            return topUpGas({
-              operation: "supply",
-              recipient: { kind: "vault" },
-            });
           },
           (rid, hash) => {
             record(rid, hash);
@@ -618,9 +556,6 @@ function useVaultOperationOwner(): VaultOperationState {
       });
     };
     try {
-      append(operation, "Requesting gas top-up from relayer...");
-      captured.assertActive();
-      await topUpGas({ operation: "redeem", recipient: { kind: "vault" } });
       const result = await withStaleStateRecovery(operation, (active) =>
         runRedeem(
           operation.progress,
@@ -631,13 +566,6 @@ function useVaultOperationOwner(): VaultOperationState {
           shares,
           (message) => {
             if (active === operation.binding) appendActive(message);
-          },
-          () => {
-            active.assertActive();
-            return topUpGas({
-              operation: "redeem",
-              recipient: { kind: "vault" },
-            });
           },
           (rid, hash) => {
             record(rid, hash);
@@ -669,7 +597,6 @@ function useVaultOperationOwner(): VaultOperationState {
     retainDepositRequest = false,
   ): Promise<OperationResult> => {
     if (locked.current) throw new Error("A vault operation is already in progress.");
-    compatibility.requireServerHeaders();
     const active = vaultOwner.requireBinding();
     const operation: CapturedOperation = {
       id: crypto.randomUUID(),
@@ -751,8 +678,8 @@ function useVaultOperationOwner(): VaultOperationState {
     currentDeposit,
     log,
     busy,
-    ready: readiness.ready && !compatibility.serverUnavailable,
-    unavailable: compatibility.serverUnavailable,
+    ready: readiness.ready,
+    unavailable: null,
     deposit: (erc20: string, amount: bigint) =>
       execute("deposit", [erc20], (operation) => runFlow(operation, "deposit", erc20, amount)),
     recoverDeposit: (erc20: string, requestId: string) =>

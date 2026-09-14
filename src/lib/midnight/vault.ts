@@ -466,17 +466,16 @@ async function pollSignatureResponse(
  *
  * @param env - Session checked before every broadcast attempt.
  * @param tx - Captured signed transaction retained across receipt polling.
- * @param opts - Continuation policy for mined reverts and gas replenishment.
+ * @param opts - Continuation policy for mined reverts.
  * @param opts.throwOnRevert - Treats a mined revert as a fatal sign-only approval failure.
- * @param opts.ensureGas - Replenishes the captured signer after insufficient-gas rejection.
  * @returns Completion after the same transaction is mined.
  */
 export async function broadcastEvm(
   env: VaultSessionEnvironment,
   tx: Transaction,
-  opts: { throwOnRevert?: boolean; ensureGas?: () => Promise<void> } = {},
+  opts: { throwOnRevert?: boolean } = {},
 ): Promise<void> {
-  const { throwOnRevert = true, ensureGas } = opts;
+  const { throwOnRevert = true } = opts;
   return withEthersProvider(env.evmRpcUrl, async (provider) => {
     const { hash } = tx;
     if (!hash) throw new Error("signed tx missing hash");
@@ -506,8 +505,7 @@ export async function broadcastEvm(
           msg.includes("nonce too low")
         )
           break;
-        if (attempt >= MAX_ATTEMPTS) throw e;
-        if (msg.includes("insufficient funds") && ensureGas) await ensureGas();
+        if (attempt >= MAX_ATTEMPTS || msg.includes("insufficient funds")) throw e;
         await sleep(2000);
       }
     }
@@ -600,7 +598,6 @@ async function settleViaMpc(
   requestsPath: readonly number[] = VAULT_REQUESTS_PATH,
   schema: string = BOOLEAN_RESULT_SCHEMA,
   respondSchema: string = schema,
-  ensureGas?: () => Promise<void>,
 ): Promise<AttestedRespondOutcome & { evmTxHash: string | undefined }> {
   env.assertActive();
   progress.set("settling");
@@ -613,7 +610,7 @@ async function settleViaMpc(
     log,
     requestsPath,
   );
-  await broadcastEvm(env, signed, { throwOnRevert: false, ensureGas });
+  await broadcastEvm(env, signed, { throwOnRevert: false });
   const end = Date.now() + 6 * MINUTE;
   while (Date.now() < end) {
     env.assertActive();
@@ -797,7 +794,6 @@ export async function runDeposit(
  * @param amount - Exact unscaled input units.
  * @param destHex - Captured withdrawal destination.
  * @param log - Operation progress sink.
- * @param ensureGas - Optional funding check before EVM broadcast attempts.
  * @param onRecord - Retains request and transaction identifiers for continuation.
  * @returns Completion of withdrawal settlement or its refund.
  * @throws {Error} If captured inputs, execution or attestation cannot be verified.
@@ -812,7 +808,6 @@ export async function runWithdraw(
   amount: bigint,
   destHex: string,
   log: (m: string) => void,
-  ensureGas?: () => Promise<void>,
   onRecord?: (rid: RequestIdHex, evmTxHash?: string) => void,
 ): Promise<VaultExecutionResult> {
   env.assertActive();
@@ -855,7 +850,6 @@ export async function runWithdraw(
     VAULT_REQUESTS_PATH,
     BOOLEAN_RESULT_SCHEMA,
     BOOLEAN_RESULT_SCHEMA,
-    ensureGas,
   );
   onRecord?.(rid, outcome.evmTxHash);
 
@@ -952,7 +946,6 @@ async function ensureRouterApproved(
  * @param log - Operation progress sink.
  * @param fee - Selected pool fee tier.
  * @param slippageBps - Allowed quote slippage in basis points.
- * @param ensureGas - Optional funding check before EVM broadcast attempts.
  * @param onRecord - Retains request and transaction identifiers for continuation.
  * @returns Completion after output and change settlement or input refund.
  * @throws {Error} If captured inputs, execution or attestation cannot be verified.
@@ -969,7 +962,6 @@ export async function runSwap(
   log: (m: string) => void,
   fee = 500n,
   slippageBps = 100n,
-  ensureGas?: () => Promise<void>,
   onRecord?: (rid: RequestIdHex, evmTxHash?: string) => void,
 ): Promise<VaultExecutionResult> {
   env.assertActive();
@@ -1048,7 +1040,6 @@ export async function runSwap(
     VAULT_SWAP_REQUESTS_PATH,
     SWAP_OUTPUT_SCHEMA,
     SWAP_RESPOND_SCHEMA,
-    ensureGas,
   );
   onRecord?.(rid, outcome.evmTxHash);
 
@@ -1173,7 +1164,6 @@ async function ensureStataApproved(
  * @param _identity - Captured operation identity retained in the common caller contract.
  * @param amount - Exact unscaled input units.
  * @param log - Operation progress sink.
- * @param ensureGas - Optional funding check before EVM broadcast attempts.
  * @param onRecord - Retains request and transaction identifiers for continuation.
  * @returns Explicit settlement or refund with attested output units when available.
  * @throws {Error} If captured inputs, execution or attestation cannot be verified.
@@ -1186,7 +1176,6 @@ export async function runSupply(
   _identity: Identity,
   amount: bigint,
   log: (m: string) => void,
-  ensureGas?: () => Promise<void>,
   onRecord?: (rid: RequestIdHex, evmTxHash?: string) => void,
 ): Promise<VaultExecutionResult> {
   env.assertActive();
@@ -1237,7 +1226,6 @@ export async function runSupply(
     VAULT_SUPPLY_REQUESTS_PATH,
     SUPPLY_OUTPUT_SCHEMA,
     SUPPLY_RESPOND_SCHEMA,
-    ensureGas,
   );
   onRecord?.(rid, outcome.evmTxHash);
 
@@ -1282,7 +1270,6 @@ export async function runSupply(
  * @param _identity - Captured operation identity retained in the common caller contract.
  * @param shares - Exact wrapper units to redeem.
  * @param log - Operation progress sink.
- * @param ensureGas - Optional funding check before EVM broadcast attempts.
  * @param onRecord - Retains request and transaction identifiers for continuation.
  * @returns Explicit settlement or refund with attested output units when available.
  * @throws {Error} If captured inputs, execution or attestation cannot be verified.
@@ -1295,7 +1282,6 @@ export async function runRedeem(
   _identity: Identity,
   shares: bigint,
   log: (m: string) => void,
-  ensureGas?: () => Promise<void>,
   onRecord?: (rid: RequestIdHex, evmTxHash?: string) => void,
 ): Promise<VaultExecutionResult> {
   env.assertActive();
@@ -1345,7 +1331,6 @@ export async function runRedeem(
     VAULT_REDEEM_REQUESTS_PATH,
     REDEEM_OUTPUT_SCHEMA,
     REDEEM_RESPOND_SCHEMA,
-    ensureGas,
   );
   onRecord?.(rid, outcome.evmTxHash);
 

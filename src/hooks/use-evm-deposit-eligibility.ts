@@ -3,25 +3,23 @@
 import { useQuery } from "@tanstack/react-query";
 import { encodeFunctionData, erc20Abi, getAddress } from "viem";
 
-import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
 import { useEvmBalances } from "@/providers/evm-balances-context";
 import { useEvmWallet } from "@/providers/evm-wallet-context";
 
 /**
- * Estimates fees only for valid captured transfer inputs and a compatible server deployment.
+ * Estimates fees only for valid captured transfer inputs.
  *
  * @param token - Token contract whose observed precision controls amount parsing.
  * @param amount - Exact decimal input string.
  * @param destination - Captured deposit address, absent before vault binding.
- * @returns Transfer readiness or an actionable amount, compatibility or fee error.
+ * @returns Transfer readiness or an actionable amount or fee error.
  */
 export function useEvmDepositEligibility(
   token: string,
   amount: string,
   destination: string | undefined,
 ): { ready: boolean; error: string | undefined } {
-  const compatibility = useServerRuntimeCompatibility();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
   const observed = balances.data?.tokens.find(
@@ -49,12 +47,7 @@ export function useEvmDepositEligibility(
       destination,
       units?.toString(),
     ],
-    enabled:
-      !!wallet &&
-      !!destination &&
-      units !== undefined &&
-      !error &&
-      !compatibility.serverUnavailable,
+    enabled: !!wallet && !!destination && units !== undefined && !error,
     gcTime: 0,
     retry: false,
     refetchInterval: 15_000,
@@ -80,13 +73,11 @@ export function useEvmDepositEligibility(
   return {
     ready:
       !!wallet &&
-      !compatibility.serverUnavailable &&
       !error &&
       balances.isSuccess &&
       fee.isSuccess &&
       balances.data.nativeUnits >= fee.data,
     error:
-      compatibility.serverUnavailable ??
       error ??
       (fee.isError
         ? "Network fee estimate is unavailable."

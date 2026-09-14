@@ -200,7 +200,7 @@ export class SeedWallet implements Wallet {
   }
 
   /** @inheritdoc */
-  ensureFeeReady(minimumDust: bigint): Promise<void> {
+  registerNightForDust(minimumDust: bigint): Promise<void> {
     this.assertActive();
     this.funding ??= this.registerAndWait(minimumDust).finally(() => {
       this.funding = undefined;
@@ -260,6 +260,16 @@ export class SeedWallet implements Wallet {
   /** @inheritdoc */
   getDustBalance(): Promise<bigint> {
     return this.readState((state) => state.dust.balance(new Date()));
+  }
+
+  /** @inheritdoc */
+  getUnregisteredNightBalance(): Promise<bigint> {
+    return this.readState((state) =>
+      state.unshielded.availableCoins.reduce(
+        (sum, coin) => (coin.meta.registeredForDustGeneration ? sum : sum + coin.utxo.value),
+        0n,
+      ),
+    );
   }
 
   private readState<Result>(read: (state: State) => Result): Promise<Result> {

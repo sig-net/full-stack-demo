@@ -4,18 +4,20 @@ import { StrictMode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { EvmDepositTransfer } from "@/components/deposit-dialog/evm-deposit-transfer";
-import { useServerRuntimeCompatibility } from "@/hooks/use-server-runtime-compatibility";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
 import { EvmBalancesProvider, useEvmBalances } from "@/providers/evm-balances-context";
 import { EvmDepositProvider, useEvmDeposit } from "@/providers/evm-deposit-context";
+import { EvmLocalFundingProvider } from "@/providers/evm-local-funding-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
+import { LocalFaucetProvider } from "@/providers/local-faucet-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
+import { LOCAL_FAUCET_DESCRIPTOR_FIXTURE } from "../config/local-faucet-fixture";
 import {
   mockMatchingRuntimeServer,
   testRuntimeConfiguration,
@@ -99,7 +101,6 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
     () => ({
       connection: useEvmWallet(),
       balances: useEvmBalances(),
-      runtime: useServerRuntimeCompatibility(),
       deposit: useEvmDeposit(),
     }),
     {
@@ -107,14 +108,18 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
         <StrictMode>
           <QueryClientProvider client={query}>
             <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
-              <EvmWalletProvider>
-                <EvmBalancesProvider tokens={[token.erc20Address]}>
-                  <EvmDepositProvider>
-                    {children}
-                    <EvmDepositTransfer token={token} />
-                  </EvmDepositProvider>
-                </EvmBalancesProvider>
-              </EvmWalletProvider>
+              <LocalFaucetProvider descriptor={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
+                <EvmWalletProvider>
+                  <EvmBalancesProvider tokens={[token.erc20Address]}>
+                    <EvmLocalFundingProvider>
+                      <EvmDepositProvider>
+                        {children}
+                        <EvmDepositTransfer token={token} />
+                      </EvmDepositProvider>
+                    </EvmLocalFundingProvider>
+                  </EvmBalancesProvider>
+                </EvmWalletProvider>
+              </LocalFaucetProvider>
             </RuntimeConfigProvider>
           </QueryClientProvider>
         </StrictMode>
@@ -127,7 +132,6 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
     });
     await waitFor(() => {
       expect(result.current.balances.isSuccess).toBe(true);
-      expect(result.current.runtime.serverUnavailable).toBeNull();
     });
     let transfer: Promise<void> | undefined;
     act(() => {

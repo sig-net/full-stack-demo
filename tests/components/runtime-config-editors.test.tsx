@@ -121,11 +121,8 @@ it("publishes immediate typed setters independently and retains drafts across di
 it("discovers local chain IDs and discards discovery from a replaced RPC", async () => {
   const hook = fixture();
   const pending = Promise.withResolvers<Response>();
-  const originalFetch = globalThis.fetch;
   let pendingStarted = false;
-  const rpc = vi.fn<typeof fetch>((input, init) => {
-    if (typeof input === "string" && input === "/api/runtime-config")
-      return originalFetch(input, init);
+  const rpc = vi.fn<typeof fetch>((input) => {
     const url = input instanceof Request ? input.url : input.toString();
     if (url.replace(/\/$/, "") === "http://localhost:9998") {
       pendingStarted = true;

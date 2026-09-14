@@ -11,7 +11,7 @@ export type WalletTransactions = MidnightProvider & WalletProvider;
 export interface Wallet extends WalletMetadata {
   readonly transactions?: WalletTransactions;
   readonly transactionUnavailable?: string;
-  readonly fundingUnavailable?: string;
+  readonly registrationUnavailable?: string;
   readonly recoveryUnavailable?: string;
   readonly reportedProofServerUrl?: string;
   readonly configuration?: MidnightNodeConfig;
@@ -19,13 +19,19 @@ export interface Wallet extends WalletMetadata {
   readonly unshieldedAddress: string;
   readonly unshieldedPublicKey?: SignatureVerifyingKey;
   /**
-   * Prepares enough fee resources for the requested readiness threshold.
+   * Reads NIGHT that the connected wallet has not registered for DUST generation.
+   *
+   * @returns Available unregistered NIGHT in ledger units when the adapter can observe it.
+   */
+  getUnregisteredNightBalance?(): Promise<bigint>;
+  /**
+   * Registers the connected wallet's eligible NIGHT for DUST generation and waits for fees.
    *
    * @param minimumDust - Required DUST in ledger units.
    * @returns Completion once the captured wallet reaches the threshold.
    * @throws {Error} If readiness, registration or session ownership fails.
    */
-  ensureFeeReady?(minimumDust: bigint): Promise<void>;
+  registerNightForDust?(minimumDust: bigint): Promise<void>;
   /**
    * Reads shielded token balances for the active session.
    *

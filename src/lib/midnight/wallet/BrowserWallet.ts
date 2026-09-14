@@ -60,8 +60,8 @@ export function discoverBrowserWallets(): BrowserWalletChoice[] {
 /** Guards connector reads and transaction completion against the captured network and session. */
 export class BrowserWallet implements Wallet {
   readonly kind = "browser";
-  readonly fundingUnavailable =
-    "This connector does not expose an unshielded public key or DUST registration. Fund and register NIGHT in the extension.";
+  readonly registrationUnavailable =
+    "This connector does not expose NIGHT registration. Register NIGHT in the wallet extension.";
   readonly recoveryUnavailable =
     "Resynchronise the browser wallet in the extension, then reconnect it.";
   private active = true;

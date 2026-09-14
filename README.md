@@ -8,7 +8,7 @@ Use Node 24, Yarn, Docker with Compose, and the Compact launcher with compiler `
 
 The companion examples checkout must contain the local setup changes on [codex/erc20-vault-local-setup](https://github.com/sig-net/midnight-examples/tree/codex/erc20-vault-local-setup), published at commit `5c3b578` and based on `ad30bf8dbb5642945aa13ec0f54840c5e76449c0`. The UI uses vault release `0.1.0` and Signet SDK `0.21.0`. Setup checks the source and compiled artefacts against the UI's installed release before deploying. On another machine, clone the examples repository and check out that branch. The commands below use the local worktree at `/Users/bernard/Projects/github.com/sig-net/midnight-examples-setup-script`. Adjust checkout paths for your machine.
 
-The only required environment input is `SEPOLIA_FORK_RPC_URL` in the examples checkout's private `.env`. Supply an upstream Sepolia HTTP(S) RPC URL there. Keep this file private and leave it available while Anvil runs. Setup generates independent role seeds, a relayer key and testing user credentials.
+The only required environment input is `SEPOLIA_FORK_RPC_URL` in the examples checkout's private `.env`. Supply an upstream Sepolia HTTP(S) RPC URL there. Keep this file private and leave it available while Anvil runs. Setup generates independent role seeds, vault credentials and testing user credentials.
 
 ## Start the local stack
 
@@ -44,10 +44,10 @@ Setup leaves services running, closes its wallet connections and writes:
 
 | Output                                  | Purpose                                                                                                           |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| UI `.env.local`                         | Public endpoints, deployment addresses, MPC key and fork marker, plus server-only genesis and relayer credentials |
+| UI `.env.local`                         | Public defaults, deployment addresses, MPC key and local faucet endpoint overrides |
 | Examples `.local-demo/testing-user.env` | Optional testing wallet seed and independent vault caller secret                                                  |
 | Examples `.local-demo/setup.env`        | Private resumable setup state                                                                                     |
-| Examples `.local-demo/instance.json`    | Local Anvil instance and marker identity                                                                          |
+| Examples `.local-demo/instance.json`    | Local Anvil instance identity                                                                                      |
 
 Generated credential files use mode 0600. Setup refuses to overwrite a UI `.env.local` without its generated-file header. Move or reconcile a manually maintained file first. Never copy server credentials into `NEXT_PUBLIC_` variables. Testing credentials are for optional manual entry and are not restored into the browser automatically.
 
@@ -75,16 +75,16 @@ Open [the local app](http://localhost:3000). The browser starts with **undeploye
 | Midnight | Node URL | `NEXT_PUBLIC_MIDNIGHT_NODE_URL` |
 | Midnight | Proof server URL | `NEXT_PUBLIC_MIDNIGHT_PROOF_SERVER_URL` |
 | EVM | Chain | `11155111` |
-| EVM | RPC URL | `NEXT_PUBLIC_SEPOLIA_RPC_URL` |
+| EVM | RPC URL | `http://127.0.0.1:8545` |
 | EVM | Explorer URL | Leave empty |
 
-Select Midnight **undeployed** and EVM **Local testnet**, then enter the generated endpoints and deployment values. Wait for local chain discovery, or enter the generated chain ID, and choose **Apply**. Keep the EVM RPC local and its explorer empty for this stack. Refresh requires entering this configuration again. Only copy the public values above into the editor. The generated server credentials remain in `.env.local`.
+Select Midnight **undeployed** and EVM **Local testnet**, then enter the generated endpoints and deployment values. Wait for local chain discovery, or enter the generated chain ID, and choose **Apply**. Keep the EVM RPC local and its explorer empty for this stack. Refresh requires entering this configuration again. The browser configuration stays independent from the server's fixed local faucet configuration.
 
 Connect a Midnight seed wallet with a fresh hexadecimal seed, or manually paste the testing seed from the private output. Wallet synchronisation completes even when the fresh wallet has no funds. Select or generate a separate 32-byte vault identity. Keep that secret outside the app if you want to return to the same identity.
 
-For an EVM extension, configure a local network with RPC `http://127.0.0.1:8545`, chain ID `11155111`, and ETH as its currency. Select this local network before connecting. Public Sepolia shares that chain ID, so the app also checks the generated fork marker through the extension. A public Sepolia connection cannot pass that local marker check. Local transaction hashes remain visible without links to a public explorer.
+For an EVM extension, configure a local network with RPC `http://127.0.0.1:8545`, chain ID `11155111`, and ETH as its currency. Select this local network before connecting. Local transaction hashes remain visible without links to a public explorer.
 
-Choose **Fund local wallets** for the connected wallets, then wait for registration and balance refresh. Local funding targets 1 ETH, 100 USDC using on-chain decimals, and 1,000,000,000,000 NIGHT base units. Repeated requests transfer only a deficit and preserve balances above target. Midnight funding sends the public NIGHT address and verifying key. DUST registration is signed in the page by the Midnight seed wallet. The user seed and vault secret stay in page memory.
+Choose **Fund local wallets** for connected local wallets. The action requests separate ETH, ERC-20 and NIGHT faucets only for deficits. Local targets are 1 ETH, 100 USDC using on-chain decimals, and 1,000,000,000,000 NIGHT base units. Choose **Register NIGHT for DUST** after NIGHT arrives, then wait for spendable DUST. Registration is a user-wallet action and is unavailable for connectors that do not expose that capability. Deposit and vault ETH addresses remain visible and copyable, with explicit local ETH funding controls. On public or mixed configurations, the faucets are unavailable and users fund their wallets and vault addresses directly.
 
 The local funding reserve indicator requires measured balances of at least 0.01 ETH and 1 USDC. EVM deposit eligibility uses the selected token, requested amount, fetched decimals and estimated network fee. Midnight readiness requires at least 10 DUST. One DUST equals 1,000,000,000,000,000 SPECK. The local 0.1 USDC browser deposit consumed 0.691887923870713 DUST across start and settlement, below the 10 DUST reserve. The responder paid a separate 0.315009887444318 DUST for its signature and execution attestation. Fees vary with the transaction and current ledger parameters. Unknown balances require refresh and cannot unlock a transaction.
 
@@ -139,7 +139,7 @@ EVM **Local testnet** selects Anvil at `http://127.0.0.1:8545`, discovers its ch
 
 Applying an EVM chain/RPC change requires EVM reconnection. Applying Midnight network/endpoints requires Midnight reconnection. Either change invalidates the vault binding, and a network change invalidates both wallet sessions. Vault address, Signet address and MPC edits rebind the vault while retaining the independent caller identity. Explorer-only edits preserve signing sessions and the operational fingerprint. Submitted transfers and Activity retain captured identifiers, destination and explorer metadata. Local receipts require an empty or local explorer.
 
-Server-assisted funding and vault operations require complete browser configuration matching the server's deployment. Unavailable server observations and named field differences are distinct. Browser edits cannot change server endpoints, keys or funding authority. GET `/api/runtime-config` returns a nested `config` record and its versioned operational `fingerprint`. Wire EVM chain IDs are canonical decimal strings or null. The fingerprint includes the EVM network selection and Signet, and excludes the explorer. Funding POST routes require that fingerprint in `x-vault-configuration`. It establishes configuration compatibility, not authorisation. Restart Next.js after changing server environment values.
+The server provides local development NIGHT, ETH and ERC-20 faucets only. It fixes Midnight to undeployed, EVM to chain `11155111`, and uses the canonical local genesis wallet for NIGHT. Its endpoint overrides are server-only and can point only to local services. The app receives a public descriptor containing those endpoint settings and development availability. A local funding action requires exact applied endpoint matches, while vault addresses and presentation fields do not affect eligibility. Client configuration, wallets, registration and vault operations remain independent. Restart Next.js after changing server faucet endpoint overrides.
 
 ## Reuse and reset
 
@@ -165,13 +165,13 @@ Setup rejects a changed Anvil instance or missing Midnight contracts. Regenerate
 yarn setup-local:erc20-vault --ui-directory /Users/bernard/Projects/github.com/sig-net/full-stack-demo-deployment --reset-config > .local-demo/reset-current.log 2>&1
 ```
 
-The reset option archives the saved configuration and clears only generated chain-bound values from `.local-demo/setup.env` and the root `.env`. The reset option refuses a still-current stack and conflicts with manually changed saved values. It preserves the upstream URL and role credentials. It also replaces the marker after a Midnight-only reset. Restart Next.js after regenerated configuration. Do not reset or stop services belonging to another checkout.
+The reset option archives the saved configuration and clears only generated chain-bound values from `.local-demo/setup.env` and the root `.env`. The reset option refuses a still-current stack and conflicts with manually changed saved values. It preserves the upstream URL and role credentials. A fresh setup establishes a fresh local stack identity. Restart Next.js after regenerated configuration. Do not reset or stop services belonging to another checkout.
 
 If setup fails, inspect the private setup log and rerun after resolving the reported prerequisite or service failure. A compiler or release mismatch needs matching installed dependencies. A fork identity error needs reconciled local configuration. A DUST wait needs registration and indexer progress. A transaction submission error requires checking actual chain confirmation before retrying.
 
 ## Configuration and checks
 
-`.env.example` lists the local defaults and generated fields. Hosted operation remains configurable through validated EVM and Midnight endpoint overrides and compatible deployment values. Local funding requires development mode, Midnight `undeployed`, loopback services, and matching live Anvil metadata and marker. The operation-specific relayer gas top-up route retains its separate contract and derives its recipient from the vault operation.
+`.env.example` lists the local defaults and generated fields. Hosted operation remains configurable through validated EVM and Midnight endpoint overrides and compatible deployment values. Local faucet funding requires development mode, Midnight `undeployed`, loopback services, Anvil chain ID `11155111` with live Anvil metadata, and Midnight chain `undeployed1`. The server exposes separate local NIGHT, ETH and ERC20 faucet endpoints.
 
 For development, `package.json` defines the available development, production, lint, typecheck,
 formatting and asset-preparation scripts. `tsconfig.json` maps `@/*` to `src/*` and enables strict
@@ -182,7 +182,8 @@ Public chain configuration is defined in `src/lib/config/evm.ts` and
 `src/lib/config/midnight.ts`. `src/lib/config/runtime.ts` composes applied public configuration,
 and `src/lib/midnight/env.ts` captures deployment inputs for lazy address resolution. Explicit
 vault and Signet address overrides take precedence over package defaults and are required for
-the undeployed network. Server relayer-key validation belongs to `src/lib/config/relayer.ts`.
+the undeployed network. Server faucet endpoint overrides use the `LOCAL_FAUCET_*` environment
+variables and the NIGHT faucet imports the canonical genesis seed from the deployment package.
 
 The vault package `@sig-net/midnight-examples-erc20-vault-contract` supplies generated contract
 types, witnesses and deployment defaults. `@sig-net/midnight` supplies the Signet SDK and its
