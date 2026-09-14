@@ -6,6 +6,7 @@ import type * as React from "react";
 import { ConfigurationMenu } from "@/components/configuration-menu";
 import { EvmWalletButton } from "@/components/evm-wallet-button";
 import { MidnightWalletButton } from "@/components/midnight-wallet-button";
+import { VaultHealthButton } from "@/components/vault-health-button";
 import { VaultIdentityButton } from "@/components/vault-identity-controls";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ export function NavigationHeader(properties: NavigationHeaderProps): React.JSX.E
           <VaultIdentityButton triggerRef={identityTriggerRef} />
           <MidnightWalletButton />
           <EvmWalletButton />
+          <VaultHealthButton />
           <ConfigurationMenu />
         </div>
       </div>

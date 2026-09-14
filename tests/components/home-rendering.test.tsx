@@ -188,6 +188,7 @@ it("orders the five activation rows and keeps identity outside the wallet menu",
       "Vault identity: not set",
       "Midnight wallet: not connected",
       "EVM wallet: not connected",
+      "Vault health: vault address unavailable",
       "Configuration",
     ],
   );

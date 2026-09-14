@@ -3,7 +3,7 @@
 import type * as React from "react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { formatUnits, getAddress } from "viem";
+import { formatUnits } from "viem";
 
 import { EvmWalletButton } from "@/components/evm-wallet-button";
 import { Button } from "@/components/ui/button";
@@ -12,17 +12,21 @@ import { Feedback } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PublicIdentifier } from "@/components/ui/public-identifier";
+import { VaultGasAccount } from "@/components/vault-gas-account";
+import { VaultGasGate } from "@/components/vault-gas-gate";
 import { useEvmDepositEligibility } from "@/hooks/use-evm-deposit-eligibility";
 import { useAppliedExplorerLinks } from "@/hooks/use-explorer-links";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
+import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import type { TokenConfig } from "@/lib/constants/token-metadata";
+import type { GasReserve } from "@/lib/evm/gas-reserve";
 import { evmExplorerLink, type EvmExplorerSource } from "@/lib/explorer";
 import { useEvmBalances } from "@/providers/evm-balances-context";
 import { useEvmDeposit } from "@/providers/evm-deposit-context";
-import { useEvmLocalFunding } from "@/providers/evm-local-funding-context";
 import { useEvmWallet } from "@/providers/evm-wallet-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { useVault } from "@/providers/vault-context";
+import { useVaultOperations } from "@/providers/vault-operations-context";
 
 const SEND_GATE_ID = "deposit-transfer-send-gate";
 const CONTINUE_GATE_ID = "deposit-transfer-continue-gate";
@@ -44,25 +48,13 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
   const evm = useEvmWallet();
   const deposit = useEvmDeposit();
   const balances = useEvmBalances();
-  const localFunding = useEvmLocalFunding();
   const vault = useVault();
   const binding = vault.binding;
   const readiness = useMidnightReadiness();
+  const operations = useVaultOperations();
   const progress = useMidnightProgress();
+  const gas = useVaultGasReserves();
   const [amount, setAmount] = useState("");
-  const [fundingAddress, setFundingAddress] = useState<string | null>(null);
-  const fundAddress = async (address: string): Promise<void> => {
-    if (fundingAddress) return;
-    setFundingAddress(address);
-    try {
-      await localFunding.fundLocalEthAddress(getAddress(address));
-      toast.success("Local ETH funding completed.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Local ETH funding failed.");
-    } finally {
-      setFundingAddress(null);
-    }
-  };
   const eligibility = useEvmDepositEligibility(token.erc20Address, amount, binding?.depositAddress);
   const explorers = useAppliedExplorerLinks();
   const transfer = deposit.transfer;
@@ -82,6 +74,19 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
     transfer.binding === vault.binding &&
     transfer.token === token.erc20Address;
   const failure = transfer?.failure ?? null;
+  const sweepReserve = gas.depositSweep.reserve;
+  const sweepGateReserve: GasReserve | null =
+    sweepReserve !== null && sweepReserve.kind !== "sufficient" ? sweepReserve : null;
+  const sweepFundingGate: ControlGate | null = sweepGateReserve && {
+    reason: sweepGateReserve.reason,
+    nextAction: sweepGateReserve.nextAction,
+    tone: sweepGateReserve.tone,
+  };
+  // A confirmed request means the sweep may already be signed and broadcast, so the reserve it
+  // spent must not block the continuation that finishes the same deposit.
+  const requestConfirmed =
+    operations.currentDeposit?.token.toLowerCase() === token.erc20Address.toLowerCase() &&
+    operations.currentDeposit.requestId !== null;
   const sendGate: ControlGate | null = inFlight
     ? {
         reason:
@@ -106,26 +111,28 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
             nextAction: failure.nextAction,
             tone: "warning",
           }
-        : null;
+        : sweepFundingGate;
   const continueGate: ControlGate | null = sweeping
     ? {
         reason: "This deposit is already being continued on Midnight.",
         nextAction: "Wait for the running continuation rather than starting a second one.",
         tone: "neutral",
       }
-    : !readiness.ready
-      ? {
-          reason: "Midnight transaction prerequisites are not ready.",
-          nextAction: "Restore Midnight readiness, then continue this deposit.",
-          tone: "warning",
-        }
-      : progress.active
+    : !requestConfirmed && sweepFundingGate
+      ? sweepFundingGate
+      : !readiness.ready
         ? {
-            reason: "Another vault operation owns the Midnight connection.",
-            nextAction: "Wait for the running operation to finish, then continue this deposit.",
-            tone: "neutral",
+            reason: "Midnight transaction prerequisites are not ready.",
+            nextAction: "Restore Midnight readiness, then continue this deposit.",
+            tone: "warning",
           }
-        : null;
+        : progress.active
+          ? {
+              reason: "Another vault operation owns the Midnight connection.",
+              nextAction: "Wait for the running operation to finish, then continue this deposit.",
+              tone: "neutral",
+            }
+          : null;
   const sendDisabled =
     !eligibility.ready ||
     !readiness.ready ||
@@ -134,6 +141,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
     inFlight ||
     sweeping ||
     deposit.unresolved ||
+    sweepFundingGate !== null ||
     !amount.trim();
   return (
     <div className="ds-stack-control ds-divider-top ds-top-inset-content">
@@ -185,7 +193,14 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
             ? "Transfer pending…"
             : "Send tokens to deposit address"}
       </Button>
-      {sendGate && (
+      {sweepGateReserve && sendGate === sweepFundingGate ? (
+        <VaultGasGate
+          reserve={sweepGateReserve}
+          observation={gas.depositSweep}
+          id={SEND_GATE_ID}
+          label="Deposit transfer availability"
+        />
+      ) : sendGate ? (
         <DisabledReason
           id={SEND_GATE_ID}
           label="Deposit transfer availability"
@@ -216,7 +231,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
             </div>
           }
         />
-      )}
+      ) : null}
       {amount.trim() && eligibility.error && (
         <Feedback tone="error" role="alert">
           {eligibility.error}
@@ -227,41 +242,27 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
       )}
       {binding && (
         <div className="ds-stack-control ds-body">
-          <p>Funding addresses</p>
-          <PublicIdentifier
-            value={binding.depositAddress}
-            label="Deposit address"
-            explorer={explorers.evmAddress(binding.depositAddress)}
+          <p className="ds-label">Funding addresses</p>
+          <p>
+            Your connected wallet pays only for the token transfer above. These two addresses hold
+            the ETH that the vault's own MPC-signed transactions spend.
+          </p>
+          <VaultGasAccount
+            heading="Deposit address"
+            accountName="deposit address"
+            purpose="ETH for the deposit sweep."
+            guidance="Send ETH on this network to the deposit address so it can pay for the token sweep into the vault. Sending ETH here does not deposit tokens and does not credit any shielded balance."
+            observation={gas.depositSweep}
+            network={gas.network}
           />
-          <PublicIdentifier
-            value={binding.vaultAddress}
-            label="Vault address"
-            explorer={explorers.evmAddress(binding.vaultAddress)}
+          <VaultGasAccount
+            heading="EVM vault address"
+            accountName="EVM vault address"
+            purpose="ETH for swaps and withdrawals."
+            guidance="Send ETH on this network to the EVM vault address so the vault can pay for swaps and withdrawals. This address is the vault's EVM account, not the Midnight vault contract."
+            observation={gas.vaultOperations}
+            network={gas.network}
           />
-          {localFunding.fundingUnavailable ? (
-            <p>Fund these addresses directly for the selected network.</p>
-          ) : (
-            <div className="ds-actions">
-              <Button
-                variant="outline"
-                disabled={fundingAddress !== null || inFlight || sweeping}
-                onClick={() => {
-                  void fundAddress(binding.depositAddress);
-                }}
-              >
-                Fund deposit address ETH
-              </Button>
-              <Button
-                variant="outline"
-                disabled={fundingAddress !== null || inFlight || sweeping}
-                onClick={() => {
-                  void fundAddress(binding.vaultAddress);
-                }}
-              >
-                Fund vault address ETH
-              </Button>
-            </div>
-          )}
         </div>
       )}
       {transfer && (
@@ -330,7 +331,14 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
                       ? "Midnight deposit pending…"
                       : "Continue with Midnight deposit"}
                 </Button>
-                {continueGate && (
+                {sweepGateReserve && continueGate === sweepFundingGate ? (
+                  <VaultGasGate
+                    reserve={sweepGateReserve}
+                    observation={gas.depositSweep}
+                    id={CONTINUE_GATE_ID}
+                    label="Midnight continuation availability"
+                  />
+                ) : continueGate ? (
                   <DisabledReason
                     id={CONTINUE_GATE_ID}
                     label="Midnight continuation availability"
@@ -338,7 +346,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
                     nextAction={continueGate.nextAction}
                     tone={continueGate.tone}
                   />
-                )}
+                ) : null}
               </>
             ) : (
               <p>

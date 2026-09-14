@@ -65,6 +65,24 @@ then destroy it. Concurrent operations own separate providers. Broadcast retries
 within one callback share its captured provider. Public viem clients capture validated chain and
 endpoint inputs. Browser signing clients remain under the EVM wallet owner.
 
+## EVM fee reserves for MPC-signed transactions
+
+The account that pays an operation's EVM fee is determined by the request path the vault signs
+under. The deposit sweep is signed for the identity's deposit address, and withdrawals, swaps,
+supplies, redemptions and their one-time approvals are signed for the EVM vault address.
+`MPC_OPERATION_ETH_RESERVE` in `src/lib/midnight/evm-envelope.ts` derives each requirement from the
+same fixed envelope caps those transactions carry, so a requirement never depends on fee-market
+data. `describeGasReserve` keeps a pending read, a failed read, an empty account and a short balance
+distinct, and a failed read never becomes a satisfied requirement.
+
+`useVaultGasReserves` observes both accounts through the applied chain configuration without a
+signing session, scoped by endpoint, chain, vault binding generation and account. Surfaces derive
+their condition once from it and pass that one value to both the panel and `aria-describedby`.
+Enforcement is separate from observation: `requireGasReserve` performs a fresh read inside the
+shared operation `execute` for every vault-address operation, and `runDeposit` requires the sweep
+reserve only on the branch that signs a new request, so a resumed or recovered deposit is never
+blocked by a reserve its existing sweep has already spent.
+
 ## Midnight fee readiness and funding
 
 `MidnightReadinessProvider` observes the connected wallet's fee balances and checks its transaction

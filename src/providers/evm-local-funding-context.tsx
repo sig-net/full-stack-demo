@@ -9,6 +9,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
 } from "react";
 import type { Address } from "viem";
 
@@ -33,6 +34,8 @@ interface AddressFundingState {
 interface EvmLocalFundingState extends AddressFundingState {
   ready: boolean;
   fundingUnavailable: string | null;
+  /** Addresses with a local ETH request in flight, shared by every surface offering funding. */
+  fundingAddresses: readonly Address[];
   fundLocalEthAddress: (address: Address) => Promise<void>;
 }
 
@@ -124,6 +127,11 @@ export function useAddressFunding(
 
 function useEvmLocalFundingOwner(): EvmLocalFundingState {
   const faucet = useLocalFaucet();
+  const ethFunding = useRef(new Map<Address, Promise<void>>());
+  const [fundingAddresses, setFundingAddresses] = useState<readonly Address[]>([]);
+  const publishEthFunding = (): void => {
+    setFundingAddresses([...ethFunding.current.keys()]);
+  };
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
   const usdcToken = ERC20_TOKENS.find((token) => token.symbol === "USDC");
@@ -188,7 +196,7 @@ function useEvmLocalFundingOwner(): EvmLocalFundingState {
     !!wallet &&
     balances.isSuccess &&
     hasLocalEvmFunds(balances.data.nativeUnits, usdc?.units, usdc?.decimals);
-  const fundLocalEthAddress = async (address: Address): Promise<void> => {
+  const requestEthFunding = async (address: Address): Promise<void> => {
     faucet.requireEligible();
     const response = await fetch("/api/evm/eth-faucet", {
       method: "POST",
@@ -205,12 +213,26 @@ function useEvmLocalFundingOwner(): EvmLocalFundingState {
       );
     }
   };
+  // Every surface offering local ETH funding shares this ownership, so two controls for one
+  // address cannot issue two faucet requests. The entry is claimed before the first await.
+  const fundLocalEthAddress = (address: Address): Promise<void> => {
+    const running = ethFunding.current.get(address);
+    if (running) return running;
+    const request = requestEthFunding(address).finally(() => {
+      ethFunding.current.delete(address);
+      publishEthFunding();
+    });
+    ethFunding.current.set(address, request);
+    publishEthFunding();
+    return request;
+  };
   return {
     ...funding,
     ready,
     fundingUnavailable: faucet.eligible
       ? null
       : "Local funding requires the exact local faucet configuration.",
+    fundingAddresses,
     fundLocalEthAddress,
   };
 }

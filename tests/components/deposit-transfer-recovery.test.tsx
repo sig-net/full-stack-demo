@@ -2,9 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { type Hash, ProviderRpcError, WaitForTransactionReceiptTimeoutError } from "viem";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { EvmDepositTransfer } from "@/components/deposit-dialog/evm-deposit-transfer";
+import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import { MIDNIGHT_TOKENS, type TokenConfig } from "@/lib/constants/token-metadata";
 import {
   Erc20TransferError,
@@ -32,14 +33,19 @@ import {
 import { browserWalletFixture, hash } from "../evm/browser-wallet-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
 import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
+import { vaultGasReservesFixture } from "./vault-gas-fixture";
 
 vi.mock(import("@/providers/vault-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/vault-operations-context"), { spy: true });
+vi.mock(import("@/hooks/use-vault-gas-reserves"), { spy: true });
 vi.mock(import("@/providers/midnight-readiness-context"), { spy: true });
 vi.mock(import("@/components/evm-wallet-button"), () => ({
   EvmWalletButton: () => <button type="button">Fixture wallet</button>,
 }));
+beforeEach(() => {
+  vi.mocked(useVaultGasReserves).mockReturnValue(vaultGasReservesFixture());
+});
 afterEach(() => {
   cleanup();
   flow.reset();

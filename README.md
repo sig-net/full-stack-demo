@@ -108,6 +108,22 @@ Wallet connection, vault identity, binding and balances have separate readiness 
 
 Withdraw, swap, supply and redeem use the MPC path independently of the EVM extension. One shared operation runs at a time. Activity distinguishes success, refund, failure and interrupted observation. Reloading a pending record preserves its request and transaction identifiers and marks observation interrupted, without asserting a chain failure. A failed balance refresh after settlement does not turn settlement into failure. EVM output is reconstructed from the configured fork's executed transaction and checked against the on-chain response attestation before settlement.
 
+## EVM fee reserves and vault health
+
+Three different accounts pay EVM fees, and each has its own balance and funding action.
+
+- Your **connected wallet** pays for the token transfer you send into the deposit address, and nothing else.
+- The **deposit address** pays for the MPC-signed sweep that moves those tokens into the vault. Send ETH on the selected EVM network to this address. Sending ETH there never deposits tokens and never credits a shielded balance.
+- The **EVM vault address** pays for swaps and withdrawals. It is the vault's EVM account, not the Midnight vault contract.
+
+The deposit dialog lists both vault-owned addresses under **Funding addresses**, each with its network, ETH balance, estimated reserve, shortfall, copy control, explorer link where one is configured, and a refresh. **Send tokens to deposit address** stays disabled while the deposit address cannot cover its sweep, or while its balance cannot be read, with the reason shown beside the control. Tokens you already transferred are never lost to that gate: the receipt is kept, and once you fund the deposit address and refresh, the same transfer continues without a second send. A deposit you resume or recover by request ID is never blocked by a reserve its sweep has already spent.
+
+The header **Vault health** control reports the EVM vault address reserve only. It does not report the health of the vault contract, the MPC signers or any Midnight service. Its dropdown repeats the address, network, balance, estimated reserve and shortfall with copy, explorer and refresh. While that reserve is short or unreadable, **Swap** and the withdrawal **Send** control are disabled with the same reason beside them. Every reserve is rechecked against the live balance at submission, since the displayed value is an observation rather than a guarantee.
+
+The required amounts are exact rather than estimated: each MPC-signed transaction carries a fixed gas limit and a fixed maximum fee per gas, and an EIP-1559 sender must hold `gasLimit * maxFeePerGas` before its transaction is accepted. A sweep or withdrawal needs 0.003 ETH, a supply or redemption 0.015 ETH, and a swap 0.021 ETH. The swap and supply figures each add one further 0.003 ETH for the one-time router or wrapper approval that precedes them, so the vault reserve the indicator reports is 0.024 ETH.
+
+With the exact local faucet configuration applied, each section offers a local ETH funding button. On any other network the section gives self-funding instructions only.
+
 ## Swap pricing
 
 Pool discovery and each concurrently queried fee tier have a 10-second deadline, including response

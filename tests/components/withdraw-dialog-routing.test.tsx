@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type * as React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WithdrawToken } from "@/components/withdraw-dialog";
 import { WithdrawDialog } from "@/components/withdraw-dialog";
 import { AmountInput } from "@/components/withdraw-dialog/amount-input";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
+import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
@@ -15,12 +16,17 @@ import { useVaultOperations } from "@/providers/vault-operations-context";
 
 import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
 import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
+import { vaultGasReservesFixture } from "./vault-gas-fixture";
 
 vi.mock(import("@/hooks/use-midnight-progress"), { spy: true });
+vi.mock(import("@/hooks/use-vault-gas-reserves"), { spy: true });
 vi.mock(import("@/providers/midnight-readiness-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/vault-context"), { spy: true });
 vi.mock(import("@/providers/vault-operations-context"), { spy: true });
+beforeEach(() => {
+  vi.mocked(useVaultGasReserves).mockReturnValue(vaultGasReservesFixture());
+});
 
 afterEach(cleanup);
 

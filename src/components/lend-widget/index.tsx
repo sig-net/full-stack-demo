@@ -5,7 +5,9 @@ import { MidnightDustGate } from "@/components/midnight-dust-gate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { VaultGasGate } from "@/components/vault-gas-gate";
 import { useMidnightDustGate } from "@/hooks/use-midnight-dust-gate";
+import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import { useVaultLending } from "@/hooks/use-vault-lending";
 
 import { Button } from "../ui/button";
@@ -15,6 +17,8 @@ interface LendWidgetProps {
 }
 
 const LENDING_DUST_GATE_ID = "lending-dust-gate";
+const SUPPLY_GAS_GATE_ID = "supply-vault-gas-gate";
+const REDEEM_GAS_GATE_ID = "redeem-vault-gas-gate";
 
 /**
  * Tracks the vault's Aave lending position and submits supply or redeem operations.
@@ -43,6 +47,16 @@ export function LendWidget({ className }: LendWidgetProps): React.JSX.Element {
     earnings,
   } = useVaultLending();
   const dustGate = useMidnightDustGate();
+  const gas = useVaultGasReserves();
+  const supplyReserve = gas.reserveFor("supply");
+  const redeemReserve = gas.reserveFor("redeem");
+  const supplyGasGate =
+    supplyReserve !== null && supplyReserve.kind !== "sufficient" ? supplyReserve : null;
+  const redeemGasGate =
+    redeemReserve !== null && redeemReserve.kind !== "sufficient" ? redeemReserve : null;
+  const describedBy = (dust: boolean, gasGateId: string | null): string | undefined =>
+    [dust ? LENDING_DUST_GATE_ID : null, gasGateId].filter((id) => id !== null).join(" ") ||
+    undefined;
 
   return (
     <Card className={className}>
@@ -71,6 +85,22 @@ export function LendWidget({ className }: LendWidgetProps): React.JSX.Element {
             label="Midnight fee readiness for lending"
           />
         )}
+        {supplyGasGate && (
+          <VaultGasGate
+            reserve={supplyGasGate}
+            observation={gas.vaultOperations}
+            id={SUPPLY_GAS_GATE_ID}
+            label="Vault ETH reserve for supplying"
+          />
+        )}
+        {redeemGasGate && (
+          <VaultGasGate
+            reserve={redeemGasGate}
+            observation={gas.vaultOperations}
+            id={REDEEM_GAS_GATE_ID}
+            label="Vault ETH reserve for redeeming"
+          />
+        )}
 
         <div className="ds-stack-control">
           <Label>
@@ -93,8 +123,8 @@ export function LendWidget({ className }: LendWidgetProps): React.JSX.Element {
               onClick={() => {
                 void runSupply();
               }}
-              disabled={disabled || !supplyReady || !supplyAmount}
-              aria-describedby={dustGate ? LENDING_DUST_GATE_ID : undefined}
+              disabled={disabled || !supplyReady || !supplyAmount || supplyGasGate !== null}
+              aria-describedby={describedBy(dustGate !== null, supplyGasGate && SUPPLY_GAS_GATE_ID)}
             >
               {busy === "supply" ? "Supplying…" : "Supply"}
             </Button>
@@ -125,8 +155,8 @@ export function LendWidget({ className }: LendWidgetProps): React.JSX.Element {
               onClick={() => {
                 void runRedeem();
               }}
-              disabled={disabled || !redeemReady || !redeemAmount}
-              aria-describedby={dustGate ? LENDING_DUST_GATE_ID : undefined}
+              disabled={disabled || !redeemReady || !redeemAmount || redeemGasGate !== null}
+              aria-describedby={describedBy(dustGate !== null, redeemGasGate && REDEEM_GAS_GATE_ID)}
             >
               {busy === "redeem" ? "Redeeming…" : "Redeem"}
             </Button>

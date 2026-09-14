@@ -161,8 +161,9 @@ Configuration dialog from the saved public deployment file, then Apply. The Cont
 field collides with Signet contract address under a non-exact role query, so use exact names.
 
 A long run-code call, whether a clipboard read or a polling loop, can navigate the application
-tab to about:blank and destroy page memory, including during a funded operation. Keep every
-run-code call short and poll with repeated short calls. Grant clipboard-read on the app origin
+tab to about:blank and destroy page memory, including during a funded operation. A call that
+combines a click with a wait did it twice. Issue one action per run-code call during funded
+work and poll with repeated short calls. Grant clipboard-read on the app origin
 through the browser context before reading the clipboard. The run-code and screenshot tools accept
 file paths only under their own allowed roots: a restore script kept in this repository is pasted
 inline, and a screenshot saved by name lands outside the repository and is moved into the

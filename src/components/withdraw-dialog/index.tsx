@@ -5,8 +5,10 @@ import { toast } from "sonner";
 
 import { MidnightDustGate } from "@/components/midnight-dust-gate";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { VaultGasGate } from "@/components/vault-gas-gate";
 import { useMidnightDustGate } from "@/hooks/use-midnight-dust-gate";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
+import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
@@ -28,6 +30,7 @@ export interface WithdrawToken {
 }
 
 const WITHDRAW_DUST_GATE_ID = "withdraw-dust-gate";
+const WITHDRAW_GAS_GATE_ID = "withdraw-vault-gas-gate";
 
 interface WithdrawDialogProps {
   open: boolean;
@@ -50,6 +53,10 @@ function WithdrawDialogContent({
   const vault = useVault();
   const midnight = useMidnightProgress();
   const dustGate = useMidnightDustGate();
+  const gas = useVaultGasReserves();
+  const withdrawReserve = gas.reserveFor("withdraw");
+  const gasGate =
+    withdrawReserve !== null && withdrawReserve.kind !== "sufficient" ? withdrawReserve : null;
 
   const handleAmountSubmit = (data: {
     token: WithdrawToken;
@@ -86,19 +93,33 @@ function WithdrawDialogContent({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <AmountInput
           availableTokens={availableTokens}
-          transactionReady={operations.ready}
+          transactionReady={operations.ready && gasGate === null}
           onSubmit={handleAmountSubmit}
           preSelectedToken={preSelectedToken}
           disabledReason={
-            dustGate ? (
-              <MidnightDustGate
-                gate={dustGate}
-                id={WITHDRAW_DUST_GATE_ID}
-                label="Midnight fee readiness for sending"
-              />
-            ) : null
+            <>
+              {dustGate && (
+                <MidnightDustGate
+                  gate={dustGate}
+                  id={WITHDRAW_DUST_GATE_ID}
+                  label="Midnight fee readiness for sending"
+                />
+              )}
+              {gasGate && (
+                <VaultGasGate
+                  reserve={gasGate}
+                  observation={gas.vaultOperations}
+                  id={WITHDRAW_GAS_GATE_ID}
+                  label="Vault ETH reserve for sending"
+                />
+              )}
+            </>
           }
-          disabledReasonId={dustGate ? WITHDRAW_DUST_GATE_ID : undefined}
+          disabledReasonId={
+            [dustGate ? WITHDRAW_DUST_GATE_ID : null, gasGate ? WITHDRAW_GAS_GATE_ID : null]
+              .filter((id) => id !== null)
+              .join(" ") || undefined
+          }
         />
       </div>
     </>

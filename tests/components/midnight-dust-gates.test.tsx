@@ -10,13 +10,14 @@ import {
   within,
 } from "@testing-library/react";
 import type * as React from "react";
-import { afterEach, expect, it, type MockInstance, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, type MockInstance, vi } from "vitest";
 
 import { LendWidget } from "@/components/lend-widget";
 import { SwapWidget } from "@/components/swap-widget";
 import { WithdrawDialog, type WithdrawToken } from "@/components/withdraw-dialog";
 import { useMidnightHistory } from "@/hooks/use-midnight-history";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
+import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import { createMidnightChainConfig } from "@/lib/config/midnight";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import { describeDustGate, type DustGateKind } from "@/lib/midnight/dust-gate";
@@ -48,9 +49,11 @@ import {
   testRuntimeConfiguration,
 } from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
+import { vaultGasReservesFixture } from "./vault-gas-fixture";
 
 vi.mock(import("@/hooks/use-midnight-history"), { spy: true });
 vi.mock(import("@/hooks/use-midnight-progress"), { spy: true });
+vi.mock(import("@/hooks/use-vault-gas-reserves"), { spy: true });
 vi.mock(import("@/lib/midnight/evm-stata"), { spy: true });
 vi.mock(import("@/lib/midnight/evm-swap"), { spy: true });
 vi.mock(import("@/lib/midnight/vault"), { spy: true });
@@ -58,6 +61,9 @@ vi.mock(import("@/providers/midnight-readiness-context"), { spy: true });
 vi.mock(import("@/providers/midnight-wallet-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/vault-context"), { spy: true });
+beforeEach(() => {
+  vi.mocked(useVaultGasReserves).mockReturnValue(vaultGasReservesFixture());
+});
 
 afterEach(() => {
   cleanup();

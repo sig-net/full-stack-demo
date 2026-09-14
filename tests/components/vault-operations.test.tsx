@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import * as tokens from "@/lib/constants/token-metadata";
+import * as gasReserve from "@/lib/evm/gas-reserve";
 import {
   flow,
   type FlowKind,
@@ -32,6 +33,7 @@ vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/midnight-readiness-context"), { spy: true });
 vi.mock(import("@/lib/midnight/vault"), { spy: true });
 vi.mock(import("@/lib/constants/token-metadata"), { spy: true });
+vi.mock(import("@/lib/evm/gas-reserve"), { spy: true });
 afterEach(() => {
   cleanup();
   flow.reset();
@@ -67,6 +69,7 @@ it.each(scenarios)(
     const token = tokens.MIDNIGHT_TOKENS[0];
     if (!token) throw new Error("Expected supported token");
     vi.mocked(tokens.fetchErc20Decimals).mockResolvedValue(6);
+    vi.mocked(gasReserve.requireGasReserve).mockResolvedValue(undefined);
     mockMatchingRuntimeServer();
     const rebuilding = Promise.withResolvers<typeof binding>();
     const rebuildEntered = Promise.withResolvers<undefined>();
@@ -443,6 +446,7 @@ it.each(["failed", "completed"] as const)(
     vi.stubEnv("NEXT_PUBLIC_MPC_SECP256K1_PUBKEY", binding.environment.mpcSecpPub);
     mockMatchingRuntimeServer();
     vi.mocked(tokens.fetchErc20Decimals).mockResolvedValue(6);
+    vi.mocked(gasReserve.requireGasReserve).mockResolvedValue(undefined);
     vi.mocked(useVault).mockReturnValue({
       status: "ready",
       error: null,

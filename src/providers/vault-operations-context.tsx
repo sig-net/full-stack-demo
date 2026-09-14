@@ -3,6 +3,7 @@
 import "./buffer-shim";
 
 import { bytesToHex } from "@sig-net/midnight";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   type JSX,
@@ -18,6 +19,8 @@ import { resolveEvmChain } from "@/lib/config/evm";
 import type { RuntimeSnapshot } from "@/lib/config/runtime";
 import { fetchErc20Decimals } from "@/lib/constants/token-metadata";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
+import { requireGasReserve } from "@/lib/evm/gas-reserve";
+import { MPC_OPERATION_ETH_RESERVE } from "@/lib/midnight/evm-envelope";
 import { AAVE_USDC, STATA_USDC } from "@/lib/midnight/evm-stata";
 import {
   flow,
@@ -123,6 +126,7 @@ interface CapturedOperation {
 function useVaultOperationOwner(): VaultOperationState {
   const vaultOwner = useVault();
   const runtime = useRuntimeConfiguration();
+  const queries = useQueryClient();
   const readiness = useMidnightReadiness();
   const { refresh } = useVaultBalances();
   const { binding } = vaultOwner;
@@ -630,6 +634,19 @@ function useVaultOperationOwner(): VaultOperationState {
     try {
       await readiness.requireReady();
       active.assertActive();
+      // The deposit sweep is paid by the deposit address and is required inside the deposit flow,
+      // which alone knows whether a new sweep will be signed.
+      if (kind !== "deposit") {
+        const evm = operation.configuration.readiness.evm;
+        if (evm.status !== "ready") throw new Error(evm.reasons.join(" "));
+        await requireGasReserve({
+          queries,
+          scope: { config: evm.value, sessionId: active.sessionId, address: active.vaultAddress },
+          purpose: "vault-operations",
+          required: MPC_OPERATION_ETH_RESERVE[kind],
+        });
+        active.assertActive();
+      }
       const entries = await Promise.all(
         tokens.map(
           async (token) =>

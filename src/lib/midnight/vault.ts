@@ -45,12 +45,14 @@ import { Contract as EthersContract, type ContractMethod, type Transaction } fro
 
 import { sepolia } from "@/lib/config/evm";
 import { withEthersProvider } from "@/lib/evm/ethers-provider";
+import { assertGasReserve } from "@/lib/evm/gas-reserve";
 
 import { derivePathAddress, type PathRendering, resolvePathRendering } from "./evm-addresses";
 import {
   ERC20_TRANSFER_GAS_LIMIT as GAS_LIMIT,
   ERC20_TRANSFER_MAX_FEE_PER_GAS as MAX_FEE,
   ERC20_TRANSFER_MAX_PRIORITY_FEE_PER_GAS as PRIORITY_FEE,
+  MPC_OPERATION_ETH_RESERVE,
   STATA_GAS_LIMIT,
   STATA_MAX_FEE_PER_GAS,
   STATA_MAX_PRIORITY_FEE_PER_GAS,
@@ -256,6 +258,28 @@ export async function erc20Balance(
       provider,
     );
     return token.getFunction<ContractMethod<string[], bigint, bigint>>("balanceOf")(address);
+  });
+}
+
+async function requireSweepReserve(
+  env: VaultSessionEnvironment,
+  depositEvm: string,
+): Promise<void> {
+  let observed: bigint | undefined;
+  let failed = false;
+  try {
+    observed = await withEthersProvider(env.evmRpcUrl, async (provider) =>
+      provider.getBalance(depositEvm),
+    );
+  } catch {
+    failed = true;
+  }
+  env.assertActive();
+  assertGasReserve({
+    purpose: "deposit-sweep",
+    required: MPC_OPERATION_ETH_RESERVE.deposit,
+    observed,
+    failed,
   });
 }
 
@@ -719,6 +743,10 @@ export async function runDeposit(
     await assertDepositRequestOnLedger(providers, env, rid);
     log(`Resuming pending deposit 0x${rid}`);
   } else {
+    // Only a brand-new request signs a sweep that still has to be broadcast, so only this branch
+    // requires the deposit address to hold its fee reserve. A resumed or recovered request may
+    // have spent that reserve on a sweep that is already on chain.
+    await requireSweepReserve(env, userEvm);
     const nonce = await evmNonce(env, userEvm);
     log(`Deposit sender ${userEvm} (evm nonce ${nonce.toString()})`);
     rid = predictRequestId(

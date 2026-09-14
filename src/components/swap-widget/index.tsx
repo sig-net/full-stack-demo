@@ -9,7 +9,9 @@ import { MidnightDustGate } from "@/components/midnight-dust-gate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Feedback } from "@/components/ui/feedback";
 import { TokenAmountDisplay } from "@/components/ui/token-amount-display";
+import { VaultGasGate } from "@/components/vault-gas-gate";
 import { useMidnightDustGate } from "@/hooks/use-midnight-dust-gate";
+import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import { useVaultSwap } from "@/hooks/use-vault-swap";
 
 import { Button } from "../ui/button";
@@ -21,6 +23,7 @@ interface SwapWidgetProps {
 
 const SLIPPAGE_PRESETS = [10n, 50n, 100n];
 const SWAP_DUST_GATE_ID = "swap-dust-gate";
+const SWAP_GAS_GATE_ID = "swap-vault-gas-gate";
 /**
  * Captures maximum spend and displays the quote used to choose a guaranteed swap output.
  *
@@ -50,6 +53,9 @@ export function SwapWidget({ className }: SwapWidgetProps): React.JSX.Element {
     handleSwap,
   } = useVaultSwap();
   const dustGate = useMidnightDustGate();
+  const gas = useVaultGasReserves();
+  const swapReserve = gas.reserveFor("swap");
+  const gasGate = swapReserve !== null && swapReserve.kind !== "sufficient" ? swapReserve : null;
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
@@ -141,12 +147,24 @@ export function SwapWidget({ className }: SwapWidgetProps): React.JSX.Element {
             label="Midnight fee readiness for swapping"
           />
         )}
+        {gasGate && (
+          <VaultGasGate
+            reserve={gasGate}
+            observation={gas.vaultOperations}
+            id={SWAP_GAS_GATE_ID}
+            label="Vault ETH reserve for swapping"
+          />
+        )}
         <Button
           onClick={() => {
             void handleSwap();
           }}
-          disabled={!canSwap}
-          aria-describedby={dustGate ? SWAP_DUST_GATE_ID : undefined}
+          disabled={!canSwap || gasGate !== null}
+          aria-describedby={
+            [dustGate ? SWAP_DUST_GATE_ID : null, gasGate ? SWAP_GAS_GATE_ID : null]
+              .filter((id) => id !== null)
+              .join(" ") || undefined
+          }
           variant="secondary"
           size="lg"
           className="w-full"
