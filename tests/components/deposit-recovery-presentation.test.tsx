@@ -247,7 +247,10 @@ it("asks for a confirmed request ID to be saved while the deposit can still need
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(requestId);
     });
-    expect(warning().textContent).toContain("Copied to the clipboard.");
+    // The copied state is published after the awaited clipboard write resolves, one tick later.
+    await waitFor(() => {
+      expect(warning().textContent).toContain("Copied to the clipboard.");
+    });
     expect(warning().textContent).toContain("Store it somewhere that survives closing this page.");
 
     writeText.mockRejectedValueOnce(new Error("Clipboard write refused"));

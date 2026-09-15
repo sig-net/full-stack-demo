@@ -5,7 +5,6 @@ import {
   requestIdBytes,
   respondBidirectionalEventToCircuitInput,
   serializeRespondOutput,
-  signBidirectionalEventToUnsignedEvmTransaction,
   SIGNET_DEFAULT_KEY_VERSION,
   SignetRequestResponseReader,
   verifyRespondBidirectionalSignature,
@@ -14,10 +13,9 @@ import {
   calculateSignetAttestationDigest,
   ecdsaSignatureToMpcSignature,
   signAttestationDigest,
-  signatureToSignatureRespondedEvent,
 } from "@sig-net/midnight/testing";
 import { JsonRpcProvider } from "ethers";
-import { TransactionReceipt, Wallet } from "ethers";
+import { TransactionReceipt } from "ethers";
 import { expect, it, vi } from "vitest";
 
 import {
@@ -29,7 +27,12 @@ import * as observation from "@/lib/midnight/observed-execution";
 import { lookupDepositRequest, runDeposit } from "@/lib/midnight/vault";
 import type { StandaloneVaultContract } from "@/lib/midnight/vault-providers";
 
-import { createPendingDeposit, createVaultCircuitFixture } from "./vault-circuit-fixture";
+import { createProgressRecorder } from "./flow-progress-fixture";
+import {
+  createPendingDeposit,
+  createSignatureResponse,
+  createVaultCircuitFixture,
+} from "./vault-circuit-fixture";
 
 vi.mock(import("@/lib/midnight/observed-execution"), { spy: true });
 
@@ -51,10 +54,7 @@ it("recovers a generated pending deposit without creating a request or reading a
       ),
     ),
   };
-  const transaction = signBidirectionalEventToUnsignedEvmTransaction(request);
-  const signer = new Wallet(`0x${"01".repeat(32)}`);
-  transaction.signature = signer.signingKey.sign(transaction.unsignedHash);
-  const signature = signatureToSignatureRespondedEvent(transaction.signature);
+  const { signer, signature } = createSignatureResponse(request, `0x${"01".repeat(32)}`);
   vi.spyOn(
     SignetRequestResponseReader.prototype,
     "getVerifiedSignatureRespondedEvent",
@@ -169,8 +169,10 @@ it("recovers a generated pending deposit without creating a request or reading a
         "not a request id",
       ),
     ).toEqual({ kind: "malformed" });
+    const recorder = createProgressRecorder();
+    const records: { hash: string | undefined; completions: number }[] = [];
     await runDeposit(
-      { set: vi.fn() },
+      recorder.progress,
       binding.providers,
       binding.contract,
       binding.environment,
@@ -178,16 +180,41 @@ it("recovers a generated pending deposit without creating a request or reading a
       tokenAddress,
       1000000n,
       vi.fn(),
-      undefined,
+      (_rid, hash) => {
+        records.push({ hash, completions: complete.mock.calls.length });
+      },
       requestId,
     );
     expect(start).not.toHaveBeenCalled();
     expect(nonce).not.toHaveBeenCalled();
     expect(complete).toHaveBeenCalledTimes(1);
+    expect(recorder.eventNames()).toEqual([
+      "request-confirmed",
+      "signature-wait",
+      "evm-broadcast",
+      "evm-receipt",
+      "attestation-wait",
+      "attestation-present",
+      "midnight-settled",
+    ]);
+    expect(recorder.events.at(-1)).toEqual({
+      name: "midnight-settled",
+      midnightTxHash: completion.public.txHash,
+      midnightBlockHeight: completion.public.blockHeight,
+    });
+    const broadcastHashes = recorder.events.flatMap((event) =>
+      event.name === "evm-broadcast" ? [event.evmTxHash] : [],
+    );
+    expect(broadcastHashes).toHaveLength(1);
+    expect(records).toEqual([
+      { hash: undefined, completions: 0 },
+      { hash: broadcastHashes[0], completions: 0 },
+      { hash: broadcastHashes[0], completions: 0 },
+    ]);
     expect(complete.mock.calls[0]?.[1]).toEqual(respondBidirectionalEventToCircuitInput(response));
     await expect(
       runDeposit(
-        { set: vi.fn() },
+        createProgressRecorder().progress,
         binding.providers,
         binding.contract,
         binding.environment,
@@ -204,7 +231,7 @@ it("recovers a generated pending deposit without creating a request or reading a
     );
     await expect(
       runDeposit(
-        { set: vi.fn() },
+        createProgressRecorder().progress,
         binding.providers,
         binding.contract,
         binding.environment,
@@ -226,7 +253,7 @@ it("recovers a generated pending deposit without creating a request or reading a
     state.data = duplicate.context.callContext.currentQueryContext.state;
     await expect(
       runDeposit(
-        { set: vi.fn() },
+        createProgressRecorder().progress,
         binding.providers,
         binding.contract,
         binding.environment,
@@ -268,7 +295,7 @@ it("recovers a generated pending deposit without creating a request or reading a
     ).toEqual({ kind: "error", cause: "indexer unavailable" });
     await expect(
       runDeposit(
-        { set: vi.fn() },
+        createProgressRecorder().progress,
         binding.providers,
         binding.contract,
         binding.environment,

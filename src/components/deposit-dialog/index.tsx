@@ -16,6 +16,7 @@ import { DepositAddress } from "./deposit-address";
 import { EvmDepositAddress } from "./evm-deposit-address";
 import { EvmDepositTransfer } from "./evm-deposit-transfer";
 import { PendingDepositRecovery } from "./pending-deposit-recovery";
+import { SettlementWaitDetail } from "./settlement-wait-detail";
 import { TokenSelection } from "./token-selection";
 
 interface DepositDialogProps {
@@ -123,7 +124,10 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
                 </>
               )}
               {isVaultEvmDeposit && progress.active ? (
-                <LoadingState message={progress.message} />
+                <div className="ds-stack-content">
+                  <LoadingState message={progress.message} />
+                  <SettlementWaitDetail />
+                </div>
               ) : isVaultEvmDeposit ? (
                 <EvmDepositAddress
                   token={selectedToken}

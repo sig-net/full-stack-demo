@@ -37,10 +37,15 @@ const transactionRecordSchema = z
     counterparty: z.string().optional(),
     status: transactionStatusSchema,
     timestampRaw: z.number().int().nonnegative(),
-    txHash: z
+    evmTxHash: z
       .string()
       .regex(/^0x[0-9a-fA-F]{64}$/)
       .optional(),
+    /**
+     * Transaction that carried the settling or refunding circuit call on Midnight. The hash is
+     * kept exactly as the SDK reports it, and its explorer route decides whether it is linkable.
+     */
+    midnightTxHash: z.string().min(1).optional(),
     networkId: z.string().optional(),
     chainId: z.number().int().positive().optional(),
     rpcUrl: z.url({ protocol: /^https?$/ }).optional(),
@@ -69,6 +74,15 @@ export type MidnightTxStatus = z.infer<typeof transactionStatusSchema>;
  */
 export type MidnightTxRecord = z.infer<typeof transactionRecordSchema>;
 
+// Persisted records carry the EVM settlement hash under `txHash` whenever they were stored by a
+// version that recorded only one chain leg, and this schema reads that key as `evmTxHash`.
+const storedRecordSchema = z.preprocess((value) => {
+  const fields = z.record(z.string(), z.unknown()).safeParse(value);
+  if (!fields.success) return value;
+  const { txHash, ...rest } = fields.data;
+  return "evmTxHash" in rest ? rest : { ...rest, evmTxHash: txHash };
+}, transactionRecordSchema);
+
 type Listener = (txs: MidnightTxRecord[]) => void;
 
 const STORAGE_KEY = "midnight-tx-history-v1";
@@ -86,7 +100,7 @@ function load(): MidnightTxRecord[] {
     // Reload interrupts observation without establishing a chain outcome.
     return records.data
       .flatMap((value) => {
-        const record = transactionRecordSchema.safeParse(value);
+        const record = storedRecordSchema.safeParse(value);
         return record.success ? [record.data] : [];
       })
       .slice(0, MAX_RECORDS)

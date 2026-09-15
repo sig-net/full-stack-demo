@@ -27,7 +27,35 @@ started it, so only that operation publishes phases and terminals and a later op
 supersedes an abandoned one. Every operation that stops publishes a terminal state, whatever happened
 to its captured binding, so no surface keeps reporting work in flight after the work has ended. Low-level
 vault functions accept the progress capability and return a settled or refunded result, including
-attested output units where available.
+attested output units where available and the Midnight transaction that carried the concluding
+circuit call.
+
+Beside the phase label, an operation publishes structured checkpoints in the order its evidence
+arrives: the submitted request with its predicted identifier, the request confirmed on the ledger,
+the signature wait, the EVM broadcast with its transaction hash, the receipt with its block, the
+attestation wait, the attested outcome and the Midnight settlement with its transaction hash and
+block height. The broadcast checkpoint is published once the transaction is on the network, before
+the receipt wait begins, and the same hash reaches the operation record there, so a surface can show
+a pending sweep by its own hash. The progress owner also holds the time the current stage began and
+the time of the most recent chain read that returned without error, which a surface reads to show
+elapsed time and observation freshness.
+
+The responder that signs the sweep reads the request from the Midnight ledger and attests the sweep
+outcome from the EVM receipt at the latest block. Neither step is gated on a confirmation depth or on
+a `finalized` block tag, and the installed reader API exposes no such threshold, so no required
+confirmation count is claimed anywhere. While the sweep is on the network the client observes it with
+its own React Query poll, reporting canonical inclusion, current depth, and whether the finalized
+head covers the receipt block on endpoints that serve the tag. Inclusion is rechecked against the
+canonical block at the receipt's own height, so a replaced block reports a lost inclusion with no
+depth, and finality is reported only for a receipt that is canonical at its own block. A sweep proven
+final while the attestation is absent says exactly that: the shielded balance is credited from the
+verified attestation alone, never from chain finality.
+
+The two MPC waits observe for twenty minutes. That limit bounds this client's own observation and not
+the responder, so elapsing it reports an unfinished observation of a request that is still live on the
+ledger and recoverable by its request ID, never an on-chain failure, and it never resends anything.
+Polls start one second apart and back off to five seconds, publishing an observation on every read
+that returns. A read that fails is retried, and a read that keeps failing is reported as itself.
 
 History outcomes belong to the captured operation. A successful settlement remains successful if a
 subsequent balance refresh fails. Replacing the visible session suppresses obsolete logs and deposit
@@ -84,7 +112,9 @@ against another network or vault contract is simply absent from this ledger and 
 History persistence validates record kinds, statuses, numeric accounting fields and optional public
 metadata. Human-readable amount labels are display text, while accounting consumes separate validated
 integer-unit fields. It retains bounded public records. Pending records loaded after a refresh become interrupted
-observations. Request IDs, transaction hashes and destinations remain available for inspection.
+observations. Request IDs, destinations and both settlement legs remain available for inspection:
+each record keeps the EVM settlement hash and the Midnight transaction hash separately, and each
+resolves its own explorer route from the chain captured with the record.
 
 Lending attribution matches the public vault commitment, Midnight network, EVM chain, vault contract,
 asset contracts and their decimal scales. A captured public configuration fingerprint additionally

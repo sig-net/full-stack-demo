@@ -79,11 +79,34 @@ function isStaleStateError(error: unknown): boolean {
 }
 
 function describeFlowError(error: unknown): string {
+  // A superseded-during failure already names both facts, and unwrapping to its cause would
+  // publish the interrupted failure alone, as if the session were still the one that observed it.
+  if (error instanceof SupersededDuringFailure) return error.message;
   const messages = errorCauseMessages(error);
   return (
     messages.find((message) => /Custom error: \d+|Invalid Transaction/.test(message)) ??
     messages.at(-1) ??
     "Unknown failure"
+  );
+}
+
+/** Terminal failure of work whose captured session was replaced before it could report. */
+class SupersededDuringFailure extends Error {}
+
+/**
+ * Keeps a node rejection visible when the session that observed it was replaced mid-flight.
+ *
+ * Both facts reach the terminal message: the session replacement that ended the work, and the
+ * failure it interrupted, which is the only evidence of why the operation stopped progressing.
+ *
+ * @param cause - Failure the captured session was reporting when it was replaced.
+ * @param superseded - Ownership rejection raised by the replaced session.
+ * @returns One error naming the replacement and retaining the interrupted failure.
+ */
+function supersededDuring(cause: unknown, superseded: unknown): Error {
+  return new SupersededDuringFailure(
+    `${describeFlowError(superseded)} The failure it interrupted: ${describeFlowError(cause)}`,
+    { cause },
   );
 }
 
@@ -167,6 +190,14 @@ function useVaultOperationOwner(): VaultOperationState {
       if (!mounted.current || operation.binding !== binding) return;
       flow.set(phase, operation);
     },
+    event: (event) => {
+      if (!mounted.current || operation.binding !== binding) return;
+      flow.event(event, operation);
+    },
+    observed: () => {
+      if (!mounted.current || operation.binding !== binding) return;
+      flow.observed(operation);
+    },
   });
   const append = (operation: CapturedOperation, m: string): void => {
     if (ownsPresentation(operation))
@@ -209,7 +240,11 @@ function useVaultOperationOwner(): VaultOperationState {
       const result = await op(captured);
       return result;
     } catch (error) {
-      captured.assertActive();
+      try {
+        captured.assertActive();
+      } catch (superseded) {
+        throw supersededDuring(error, superseded);
+      }
       if (!isStaleStateError(error)) throw error;
       append(operation, "Wallet state drifted behind the chain. Resynchronising from scratch...");
       const recovered = await vaultOwner.rebuild(captured, (error) => {
@@ -237,6 +272,7 @@ function useVaultOperationOwner(): VaultOperationState {
     if (operation.recordId)
       midnightTxHistory.update(operation.recordId, {
         ...patch,
+        midnightTxHash: result.midnightTxHash,
         status: result.status === "refunded" ? "refunded" : "completed",
       });
     void refresh(operation.binding).catch(() => undefined);
@@ -290,11 +326,11 @@ function useVaultOperationOwner(): VaultOperationState {
     const { symbol } = tokenMeta(operation, erc20Address);
     const record = (
       rid: string,
-      base: Omit<MidnightTxRecord, "id" | "status" | "timestampRaw" | "txHash">,
+      base: Omit<MidnightTxRecord, "id" | "status" | "timestampRaw" | "evmTxHash">,
       evmTxHash?: string,
     ): void => {
       if (operation.recordId === rid) {
-        if (evmTxHash) midnightTxHistory.update(rid, { txHash: evmTxHash });
+        if (evmTxHash) midnightTxHistory.update(rid, { evmTxHash });
         return;
       }
       operation.recordId = rid;
@@ -306,7 +342,7 @@ function useVaultOperationOwner(): VaultOperationState {
         vaultContractAddress: operation.configuration.vault.contractAddress,
         id: rid,
         ...base,
-        txHash: evmTxHash,
+        evmTxHash,
         status: "pending",
         timestampRaw: nowSec(),
       });
@@ -406,7 +442,7 @@ function useVaultOperationOwner(): VaultOperationState {
 
     const record = (rid: string, evmTxHash?: string): void => {
       if (operation.recordId === rid) {
-        if (evmTxHash) midnightTxHistory.update(rid, { txHash: evmTxHash });
+        if (evmTxHash) midnightTxHistory.update(rid, { evmTxHash });
         return;
       }
       operation.recordId = rid;
@@ -422,7 +458,7 @@ function useVaultOperationOwner(): VaultOperationState {
         fromAmount: fmtAmount(operation, amountUnits, tokenInErc20),
         toSymbol: tokenMeta(operation, tokenOutErc20).symbol,
         toAmount: "",
-        txHash: evmTxHash,
+        evmTxHash,
         status: "pending",
         timestampRaw: nowSec(),
       });
@@ -468,7 +504,7 @@ function useVaultOperationOwner(): VaultOperationState {
 
     const record = (rid: string, evmTxHash?: string): void => {
       if (operation.recordId === rid) {
-        if (evmTxHash) midnightTxHistory.update(rid, { txHash: evmTxHash });
+        if (evmTxHash) midnightTxHistory.update(rid, { evmTxHash });
         return;
       }
       operation.recordId = rid;
@@ -487,7 +523,7 @@ function useVaultOperationOwner(): VaultOperationState {
         basisAssets: formatUnits(amountUnits, tokenMeta(operation, AAVE_USDC).decimals),
         toSymbol: "stataUSDC",
         toAmount: "",
-        txHash: evmTxHash,
+        evmTxHash,
         status: "pending",
         timestampRaw: nowSec(),
       });
@@ -540,7 +576,7 @@ function useVaultOperationOwner(): VaultOperationState {
 
     const record = (rid: string, evmTxHash?: string): void => {
       if (operation.recordId === rid) {
-        if (evmTxHash) midnightTxHistory.update(rid, { txHash: evmTxHash });
+        if (evmTxHash) midnightTxHistory.update(rid, { evmTxHash });
         return;
       }
       operation.recordId = rid;
@@ -559,7 +595,7 @@ function useVaultOperationOwner(): VaultOperationState {
         sharesBurned: formatUnits(shares, tokenMeta(operation, STATA_USDC).decimals),
         toSymbol: "USDC",
         toAmount: "",
-        txHash: evmTxHash,
+        evmTxHash,
         status: "pending",
         timestampRaw: nowSec(),
       });
@@ -617,6 +653,14 @@ function useVaultOperationOwner(): VaultOperationState {
         set: (phase) => {
           if (!mounted.current || operation.binding !== active) return;
           flow.set(phase, operation);
+        },
+        event: (event) => {
+          if (!mounted.current || operation.binding !== active) return;
+          flow.event(event, operation);
+        },
+        observed: () => {
+          if (!mounted.current || operation.binding !== active) return;
+          flow.observed(operation);
         },
       },
     };

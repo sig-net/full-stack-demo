@@ -12,6 +12,7 @@ import {
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { ActivityExplorerLinks } from "@/components/activity-list-table";
 import { TransactionDetailsDialog } from "@/components/activity-list-table/transaction-details-dialog";
 import { useMidnightTransactions } from "@/hooks/use-midnight-transactions";
 import { createEvmChainConfig, getEvmNetworkDefaults } from "@/lib/config/evm";
@@ -39,6 +40,7 @@ afterEach(() => {
 });
 
 const transactionHash = `0x${"ab".repeat(32)}`;
+const midnightTransactionHash = "cd".repeat(32);
 const evmAddress = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
 const vaultContract = "aa".repeat(32);
 const SEPOLIA: EvmExplorerSource = {
@@ -48,15 +50,11 @@ const SEPOLIA: EvmExplorerSource = {
 const MAINNET: EvmExplorerSource = { explorerUrl: "https://etherscan.io", chainId: 1n };
 const LOCAL_FORK: EvmExplorerSource = { explorerUrl: "", chainId: 11155111n };
 
-function unavailableLinks(reason: string): {
-  transaction: ExplorerAvailability;
-  fromAddress: ExplorerAvailability;
-  toAddress: ExplorerAvailability;
-  vaultContract: ExplorerAvailability;
-} {
+function unavailableLinks(reason: string): ActivityExplorerLinks {
   const entry: ExplorerAvailability = { status: "unavailable", reason };
   return {
-    transaction: entry,
+    evmTransaction: entry,
+    midnightTransaction: entry,
     fromAddress: entry,
     toAddress: entry,
     vaultContract: entry,
@@ -209,7 +207,7 @@ describe("activity history links", () => {
     toAmount: "1 USDC",
     status: "completed",
     timestampRaw: 1,
-    txHash: transactionHash,
+    evmTxHash: transactionHash,
     ...overrides,
   });
 
@@ -225,8 +223,8 @@ describe("activity history links", () => {
       midnightTxHistory.add(local);
     });
     const row = result.current.find((entry) => entry.id === local.id);
-    expect(row?.transactionHash).toBe(transactionHash);
-    expect(row?.explorer.transaction.status).toBe("unavailable");
+    expect(row?.evmTransactionHash).toBe(transactionHash);
+    expect(row?.explorer.evmTransaction.status).toBe("unavailable");
     expect(row?.explorer.fromAddress.status).toBe("unavailable");
     expect(row?.explorer.vaultContract).toEqual({
       status: "unavailable",
@@ -237,7 +235,7 @@ describe("activity history links", () => {
       midnightTxHistory.update(local.id, { explorerUrl: "https://sepolia.etherscan.io" });
     });
     const relinked = result.current.find((entry) => entry.id === local.id);
-    expect(relinked?.explorer.transaction).toEqual({
+    expect(relinked?.explorer.evmTransaction).toEqual({
       status: "available",
       href: `https://sepolia.etherscan.io/tx/${transactionHash}`,
       label: "View this transaction on the Sepolia explorer",
@@ -261,7 +259,7 @@ describe("activity history links", () => {
       midnightTxHistory.add(crossChain);
     });
     const row = result.current.find((entry) => entry.id === crossChain.id);
-    expect(row?.explorer.transaction).toEqual({
+    expect(row?.explorer.evmTransaction).toEqual({
       status: "available",
       href: `https://etherscan.io/tx/${transactionHash}`,
       label: "View this transaction on the Ethereum explorer",
@@ -290,7 +288,7 @@ describe("transaction details presentation", () => {
           timestamp: "fixture time",
           timestampRaw: 1,
           status: "completed",
-          transactionHash,
+          evmTransactionHash: transactionHash,
           explorer: unavailableLinks(
             "No explorer is configured for this network, so this transaction has no link.",
           ),
@@ -306,11 +304,15 @@ describe("transaction details presentation", () => {
         "No explorer is configured for this network, so this transaction has no link.",
       ),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Copy Transaction hash" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Show full Transaction hash" }));
-    expect(screen.getByRole("dialog", { name: "Full Transaction hash" }).textContent).toContain(
-      transactionHash,
+    expect(
+      screen.getByRole("button", { name: "Copy EVM settlement transaction hash" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show full EVM settlement transaction hash" }),
     );
+    expect(
+      screen.getByRole("dialog", { name: "Full EVM settlement transaction hash" }).textContent,
+    ).toContain(transactionHash);
     expect(screen.queryByRole("link")).toBeNull();
   });
 
@@ -323,13 +325,19 @@ describe("transaction details presentation", () => {
           timestamp: "fixture time",
           timestampRaw: 1,
           status: "completed",
-          transactionHash,
+          evmTransactionHash: transactionHash,
+          midnightTransactionHash,
           requestId: "request-fixture",
           explorer: {
-            transaction: {
+            evmTransaction: {
               status: "available",
               href: `https://sepolia.etherscan.io/tx/${transactionHash}`,
               label: "View this transaction on the Sepolia explorer",
+            },
+            midnightTransaction: {
+              status: "available",
+              href: `https://preview.midnightexplorer.com/transactions/0x${midnightTransactionHash}`,
+              label: "View this transaction on the Midnight preview explorer",
             },
             fromAddress: { status: "unavailable", reason: "No counterparty address is recorded." },
             toAddress: { status: "unavailable", reason: "No counterparty address is recorded." },
@@ -346,11 +354,23 @@ describe("transaction details presentation", () => {
     );
 
     const receipt = screen.getByRole("link", {
-      name: "View this transaction on the Sepolia explorer: Transaction hash",
+      name: "View this transaction on the Sepolia explorer: EVM settlement transaction hash",
     });
     expect(receipt.getAttribute("href")).toBe(`https://sepolia.etherscan.io/tx/${transactionHash}`);
     expect(receipt.getAttribute("target")).toBe("_blank");
     expect(receipt.getAttribute("rel")).toBe("noopener noreferrer");
+
+    const claim = screen.getByRole("link", {
+      name: "View this transaction on the Midnight preview explorer: Midnight settlement transaction hash",
+    });
+    expect(claim.getAttribute("href")).toBe(
+      `https://preview.midnightexplorer.com/transactions/0x${midnightTransactionHash}`,
+    );
+    expect(claim.getAttribute("target")).toBe("_blank");
+    expect(claim.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(
+      screen.getByRole("button", { name: "Copy Midnight settlement transaction hash" }),
+    ).toBeTruthy();
 
     const contract = screen.getByRole("link", {
       name: "View this contract on the Midnight preview explorer",
@@ -378,7 +398,7 @@ describe("activity table isolation", () => {
       toAmount: "1 USDC",
       status: "completed",
       timestampRaw: 9_999,
-      txHash: transactionHash,
+      evmTxHash: transactionHash,
       chainId: 11155111,
       explorerUrl: "https://sepolia.etherscan.io",
       networkId: "preview",

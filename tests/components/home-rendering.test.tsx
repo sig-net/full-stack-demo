@@ -131,7 +131,14 @@ it("renders the connected Home sections and refunded activity on the server", as
       timestamp: "fixture",
       status: "refunded",
       explorer: {
-        transaction: { status: "unavailable", reason: "No settled EVM transaction is recorded." },
+        evmTransaction: {
+          status: "unavailable",
+          reason: "No settled EVM transaction is recorded.",
+        },
+        midnightTransaction: {
+          status: "unavailable",
+          reason: "No settled Midnight transaction is recorded.",
+        },
         fromAddress: { status: "unavailable", reason: "No counterparty address is recorded." },
         toAddress: { status: "unavailable", reason: "No counterparty address is recorded." },
         vaultContract: { status: "unavailable", reason: "No vault contract is recorded." },

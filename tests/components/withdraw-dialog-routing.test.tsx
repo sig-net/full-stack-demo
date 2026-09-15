@@ -15,6 +15,7 @@ import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
 import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
+import { progressState } from "./midnight-progress-fixture";
 import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 import { vaultGasReservesFixture } from "./vault-gas-fixture";
 
@@ -86,7 +87,7 @@ describe("withdrawal routing", () => {
       .fn<ReturnType<typeof useVaultOperations>["withdraw"]>()
       .mockResolvedValue({ refunded: false });
     const onOpenChange = vi.fn();
-    vi.mocked(useMidnightProgress).mockReturnValue({ active: false, message: "", error: null });
+    vi.mocked(useMidnightProgress).mockReturnValue(progressState());
     vi.mocked(useMidnightReadiness).mockImplementation(() =>
       useReadyMidnightFixture(binding.wallet),
     );
@@ -184,7 +185,7 @@ describe("withdrawal routing", () => {
     );
     const withdraw = vi.fn<ReturnType<typeof useVaultOperations>["withdraw"]>();
     const onOpenChange = vi.fn();
-    vi.mocked(useMidnightProgress).mockReturnValue({ active: false, message: "", error: null });
+    vi.mocked(useMidnightProgress).mockReturnValue(progressState());
     vi.mocked(useMidnightReadiness).mockImplementation(() =>
       useReadyMidnightFixture(binding.wallet),
     );

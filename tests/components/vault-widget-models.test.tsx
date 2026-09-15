@@ -31,6 +31,7 @@ import {
   testRuntimeConfiguration,
 } from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
+import { progressState } from "./midnight-progress-fixture";
 
 vi.mock(import("@/hooks/use-midnight-history"), { spy: true });
 vi.mock(import("@/hooks/use-midnight-progress"), { spy: true });
@@ -91,7 +92,7 @@ async function fixture(): Promise<WidgetFixture> {
   vi.mocked(stataAssetsPerShare).mockResolvedValue(1.25);
   vi.mocked(stataSupplyApy).mockResolvedValue(0.03);
   vi.mocked(useMidnightHistory).mockReturnValue([]);
-  vi.mocked(useMidnightProgress).mockReturnValue({ active: false, message: "", error: null });
+  vi.mocked(useMidnightProgress).mockReturnValue(progressState());
   vi.mocked(useVaultBalances).mockReturnValue({
     balances,
     loading: false,

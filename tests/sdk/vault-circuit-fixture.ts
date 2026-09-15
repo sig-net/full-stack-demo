@@ -6,11 +6,17 @@ import {
 } from "@midnight-ntwrk/compact-runtime";
 import {
   type RequestIdHex,
+  type SignatureRespondedEvent,
+  type SignBidirectionalEvent,
+  signBidirectionalEventToUnsignedEvmTransaction,
   SIGNET_DEFAULT_KEY_VERSION,
   type SignetRequestResponseReader,
   toSignBidirectionalEventIndex,
 } from "@sig-net/midnight";
-import { secp256k1PublicKeyOf } from "@sig-net/midnight/testing";
+import {
+  secp256k1PublicKeyOf,
+  signatureToSignatureRespondedEvent,
+} from "@sig-net/midnight/testing";
 import { Contract as SignetContract } from "@sig-net/midnight-contract";
 import { ledger } from "@sig-net/midnight-examples-erc20-vault-contract";
 import {
@@ -19,6 +25,7 @@ import {
   type VaultPrivateState,
   witnesses,
 } from "@sig-net/midnight-examples-erc20-vault-contract";
+import { Wallet } from "ethers";
 
 import {
   ERC20_TRANSFER_GAS_LIMIT,
@@ -116,4 +123,21 @@ export async function createPendingDeposit(
   if (!entry) throw new Error("Expected generated pending request");
   const [requestId, request] = entry;
   return { pendingState, requestId, request };
+}
+
+/**
+ * Signs one request the way a responder does, so a verified signature poll accepts the post.
+ *
+ * @param request - Signature request read back from the requester contract.
+ * @param signerKey - Controlled key standing in for the MPC-derived signer of that request.
+ * @returns The signer whose address the poll verifies against and its response post.
+ */
+export function createSignatureResponse(
+  request: SignBidirectionalEvent,
+  signerKey: string,
+): { signer: Wallet; signature: SignatureRespondedEvent } {
+  const transaction = signBidirectionalEventToUnsignedEvmTransaction(request);
+  const signer = new Wallet(signerKey);
+  transaction.signature = signer.signingKey.sign(transaction.unsignedHash);
+  return { signer, signature: signatureToSignatureRespondedEvent(transaction.signature) };
 }

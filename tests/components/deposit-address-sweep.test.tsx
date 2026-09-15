@@ -32,6 +32,7 @@ import {
   testRuntimeConfiguration,
 } from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
+import { progressState } from "./midnight-progress-fixture";
 import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 import { vaultGasReservesFixture } from "./vault-gas-fixture";
 
@@ -58,7 +59,7 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.mocked(useVaultGasReserves).mockReturnValue(vaultGasReservesFixture());
-  vi.mocked(useMidnightProgress).mockReturnValue({ active: false, message: "", error: null });
+  vi.mocked(useMidnightProgress).mockReturnValue(progressState());
 });
 
 interface SweepSurfaceInput {
@@ -335,11 +336,9 @@ it("blocks the sweep while another vault operation owns the connection", async (
   try {
     const amount = screen.getByLabelText(`Amount to deposit (${surface.token.symbol})`);
     fireEvent.change(amount, { target: { value: "3" } });
-    vi.mocked(useMidnightProgress).mockReturnValue({
-      active: true,
-      message: "Proving…",
-      error: null,
-    });
+    vi.mocked(useMidnightProgress).mockReturnValue(
+      progressState({ active: true, message: "Proving…" }),
+    );
     surface.rerender();
     const start = screen.getByRole("button", { name: CONTINUE });
     expect(start).toHaveProperty("disabled", true);

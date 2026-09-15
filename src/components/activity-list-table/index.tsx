@@ -25,7 +25,8 @@ import { TransactionDetailsDialog } from "./transaction-details-dialog";
 
 /** Explorer destination of each captured leg, resolved once from the record's own chain. */
 export interface ActivityExplorerLinks {
-  readonly transaction: ExplorerAvailability;
+  readonly evmTransaction: ExplorerAvailability;
+  readonly midnightTransaction: ExplorerAvailability;
   readonly fromAddress: ExplorerAvailability;
   readonly toAddress: ExplorerAvailability;
   readonly vaultContract: ExplorerAvailability;
@@ -51,7 +52,8 @@ export interface ActivityTransaction {
   timestamp: string;
   timestampRaw?: number;
   status: MidnightTxRecord["status"];
-  transactionHash?: string;
+  evmTransactionHash?: string;
+  midnightTransactionHash?: string;
   requestId?: string;
   explorer: ActivityExplorerLinks;
   failureReason?: string;
@@ -266,13 +268,13 @@ export function ActivityListTable(properties: ActivityListTableProps): React.JSX
                   <StatusBadge status={transaction.status} />
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
-                  {transaction.explorer.transaction.status === "available" && (
+                  {transaction.explorer.evmTransaction.status === "available" && (
                     <Button asChild variant="ghost" size="icon-sm">
                       <a
-                        href={transaction.explorer.transaction.href}
+                        href={transaction.explorer.evmTransaction.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label={`${transaction.explorer.transaction.label}: ${transaction.type} ${transaction.timestamp}`}
+                        aria-label={`${transaction.explorer.evmTransaction.label}: ${transaction.type} ${transaction.timestamp}`}
                         onClick={(event) => {
                           event.stopPropagation();
                         }}

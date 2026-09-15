@@ -40,13 +40,24 @@ function explorerLinks(
       ? { status: "unavailable", reason: "This operation records no EVM counterparty address." }
       : evmExplorerLink(evmSource, "address", value);
   return {
-    transaction:
-      r.txHash === undefined
+    evmTransaction:
+      r.evmTxHash === undefined
         ? {
             status: "unavailable",
             reason: "No settled EVM transaction is recorded for this operation yet.",
           }
-        : evmExplorerLink(evmSource, "transaction", r.txHash),
+        : evmExplorerLink(evmSource, "transaction", r.evmTxHash),
+    midnightTransaction:
+      r.midnightTxHash === undefined
+        ? {
+            status: "unavailable",
+            reason: "No settled Midnight transaction is recorded for this operation yet.",
+          }
+        : midnightExplorerLink(
+            capturedMidnightNetwork(r.networkId),
+            "transaction",
+            r.midnightTxHash,
+          ),
     fromAddress: address(fromAddress),
     toAddress: address(toAddress),
     vaultContract:
@@ -89,7 +100,8 @@ function toActivity(r: MidnightTxRecord): ActivityTransaction {
     timestamp: formatActivityDate(r.timestampRaw),
     timestampRaw: r.timestampRaw,
     status: r.status,
-    transactionHash: r.txHash,
+    evmTransactionHash: r.evmTxHash,
+    midnightTransactionHash: r.midnightTxHash,
     failureReason: r.failureReason,
     explorer: explorerLinks(
       r,

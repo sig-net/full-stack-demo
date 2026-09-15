@@ -28,6 +28,8 @@ import {
 import { createVaultFixture } from "../sdk/vault-fixture";
 import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 
+const MIDNIGHT_CLAIM_HASH = "34".repeat(32);
+
 vi.mock(import("@/providers/vault-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
 vi.mock(import("@/providers/midnight-readiness-context"), { spy: true });
@@ -107,8 +109,8 @@ it.each(scenarios)(
       onRecord?.(recordId, `0x${"01".repeat(32)}`);
       return execution.promise.then(() => {
         return outcome === "refunded"
-          ? { status: "refunded" }
-          : { status: "settled", outputUnits: 12n };
+          ? { status: "refunded", midnightTxHash: MIDNIGHT_CLAIM_HASH }
+          : { status: "settled", outputUnits: 12n, midnightTxHash: MIDNIGHT_CLAIM_HASH };
       });
     };
     const deposit = vi
@@ -323,6 +325,15 @@ it.each(scenarios)(
             : { status: outcome },
         ),
       );
+      expect(terminal).toHaveBeenCalledWith(
+        recordId,
+        expect.objectContaining(
+          outcome === "failed"
+            ? { status: recovery === "superseded" ? "interrupted" : "failed" }
+            : { midnightTxHash: MIDNIGHT_CLAIM_HASH },
+        ),
+      );
+      expect(history.mock.calls[0]?.[0].evmTxHash).toBe(`0x${"01".repeat(32)}`);
       expect(mounted.result.current[0].busy).toBe(unmounted === true);
       {
         expect(mounted.result.current[0].currentDeposit).toEqual(
@@ -388,7 +399,11 @@ it("retains the confirmed deposit when manual recovery fails validation", async 
       onRecord,
     ) => {
       onRecord?.(id);
-      return Promise.resolve({ status: "settled", outputUnits: null });
+      return Promise.resolve({
+        status: "settled",
+        outputUnits: null,
+        midnightTxHash: MIDNIGHT_CLAIM_HASH,
+      });
     },
   );
   vi.mocked(vault.lookupDepositRequest).mockResolvedValue({
@@ -504,13 +519,24 @@ it.each(["failed", "completed"] as const)(
       });
       await act(async () => {
         if (outcome === "failed") execution.reject(new Error("Fixture proof rejected"));
-        else execution.resolve({ status: "settled", outputUnits: null });
+        else
+          execution.resolve({
+            status: "settled",
+            outputUnits: null,
+            midnightTxHash: MIDNIGHT_CLAIM_HASH,
+          });
         await Promise.allSettled([sweep]);
       });
       expect(mounted.result.current.progress.active).toBe(false);
       expect(mounted.result.current.operations.busy).toBe(false);
       expect(flow.phase).toBe(outcome === "failed" ? "preparing" : "done");
-      expect(flow.error).toBe(outcome === "failed" ? "Vault session superseded." : null);
+      // The replacement and the failure it interrupted are both named, so a node rejection
+      // observed by the replaced session stays readable in the terminal state.
+      expect(flow.error).toBe(
+        outcome === "failed"
+          ? "Vault session superseded. The failure it interrupted: Fixture proof rejected"
+          : null,
+      );
     } finally {
       mounted.unmount();
       query.clear();

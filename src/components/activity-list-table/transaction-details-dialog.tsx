@@ -85,19 +85,35 @@ export function TransactionDetailsDialog(
               />
             </div>
           )}
-          {transaction.transactionHash && (
+          {transaction.evmTransactionHash && (
             <div>
               <p>EVM settlement transaction</p>
               <PublicIdentifier
-                value={transaction.transactionHash}
-                label="Transaction hash"
-                explorer={transaction.explorer.transaction}
+                value={transaction.evmTransactionHash}
+                label="EVM settlement transaction hash"
+                explorer={transaction.explorer.evmTransaction}
               />
             </div>
           )}
-          {transaction.explorer.transaction.status === "unavailable" && (
-            <p className="ds-caption ds-muted">{transaction.explorer.transaction.reason}</p>
+          {transaction.explorer.evmTransaction.status === "unavailable" && (
+            <p className="ds-caption ds-muted">{transaction.explorer.evmTransaction.reason}</p>
           )}
+          {transaction.midnightTransactionHash && (
+            <div>
+              <p>Midnight settlement transaction</p>
+              <PublicIdentifier
+                value={transaction.midnightTransactionHash}
+                label="Midnight settlement transaction hash"
+                explorer={transaction.explorer.midnightTransaction}
+              />
+            </div>
+          )}
+          {transaction.midnightTransactionHash &&
+            transaction.explorer.midnightTransaction.status === "unavailable" && (
+              <p className="ds-caption ds-muted">
+                {transaction.explorer.midnightTransaction.reason}
+              </p>
+            )}
           {transaction.explorer.vaultContract.status === "available" && (
             <div>
               <p>Midnight vault contract</p>

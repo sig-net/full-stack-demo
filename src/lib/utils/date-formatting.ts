@@ -32,3 +32,18 @@ export function formatActivityDate(timestamp: number): string {
     return format(date, "MMM d, yyyy");
   }
 }
+
+/**
+ * Renders a short elapsed duration for a wait a user is watching in real time.
+ *
+ * @param elapsedMs - Non-negative milliseconds spent so far.
+ * @returns Seconds under a minute, minutes and seconds under an hour, hours and minutes above it.
+ */
+export function formatElapsed(elapsedMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  if (totalSeconds < 60) return `${totalSeconds.toString()}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  if (minutes < 60)
+    return `${minutes.toString()}m ${(totalSeconds % 60).toString().padStart(2, "0")}s`;
+  return `${Math.floor(minutes / 60).toString()}h ${(minutes % 60).toString().padStart(2, "0")}m`;
+}

@@ -78,20 +78,20 @@ describe("activity history", () => {
       expect(result.current[0]?.failureReason).toBe("Proof failed");
     });
     act(() => {
-      midnightTxHistory.update(fixture.id, { status: "completed", txHash: "0xabc" });
+      midnightTxHistory.update(fixture.id, { status: "completed", evmTxHash: "0xabc" });
     });
     await waitFor(() => {
       expect(result.current[0]?.status).toBe("completed");
     });
-    expect(result.current[0]?.explorer.transaction).toEqual({
+    expect(result.current[0]?.explorer.evmTransaction).toEqual({
       status: "unavailable",
       reason: "This value is not an EVM transaction identifier.",
     });
     act(() => {
-      midnightTxHistory.update(fixture.id, { txHash: settledHash });
+      midnightTxHistory.update(fixture.id, { evmTxHash: settledHash });
     });
     await waitFor(() => {
-      expect(result.current[0]?.explorer.transaction).toEqual({
+      expect(result.current[0]?.explorer.evmTransaction).toEqual({
         status: "available",
         href: `https://sepolia.etherscan.io/tx/${settledHash}`,
         label: "View this transaction on the Sepolia explorer",
@@ -122,12 +122,16 @@ describe("activity history", () => {
       timestamp: "fixture time",
       status: "refunded",
       failureReason: "Fixture proof failed",
-      transactionHash: settledHash,
+      evmTransactionHash: settledHash,
       explorer: {
-        transaction: {
+        evmTransaction: {
           status: "available",
           href: `https://sepolia.etherscan.io/tx/${settledHash}`,
           label: "View this transaction on the Sepolia explorer",
+        },
+        midnightTransaction: {
+          status: "unavailable",
+          reason: "No settled Midnight transaction is recorded for this operation yet.",
         },
         fromAddress: { status: "unavailable", reason: "No counterparty address is recorded." },
         toAddress: { status: "unavailable", reason: "No counterparty address is recorded." },
@@ -138,11 +142,13 @@ describe("activity history", () => {
     expect(screen.getByText("Supply Details")).toBeTruthy();
     expect(screen.getByText("Status: refunded")).toBeTruthy();
     expect(screen.getByText("Fixture proof failed")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Copy Transaction hash" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Copy EVM settlement transaction hash" }),
+    ).toBeTruthy();
     expect(
       screen
         .getByRole("link", {
-          name: "View this transaction on the Sepolia explorer: Transaction hash",
+          name: "View this transaction on the Sepolia explorer: EVM settlement transaction hash",
         })
         .getAttribute("href"),
     ).toBe(`https://sepolia.etherscan.io/tx/${settledHash}`);

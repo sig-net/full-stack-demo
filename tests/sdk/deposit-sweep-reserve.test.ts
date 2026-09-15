@@ -6,6 +6,7 @@ import { MPC_OPERATION_ETH_RESERVE } from "@/lib/midnight/evm-envelope";
 import { readPendingDeposits, runDeposit } from "@/lib/midnight/vault";
 
 import { startRpcStub } from "../evm/rpc-stub";
+import { createProgressRecorder } from "./flow-progress-fixture";
 import { createPendingDeposit, createVaultCircuitFixture } from "./vault-circuit-fixture";
 
 const REQUIRED = MPC_OPERATION_ETH_RESERVE.deposit;
@@ -30,7 +31,7 @@ it.each([
   try {
     await expect(
       runDeposit(
-        { set: vi.fn() },
+        createProgressRecorder().progress,
         fixture.binding.providers,
         fixture.binding.contract,
         { ...fixture.binding.environment, evmRpcUrl: stub.url },
@@ -62,7 +63,7 @@ it("rejects a new deposit request when the deposit address balance cannot be rea
   try {
     await expect(
       runDeposit(
-        { set: vi.fn() },
+        createProgressRecorder().progress,
         fixture.binding.providers,
         fixture.binding.contract,
         { ...fixture.binding.environment, evmRpcUrl: stub.url },
@@ -93,15 +94,11 @@ it("submits a new deposit request once the deposit address holds exactly the res
     .mockRejectedValue(new Error(START_REACHED));
   stub.setBalance(REQUIRED);
   stub.setNonce(7n);
-  const phases: string[] = [];
+  const recorder = createProgressRecorder();
   try {
     await expect(
       runDeposit(
-        {
-          set: (phase) => {
-            phases.push(phase);
-          },
-        },
+        recorder.progress,
         fixture.binding.providers,
         fixture.binding.contract,
         { ...fixture.binding.environment, evmRpcUrl: stub.url },
@@ -114,7 +111,8 @@ it("submits a new deposit request once the deposit address holds exactly the res
     expect(start).toHaveBeenCalledTimes(1);
     expect(start.mock.calls[0]?.[0]).toBe(7n);
     expect(start.mock.calls[0]?.[5]).toEqual({ erc20Address: TOKEN, amount: AMOUNT });
-    expect(phases).toEqual(["proving"]);
+    expect(recorder.phases).toEqual(["proving"]);
+    expect(recorder.eventNames()).toEqual([]);
   } finally {
     await stub.close();
     fixture.binding.providers.privateStateProvider.dispose();
@@ -144,7 +142,7 @@ it("refuses a second request beside a pending one of a different amount", async 
     ).toEqual([{ requestId: pending.requestId, units: AMOUNT }]);
     await expect(
       runDeposit(
-        { set: vi.fn() },
+        createProgressRecorder().progress,
         fixture.binding.providers,
         fixture.binding.contract,
         { ...fixture.binding.environment, evmRpcUrl: stub.url },

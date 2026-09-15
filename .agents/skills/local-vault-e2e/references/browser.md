@@ -34,8 +34,11 @@ messages to recover those bodies. Revalidate any future tool upgrade before wall
 ## Browser procedure
 
 Before a relayed browser check or deposit, agree a stable application-file window with the
-implementing agent. HMR clears in-memory credentials and the applied configuration on every
-source edit, including a comment-only tidy-up, so finish every edit before restoring.
+implementing agent. HMR is not reliable in either direction: on some edits it clears in-memory
+credentials and the applied configuration, including for a comment-only tidy-up, and on others
+the open tab keeps its previous build until an explicit reload. Finish every edit before
+restoring, then reload and verify which build the page is running before a funded run or any
+observation you intend to record.
 Wait for their acknowledgement that writes and formatting have stopped before restoring credentials.
 They can continue fixture and documentation work while the browser owner checks the UI. Resume
 application edits after the browser owner releases the window. HMR can
@@ -162,6 +165,9 @@ installed. Stop the fixture server when done and label its evidence as fixture e
 Restoring the applied deployment after a page load means refilling every field of the
 Configuration dialog from the saved public deployment file, then Apply. The Contract address
 field collides with Signet contract address under a non-exact role query, so use exact names.
+The Configuration inputs carry generated ids and no accessible names, so map the saved deployment
+file onto them by their labels and order. Inspect the current page state before assuming what a
+previous task left: sessions have been found cleared with nothing in the record to say so.
 
 A long run-code call, whether a clipboard read or a polling loop, can navigate the application
 tab to about:blank and destroy page memory, including during a funded operation. A call that
@@ -221,7 +227,10 @@ can erase browser memory. Automatically generated `.playwright-mcp` captures rem
 
 For request-ID copy/paste acceptance, wait until the recovery input contains the exact full ID.
 Clipboard paste completes asynchronously after the button click. The copy success line clears
-after two seconds, so click and read it inside one page evaluation. Starting a deposit from the
+after two seconds, so click and read it inside one page evaluation, and any timed line near the
+end of a wait can be lost to settlement between a text read and a screenshot, so capture it in
+the same evaluation as the read. The console buffer keeps two hundred messages, so read it
+immediately after an action that may raise an error. Starting a deposit from the
 deposit-address entry point closes the dialog, so reopen it to capture the settlement-stage
 request display, and capture promptly: successful completion can close the deposit dialog
 before a queued copy action runs. A later successful copy proves the completed-state control, not the pending one.

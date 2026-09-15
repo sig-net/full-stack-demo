@@ -49,6 +49,7 @@ import {
   testRuntimeConfiguration,
 } from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
+import { progressState } from "./midnight-progress-fixture";
 import { vaultGasReservesFixture } from "./vault-gas-fixture";
 
 vi.mock(import("@/hooks/use-midnight-history"), { spy: true });
@@ -354,7 +355,7 @@ async function mountSurface(content: React.ReactNode): Promise<OperationSurface>
   vi.mocked(stataAssetsPerShare).mockResolvedValue(1);
   vi.mocked(stataSupplyApy).mockResolvedValue(0.03);
   vi.mocked(useMidnightHistory).mockReturnValue([]);
-  vi.mocked(useMidnightProgress).mockReturnValue({ active: false, message: "", error: null });
+  vi.mocked(useMidnightProgress).mockReturnValue(progressState());
   vi.mocked(useVault).mockReturnValue({
     status: "ready",
     error: null,

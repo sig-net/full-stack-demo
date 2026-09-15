@@ -43,7 +43,8 @@ describe("public history ingress and lending attribution", () => {
       chainId: 11155111,
       rpcUrl: "http://localhost:8545",
       explorerUrl: "",
-      txHash: `0x${"05".repeat(32)}`,
+      evmTxHash: `0x${"05".repeat(32)}`,
+      midnightTxHash: "34".repeat(32),
     };
     localStorage.setItem("midnight-tx-history-v1", JSON.stringify([deposit]));
     vi.resetModules();
@@ -55,17 +56,33 @@ describe("public history ingress and lending attribution", () => {
     localStorage.removeItem("midnight-tx-history-v1");
   });
 
+  it("reads a stored settlement hash held under the single-leg key as the EVM leg", async () => {
+    const evmTxHash = `0x${"05".repeat(32)}`;
+    const stored = { ...record, type: "Deposit", id: "single-leg-record", txHash: evmTxHash };
+    localStorage.setItem("midnight-tx-history-v1", JSON.stringify([stored]));
+    vi.resetModules();
+    const { midnightTxHistory } = await import("@/lib/midnight/tx-history");
+    const listener = vi.fn<(txs: MidnightTxRecord[]) => void>();
+    const unsubscribe = midnightTxHistory.subscribe(listener);
+    const loaded = listener.mock.calls[0]?.[0];
+    expect(loaded).toEqual([{ ...record, type: "Deposit", id: "single-leg-record", evmTxHash }]);
+    expect(loaded?.[0]).not.toHaveProperty("txHash");
+    expect(loaded?.[0]).not.toHaveProperty("midnightTxHash");
+    unsubscribe();
+    localStorage.removeItem("midnight-tx-history-v1");
+  });
+
   it("keeps interrupted observations and rejects malformed persisted records individually", async () => {
     const pending = {
       ...record,
       status: "pending",
-      txHash: `0x${"05".repeat(32)}`,
+      evmTxHash: `0x${"05".repeat(32)}`,
       counterparty: position.assetToken,
     };
     const invalid = [
       { ...record, type: "Deposit", status: "refunded" },
       { ...record, explorerUrl: "javascript:alert(1)" },
-      { ...record, txHash: "bogus" },
+      { ...record, evmTxHash: "bogus" },
       { ...record, rpcUrl: "not a URL" },
       { ...record, type: "Invented" },
       { ...record, fromAmount: undefined },

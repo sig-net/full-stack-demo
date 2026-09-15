@@ -1,4 +1,5 @@
 import { rawTokenType } from "@midnight-ntwrk/compact-runtime";
+import type { FinalizedTxData } from "@midnight-ntwrk/midnight-js/types";
 import {
   type AbiDecodedOutput,
   asciiPadded,
@@ -141,6 +142,66 @@ async function rpcStep<T>(step: string, attempts: number, fn: () => Promise<T>):
       ? lastError.message
       : String(lastError);
   throw new Error(`${step} failed after ${attempts.toString()} attempts: ${detail}`);
+}
+
+/**
+ * Local deadline for observing an MPC response, elapsed while the request was still outstanding.
+ *
+ * The request remains live on the ledger and nothing was submitted a second time, so a caller
+ * resumes the same request by its ID. This is never evidence that the operation failed on chain.
+ */
+export class SettlementObservationTimeout extends Error {
+  readonly requestId: RequestIdHex;
+  readonly stage: "signature" | "attestation";
+  /**
+   * @param stage - MPC response whose observation ran out of time.
+   * @param requestId - Request that stays live on the ledger.
+   * @param waitedMs - Length of the observation this client performed.
+   * @param options - Standard error options carrying the last failed read as the cause.
+   */
+  constructor(
+    stage: "signature" | "attestation",
+    requestId: RequestIdHex,
+    waitedMs: number,
+    options?: ErrorOptions,
+  ) {
+    const minutes = Math.round(waitedMs / MINUTE).toString();
+    const subject =
+      stage === "signature" ? "MPC signature" : "MPC attestation of the EVM execution";
+    super(
+      `The ${subject} for request ${requestId} has not arrived within ${minutes} minutes of observation. The request is still live on chain: recover it with this request ID.`,
+      options,
+    );
+    this.name = "SettlementObservationTimeout";
+    this.requestId = requestId;
+    this.stage = stage;
+  }
+}
+
+// The reported settlement wait is around fifteen minutes. That is a reported duration and not a
+// protocol maximum, so this limit bounds how long this client keeps observing. Elapsing it reports
+// an unfinished observation of a live request.
+const MPC_OBSERVATION_LIMIT = 20 * MINUTE;
+// One-second polling keeps the first reading fresh, and a wait that runs into minutes backs off so
+// a fifteen-minute observation costs hundreds of ledger reads.
+const POLL_BACKOFF_STEPS = [
+  { untilMs: 30_000, intervalMs: 1000 },
+  { untilMs: 2 * MINUTE, intervalMs: 2000 },
+] as const;
+const POLL_INTERVAL_CEILING_MS = 5000;
+// A read that keeps failing is reported as itself, so a persistent fault never masquerades as a
+// slow MPC while a transient one never ends an operation that is still progressing.
+const MAX_CONSECUTIVE_READ_FAILURES = 5;
+
+/**
+ * @param elapsedMs - Time spent in the current wait.
+ * @returns The interval before the next poll of the same wait.
+ */
+export function pollBackoffMs(elapsedMs: number): number {
+  return (
+    POLL_BACKOFF_STEPS.find((step) => elapsedMs < step.untilMs)?.intervalMs ??
+    POLL_INTERVAL_CEILING_MS
+  );
 }
 
 const rand32 = (): Uint8Array => crypto.getRandomValues(new Uint8Array(32));
@@ -454,36 +515,53 @@ export function predictCallRequestId(
 }
 
 async function pollSignatureResponse(
+  progress: OperationProgress,
   providers: VaultProviders,
   env: VaultSessionEnvironment,
   requestId: RequestIdHex,
   expectedSigner: string,
   log: (m: string) => void,
   requestsPath: readonly number[] = VAULT_REQUESTS_PATH,
-  timeoutMs = 6 * MINUTE,
+  timeoutMs = MPC_OBSERVATION_LIMIT,
 ): Promise<Transaction> {
   const reader = responseReader(providers, env, requestsPath);
-  const end = Date.now() + timeoutMs;
+  const started = Date.now();
+  const end = started + timeoutMs;
   const warned = new Set<bigint>();
+  let consecutiveFailures = 0;
+  let lastFailure: unknown;
   while (Date.now() < end) {
     env.assertActive();
-    const { verified, verdicts } = await reader.getVerifiedSignatureRespondedEvent(
-      requestId,
-      expectedSigner,
-    );
-    for (const v of verdicts) {
-      if (v.rejectedReason !== undefined && !warned.has(v.index)) {
-        warned.add(v.index);
-        log(`ignoring response post ${v.index.toString()}: ${v.rejectedReason}`);
+    try {
+      const { verified, verdicts } = await reader.getVerifiedSignatureRespondedEvent(
+        requestId,
+        expectedSigner,
+      );
+      consecutiveFailures = 0;
+      lastFailure = undefined;
+      progress.observed();
+      for (const v of verdicts) {
+        if (v.rejectedReason !== undefined && !warned.has(v.index)) {
+          warned.add(v.index);
+          log(`ignoring response post ${v.index.toString()}: ${v.rejectedReason}`);
+        }
       }
+      if (verified !== undefined) {
+        const request = await reader.getSignatureRequest(requestId);
+        return signBidirectionalEventToSignedEvmTransaction(request, verified);
+      }
+    } catch (failure) {
+      env.assertActive();
+      consecutiveFailures += 1;
+      lastFailure = failure;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_READ_FAILURES) throw failure;
+      log(`signature response read failed, retrying: ${failureDetail(failure)}`);
     }
-    if (verified !== undefined) {
-      const request = await reader.getSignatureRequest(requestId);
-      return signBidirectionalEventToSignedEvmTransaction(request, verified);
-    }
-    await sleep(1000);
+    await sleep(pollBackoffMs(Date.now() - started));
   }
-  throw new Error(`timed out waiting for signature response to ${requestId}`);
+  throw new SettlementObservationTimeout("signature", requestId, timeoutMs, {
+    cause: lastFailure,
+  });
 }
 
 /**
@@ -492,21 +570,30 @@ async function pollSignatureResponse(
  *
  * @param env - Session checked before every broadcast attempt.
  * @param tx - Captured signed transaction retained across receipt polling.
- * @param opts - Continuation policy for mined reverts.
+ * @param opts - Continuation policy for mined reverts and observation sinks.
  * @param opts.throwOnRevert - Treats a mined revert as a fatal sign-only approval failure.
+ * @param opts.onBroadcast - Reports the hash once the transaction is on the network, which is
+ *   before the receipt wait begins, so a surface can show the pending transaction.
+ * @param opts.onReceipt - Reports the mined block of that same transaction.
  * @returns Completion after the same transaction is mined.
  */
 export async function broadcastEvm(
   env: VaultSessionEnvironment,
   tx: Transaction,
-  opts: { throwOnRevert?: boolean } = {},
+  opts: {
+    throwOnRevert?: boolean;
+    onBroadcast?: (hash: string) => void;
+    onReceipt?: (hash: string, blockNumber: number) => void;
+  } = {},
 ): Promise<void> {
-  const { throwOnRevert = true } = opts;
+  const { throwOnRevert = true, onBroadcast, onReceipt } = opts;
   return withEthersProvider(env.evmRpcUrl, async (provider) => {
     const { hash } = tx;
     if (!hash) throw new Error("signed tx missing hash");
     const mined = await rpcStep("receipt lookup", 3, () => provider.getTransactionReceipt(hash));
     if (mined) {
+      onBroadcast?.(hash);
+      onReceipt?.(hash, mined.blockNumber);
       if (mined.status === 0 && throwOnRevert) throw new Error(`sweep ${hash} reverted`);
       return;
     }
@@ -535,12 +622,17 @@ export async function broadcastEvm(
         await sleep(2000);
       }
     }
+    onBroadcast?.(hash);
     // A lost receipt poll must recheck the submitted transaction before failing continuation.
     const receipt = await rpcStep("receipt wait", 3, async () => {
       const r = await provider.waitForTransaction(hash, 1, 3 * MINUTE);
       return r ?? (await provider.getTransactionReceipt(hash));
     });
-    if (!receipt) throw new Error(`sweep ${hash} not confirmed`);
+    if (!receipt)
+      throw new Error(
+        `Transaction ${hash} has not been mined within the receipt observation limit. It is on the network and the same hash can be rechecked.`,
+      );
+    onReceipt?.(hash, receipt.blockNumber);
     if (receipt.status === 0 && throwOnRevert) throw new Error(`sweep ${hash} reverted`);
   });
 }
@@ -614,6 +706,25 @@ export async function fetchAttestedRespondOutcome(
   return undefined;
 }
 
+/** Public part of a finalised circuit call, which is the only part an operation record keeps. */
+interface MidnightClaimTx {
+  readonly public: Pick<FinalizedTxData, "txHash" | "blockHeight">;
+}
+
+/**
+ * @param progress - Checkpoint sink of the captured operation.
+ * @param claim - Finalised circuit call that concluded the operation on Midnight.
+ * @returns The Midnight transaction hash of that call.
+ */
+function settledOnMidnight(progress: OperationProgress, claim: MidnightClaimTx): string {
+  progress.event({
+    name: "midnight-settled",
+    midnightTxHash: claim.public.txHash,
+    midnightBlockHeight: claim.public.blockHeight,
+  });
+  return claim.public.txHash;
+}
+
 async function settleViaMpc(
   progress: OperationProgress,
   providers: VaultProviders,
@@ -624,11 +735,14 @@ async function settleViaMpc(
   requestsPath: readonly number[] = VAULT_REQUESTS_PATH,
   schema: string = BOOLEAN_RESULT_SCHEMA,
   respondSchema: string = schema,
+  onEvmBroadcast?: (hash: string) => void,
 ): Promise<AttestedRespondOutcome & { evmTxHash: string | undefined }> {
   env.assertActive();
   progress.set("settling");
   log("Waiting for MPC signature and EVM settlement...");
+  progress.event({ name: "signature-wait", requestId: rid });
   const signed = await pollSignatureResponse(
+    progress,
     providers,
     env,
     rid,
@@ -636,22 +750,56 @@ async function settleViaMpc(
     log,
     requestsPath,
   );
-  await broadcastEvm(env, signed, { throwOnRevert: false });
-  const end = Date.now() + 6 * MINUTE;
+  await broadcastEvm(env, signed, {
+    throwOnRevert: false,
+    onBroadcast: (hash) => {
+      progress.event({ name: "evm-broadcast", evmTxHash: hash });
+      onEvmBroadcast?.(hash);
+    },
+    onReceipt: (hash, blockNumber) => {
+      progress.observed();
+      progress.event({ name: "evm-receipt", evmTxHash: hash, evmBlockNumber: blockNumber });
+    },
+  });
+  progress.event({ name: "attestation-wait", requestId: rid });
+  const started = Date.now();
+  const end = started + MPC_OBSERVATION_LIMIT;
+  let consecutiveFailures = 0;
+  let lastFailure: unknown;
   while (Date.now() < end) {
     env.assertActive();
-    const outcome = await fetchAttestedRespondOutcome(
-      providers,
-      env,
-      rid,
-      requestsPath,
-      schema,
-      respondSchema,
-    );
-    if (outcome) return { ...outcome, evmTxHash: signed.hash ?? undefined };
-    await sleep(1000);
+    try {
+      const outcome = await fetchAttestedRespondOutcome(
+        providers,
+        env,
+        rid,
+        requestsPath,
+        schema,
+        respondSchema,
+      );
+      consecutiveFailures = 0;
+      lastFailure = undefined;
+      progress.observed();
+      if (outcome) {
+        progress.event({
+          name: "attestation-present",
+          requestId: rid,
+          succeeded: outcome.succeeded,
+        });
+        return { ...outcome, evmTxHash: signed.hash ?? undefined };
+      }
+    } catch (failure) {
+      env.assertActive();
+      consecutiveFailures += 1;
+      lastFailure = failure;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_READ_FAILURES) throw failure;
+      log(`attestation read failed, retrying: ${failureDetail(failure)}`);
+    }
+    await sleep(pollBackoffMs(Date.now() - started));
   }
-  throw new Error(`timed out waiting for respond-bidirectional attestation for ${rid}`);
+  throw new SettlementObservationTimeout("attestation", rid, MPC_OBSERVATION_LIMIT, {
+    cause: lastFailure,
+  });
 }
 
 const failureDetail = (error: unknown): string =>
@@ -803,6 +951,7 @@ export async function runDeposit(
     }
     if (lookup.units !== amount) throw new Error("Pending deposit amount changed.");
     rid = lookup.requestId;
+    progress.event({ name: "request-confirmed", requestId: rid });
     log(`Recovering pending deposit 0x${rid}`);
   } else if (pending[0]) {
     rid = requestIdHex(pending[0][0]);
@@ -813,6 +962,7 @@ export async function runDeposit(
         `Pending deposit 0x${rid} requires explicit recovery before sweeping newly available funds.`,
       );
     await assertDepositRequestOnLedger(providers, env, rid);
+    progress.event({ name: "request-confirmed", requestId: rid });
     log(`Resuming pending deposit 0x${rid}`);
   } else if (pendingForToken[0]) {
     // Every pending request owns a sweep signed against this address's current EVM nonce, so a
@@ -848,7 +998,10 @@ export async function runDeposit(
       SIGNET_DEFAULT_KEY_VERSION,
       { erc20Address: erc20, amount },
     );
+    progress.event({ name: "request-submitted", predictedRequestId: rid });
     await assertDepositRequestOnLedger(providers, env, rid);
+    progress.observed();
+    progress.event({ name: "request-confirmed", requestId: rid });
   }
   onRecord?.(rid);
 
@@ -860,6 +1013,11 @@ export async function runDeposit(
     userEvm,
     log,
     VAULT_DEPOSIT_REQUESTS_PATH,
+    BOOLEAN_RESULT_SCHEMA,
+    BOOLEAN_RESULT_SCHEMA,
+    (hash) => {
+      onRecord?.(rid, hash);
+    },
   );
   onRecord?.(rid, outcome.evmTxHash);
   if (!outcome.succeeded) throw new Error(`MPC attested deposit ${rid} as FAILED`);
@@ -876,7 +1034,7 @@ export async function runDeposit(
       right: { bytes: new Uint8Array(32) },
     },
   };
-  await vault.callTx.completeDeposit(
+  const claim = await vault.callTx.completeDeposit(
     requestIdBytes(rid),
     respondBidirectionalEventToCircuitInput(outcome.event),
     outcome.serializedOutput,
@@ -885,7 +1043,11 @@ export async function runDeposit(
   );
   env.assertActive();
   log("Deposit complete. Shielded token minted.");
-  return { status: "settled", outputUnits: null };
+  return {
+    status: "settled",
+    outputUnits: null,
+    midnightTxHash: settledOnMidnight(progress, claim),
+  };
 }
 
 /**
@@ -956,6 +1118,9 @@ export async function runWithdraw(
     VAULT_REQUESTS_PATH,
     BOOLEAN_RESULT_SCHEMA,
     BOOLEAN_RESULT_SCHEMA,
+    (hash) => {
+      onRecord?.(rid, hash);
+    },
   );
   onRecord?.(rid, outcome.evmTxHash);
 
@@ -963,7 +1128,7 @@ export async function runWithdraw(
     env.assertActive();
     progress.set("refunding");
     log("EVM transfer never executed. Refunding...");
-    await vault.callTx.refundWithdraw(
+    const claim = await vault.callTx.refundWithdraw(
       requestIdBytes(rid),
       respondBidirectionalEventToCircuitInput(outcome.event),
       outcome.serializedOutput,
@@ -971,12 +1136,12 @@ export async function runWithdraw(
     );
     env.assertActive();
     log("Withdraw settled (refunded).");
-    return { status: "refunded" };
+    return { status: "refunded", midnightTxHash: settledOnMidnight(progress, claim) };
   }
   env.assertActive();
   progress.set("claim-proving");
   log("Settling completeWithdraw...");
-  await vault.callTx.completeWithdraw(
+  const claim = await vault.callTx.completeWithdraw(
     requestIdBytes(rid),
     respondBidirectionalEventToCircuitInput(outcome.event),
     outcome.serializedOutput,
@@ -984,7 +1149,11 @@ export async function runWithdraw(
   );
   env.assertActive();
   log("Withdraw finalized (success).");
-  return { status: "settled", outputUnits: null };
+  return {
+    status: "settled",
+    outputUnits: null,
+    midnightTxHash: settledOnMidnight(progress, claim),
+  };
 }
 
 async function evmNonce(env: VaultSessionEnvironment, address: string): Promise<bigint> {
@@ -994,6 +1163,7 @@ async function evmNonce(env: VaultSessionEnvironment, address: string): Promise<
 }
 
 async function ensureRouterApproved(
+  progress: OperationProgress,
   providers: VaultProviders,
   vault: StandaloneVaultContract,
   env: VaultSessionEnvironment,
@@ -1026,6 +1196,7 @@ async function ensureRouterApproved(
   await assertRequestOnLedger(providers, env, rid, "approveRouter");
 
   const signed = await pollSignatureResponse(
+    progress,
     providers,
     env,
     rid,
@@ -1077,7 +1248,7 @@ export async function runSwap(
 
   env.assertActive();
   progress.set("preparing");
-  await ensureRouterApproved(providers, vault, env, tokenInHex, log);
+  await ensureRouterApproved(progress, providers, vault, env, tokenInHex, log);
 
   // The UI captures maximum spend, while settlement requires a guaranteed exact output.
   const { amountOut: expectedOut } = await quoteExactInputSingle(
@@ -1146,6 +1317,9 @@ export async function runSwap(
     VAULT_SWAP_REQUESTS_PATH,
     SWAP_OUTPUT_SCHEMA,
     SWAP_RESPOND_SCHEMA,
+    (hash) => {
+      onRecord?.(rid, hash);
+    },
   );
   onRecord?.(rid, outcome.evmTxHash);
 
@@ -1153,7 +1327,7 @@ export async function runSwap(
     env.assertActive();
     progress.set("refunding");
     log("Swap did not execute on EVM. Refunding tokenIn...");
-    await vault.callTx.refundSwap(
+    const claim = await vault.callTx.refundSwap(
       requestIdBytes(rid),
       respondBidirectionalEventToCircuitInput(outcome.event),
       outcome.serializedOutput,
@@ -1161,13 +1335,13 @@ export async function runSwap(
     );
     env.assertActive();
     log("Swap refunded (did not execute).");
-    return { status: "refunded" };
+    return { status: "refunded", midnightTxHash: settledOnMidnight(progress, claim) };
   }
   env.assertActive();
   progress.set("claim-proving");
   log("Settling completeSwap (minting shielded tokenOut + change)...");
   // Output and change require independent nonces.
-  await vault.callTx.completeSwap(
+  const claim = await vault.callTx.completeSwap(
     requestIdBytes(rid),
     respondBidirectionalEventToCircuitInput(outcome.event),
     outcome.serializedOutput,
@@ -1178,7 +1352,11 @@ export async function runSwap(
   log(
     `Swap complete. Minted ${amountOut.toString()} tokenOut (spent ~${String(outcome.decoded?.amountIn ?? "?")} tokenIn).`,
   );
-  return { status: "settled", outputUnits: null };
+  return {
+    status: "settled",
+    outputUnits: null,
+    midnightTxHash: settledOnMidnight(progress, claim),
+  };
 }
 
 async function stataAllowance(env: VaultSessionEnvironment, vaultEvm: string): Promise<bigint> {
@@ -1218,6 +1396,7 @@ async function assertRedeemRequestOnLedger(
 }
 
 async function ensureStataApproved(
+  progress: OperationProgress,
   providers: VaultProviders,
   vault: StandaloneVaultContract,
   env: VaultSessionEnvironment,
@@ -1248,6 +1427,7 @@ async function ensureStataApproved(
   await assertRequestOnLedger(providers, env, rid, "approveStata");
 
   const signed = await pollSignatureResponse(
+    progress,
     providers,
     env,
     rid,
@@ -1290,7 +1470,7 @@ export async function runSupply(
   env.assertActive();
 
   progress.set("preparing");
-  await ensureStataApproved(providers, vault, env, log);
+  await ensureStataApproved(progress, providers, vault, env, log);
 
   const nonce = await evmNonce(env, vaultEvm);
   const before = await readVaultLedger(providers, env);
@@ -1332,6 +1512,9 @@ export async function runSupply(
     VAULT_SUPPLY_REQUESTS_PATH,
     SUPPLY_OUTPUT_SCHEMA,
     SUPPLY_RESPOND_SCHEMA,
+    (hash) => {
+      onRecord?.(rid, hash);
+    },
   );
   onRecord?.(rid, outcome.evmTxHash);
 
@@ -1339,7 +1522,7 @@ export async function runSupply(
     env.assertActive();
     progress.set("refunding");
     log("Supply did not execute on EVM. Refunding USDC...");
-    await vault.callTx.refundSupply(
+    const claim = await vault.callTx.refundSupply(
       requestIdBytes(rid),
       respondBidirectionalEventToCircuitInput(outcome.event),
       outcome.serializedOutput,
@@ -1347,7 +1530,7 @@ export async function runSupply(
     );
     env.assertActive();
     log("Supply refunded (did not execute).");
-    return { status: "refunded" };
+    return { status: "refunded", midnightTxHash: settledOnMidnight(progress, claim) };
   }
   env.assertActive();
   progress.set("claim-proving");
@@ -1355,7 +1538,7 @@ export async function runSupply(
   if (shares !== undefined && typeof shares !== "bigint")
     throw new Error("Invalid attested share amount");
   log("Settling completeSupply (minting shielded stataUSDC)...");
-  await vault.callTx.completeSupply(
+  const claim = await vault.callTx.completeSupply(
     requestIdBytes(rid),
     respondBidirectionalEventToCircuitInput(outcome.event),
     outcome.serializedOutput,
@@ -1363,7 +1546,11 @@ export async function runSupply(
   );
   env.assertActive();
   log(`Supply complete. Minted ${shares?.toString() ?? "?"} stataUSDC shares.`);
-  return { status: "settled", outputUnits: shares ?? null };
+  return {
+    status: "settled",
+    outputUnits: shares ?? null,
+    midnightTxHash: settledOnMidnight(progress, claim),
+  };
 }
 
 /**
@@ -1437,6 +1624,9 @@ export async function runRedeem(
     VAULT_REDEEM_REQUESTS_PATH,
     REDEEM_OUTPUT_SCHEMA,
     REDEEM_RESPOND_SCHEMA,
+    (hash) => {
+      onRecord?.(rid, hash);
+    },
   );
   onRecord?.(rid, outcome.evmTxHash);
 
@@ -1444,7 +1634,7 @@ export async function runRedeem(
     env.assertActive();
     progress.set("refunding");
     log("Redeem did not execute on EVM. Refunding stataUSDC...");
-    await vault.callTx.refundRedeem(
+    const claim = await vault.callTx.refundRedeem(
       requestIdBytes(rid),
       respondBidirectionalEventToCircuitInput(outcome.event),
       outcome.serializedOutput,
@@ -1452,7 +1642,7 @@ export async function runRedeem(
     );
     env.assertActive();
     log("Redeem refunded (did not execute).");
-    return { status: "refunded" };
+    return { status: "refunded", midnightTxHash: settledOnMidnight(progress, claim) };
   }
   env.assertActive();
   progress.set("claim-proving");
@@ -1460,7 +1650,7 @@ export async function runRedeem(
   if (assets !== undefined && typeof assets !== "bigint")
     throw new Error("Invalid attested asset amount");
   log("Settling completeRedeem (minting shielded USDC)...");
-  await vault.callTx.completeRedeem(
+  const claim = await vault.callTx.completeRedeem(
     requestIdBytes(rid),
     respondBidirectionalEventToCircuitInput(outcome.event),
     outcome.serializedOutput,
@@ -1468,5 +1658,9 @@ export async function runRedeem(
   );
   env.assertActive();
   log(`Redeem complete. Minted ${assets?.toString() ?? "?"} USDC.`);
-  return { status: "settled", outputUnits: assets ?? null };
+  return {
+    status: "settled",
+    outputUnits: assets ?? null,
+    midnightTxHash: settledOnMidnight(progress, claim),
+  };
 }

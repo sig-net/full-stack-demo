@@ -47,6 +47,7 @@ import {
 import { browserWalletFixture } from "../evm/browser-wallet-fixture";
 import { startRpcStub } from "../evm/rpc-stub";
 import { createVaultFixture } from "../sdk/vault-fixture";
+import { progressState } from "./midnight-progress-fixture";
 import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 import { FUNDED_RESERVE_WEI, vaultGasReservesFixture } from "./vault-gas-fixture";
 
@@ -123,7 +124,7 @@ async function mountVaultSurface(content: React.ReactNode): Promise<VaultSurface
   vi.mocked(stataAssetsPerShare).mockResolvedValue(1);
   vi.mocked(stataSupplyApy).mockResolvedValue(0.03);
   vi.mocked(useMidnightHistory).mockReturnValue([]);
-  vi.mocked(useMidnightProgress).mockReturnValue({ active: false, message: "", error: null });
+  vi.mocked(useMidnightProgress).mockReturnValue(progressState());
   vi.mocked(useVault).mockReturnValue({
     status: "ready",
     error: null,
@@ -512,10 +513,10 @@ it("rechecks the vault reserve at the operation boundary and leaves the deposit 
   vi.mocked(tokenMetadata.fetchErc20Decimals).mockResolvedValue(6);
   const runSwap = vi
     .mocked(vault.runSwap)
-    .mockResolvedValue({ status: "settled", outputUnits: 1n });
+    .mockResolvedValue({ status: "settled", outputUnits: 1n, midnightTxHash: "34".repeat(32) });
   const runDeposit = vi
     .mocked(vault.runDeposit)
-    .mockResolvedValue({ status: "settled", outputUnits: null });
+    .mockResolvedValue({ status: "settled", outputUnits: null, midnightTxHash: "34".repeat(32) });
   const hook = renderHook(useVaultOperations, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={client}>
