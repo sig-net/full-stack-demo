@@ -195,6 +195,10 @@
   @apply border-border flex w-full items-center justify-between border-t py-(--space-section);
 }
 
+@utility ds-bullets {
+  @apply list-disc pl-4;
+}
+
 @utility ds-github-corner {
   @apply fill-foreground text-muted;
 

@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
-  PopoverDescription,
   PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
@@ -22,8 +21,24 @@ import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useVault } from "@/providers/vault-context";
 import { useVaultIdentity } from "@/providers/vault-identity-context";
 
-const identityHelp =
-  "Your vault identity uses a separate secret from either wallet. Keep a copy: refresh requires re-entry. Losing it can prevent access to vault funds or completion of a pending deposit. Deposits transfer on EVM first, then require this identity to complete on Midnight.";
+const identityHelpLines = [
+  "Your secret vault identity across interactions requiring multiple vault transactions",
+  "NOT a Wallet - Deposits to the vault are credited to your Midnight Wallet",
+  "Perferably a different seed from either your Midnight or EVM wallet",
+  "Keep a copy: losing it can prevent access to vault funds during pending interactions",
+  "Required on refresh to resume pending interactions",
+  "KEEP SECRET!"
+]
+
+function IdentityHelpList({ id }: { id?: string }): React.JSX.Element {
+  return (
+    <ul id={id} className="ds-muted ds-bullets">
+      {identityHelpLines.map((line) => (
+        <li key={line}>{line}</li>
+      ))}
+    </ul>
+  );
+}
 
 /**
  * Shares applied identity while each anchored editor owns its temporary input.
@@ -87,7 +102,7 @@ export function VaultIdentityButton({
       >
         <PopoverHeader>
           <PopoverTitle id={titleId}>Vault identity</PopoverTitle>
-          <PopoverDescription id={descriptionId}>{identityHelp}</PopoverDescription>
+          <IdentityHelpList id={descriptionId} />
         </PopoverHeader>
         <form
           className="ds-stack-control"
@@ -210,7 +225,7 @@ export function VaultIdentityHelp(): React.JSX.Element {
       </PopoverTrigger>
       <PopoverContent aria-labelledby={titleId}>
         <PopoverTitle id={titleId}>Keep your vault secret</PopoverTitle>
-        <PopoverDescription>{identityHelp}</PopoverDescription>
+        <IdentityHelpList />
       </PopoverContent>
     </Popover>
   );
