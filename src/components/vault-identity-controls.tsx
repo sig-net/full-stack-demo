@@ -17,6 +17,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useVault } from "@/providers/vault-context";
 import { useVaultIdentity } from "@/providers/vault-identity-context";
@@ -58,18 +59,20 @@ export function VaultIdentityButton({
   };
   return (
     <Popover open={open} onOpenChange={changeOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          ref={triggerRef}
-          variant="outline"
-          size="xs"
-          aria-label={`Vault identity: ${identity.identitySecret ? "set" : "not set"}`}
-        >
-          <KeyRound aria-hidden="true" />
-          <span>Vault identity</span>
-          <StatusDot tone={identity.identitySecret ? "success" : "neutral"} />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip title={`Vault identity: ${identity.identitySecret ? "set" : "not set"}`}>
+        <PopoverTrigger asChild>
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="sm"
+            aria-label={`Vault identity: ${identity.identitySecret ? "set" : "not set"}`}
+          >
+            <KeyRound aria-hidden="true" />
+            <span>Vault identity</span>
+            <StatusDot tone={identity.identitySecret ? "success" : "neutral"} />
+          </Button>
+        </PopoverTrigger>
+      </Tooltip>
       <PopoverContent
         size="wide"
         align="end"
