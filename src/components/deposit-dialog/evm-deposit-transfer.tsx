@@ -34,11 +34,19 @@ const CONTINUE_GATE_ID = "deposit-transfer-continue-gate";
 /**
  * Owns the EVM transfer amount and continues a matching vault deposit session.
  *
- * @param root0 - Transfer properties.
- * @param root0.token - Token being transferred.
+ * @param properties - Transfer properties.
+ * @param properties.token - Token being transferred.
+ * @param properties.sweepReserveExplained - Whether the deposit address entry point already states
+ *   the deposit sweep reserve's reason, so the funding section states it once per dialog.
  * @returns The EVM deposit transfer controls.
  */
-export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX.Element {
+export function EvmDepositTransfer({
+  token,
+  sweepReserveExplained,
+}: {
+  token: TokenConfig;
+  sweepReserveExplained: boolean;
+}): React.JSX.Element {
   const evm = useEvmWallet();
   const deposit = useEvmDeposit();
   const balances = useEvmBalances();
@@ -68,6 +76,11 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
     transfer.binding === vault.binding &&
     transfer.token === token.erc20Address;
   const failure = transfer?.failure ?? null;
+  // The sweep is a different transaction with its own observation, so rechecking the preparation
+  // transfer's receipt is offered only while that receipt is the outcome still in question.
+  const receiptOutcomeOpen =
+    transfer?.hash !== undefined &&
+    (transfer.status === "confirming" || failure?.recovery === "recheck");
   const sweepReserve = gas.depositSweep.reserve;
   const sweepGateReserve: GasReserve | null =
     sweepReserve !== null && sweepReserve.kind !== "sufficient" ? sweepReserve : null;
@@ -216,7 +229,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
                   Stop waiting for wallet approval
                 </Button>
               )}
-              {transfer?.hash && (
+              {receiptOutcomeOpen && (
                 <Button
                   variant="outline"
                   disabled={deposit.rechecking}
@@ -251,6 +264,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
             guidance="Send ETH on this network to the deposit address so it can pay for the token sweep into the vault. Sending ETH here does not deposit tokens and does not credit any shielded balance."
             observation={gas.depositSweep}
             network={gas.network}
+            reasonShownByGate={sweepReserveExplained || sendGate === sweepFundingGate}
           />
           <VaultGasAccount
             heading="EVM vault address"
@@ -259,6 +273,7 @@ export function EvmDepositTransfer({ token }: { token: TokenConfig }): React.JSX
             guidance="Send ETH on this network to the EVM vault address so the vault can pay for swaps and withdrawals. This address is the vault's EVM account, not the Midnight vault contract."
             observation={gas.vaultOperations}
             network={gas.network}
+            reasonShownByGate={false}
           />
         </div>
       )}

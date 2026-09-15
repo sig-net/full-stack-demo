@@ -251,7 +251,7 @@ interface DepositSurface {
   close: () => Promise<void>;
 }
 
-async function mountDepositSurface(): Promise<DepositSurface> {
+async function mountDepositSurface(sweepReserveExplained = false): Promise<DepositSurface> {
   vi.stubEnv("NEXT_PUBLIC_SEPOLIA_RPC_URL", "http://127.0.0.1:8545");
   const binding = await createVaultFixture();
   const f = browserWalletFixture();
@@ -302,7 +302,10 @@ async function mountDepositSurface(): Promise<DepositSurface> {
                   <VaultOperationsProvider>
                     <EvmDepositProvider>
                       <Bridge />
-                      <EvmDepositTransfer token={token} />
+                      <EvmDepositTransfer
+                        token={token}
+                        sweepReserveExplained={sweepReserveExplained}
+                      />
                     </EvmDepositProvider>
                   </VaultOperationsProvider>
                 </EvmLocalFundingProvider>
@@ -344,28 +347,42 @@ async function mountDepositSurface(): Promise<DepositSurface> {
   };
 }
 
-const sweepBoundaries: { name: string; observed: bigint; blocked: boolean }[] = [
-  { name: "zero", observed: 0n, blocked: true },
+// Wording of each blocking deposit-sweep reserve, which this dialog must state exactly once.
+const EMPTY_SWEEP_RESERVE_REASON =
+  "The deposit address holds no ETH, so it cannot pay for the token sweep into the vault.";
+const SHORT_SWEEP_RESERVE_REASON =
+  "The deposit address ETH balance is below the reserve needed to pay for the token sweep into the vault.";
+
+const sweepBoundaries: {
+  name: string;
+  observed: bigint;
+  blocked: boolean;
+  reason: string | null;
+}[] = [
+  { name: "zero", observed: 0n, blocked: true, reason: EMPTY_SWEEP_RESERVE_REASON },
   {
     name: "one wei below the sweep reserve",
     observed: MPC_OPERATION_ETH_RESERVE.deposit - 1n,
     blocked: true,
+    reason: SHORT_SWEEP_RESERVE_REASON,
   },
   {
     name: "exactly the sweep reserve",
     observed: MPC_OPERATION_ETH_RESERVE.deposit,
     blocked: false,
+    reason: null,
   },
   {
     name: "above the sweep reserve",
     observed: MPC_OPERATION_ETH_RESERVE.deposit + 1n,
     blocked: false,
+    reason: null,
   },
 ];
 
 it.each(sweepBoundaries)(
   "blocks a new deposit transfer at $name: $blocked",
-  async ({ observed, blocked }) => {
+  async ({ observed, blocked, reason }) => {
     const surface = await mountDepositSurface();
     try {
       const amountField = await screen.findByLabelText(
@@ -379,6 +396,11 @@ it.each(sweepBoundaries)(
       });
       expect(send.getAttribute("aria-describedby")).toBe(blocked ? SEND_GATE_ID : null);
       expect(screen.queryByRole("status", { name: SEND_GATE }) !== null).toBe(blocked);
+      // One reserve, one reason: the send gate carries it, so the funding section for the same
+      // account states the balance and the shortfall without repeating the reason.
+      expect(screen.queryAllByText(reason ?? EMPTY_SWEEP_RESERVE_REASON)).toHaveLength(
+        blocked ? 1 : 0,
+      );
       expect(amountField).toHaveProperty("value", "1");
     } finally {
       await surface.close();
@@ -387,6 +409,23 @@ it.each(sweepBoundaries)(
 );
 
 const SEND_GATE_ID = "deposit-transfer-send-gate";
+
+it("drops the funding section's reason while the address entry point states the same reserve", async () => {
+  const surface = await mountDepositSurface(true);
+  try {
+    surface.observe(0n);
+    await waitFor(() => {
+      expect(screen.queryByRole("status", { name: SEND_GATE })).not.toBeNull();
+    });
+    expect(screen.queryAllByText(EMPTY_SWEEP_RESERVE_REASON)).toHaveLength(1);
+    const section = screen.getByText("Deposit address").parentElement;
+    if (!section) throw new Error("Expected the deposit address funding section");
+    expect(within(section).queryByText(EMPTY_SWEEP_RESERVE_REASON)).toBeNull();
+    expect(within(section).getByText(/Balance:/)).toBeTruthy();
+  } finally {
+    await surface.close();
+  }
+});
 
 it("explains an unreadable deposit reserve and keeps the entered amount", async () => {
   const surface = await mountDepositSurface();

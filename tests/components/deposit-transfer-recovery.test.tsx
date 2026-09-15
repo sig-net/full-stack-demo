@@ -83,7 +83,9 @@ function Harness(properties: {
                 <EvmLocalFundingProvider>
                   <EvmDepositProvider>
                     <Bridge expose={expose} />
-                    {showSurface && <EvmDepositTransfer token={token} />}
+                    {showSurface && (
+                      <EvmDepositTransfer token={token} sweepReserveExplained={false} />
+                    )}
                   </EvmDepositProvider>
                 </EvmLocalFundingProvider>
               </EvmBalancesProvider>
@@ -477,6 +479,8 @@ it("admits one sweep continuation from repeated clicks and duplicate entry point
       await surface.current().deposit.sendDeposit(surface.binding, surface.token.erc20Address, "1");
     });
     expect(surface.current().deposit.transfer?.status).toBe("confirmed");
+    // An established receipt leaves nothing to recheck, so the control is not offered for it.
+    expect(screen.queryByRole("button", { name: "Recheck transfer receipt" })).toBeNull();
     const gate = Promise.withResolvers<{ refunded: boolean }>();
     surface.sweep.mockReturnValue(gate.promise);
     let first: Promise<void> | undefined;
@@ -491,6 +495,9 @@ it("admits one sweep continuation from repeated clicks and duplicate entry point
     const continuation = screen.getByRole("button", { name: "Midnight deposit pending…" });
     expect(continuation.hasAttribute("disabled")).toBe(true);
     expect(continuation.getAttribute("aria-describedby")).toBe("deposit-transfer-continue-gate");
+    // The sweep is a different transaction with its own observation, so the preparation transfer's
+    // receipt recheck stays out of the way while the sweep runs.
+    expect(screen.queryByRole("button", { name: "Recheck transfer receipt" })).toBeNull();
     await act(async () => {
       gate.resolve({ refunded: false });
       await first;

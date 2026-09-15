@@ -103,6 +103,7 @@ it("recovers a generated pending deposit without creating a request or reading a
     ),
   );
   const nonce = vi.spyOn(JsonRpcProvider.prototype, "getTransactionCount");
+  const broadcast = vi.spyOn(JsonRpcProvider.prototype, "broadcastTransaction");
   const start = vi.spyOn(binding.contract.callTx, "startDeposit");
   const completion: Awaited<ReturnType<StandaloneVaultContract["callTx"]["completeDeposit"]>> = {
     public: {
@@ -187,6 +188,9 @@ it("recovers a generated pending deposit without creating a request or reading a
     );
     expect(start).not.toHaveBeenCalled();
     expect(nonce).not.toHaveBeenCalled();
+    // The already mined receipt satisfies the sweep, so recovery sends no transaction of its own
+    // and cannot change the nonce or the amount of the one the MPC already signed.
+    expect(broadcast).not.toHaveBeenCalled();
     expect(complete).toHaveBeenCalledTimes(1);
     expect(recorder.eventNames()).toEqual([
       "request-confirmed",
@@ -212,6 +216,40 @@ it("recovers a generated pending deposit without creating a request or reading a
       { hash: broadcastHashes[0], completions: 0 },
     ]);
     expect(complete.mock.calls[0]?.[1]).toEqual(respondBidirectionalEventToCircuitInput(response));
+    // Another session settling the same request between the attestation and the completion must
+    // stop this one before it submits a second completion for a request the ledger has cleared.
+    vi.mocked(observation.observeExecution).mockImplementationOnce(() => {
+      state.data = fixture.readyState;
+      return Promise.resolve({ success: true, output: `0x${"00".repeat(31)}01` });
+    });
+    await expect(
+      runDeposit(
+        createProgressRecorder().progress,
+        binding.providers,
+        binding.contract,
+        binding.environment,
+        binding.identity,
+        tokenAddress,
+        1000000n,
+        vi.fn(),
+        undefined,
+        requestId,
+      ),
+    ).rejects.toThrow("Already completed");
+    expect(complete).toHaveBeenCalledTimes(1);
+    state.data = pendingState;
+    // A deployment holding no initialised vault is the one network-shaped mismatch a read proves.
+    state.data = binding.contract.deployTxData.public.initialContractState.data;
+    expect(
+      await lookupDepositRequest(
+        binding.providers,
+        binding.environment,
+        binding.identity,
+        tokenAddress,
+        requestId,
+      ),
+    ).toEqual({ kind: "mismatched", requestId, mismatch: "deployment" });
+    state.data = pendingState;
     await expect(
       runDeposit(
         createProgressRecorder().progress,
@@ -262,7 +300,9 @@ it("recovers a generated pending deposit without creating a request or reading a
         1000000n,
         vi.fn(),
       ),
-    ).rejects.toThrow("Multiple pending deposits");
+    ).rejects.toThrow(
+      "2 pending deposits from this deposit address already claim a sweep at this amount",
+    );
     state.data = fixture.readyState;
     expect(
       await lookupDepositRequest(

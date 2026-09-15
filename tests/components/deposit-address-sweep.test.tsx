@@ -4,10 +4,12 @@ import type * as React from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { EvmDepositAddress } from "@/components/deposit-dialog/evm-deposit-address";
+import { useDepositAddressSweep } from "@/hooks/use-deposit-address-sweep";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import {
   MIDNIGHT_TOKENS,
+  type NetworkData,
   NETWORKS_WITH_TOKENS,
   type TokenConfig,
 } from "@/lib/constants/token-metadata";
@@ -61,6 +63,36 @@ beforeEach(() => {
   vi.mocked(useVaultGasReserves).mockReturnValue(vaultGasReservesFixture());
   vi.mocked(useMidnightProgress).mockReturnValue(progressState());
 });
+
+/**
+ * Observes the deposit address the way the dialog does, then renders the surface under test.
+ *
+ * @param properties - Token, applied network, derived address and the start sink.
+ * @param properties.token - Token whose deposit-address balance is observed.
+ * @param properties.network - Applied network shown beside the address.
+ * @param properties.depositAddress - Identity-derived address holding the unswept tokens.
+ * @param properties.onStartDeposit - Receives the exact validated base units.
+ * @returns The surface with a live observation supplied by its owner.
+ */
+function ObservedDepositAddress(properties: {
+  token: TokenConfig;
+  network: NetworkData;
+  depositAddress: string;
+  onStartDeposit: (units: bigint) => void;
+}): React.JSX.Element {
+  const sweep = useDepositAddressSweep(properties.token);
+  return (
+    <EvmDepositAddress
+      token={properties.token}
+      network={properties.network}
+      depositAddress={properties.depositAddress}
+      sweep={sweep}
+      isSubmitting={false}
+      showContinue
+      onStartDeposit={properties.onStartDeposit}
+    />
+  );
+}
 
 interface SweepSurfaceInput {
   depositUnits?: bigint | null;
@@ -134,12 +166,10 @@ async function mountSweepSurface(input: SweepSurfaceInput = {}): Promise<SweepSu
             <EvmBalancesProvider tokens={[]}>
               <EvmLocalFundingProvider>
                 <VaultOperationsProvider>
-                  <EvmDepositAddress
+                  <ObservedDepositAddress
                     token={token}
                     network={network}
                     depositAddress={binding.depositAddress}
-                    isSubmitting={false}
-                    showContinue
                     onStartDeposit={started}
                   />
                 </VaultOperationsProvider>
@@ -179,6 +209,7 @@ it("starts a sweep for a partial amount of the observed deposit address balance"
     expect(screen.getByText("Unswept balance: 10 USDC")).toBeTruthy();
     expect(screen.getByText(/^Last checked /)).toBeTruthy();
     const amount = screen.getByLabelText(`Amount to deposit (${surface.token.symbol})`);
+    expect(amount).toHaveProperty("disabled", false);
     const start = screen.getByRole("button", { name: CONTINUE });
     expect(start).toHaveProperty("disabled", true);
 
@@ -228,6 +259,12 @@ it("names an empty deposit address without offering a maximum", async () => {
   try {
     expect(screen.getByText("Unswept balance: 0 USDC")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Max" })).toHaveProperty("disabled", true);
+    // No amount can be swept from this address, so the field that would accept one is blocked and
+    // the reason beside the start control is the single explanation.
+    expect(screen.getByLabelText(`Amount to deposit (${surface.token.symbol})`)).toHaveProperty(
+      "disabled",
+      true,
+    );
     const start = screen.getByRole("button", { name: CONTINUE });
     expect(start).toHaveProperty("disabled", true);
     expect(start.getAttribute("aria-describedby")).toBe(GATE_ID);
@@ -253,6 +290,10 @@ it.each([
       within(screen.getByRole("alert", { name: GATE_LABEL })).getByText(/could not be read/),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Max" })).toHaveProperty("disabled", true);
+    expect(screen.getByLabelText(`Amount to deposit (${surface.token.symbol})`)).toHaveProperty(
+      "disabled",
+      true,
+    );
   } finally {
     await surface.close();
   }
@@ -271,6 +312,9 @@ it("refuses a second sweep while a pending request claims the address's next non
     expect(screen.getByText("4 USDC")).toBeTruthy();
     expect(screen.getByLabelText("Copy Pending deposit request ID")).toBeTruthy();
     const amount = screen.getByLabelText(`Amount to deposit (${surface.token.symbol})`);
+    await waitFor(() => {
+      expect(amount).toHaveProperty("disabled", true);
+    });
     fireEvent.change(amount, { target: { value: "3" } });
     const start = screen.getByRole("button", { name: CONTINUE });
     await waitFor(() => {

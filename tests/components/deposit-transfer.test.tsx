@@ -116,7 +116,7 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
                     <EvmLocalFundingProvider>
                       <EvmDepositProvider>
                         {children}
-                        <EvmDepositTransfer token={token} />
+                        <EvmDepositTransfer token={token} sweepReserveExplained={false} />
                       </EvmDepositProvider>
                     </EvmLocalFundingProvider>
                   </EvmBalancesProvider>

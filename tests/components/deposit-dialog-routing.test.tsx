@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 
 import { DepositDialog } from "@/components/deposit-dialog";
+import { useDepositAddressSweep } from "@/hooks/use-deposit-address-sweep";
+import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import { NETWORKS_WITH_TOKENS } from "@/lib/constants/token-metadata";
 import { describeTransferFailure, Erc20TransferError } from "@/lib/evm/transfer-failure";
 import { useEvmDeposit } from "@/providers/evm-deposit-context";
@@ -12,7 +14,10 @@ import { useVaultOperations } from "@/providers/vault-operations-context";
 
 import { account, hash } from "../evm/browser-wallet-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
+import { vaultGasReservesFixture } from "./vault-gas-fixture";
 
+vi.mock(import("@/hooks/use-deposit-address-sweep"), { spy: true });
+vi.mock(import("@/hooks/use-vault-gas-reserves"), { spy: true });
 vi.mock(import("@/providers/evm-deposit-context"), { spy: true });
 vi.mock(import("@/providers/midnight-wallet-context"), { spy: true });
 vi.mock(import("@/providers/vault-balances-context"), { spy: true });
@@ -34,6 +39,7 @@ vi.mock(import("@/components/deposit-dialog/token-selection"), () => ({
   ),
 }));
 vi.mock(import("@/components/deposit-dialog/evm-deposit-address"), () => ({
+  depositAddressShowsReserve: () => false,
   EvmDepositAddress: ({ onStartDeposit, showContinue, depositAddress }) => (
     <button
       type="button"
@@ -52,6 +58,9 @@ vi.mock(import("@/components/deposit-dialog/evm-deposit-transfer"), () => ({
 }));
 vi.mock(import("@/components/deposit-dialog/pending-deposit-recovery"), () => ({
   PendingDepositRecovery: () => <div>Recovery controls</div>,
+}));
+vi.mock(import("@/components/deposit-dialog/deposit-stepper"), () => ({
+  DepositStepper: () => <div>Deposit steps</div>,
 }));
 afterEach(cleanup);
 
@@ -154,6 +163,22 @@ it.each(["error", "unresolved-error", "confirmed", "fresh-binding", "complete"] 
       abandonApproval: vi.fn(),
       dismissTransfer: vi.fn(),
     });
+    vi.mocked(useVaultGasReserves).mockReturnValue(vaultGasReservesFixture());
+    vi.mocked(useDepositAddressSweep).mockReturnValue({
+      address: active.depositAddress,
+      balance: {
+        kind: "available",
+        units: 5n,
+        decimals: 6,
+        reason: null,
+        nextAction: null,
+        tone: "neutral",
+      },
+      pendingRequests: [],
+      checkedAt: null,
+      refreshing: false,
+      refresh: vi.fn(),
+    });
     const onOpenChange = vi.fn();
     const { unmount } = render(<DepositDialog open onOpenChange={onOpenChange} />);
     try {
@@ -163,13 +188,16 @@ it.each(["error", "unresolved-error", "confirmed", "fresh-binding", "complete"] 
       // A confirmed or unresolved submitted transfer keeps the route, so the address entry point
       // cannot start a fresh deposit while that transaction can still settle. The confirmed
       // transfer's own Midnight continuation belongs to the transfer surface that holds its hash.
+      // Starting from this route keeps the dialog open, so the five-step view and the confirmed
+      // request ID stay in front of the user for the whole operation.
       const held = scenario === "confirmed" || scenario === "unresolved-error";
       expect(continuation.getAttribute("data-show-continue")).toBe(held ? "false" : "true");
       fireEvent.click(continuation);
       await waitFor(() => {
         expect(manual.mock.calls).toEqual(held ? [] : [[token.erc20Address, 5n]]);
         expect(continued).not.toHaveBeenCalled();
-        expect(onOpenChange.mock.calls).toEqual(held ? [] : [[false]]);
+        expect(onOpenChange).not.toHaveBeenCalled();
+        expect(screen.getByText("Deposit steps")).toBeTruthy();
       });
     } finally {
       unmount();

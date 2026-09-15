@@ -46,7 +46,9 @@ clear connections or close a dialog between steps. If that happens, inspect the 
 coordinate before retrying, then restore the existing disposable identity privately if needed.
 
 Discover callable Playwright tool schemas from the current environment. List tabs, select by
-observed URL, and capture a fresh snapshot. Use observed role/name locators. Scope repeated
+observed URL, and capture a fresh snapshot. Use observed role/name locators. A stepper's
+aria-current item and its role=status announcement repeat every step label, so scope text
+queries to the list item you mean. Scope repeated
 connection buttons to the banner or active dialog. A click can return before React completes its
 state transition: wait for the expected control rather than interpreting an immediate false
 visibility result as failure. Seed installation can close its dialog before synchronisation finishes.
@@ -166,8 +168,8 @@ Restoring the applied deployment after a page load means refilling every field o
 Configuration dialog from the saved public deployment file, then Apply. The Contract address
 field collides with Signet contract address under a non-exact role query, so use exact names.
 The Configuration inputs carry generated ids and no accessible names, so map the saved deployment
-file onto them by their labels and order. Inspect the current page state before assuming what a
-previous task left: sessions have been found cleared with nothing in the record to say so.
+file onto them by their labels and order. Assume the prepared tab is empty until inspected: sessions have been found cleared three times
+with nothing in the record to say so. Verify the running build before any recorded observation.
 
 A long run-code call, whether a clipboard read or a polling loop, can navigate the application
 tab to about:blank and destroy page memory, including during a funded operation. A call that

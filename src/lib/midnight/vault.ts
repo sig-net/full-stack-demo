@@ -934,7 +934,7 @@ export async function runDeposit(
   const pending = pendingForToken.filter(([, view]) => view.amount === amount);
   if (!recoveryRequestId && pending.length > 1)
     throw new Error(
-      "Multiple pending deposits match this identity, token and amount. Select a specific request before continuing.",
+      `${pending.length.toString()} pending deposits from this deposit address already claim a sweep at this amount. Recover the one you want by its request ID, which the pending request list shows beside its amount.`,
     );
   let rid: RequestIdHex;
   if (recoveryRequestId) {
@@ -1023,6 +1023,14 @@ export async function runDeposit(
   if (!outcome.succeeded) throw new Error(`MPC attested deposit ${rid} as FAILED`);
 
   env.assertActive();
+  // Another session holding this identity can settle the same request while this one waits on the
+  // MPC, and completeDeposit consumes the pending view, so the ledger is read once more and a
+  // request whose view is gone rejects before a second completion is submitted.
+  const stillPending = await lookupDepositRequest(providers, env, identity, erc20Hex, rid);
+  if (stillPending.kind !== "recoverable") {
+    const described = describeDepositLookup(stillPending);
+    throw new Error(`${described.summary} ${described.nextAction}`);
+  }
 
   progress.set("claim-proving");
   log("Submitting completeDeposit() to mint shielded token...");

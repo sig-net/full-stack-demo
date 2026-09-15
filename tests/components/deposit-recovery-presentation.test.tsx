@@ -7,9 +7,14 @@ import { PendingDepositRecovery } from "@/components/deposit-dialog/pending-depo
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import type { DepositLookup, DepositLookupKind } from "@/lib/midnight/deposit-lookup";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
+import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
+import {
+  mockMatchingRuntimeServer,
+  testRuntimeConfiguration,
+} from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
 import { useReadyMidnightFixture } from "./midnight-readiness-fixture";
 
@@ -26,7 +31,7 @@ function syntaxLookup(id: string): DepositLookup {
     : { kind: "malformed" };
 }
 
-it("keeps confirmed IDs copyable through settlement, errors and reopening while recovery drafts stay independent", async () => {
+it("keeps recovery drafts independent of the current request, the selected token and the session", async () => {
   const binding = await createVaultFixture();
   const token = MIDNIGHT_TOKENS[0];
   const otherToken = MIDNIGHT_TOKENS[1];
@@ -34,11 +39,10 @@ it("keeps confirmed IDs copyable through settlement, errors and reopening while 
   const requestId = "ab".repeat(32);
   const manualId = `0x${"CD".repeat(32)}`;
   const readText = vi.fn<() => Promise<string>>().mockResolvedValue(manualId);
-  const writeText = vi.fn<(value: string) => Promise<void>>().mockResolvedValue();
   vi.stubGlobal("isSecureContext", true);
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
-    value: { readText, writeText },
+    value: { readText, writeText: vi.fn() },
   });
   const recover = vi
     .fn<ReturnType<typeof useVaultOperations>["recoverDeposit"]>()
@@ -72,26 +76,25 @@ it("keeps confirmed IDs copyable through settlement, errors and reopening while 
   };
   vi.mocked(useVault).mockImplementation(() => ({ ...owner }));
   vi.mocked(useMidnightReadiness).mockImplementation(() => useReadyMidnightFixture(binding.wallet));
+  mockMatchingRuntimeServer();
   const query = new QueryClient();
   const view = render(<PendingDepositRecovery token={token} />, {
-    wrapper: ({ children }) => <QueryClientProvider client={query}>{children}</QueryClientProvider>,
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={query}>
+        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+          {children}
+        </RuntimeConfigProvider>
+      </QueryClientProvider>
+    ),
   });
   try {
-    expect(screen.getByText(/Request ID not available yet/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Recover pending deposit" })).toHaveProperty(
       "disabled",
       true,
     );
+    expect(screen.queryByRole("button", { name: "Use current request" })).toBeNull();
     operation.currentDeposit = { token: token.erc20Address, requestId, status: "pending" };
     view.rerender(<PendingDepositRecovery token={token} />);
-    fireEvent.click(screen.getByRole("button", { name: "Copy Deposit request ID" }));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(requestId);
-    });
-    expect(screen.getByRole("button", { name: "Copy Deposit request ID" })).toHaveProperty(
-      "disabled",
-      false,
-    );
     expect(screen.getByRole("button", { name: "Use current request" })).toHaveProperty(
       "disabled",
       true,
@@ -139,21 +142,16 @@ it("keeps confirmed IDs copyable through settlement, errors and reopening while 
     await screen.findByText(/Unable to read the clipboard/);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
-      value: { readText, writeText },
+      value: { readText, writeText: vi.fn() },
     });
     operation.currentDeposit.status = "completed";
     view.rerender(<PendingDepositRecovery token={token} />);
-    expect(screen.getByText("Confirmed request, deposit completed.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Use current request" })).toHaveProperty(
       "disabled",
       true,
     );
     view.rerender(<></>);
     view.rerender(<PendingDepositRecovery token={token} />);
-    expect(screen.getByRole("button", { name: "Copy Deposit request ID" })).toHaveProperty(
-      "disabled",
-      false,
-    );
     expect(screen.getByRole("textbox")).toHaveProperty("value", "");
     const staleClipboard = Promise.withResolvers<string>();
     readText.mockReturnValueOnce(staleClipboard.promise);
@@ -163,123 +161,18 @@ it("keeps confirmed IDs copyable through settlement, errors and reopening while 
       staleClipboard.resolve(manualId);
       await staleClipboard.promise;
     });
-    expect(screen.queryByRole("button", { name: "Copy Deposit request ID" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Use current request" })).toBeNull();
     expect(screen.getByRole("textbox")).toHaveProperty("value", "");
     view.rerender(<PendingDepositRecovery token={token} />);
-    expect(screen.getByRole("button", { name: "Copy Deposit request ID" })).toHaveProperty(
+    expect(screen.getByRole("button", { name: "Use current request" })).toHaveProperty(
       "disabled",
-      false,
+      true,
     );
     owner.binding = null;
     operation.currentDeposit = null;
     view.rerender(<PendingDepositRecovery token={token} />);
-    expect(screen.queryByRole("button", { name: "Copy Deposit request ID" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Use current request" })).toBeNull();
     expect(screen.getByRole("textbox")).toHaveProperty("value", "");
-  } finally {
-    view.unmount();
-    query.clear();
-    binding.providers.privateStateProvider.dispose();
-    await binding.providers.publicDataProvider.dispose();
-  }
-});
-
-it("asks for a confirmed request ID to be saved while the deposit can still need it", async () => {
-  const binding = await createVaultFixture();
-  const token = MIDNIGHT_TOKENS[0];
-  if (!token) throw new Error("Expected a supported token");
-  const requestId = "ab".repeat(32);
-  const writeText = vi.fn<(value: string) => Promise<void>>().mockResolvedValue();
-  vi.stubGlobal("isSecureContext", true);
-  Object.defineProperty(navigator, "clipboard", {
-    configurable: true,
-    value: { readText: vi.fn(), writeText },
-  });
-  const operation: ReturnType<typeof useVaultOperations> = {
-    currentDeposit: { token: token.erc20Address, requestId: null, status: "pending" },
-    log: [],
-    busy: true,
-    ready: true,
-    unavailable: null,
-    lookupDepositRequest: vi.fn(),
-    recoverDeposit: vi.fn(),
-    deposit: vi.fn(),
-    withdraw: vi.fn(),
-    swap: vi.fn(),
-    supply: vi.fn(),
-    redeem: vi.fn(),
-  };
-  vi.mocked(useVaultOperations).mockImplementation(() => ({ ...operation }));
-  const owner: ReturnType<typeof useVault> = {
-    status: "ready",
-    error: null,
-    binding,
-    requireBinding: () => binding,
-    retry: vi.fn(),
-    rebuild: vi.fn(),
-    disconnect: vi.fn(),
-  };
-  vi.mocked(useVault).mockImplementation(() => ({ ...owner }));
-  vi.mocked(useMidnightReadiness).mockImplementation(() => useReadyMidnightFixture(binding.wallet));
-  const query = new QueryClient();
-  const view = render(<PendingDepositRecovery token={token} />, {
-    wrapper: ({ children }) => <QueryClientProvider client={query}>{children}</QueryClientProvider>,
-  });
-  const warning = (): HTMLElement =>
-    screen.getByRole("status", { name: "Deposit request ID safekeeping" });
-  try {
-    expect(screen.queryByRole("status", { name: "Deposit request ID safekeeping" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Copy request ID" })).toBeNull();
-
-    operation.currentDeposit = { token: token.erc20Address, requestId, status: "pending" };
-    view.rerender(<PendingDepositRecovery token={token} />);
-    expect(warning().textContent).toContain("Save this deposit request ID.");
-    expect(warning().textContent).toContain("before closing or refreshing this page");
-    expect(warning().textContent).toContain(
-      "needs the same vault secret, network, vault deployment and token",
-    );
-    expect(warning().textContent).toContain("rather than the only one");
-    expect(screen.getByRole("button", { name: "Copy request ID" })).toHaveProperty(
-      "disabled",
-      false,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy request ID" }));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(requestId);
-    });
-    // The copied state is published after the awaited clipboard write resolves, one tick later.
-    await waitFor(() => {
-      expect(warning().textContent).toContain("Copied to the clipboard.");
-    });
-    expect(warning().textContent).toContain("Store it somewhere that survives closing this page.");
-
-    writeText.mockRejectedValueOnce(new Error("Clipboard write refused"));
-    fireEvent.click(screen.getByRole("button", { name: "Copy request ID" }));
-    await screen.findByText("Clipboard write refused");
-    expect(warning().textContent).not.toContain("Copied to the clipboard.");
-    expect(warning().textContent).toContain("Save this deposit request ID.");
-
-    operation.currentDeposit = { token: token.erc20Address, requestId, status: "failed" };
-    view.rerender(<PendingDepositRecovery token={token} />);
-    expect(warning().textContent).toContain("Save this deposit request ID.");
-
-    view.rerender(<></>);
-    view.rerender(<PendingDepositRecovery token={token} />);
-    expect(warning().textContent).toContain("Save this deposit request ID.");
-
-    operation.currentDeposit = { token: token.erc20Address, requestId, status: "completed" };
-    view.rerender(<PendingDepositRecovery token={token} />);
-    expect(warning().textContent).toContain("Deposit completed. Keep this request ID");
-    expect(warning().textContent).not.toContain("Save this deposit request ID.");
-    expect(screen.getByRole("button", { name: "Copy request ID" })).toHaveProperty(
-      "disabled",
-      false,
-    );
-
-    owner.binding = null;
-    operation.currentDeposit = null;
-    view.rerender(<PendingDepositRecovery token={token} />);
-    expect(screen.queryByRole("status", { name: "Deposit request ID safekeeping" })).toBeNull();
   } finally {
     view.unmount();
     query.clear();
@@ -409,10 +302,15 @@ it.each(LOOKUP_CASES)(
     vi.mocked(useMidnightReadiness).mockImplementation(() =>
       useReadyMidnightFixture(binding.wallet),
     );
+    mockMatchingRuntimeServer();
     const query = new QueryClient();
     const view = render(<PendingDepositRecovery token={token} />, {
       wrapper: ({ children }) => (
-        <QueryClientProvider client={query}>{children}</QueryClientProvider>
+        <QueryClientProvider client={query}>
+          <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+            {children}
+          </RuntimeConfigProvider>
+        </QueryClientProvider>
       ),
     });
     try {

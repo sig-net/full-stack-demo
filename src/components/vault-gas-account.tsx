@@ -19,6 +19,8 @@ interface VaultGasAccountProps {
   guidance: string;
   observation: VaultGasReserveObservation;
   network: ResolvedEvmChainConfig | null;
+  /** Whether a gate beside a control already states this reserve's reason in the same surface. */
+  reasonShownByGate: boolean;
 }
 
 /**
@@ -31,10 +33,13 @@ interface VaultGasAccountProps {
  * @param properties.guidance - Funding instruction for the selected network.
  * @param properties.observation - Observed reserve, refresh action and read state.
  * @param properties.network - Applied chain, absent when the EVM configuration is unusable.
+ * @param properties.reasonShownByGate - Whether a gate beside a control already carries this
+ *   reserve's reason, so the surface states that reason once.
  * @returns The funding section for one paying account.
  */
 export function VaultGasAccount(properties: VaultGasAccountProps): React.JSX.Element {
-  const { heading, accountName, purpose, guidance, observation, network } = properties;
+  const { heading, accountName, purpose, guidance, observation, network, reasonShownByGate } =
+    properties;
   const explorers = useAppliedExplorerLinks();
   const { reserve, address } = observation;
   const funding = useLocalEthFunding(observation.refresh);
@@ -77,7 +82,7 @@ export function VaultGasAccount(properties: VaultGasAccountProps): React.JSX.Ele
               Last checked {new Date(observation.checkedAt).toLocaleTimeString()}
             </p>
           )}
-          {reserve.kind !== "sufficient" && (
+          {reserve.kind !== "sufficient" && !reasonShownByGate && (
             <Feedback tone={reserve.tone} role={reserve.tone === "error" ? "alert" : "status"}>
               <p className="ds-label">{reserve.reason}</p>
               <p>{reserve.nextAction}</p>

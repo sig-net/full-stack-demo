@@ -80,6 +80,7 @@ export function VaultHealthButton(): React.JSX.Element {
           guidance="Send ETH on this network to the EVM vault address so the vault can pay for swaps and withdrawals. This address is the vault's EVM account, not the Midnight vault contract, and sending ETH here does not credit any shielded balance."
           observation={observation}
           network={reserves.network}
+          reasonShownByGate={false}
         />
       </PopoverContent>
     </Popover>

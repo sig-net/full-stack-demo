@@ -4,9 +4,9 @@ import type * as React from "react";
 import { StrictMode } from "react";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
-import { SettlementWaitDetail } from "@/components/deposit-dialog/settlement-wait-detail";
+import { SettlementWaitDetail } from "@/components/settlement-wait-detail";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
-import type { FlowEvent } from "@/lib/midnight/flow";
+import type { FlowEvent, FlowKind } from "@/lib/midnight/flow";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
 import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVault } from "@/providers/vault-context";
@@ -71,11 +71,15 @@ afterEach(() => {
 
 /**
  * @param events - Checkpoints the shared progress owner has published.
+ * @param kind - Operation category owning the shared progress.
  * @returns The mounted surface and its query owner.
  */
-function mountWait(events: readonly FlowEvent[]): { client: QueryClient } {
+function mountWait(
+  events: readonly FlowEvent[],
+  kind: FlowKind | null = null,
+): { client: QueryClient } {
   vi.mocked(useMidnightProgress).mockReturnValue(
-    progressState({ active: true, message: "MPC signing + settling on Sepolia…", events }),
+    progressState({ active: true, kind, message: "MPC signing + settling on Sepolia…", events }),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: React.ReactNode }): React.JSX.Element => (
@@ -162,5 +166,32 @@ it("renders nothing once every checkpoint's evidence has arrived", () => {
     expect(screen.queryByText(/Waiting for/)).toBeNull();
   } finally {
     client.clear();
+  }
+});
+
+// Every operation shares the MPC settlement path, so this surface names whichever one is waiting.
+const OPERATION_NAMES: Record<FlowKind, string> = {
+  deposit: "Deposit",
+  withdraw: "Withdrawal",
+  swap: "Swap",
+  supply: "Supply",
+  redeem: "Redeem",
+};
+
+it("names the waiting operation for every operation that shares the settlement path", () => {
+  const kinds = Object.keys(OPERATION_NAMES) as FlowKind[];
+  expect(kinds.length).toBeGreaterThan(0);
+  for (const kind of kinds) {
+    const { client } = mountWait(ATTESTATION_WAIT_EVENTS, kind);
+    try {
+      expect(
+        screen.getByText(
+          `${OPERATION_NAMES[kind]}: Waiting for the MPC attestation of the sweep outcome.`,
+        ),
+      ).toBeDefined();
+    } finally {
+      cleanup();
+      client.clear();
+    }
   }
 });

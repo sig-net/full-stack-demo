@@ -52,6 +52,9 @@
 @utility ds-surface-success {
   @apply bg-success-foreground;
 }
+@utility ds-surface-warning {
+  @apply bg-warning-foreground;
+}
 @utility ds-surface-error {
   @apply bg-destructive-foreground;
 }

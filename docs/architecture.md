@@ -89,13 +89,35 @@ most one request per address can ever be mined. `runDeposit` therefore rejects a
 any request for that identity and token is still pending, after re-reading the ledger, and the
 surface blocks the control and lists those requests with their IDs and amounts.
 
+## Deposit steps and re-entry
+
+`describeDepositSteps` in `src/lib/midnight/deposit-steps.ts` projects the published `FlowEvent`
+checkpoints onto the five steps of the deposit dialog contract. Completion comes from the event
+that proves the step: `request-confirmed` for the request, a sweep transaction on the network for
+the MPC signature, `evm-receipt` for the sweep, an `attestation-present` whose outcome succeeded for
+the attestation, and `midnight-settled` for the Midnight settlement. `request-submitted` is absent
+on a resumed or recovered run, so it takes no part in that decision. Nothing in the derivation reads
+confirmation depth or finality, so observed chain progress can never tick a step. The failing step
+keeps its position and reports the terminal failure, and earlier completions are retained.
+
+Re-entry needs no separate resume path. `pollSignatureResponse` returns on its first successful read
+when the verified response already exists, `broadcastEvm` looks up the receipt before broadcasting
+and reuses the same serialised transaction when it must rebroadcast, and the attestation loop
+returns on its first read when the attestation is present. `runDeposit` therefore resumes a request
+at whatever stage its own evidence has reached, and republishes the checkpoints it reads back.
+Before `completeDeposit` it resolves the request once more, so a request another session settled in
+the meantime rejects and is completed exactly once.
+
 ## Deposit request lookup outcomes
 
 `lookupDepositRequest` in `src/lib/midnight/vault.ts` resolves one request ID against the bound
 session and returns a `DepositLookup` from `src/lib/midnight/deposit-lookup.ts`. The outcomes are
 `looking-up`, `recoverable` with the exact units the request settles, `completed`, `not-found`,
 `mismatched` for an identity, token or deployment the current session cannot recover, `malformed`
-and `error`. `describeDepositLookup` is the single place those outcomes become words, so the
+and `error`. `completed` carries no transaction of its own: `completeDeposit` removes the signature
+request the sweep hash derives from, so the settled sweep is not recoverable from a chain read at
+the moment that outcome becomes true. The recovery surface renders both settlement legs from the
+persisted operation record instead, and shows none for a deposit settled in another browser. `describeDepositLookup` is the single place those outcomes become words, so the
 recovery surface and the deposit stepper render one wording.
 
 `completeDeposit` is the only circuit that removes a request from `depositEventMap` and

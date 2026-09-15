@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardPaste, Copy } from "lucide-react";
+import { ClipboardPaste } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 
@@ -9,78 +9,30 @@ import { Feedback } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PublicIdentifier } from "@/components/ui/public-identifier";
-import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { useMidnightTransactions } from "@/hooks/use-midnight-transactions";
 import type { TokenConfig } from "@/lib/constants/token-metadata";
-import { REQUEST_ID_UNSUPPORTED } from "@/lib/explorer";
 import { type DepositLookup, describeDepositLookup } from "@/lib/midnight/deposit-lookup";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
 /**
- * Asks for the confirmed request ID to be stored outside the page while the deposit can still
- * need it, and states the prerequisites recovery actually enforces.
+ * Renders one resolved lookup, with the transaction details a completed request can prove.
  *
- * Copy feedback reports the clipboard write only. Storing the ID durably stays with the user, so
- * a pressed control never claims the ID is saved.
- *
- * @param properties - Confirmed request and its settlement status.
- * @param properties.requestId - Ledger-confirmed deposit request ID.
- * @param properties.completed - Whether this deposit has already settled.
- * @returns The safekeeping panel with its own copy action and feedback.
+ * @param properties - The outcome being reported.
+ * @param properties.lookup - Outcome reported by the data layer.
+ * @returns The outcome panel.
  */
-function SaveRequestIdWarning(properties: {
-  requestId: string;
-  completed: boolean;
-}): React.JSX.Element {
-  const { requestId, completed } = properties;
-  const { isCopied, copyToClipboard, error } = useCopyToClipboard();
-  return (
-    <Feedback
-      tone={completed ? "neutral" : "warning"}
-      role="status"
-      aria-label="Deposit request ID safekeeping"
-    >
-      <p className="ds-label">
-        {completed
-          ? "Deposit completed. Keep this request ID for your records."
-          : "Save this deposit request ID."}
-      </p>
-      <p>
-        {completed
-          ? "Resuming this deposit does not need it. Activity keeps the request and its transactions for this browser."
-          : "Copy it somewhere safe before closing or refreshing this page. You may need it to resume this deposit."}
-      </p>
-      <p>
-        Resuming a deposit by its ID needs the same vault secret, network, vault deployment and
-        token, so keep your vault secret safe as well. The deposit dialog also lists pending
-        requests for this identity, so the ID is one route back to a deposit rather than the only
-        one.
-      </p>
-      <Button
-        variant="outline"
-        onClick={() => {
-          void copyToClipboard(requestId);
-        }}
-      >
-        <Copy aria-hidden="true" /> Copy request ID
-      </Button>
-      {isCopied && (
-        <p className="ds-caption">
-          Copied to the clipboard. Store it somewhere that survives closing this page.
-        </p>
-      )}
-      {error && (
-        <Feedback tone="error" role="alert">
-          {error.message}
-        </Feedback>
-      )}
-    </Feedback>
-  );
-}
-
 function DepositLookupOutcome({ lookup }: { lookup: DepositLookup }): React.JSX.Element {
   const { summary, nextAction, tone } = describeDepositLookup(lookup);
+  const activity = useMidnightTransactions();
+  // Completing a deposit removes its signature request from the ledger, so a chain read cannot
+  // supply the settled sweep. The operation record this browser kept is the source of both
+  // settlement legs, and a request settled elsewhere simply shows none.
+  const record =
+    lookup.kind === "completed"
+      ? (activity.find((entry) => entry.id === lookup.requestId) ?? null)
+      : null;
   return (
     <Feedback
       tone={tone}
@@ -89,6 +41,26 @@ function DepositLookupOutcome({ lookup }: { lookup: DepositLookup }): React.JSX.
     >
       <p className="ds-label">{summary}</p>
       <p>{nextAction}</p>
+      {record?.evmTransactionHash != null && (
+        <>
+          <p className="ds-body">EVM settlement transaction</p>
+          <PublicIdentifier
+            value={record.evmTransactionHash}
+            label="Completed deposit sweep transaction hash"
+            explorer={record.explorer.evmTransaction}
+          />
+        </>
+      )}
+      {record?.midnightTransactionHash != null && (
+        <>
+          <p className="ds-body">Midnight settlement transaction</p>
+          <PublicIdentifier
+            value={record.midnightTransactionHash}
+            label="Completed deposit Midnight transaction hash"
+            explorer={record.explorer.midnightTransaction}
+          />
+        </>
+      )}
     </Feedback>
   );
 }
@@ -164,27 +136,6 @@ function DepositRecoveryForm({ token }: { token: TokenConfig }): React.JSX.Eleme
   };
   return (
     <div className="ds-stack-control ds-divider-top ds-top-inset-content">
-      <p className="ds-label">Current deposit request ID</p>
-      {current?.requestId ? (
-        <>
-          <PublicIdentifier
-            value={current.requestId}
-            label="Deposit request ID"
-            explorer={REQUEST_ID_UNSUPPORTED}
-          />
-          <p className="ds-body">
-            Confirmed request{current.status === "completed" ? ", deposit completed" : ""}.
-          </p>
-          <SaveRequestIdWarning
-            requestId={current.requestId}
-            completed={current.status === "completed"}
-          />
-        </>
-      ) : (
-        <p className="ds-body">
-          Request ID not available yet. It appears after the Midnight request is confirmed.
-        </p>
-      )}
       <Label htmlFor={`recover-deposit-${token.symbol}`}>Recover a deposit by request ID</Label>
       <Input
         id={`recover-deposit-${token.symbol}`}
@@ -225,7 +176,7 @@ function DepositRecoveryForm({ token }: { token: TokenConfig }): React.JSX.Eleme
       {operations.busy && (
         <p className="ds-body">
           Recovery is unavailable while a vault operation is in progress. You can still copy its
-          confirmed request ID.
+          confirmed request ID from the steps above.
         </p>
       )}
       {lookup && <DepositLookupOutcome lookup={lookup} />}
@@ -235,8 +186,9 @@ function DepositRecoveryForm({ token }: { token: TokenConfig }): React.JSX.Eleme
         </Feedback>
       )}
       <p className="ds-body">
-        Copy a request ID from Activity to finish a deposit after its EVM sweep. The pending request
-        supplies the amount. Recovery validates the selected token and vault identity.
+        Pasting a request ID resolves it first and resumes it at the earliest stage its evidence
+        leaves incomplete. The pending request supplies the amount, and recovery validates the
+        selected token and vault identity.
       </p>
     </div>
   );
@@ -247,7 +199,7 @@ function DepositRecoveryForm({ token }: { token: TokenConfig }): React.JSX.Eleme
  *
  * @param props - Selected token.
  * @param props.token - Token whose pending deposit is recovered.
- * @returns The current confirmed request and independent recovery controls.
+ * @returns The read-only request resolution and recovery controls.
  */
 export function PendingDepositRecovery({ token }: { token: TokenConfig }): React.JSX.Element {
   const vault = useVault();

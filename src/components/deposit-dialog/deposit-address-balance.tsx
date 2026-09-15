@@ -30,13 +30,17 @@ interface DepositAddressBalanceProps {
  * @param properties.sweep - Observed balance, pending requests and refresh owner.
  * @param properties.amount - Exact decimal amount text entered for the sweep.
  * @param properties.onAmountChange - Publishes an edited amount to the surface owner.
- * @param properties.disabled - Blocks amount entry while a sweep cannot be started.
+ * @param properties.disabled - Blocks amount entry while a vault operation owns this surface.
  * @returns The deposit-address balance section.
  */
 export function DepositAddressBalance(properties: DepositAddressBalanceProps): React.JSX.Element {
   const { token, sweep, amount, onAmountChange, disabled } = properties;
   const { balance } = sweep;
   const spendable = balance.kind === "available" && balance.units !== null;
+  // A first read still in flight keeps the field usable, so typing is never interrupted by the
+  // read returning. Every other blocking state leaves no amount this address can sweep, and a
+  // field that accepted one would contradict the reason shown beside the start control.
+  const amountEntryBlocked = disabled || !(spendable || balance.kind === "checking");
   return (
     <div className="ds-stack-control ds-divider-top ds-top-inset-content w-full">
       <p className="ds-label">Tokens at your deposit address</p>
@@ -92,7 +96,7 @@ export function DepositAddressBalance(properties: DepositAddressBalanceProps): R
         id={`deposit-sweep-amount-${token.symbol}`}
         inputMode="decimal"
         value={amount}
-        disabled={disabled}
+        disabled={amountEntryBlocked}
         onChange={(event) => {
           onAmountChange(event.target.value);
         }}
@@ -100,7 +104,7 @@ export function DepositAddressBalance(properties: DepositAddressBalanceProps): R
       <div className="ds-actions">
         <Button
           variant="outline"
-          disabled={disabled || !spendable}
+          disabled={amountEntryBlocked || !spendable}
           onClick={() => {
             if (balance.units !== null && balance.decimals !== null)
               onAmountChange(formatUnits(balance.units, balance.decimals));

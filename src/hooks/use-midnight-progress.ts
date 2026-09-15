@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-import { flow, type FlowEvent, type FlowState, PHASE_MESSAGE } from "@/lib/midnight/flow";
+import {
+  flow,
+  type FlowEvent,
+  type FlowKind,
+  type FlowState,
+  PHASE_MESSAGE,
+} from "@/lib/midnight/flow";
 
 // A stage can stay active for many minutes, so the elapsed reading is refreshed on its own clock
 // while the operation runs. The reading is clamped at zero, so the interval between entering a
@@ -12,6 +18,8 @@ const ELAPSED_TICK_MS = 1000;
 /** Presentation view of the shared operation progress owner. */
 export interface MidnightProgress {
   readonly active: boolean;
+  /** Operation category owning the shared progress, or null while nothing runs. */
+  readonly kind: FlowKind | null;
   readonly message: string;
   readonly error: string | null;
   /** Structured checkpoints published by the running operation, in order. */
@@ -55,6 +63,7 @@ export function useMidnightProgress(): MidnightProgress {
   }, [active, stageEnteredAt]);
   return {
     active,
+    kind: s.kind,
     message: s.phase ? PHASE_MESSAGE[s.phase] : "Working…",
     error: s.error,
     events: s.events,

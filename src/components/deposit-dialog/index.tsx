@@ -3,9 +3,10 @@
 import type * as React from "react";
 import { useRef, useState } from "react";
 
-import { LoadingState } from "@/components/states/LoadingState";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useDepositAddressSweep } from "@/hooks/use-deposit-address-sweep";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
+import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import type { NetworkData, TokenConfig } from "@/lib/constants/token-metadata";
 import { useEvmDeposit } from "@/providers/evm-deposit-context";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
@@ -13,11 +14,65 @@ import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
 import { DepositAddress } from "./deposit-address";
-import { EvmDepositAddress } from "./evm-deposit-address";
+import { DepositStepper } from "./deposit-stepper";
+import { depositAddressShowsReserve, EvmDepositAddress } from "./evm-deposit-address";
 import { EvmDepositTransfer } from "./evm-deposit-transfer";
 import { PendingDepositRecovery } from "./pending-deposit-recovery";
-import { SettlementWaitDetail } from "./settlement-wait-detail";
 import { TokenSelection } from "./token-selection";
+
+interface VaultEvmDepositProps {
+  token: TokenConfig;
+  network: NetworkData;
+  depositAddress: string;
+  recordedTransfer: boolean;
+  onStartDeposit: (units: bigint) => void;
+}
+
+/**
+ * Composes the preparation section, the five-step view and the request-ID re-entry for one token.
+ *
+ * The deposit sweep reserve is observed once here, so exactly one surface in the dialog states its
+ * reason: the address entry point's gate when that control is the one it blocks, the send gate
+ * when it blocks the transfer, and the deposit address funding section otherwise.
+ *
+ * @param properties - Selected token, applied network and the deposit route's state.
+ * @param properties.token - Token being deposited.
+ * @param properties.network - Applied network shown beside the address.
+ * @param properties.depositAddress - Identity-derived address holding the unswept tokens.
+ * @param properties.recordedTransfer - Whether an unresolved transfer owns this deposit route.
+ * @param properties.onStartDeposit - Starts the sweep for the exact validated base units.
+ * @returns The vault deposit surface for the EVM route.
+ */
+function VaultEvmDeposit(properties: VaultEvmDepositProps): React.JSX.Element {
+  const { token, network, depositAddress, recordedTransfer, onStartDeposit } = properties;
+  const progress = useMidnightProgress();
+  const gas = useVaultGasReserves();
+  const sweep = useDepositAddressSweep(token);
+  const sweepReserve = gas.depositSweep.reserve;
+  const addressShowsReserve = depositAddressShowsReserve({
+    balanceReason: sweep.balance.reason,
+    operationActive: progress.active,
+    reserveBlocking: sweepReserve !== null && sweepReserve.kind !== "sufficient",
+  });
+  return (
+    <>
+      <EvmDepositTransfer token={token} sweepReserveExplained={addressShowsReserve} />
+      <div className="ds-stack-content">
+        <EvmDepositAddress
+          token={token}
+          network={network}
+          depositAddress={depositAddress}
+          sweep={sweep}
+          isSubmitting={progress.active}
+          showContinue={!recordedTransfer}
+          onStartDeposit={onStartDeposit}
+        />
+        <DepositStepper token={token} />
+        <PendingDepositRecovery token={token} />
+      </div>
+    </>
+  );
+}
 
 interface DepositDialogProps {
   open: boolean;
@@ -72,13 +127,13 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
   };
 
   // The units arrive already validated against the balance the deposit surface observed, and
-  // runDeposit rereads the ledger before it signs anything.
+  // runDeposit rereads the ledger before it signs anything. The dialog stays open so the five-step
+  // view and the confirmed request ID are in front of the user for the whole operation.
   const handleStartDeposit = (units: bigint): void => {
     if (!selectedToken || progress.active || recordedTransfer) return;
     void operations.deposit(selectedToken.erc20Address, units).catch(() => {
       /* surfaced by MidnightProgressToaster via flow.fail */
     });
-    handleClose();
   };
 
   const handleClose = (): void => {
@@ -117,40 +172,36 @@ export function DepositDialog({ open, onOpenChange }: DepositDialogProps): React
               <DialogTitle>Deposit Address</DialogTitle>
             </DialogHeader>
             <div className="ds-deposit-layout">
-              {selectedNetwork.chain === "ethereum" && (
-                <>
-                  <EvmDepositTransfer token={selectedToken} />
-                  <PendingDepositRecovery token={selectedToken} />
-                </>
-              )}
-              {isVaultEvmDeposit && progress.active ? (
-                <div className="ds-stack-content">
-                  <LoadingState message={progress.message} />
-                  <SettlementWaitDetail />
-                </div>
-              ) : isVaultEvmDeposit ? (
-                <EvmDepositAddress
+              {isVaultEvmDeposit ? (
+                <VaultEvmDeposit
                   token={selectedToken}
                   network={selectedNetwork}
                   depositAddress={vault.binding?.depositAddress ?? ""}
-                  isSubmitting={progress.active}
-                  showContinue={!recordedTransfer}
+                  recordedTransfer={recordedTransfer !== null}
                   onStartDeposit={handleStartDeposit}
                 />
               ) : (
-                <DepositAddress
-                  token={selectedToken}
-                  network={selectedNetwork}
-                  depositAddress={
-                    selectedNetwork.chain === "midnight"
-                      ? (connection.wallet?.shieldedAddress ?? "")
-                      : (vault.binding?.depositAddress ?? "")
-                  }
-                  isSubmitting={progress.active}
-                  showContinue={!recordedTransfer}
-                  canContinue={operations.ready}
-                  onContinue={handleMidnightContinue}
-                />
+                <>
+                  {selectedNetwork.chain === "ethereum" && (
+                    <>
+                      <EvmDepositTransfer token={selectedToken} sweepReserveExplained={false} />
+                      <PendingDepositRecovery token={selectedToken} />
+                    </>
+                  )}
+                  <DepositAddress
+                    token={selectedToken}
+                    network={selectedNetwork}
+                    depositAddress={
+                      selectedNetwork.chain === "midnight"
+                        ? (connection.wallet?.shieldedAddress ?? "")
+                        : (vault.binding?.depositAddress ?? "")
+                    }
+                    isSubmitting={progress.active}
+                    showContinue={!recordedTransfer}
+                    canContinue={operations.ready}
+                    onContinue={handleMidnightContinue}
+                  />
+                </>
               )}
             </div>
           </div>

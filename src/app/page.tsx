@@ -9,6 +9,7 @@ import { EmptyStateWallet } from "@/components/empty-state-wallet";
 import { LendWidget } from "@/components/lend-widget";
 import { LocalWalletFunding } from "@/components/local-wallet-funding";
 import { NavigationHeader } from "@/components/navigation-header";
+import { SettlementWaitDetail } from "@/components/settlement-wait-detail";
 import { SwapWidget } from "@/components/swap-widget";
 import { useVault } from "@/providers/vault-context";
 
@@ -40,6 +41,7 @@ export default function Home(): React.JSX.Element {
             </div>
 
             <div className="ds-section-gap lg:ds-section-gap order-2 flex w-full flex-col lg:order-1 lg:flex-1">
+              <SettlementWaitDetail />
               <BalanceSection />
               <ActivityListTable />
             </div>

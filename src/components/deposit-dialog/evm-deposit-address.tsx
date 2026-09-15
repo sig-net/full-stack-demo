@@ -6,7 +6,7 @@ import { useState } from "react";
 import { MidnightDustGate } from "@/components/midnight-dust-gate";
 import { type ControlGate, DisabledReason } from "@/components/ui/disabled-reason";
 import { VaultGasGate } from "@/components/vault-gas-gate";
-import { useDepositAddressSweep } from "@/hooks/use-deposit-address-sweep";
+import type { DepositAddressSweep } from "@/hooks/use-deposit-address-sweep";
 import { useMidnightDustGate } from "@/hooks/use-midnight-dust-gate";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
@@ -21,10 +21,31 @@ import { DepositAddressBalance } from "./deposit-address-balance";
 const CONTINUE_GATE_ID = "deposit-address-continue-gate";
 const CONTINUE_GATE_LABEL = "Deposit from address availability";
 
+/**
+ * Decides whether this surface is the one stating the deposit sweep reserve's reason.
+ *
+ * Both this surface and the dialog that owns the funding sections read the same rule, so exactly
+ * one of them carries that reason and the dialog never repeats it.
+ *
+ * @param input - The conditions that take precedence over the reserve on this surface.
+ * @param input.balanceReason - Blocking reason of the observed deposit-address balance, or null.
+ * @param input.operationActive - Whether a vault operation already owns the Midnight connection.
+ * @param input.reserveBlocking - Whether the deposit sweep ETH reserve is short.
+ * @returns Whether this surface renders the reserve gate.
+ */
+export function depositAddressShowsReserve(input: {
+  balanceReason: string | null;
+  operationActive: boolean;
+  reserveBlocking: boolean;
+}): boolean {
+  return input.balanceReason === null && !input.operationActive && input.reserveBlocking;
+}
+
 interface EvmDepositAddressProps {
   token: TokenConfig;
   network: NetworkData;
   depositAddress: string;
+  sweep: DepositAddressSweep;
   isSubmitting: boolean;
   showContinue: boolean;
   onStartDeposit: (units: bigint) => void;
@@ -40,14 +61,15 @@ interface EvmDepositAddressProps {
  * @param properties.token - Token being deposited.
  * @param properties.network - Applied network shown beside the address.
  * @param properties.depositAddress - Identity-derived address holding the unswept tokens.
+ * @param properties.sweep - Observed balance, pending requests and refresh owner from the dialog.
  * @param properties.isSubmitting - Whether a vault operation already owns this surface.
  * @param properties.showContinue - Whether this entry point is the current deposit route.
  * @param properties.onStartDeposit - Starts the sweep for the exact validated base units.
  * @returns The deposit address surface with its balance, amount and blocking reason.
  */
 export function EvmDepositAddress(properties: EvmDepositAddressProps): React.JSX.Element {
-  const { token, network, depositAddress, isSubmitting, showContinue, onStartDeposit } = properties;
-  const sweep = useDepositAddressSweep(token);
+  const { token, network, depositAddress, sweep, isSubmitting, showContinue, onStartDeposit } =
+    properties;
   const operations = useVaultOperations();
   const progress = useMidnightProgress();
   const gas = useVaultGasReserves();
@@ -82,6 +104,11 @@ export function EvmDepositAddress(properties: EvmDepositAddressProps): React.JSX
   const sweepReserve = gas.depositSweep.reserve;
   const sweepGateReserve: GasReserve | null =
     sweepReserve !== null && sweepReserve.kind !== "sufficient" ? sweepReserve : null;
+  const showsReserve = depositAddressShowsReserve({
+    balanceReason: balance.reason,
+    operationActive: progress.active,
+    reserveBlocking: sweepGateReserve !== null,
+  });
   const amountGate: ControlGate | null = amountError
     ? {
         reason: amountError,
@@ -93,7 +120,7 @@ export function EvmDepositAddress(properties: EvmDepositAddressProps): React.JSX
   const gate: ControlGate | null = plainGate ?? sweepGateReserve ?? dustGate ?? amountGate;
   const gateNode = plainGate ? (
     <DisabledReason id={CONTINUE_GATE_ID} label={CONTINUE_GATE_LABEL} {...plainGate} />
-  ) : sweepGateReserve ? (
+  ) : showsReserve && sweepGateReserve ? (
     <VaultGasGate
       reserve={sweepGateReserve}
       observation={gas.depositSweep}
