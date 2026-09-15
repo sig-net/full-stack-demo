@@ -30,7 +30,7 @@ function TooltipProvider(
  * @param properties - Tooltip root properties.
  * @returns The tooltip root.
  */
-function Tooltip(
+function TooltipRoot(
   properties: React.ComponentProps<typeof TooltipPrimitive.Root>,
 ): React.JSX.Element {
   return <TooltipPrimitive.Root data-slot="tooltip" {...properties} />;
@@ -76,4 +76,40 @@ function TooltipContent(
   );
 }
 
-export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger };
+type TooltipContentProperties = React.ComponentProps<typeof TooltipPrimitive.Content>;
+
+/**
+ * Attaches text to a single trigger element.
+ *
+ * @param properties - Tooltip properties.
+ * @param properties.title - Tooltip content.
+ * @param properties.side - Preferred side of the trigger.
+ * @param properties.align - Alignment against the trigger.
+ * @param properties.children - One element that forwards its ref and DOM event handlers. A
+ * disabled button emits no pointer events, so wrap it in a focusable element.
+ * @returns The tooltip composition.
+ */
+function Tooltip({
+  title,
+  side,
+  align,
+  children,
+}: {
+  title: React.ReactNode;
+  side?: TooltipContentProperties["side"];
+  align?: TooltipContentProperties["align"];
+  children: React.ReactElement;
+}): React.JSX.Element {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <TooltipRoot>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
+        <TooltipContent side={side} align={align}>
+          {title}
+        </TooltipContent>
+      </TooltipRoot>
+    </TooltipProvider>
+  );
+}
+
+export { Tooltip, TooltipContent, TooltipProvider, TooltipRoot, TooltipTrigger };

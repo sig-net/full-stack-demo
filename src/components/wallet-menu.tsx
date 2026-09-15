@@ -14,6 +14,7 @@ import {
 import { StatusDot } from "@/components/ui/feedback";
 import { Feedback } from "@/components/ui/feedback";
 import { PublicIdentifier } from "@/components/ui/public-identifier";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { ExplorerAvailability } from "@/lib/explorer";
 import type { WalletMetadata } from "@/lib/wallet-metadata";
 
@@ -93,17 +94,19 @@ export function WalletMenu({
   return (
     <>
       <DropdownMenu open={open} onOpenChange={changeOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button ref={trigger} variant="ghost" size="sm" aria-label={label} title={label}>
-            {connecting ? (
-              <LoaderCircle className="ds-spinner size-4" aria-hidden="true" />
-            ) : (
-              <WalletMark iconUrl={wallet?.iconUrl} />
-            )}
-            <span>{chainName}</span>
-            <StatusDot tone={wallet ? "success" : "neutral"} />
-          </Button>
-        </DropdownMenuTrigger>
+        <Tooltip title={label}>
+          <DropdownMenuTrigger asChild>
+            <Button ref={trigger} variant="ghost" size="sm" aria-label={label}>
+              {connecting ? (
+                <LoaderCircle className="ds-spinner size-4" aria-hidden="true" />
+              ) : (
+                <WalletMark iconUrl={wallet?.iconUrl} />
+              )}
+              <span>{chainName}</span>
+              <StatusDot tone={wallet ? "success" : "neutral"} />
+            </Button>
+          </DropdownMenuTrigger>
+        </Tooltip>
         <DropdownMenuContent
           align="end"
           onCloseAutoFocus={(event) => {

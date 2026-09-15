@@ -18,7 +18,7 @@ import { Feedback } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TokenAmountDisplay } from "@/components/ui/token-amount-display";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip } from "@/components/ui/tooltip";
 
 /** Keeps development fixture rendering available through a dynamic route. */
 export const dynamic = "force-dynamic";
@@ -120,14 +120,9 @@ export default function ComponentStates(): React.JSX.Element | null {
           </DropdownMenuCheckboxItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost">Tooltip target</Button>
-          </TooltipTrigger>
-          <TooltipContent>Portal tooltip fixture</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip title="Portal tooltip fixture">
+        <Button variant="ghost">Tooltip target</Button>
+      </Tooltip>
       <div className="ds-stack-content">
         <Feedback tone="error" role="alert">
           Error fixture

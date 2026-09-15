@@ -194,3 +194,35 @@
 @utility ds-section-header {
   @apply border-border flex w-full items-center justify-between border-t py-(--space-section);
 }
+
+@utility ds-github-corner {
+  @apply fill-foreground text-muted;
+
+  &:hover .ds-github-corner-arm {
+    animation: ds-octocat-wave 560ms ease-in-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &:hover .ds-github-corner-arm {
+      animation: none;
+    }
+  }
+}
+/* Pivot in the artwork's 250-unit viewBox where the arm meets the body. */
+@utility ds-github-corner-arm {
+  transform-origin: 130px 106px;
+}
+@keyframes ds-octocat-wave {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20%,
+  60% {
+    transform: rotate(-25deg);
+  }
+  40%,
+  80% {
+    transform: rotate(10deg);
+  }
+}

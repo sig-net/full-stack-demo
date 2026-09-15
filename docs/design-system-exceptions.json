@@ -17,7 +17,7 @@
   {
     "path": "src/components/navigation-header.tsx",
     "kind": "geometry",
-    "reason": "The deployment logo and three explicit header controls use responsive image bounds and horizontal placement."
+    "reason": "The deployment logo and three explicit header controls use responsive image bounds and horizontal placement. The GitHub corner artwork uses fixed SVG geometry, mirrored and pinned to the header's top-left corner."
   },
   {
     "path": "src/app/page.tsx",

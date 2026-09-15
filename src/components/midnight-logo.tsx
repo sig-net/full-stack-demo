@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type * as React from "react";
 
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,21 +14,22 @@ import { cn } from "@/lib/utils";
 export function MidnightLogo(properties: { className?: string }): React.JSX.Element {
   const { className } = properties;
   return (
-    <span
-      className={cn(
-        "ds-circle ds-surface flex shrink-0 items-center justify-center overflow-hidden",
-        className,
-      )}
-      title="Midnight"
-    >
-      <Image
-        src="/midnight/logomark.svg"
-        alt="Midnight"
-        width={28}
-        height={28}
-        className="h-full w-full"
-        unoptimized
-      />
-    </span>
+    <Tooltip title="Midnight">
+      <span
+        className={cn(
+          "ds-circle ds-surface flex shrink-0 items-center justify-center overflow-hidden",
+          className,
+        )}
+      >
+        <Image
+          src="/midnight/logomark.svg"
+          alt="Midnight"
+          width={28}
+          height={28}
+          className="h-full w-full"
+          unoptimized
+        />
+      </span>
+    </Tooltip>
   );
 }

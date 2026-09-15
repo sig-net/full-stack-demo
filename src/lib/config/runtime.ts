@@ -44,7 +44,11 @@ export type RuntimeScope = keyof RuntimeConfig;
 // Stagenet literals mirror midnight-integration/packages/signet-contract-deploy/src/plumbing/midnight-node-config.ts.
 // Replace this intentional duplication when an equivalent stable shared export is available and its adoption is authorised.
 const midnightEndpoints: Record<NetworkId, readonly [string, string, string]> = {
-  undeployed: ["", "", ""],
+  undeployed: [
+     "http://127.0.0.1:8088/api/v3/graphql",
+     "ws://127.0.0.1:8088/api/v3/graphql/ws",
+     "http://127.0.0.1:9944"
+  ],
   stagenet: [
     "https://indexer.stagenet.shielded.tools/api/v4/graphql",
     "wss://indexer.stagenet.shielded.tools/api/v4/graphql/ws",

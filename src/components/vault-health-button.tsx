@@ -1,6 +1,6 @@
 "use client";
 
-import { Fuel } from "lucide-react";
+import { Vault } from "lucide-react";
 import type * as React from "react";
 import { useId, useState } from "react";
 
@@ -14,12 +14,13 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Tooltip } from "@/components/ui/tooltip";
 import { VaultGasAccount } from "@/components/vault-gas-account";
 import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
 import type { GasReserveKind } from "@/lib/evm/gas-reserve";
 
-const HEALTH_DESCRIPTION =
-  "This indicator reports the ETH the EVM vault address holds for swap and withdrawal fees. It does not report the health of the vault contract, the MPC signers or any Midnight service.";
+const VALULT_OPS_DESCRIPTION =
+  "Green means Vault Account is sufficiently for operations on EVM Chain";
 
 const STATE_TEXT: Readonly<Record<GasReserveKind, string>> = Object.freeze({
   checking: "checking ETH",
@@ -51,18 +52,19 @@ export function VaultHealthButton(): React.JSX.Element {
   const reserves = useVaultGasReserves();
   const observation = reserves.vaultOperations;
   const kind = observation.reserve?.kind;
-  const state = kind === undefined ? "vault address unavailable" : STATE_TEXT[kind];
+  const state = kind === undefined ? "vault address not set" : STATE_TEXT[kind];
   const tone = kind === undefined ? "neutral" : STATE_TONE[kind];
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="xs" aria-label={`Vault health: ${state}`}>
-          <Fuel aria-hidden="true" />
-          <span>Vault health</span>
-          <span className="ds-muted">{state}</span>
-          <StatusDot tone={tone} />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip title={state}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="xs" aria-label={`Vault health: ${state}`}>
+            <Vault aria-hidden="true" />
+            <span>Vault Operations</span>
+            <StatusDot tone={tone} />
+          </Button>
+        </PopoverTrigger>
+      </Tooltip>
       <PopoverContent
         size="wide"
         align="end"
@@ -70,8 +72,8 @@ export function VaultHealthButton(): React.JSX.Element {
         aria-describedby={descriptionId}
       >
         <PopoverHeader>
-          <PopoverTitle id={titleId}>Vault health</PopoverTitle>
-          <PopoverDescription id={descriptionId}>{HEALTH_DESCRIPTION}</PopoverDescription>
+          <PopoverTitle id={titleId}>Vault Operations</PopoverTitle>
+          <PopoverDescription id={descriptionId}>{VALULT_OPS_DESCRIPTION}</PopoverDescription>
         </PopoverHeader>
         <VaultGasAccount
           heading="EVM vault address"
