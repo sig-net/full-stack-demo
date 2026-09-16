@@ -9,8 +9,8 @@ import {
   discoverBrowserWallets,
 } from "@/lib/midnight/wallet/BrowserWallet";
 import type { Wallet } from "@/lib/midnight/wallet/Wallet";
+import { useConfiguration } from "@/providers/configuration-context";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
-import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 import { useVault } from "@/providers/vault-context";
 
 import { PublicIdentifier } from "./ui/public-identifier";
@@ -22,7 +22,7 @@ import { WalletMenu } from "./wallet-menu";
  * @returns The Midnight wallet menu.
  */
 export function MidnightWalletButton(): React.JSX.Element {
-  const { applied } = useRuntimeConfiguration();
+  const { applied } = useConfiguration();
   const connection = useMidnightConnection();
   const vault = useVault();
   const [choices, setChoices] = useState<BrowserWalletChoice[]>([]);

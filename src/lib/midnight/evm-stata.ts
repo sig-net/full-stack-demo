@@ -7,7 +7,7 @@ import {
 import { type ConstantContractMethod, Contract } from "ethers";
 import { formatUnits } from "viem";
 
-import { createEvmChainConfig } from "@/lib/config/evm";
+import { sepoliaChainConfig } from "@/lib/config/runtime";
 import { fetchErc20Decimals } from "@/lib/constants/token-metadata";
 import { withEthersProvider } from "@/lib/evm/ethers-provider";
 
@@ -52,7 +52,7 @@ export async function stataAssetsPerShare(evmRpcUrl: string): Promise<number> {
       ["function convertToAssets(uint256 shares) view returns (uint256)"],
       provider,
     );
-    const config = createEvmChainConfig(evmRpcUrl);
+    const config = sepoliaChainConfig(evmRpcUrl);
     const [shareDecimals, assetDecimals] = await Promise.all([
       fetchErc20Decimals(STATA_USDC, config),
       fetchErc20Decimals(AAVE_USDC, config),

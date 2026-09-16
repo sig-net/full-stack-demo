@@ -15,8 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivityExplorerLinks } from "@/components/activity-list-table";
 import { TransactionDetailsDialog } from "@/components/activity-list-table/transaction-details-dialog";
 import { useMidnightTransactions } from "@/hooks/use-midnight-transactions";
-import { createEvmChainConfig, getEvmNetworkDefaults } from "@/lib/config/evm";
-import type { NetworkId } from "@/lib/config/midnight";
+import { NETWORK_DEFAULTS, type NetworkId, sepoliaChainConfig } from "@/lib/config/runtime";
 import {
   evmExplorerLink,
   type EvmExplorerSource,
@@ -27,10 +26,9 @@ import {
   REQUEST_ID_UNSUPPORTED,
 } from "@/lib/explorer";
 import { midnightTxHistory, type MidnightTxRecord } from "@/lib/midnight/tx-history";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { MidnightWalletProvider } from "@/providers/midnight-wallet-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { VaultProvider } from "@/providers/vault-context";
-import { VaultIdentityProvider } from "@/providers/vault-identity-context";
 
 import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
 
@@ -81,8 +79,8 @@ describe("EVM explorer routes", () => {
   });
 
   it("refuses a public explorer for a local fork that reuses the Sepolia chain ID", () => {
-    expect(getEvmNetworkDefaults("local").explorerUrl).toBe("");
-    expect(createEvmChainConfig(undefined).explorerUrl).toBe("");
+    expect(NETWORK_DEFAULTS.evm.local.explorerUrl).toBe("");
+    expect(sepoliaChainConfig(NETWORK_DEFAULTS.evm.local.rpcUrl).explorerUrl).toBe("");
     expect(evmExplorerLink(LOCAL_FORK, "transaction", transactionHash)).toEqual({
       status: "unavailable",
       reason: "No explorer is configured for this network, so this transaction has no link.",
@@ -411,15 +409,13 @@ describe("activity table isolation", () => {
     const { ActivityListTable } = await import("@/components/activity-list-table");
     const view = render(
       <QueryClientProvider client={queryClient}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
           <MidnightWalletProvider>
-            <VaultIdentityProvider>
-              <VaultProvider>
-                <ActivityListTable />
-              </VaultProvider>
-            </VaultIdentityProvider>
+            <VaultProvider>
+              <ActivityListTable />
+            </VaultProvider>
           </MidnightWalletProvider>
-        </RuntimeConfigProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>,
     );
     try {

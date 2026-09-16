@@ -7,6 +7,7 @@ import { afterEach, expect, it, type MockInstance, vi } from "vitest";
 
 import { SeedWallet } from "@/lib/evm/wallet/SeedWallet";
 import type { WalletConnection } from "@/lib/evm/wallet/Wallet";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { useAddressFunding } from "@/providers/evm-local-funding-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
 
@@ -44,7 +45,9 @@ it("shares one signing session and disposes pending or mounted resources once in
     {
       wrapper: ({ children }) => (
         <StrictMode>
-          <EvmWalletProvider>{children}</EvmWalletProvider>
+          <ConfigurationProvider>
+            <EvmWalletProvider>{children}</EvmWalletProvider>
+          </ConfigurationProvider>
         </StrictMode>
       ),
     },

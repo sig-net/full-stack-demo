@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, expect, it, vi } from "vitest";
 
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { NETWORK_DEFAULTS } from "@/lib/config/runtime";
 import * as vault from "@/lib/midnight/vault";
 import * as assembly from "@/lib/midnight/vault-providers";
 import { createVaultSession } from "@/lib/midnight/vault-session";
@@ -29,7 +29,7 @@ it("guards a complete SDK binding and disposes its raw resources exactly once", 
   const session = createVaultSession({
     wallet: fixture.wallet,
     secret: fixture.identity.secretKey,
-    configuration: createMidnightChainConfig({}),
+    configuration: NETWORK_DEFAULTS.midnight.undeployed,
     environment: fixture.environment,
     zkOrigin: "https://zk.example.invalid",
     isCurrent: () => current,
@@ -67,7 +67,7 @@ it("rejects successful reads that finish after session replacement", async () =>
   const session = createVaultSession({
     wallet: fixture.wallet,
     secret: fixture.identity.secretKey,
-    configuration: createMidnightChainConfig({}),
+    configuration: NETWORK_DEFAULTS.midnight.undeployed,
     environment: fixture.environment,
     zkOrigin: "https://zk.example.invalid",
     isCurrent: () => current,
@@ -110,7 +110,7 @@ it("disposes resources while binding construction is pending and rejects the lat
   const session = createVaultSession({
     wallet: fixture.wallet,
     secret: fixture.identity.secretKey,
-    configuration: createMidnightChainConfig({}),
+    configuration: NETWORK_DEFAULTS.midnight.undeployed,
     environment: fixture.environment,
     zkOrigin: "https://zk.example.invalid",
     isCurrent: () => true,

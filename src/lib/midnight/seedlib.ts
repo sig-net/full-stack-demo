@@ -38,7 +38,7 @@ import { Effect } from "effect";
 
 export type { WalletFacade } from "@midnightntwrk/wallet-sdk-facade";
 
-import type { MidnightNodeConfig, NetworkId } from "../config/midnight";
+import type { MidnightNodeConfig, NetworkId } from "../config/runtime";
 
 /** The live key material for one account. Reused for signing / balancing. */
 export interface AccountKeys {

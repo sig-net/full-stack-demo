@@ -16,13 +16,12 @@ import {
   stataSupplyApy,
 } from "@/lib/midnight/evm-stata";
 import type { VaultBalances } from "@/lib/midnight/vault-balances";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { EvmBalancesProvider } from "@/providers/evm-balances-context";
 import { EvmLocalFundingProvider } from "@/providers/evm-local-funding-context";
 import { EvmWalletProvider } from "@/providers/evm-wallet-context";
-import { LocalFaucetProvider } from "@/providers/local-faucet-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
@@ -160,9 +159,12 @@ it("uses asset decimals, preserves refunds, rejects excess precision and gates u
   const { rerender, unmount } = render(<LendWidget />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={query}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        <ConfigurationProvider
+          localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}
+          initialConfiguration={testRuntimeConfiguration()}
+        >
           {children}
-        </RuntimeConfigProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>
     ),
   });
@@ -268,15 +270,16 @@ it("blocks supply on a vault reserve that still covers redeem", async () => {
   const { unmount } = render(<LendWidget />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={query}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
-          <LocalFaucetProvider descriptor={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
-            <EvmWalletProvider>
-              <EvmBalancesProvider tokens={[]}>
-                <EvmLocalFundingProvider>{children}</EvmLocalFundingProvider>
-              </EvmBalancesProvider>
-            </EvmWalletProvider>
-          </LocalFaucetProvider>
-        </RuntimeConfigProvider>
+        <ConfigurationProvider
+          localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}
+          initialConfiguration={testRuntimeConfiguration()}
+        >
+          <EvmWalletProvider>
+            <EvmBalancesProvider tokens={[]}>
+              <EvmLocalFundingProvider>{children}</EvmLocalFundingProvider>
+            </EvmBalancesProvider>
+          </EvmWalletProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>
     ),
   });

@@ -1,7 +1,7 @@
 import type { FacadeState } from "@midnightntwrk/wallet-sdk-facade";
 import { vi } from "vitest";
 
-import type { MidnightNodeConfig } from "@/lib/config/midnight";
+import type { MidnightNodeConfig } from "@/lib/config/runtime";
 import type * as seedlib from "@/lib/midnight/seedlib";
 import type { AccountKeys, WalletFacade } from "@/lib/midnight/seedlib";
 

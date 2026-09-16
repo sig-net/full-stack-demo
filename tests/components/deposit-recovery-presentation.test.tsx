@@ -6,8 +6,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { PendingDepositRecovery } from "@/components/deposit-dialog/pending-deposit-recovery";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import type { DepositLookup, DepositLookupKind } from "@/lib/midnight/deposit-lookup";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
@@ -81,9 +81,9 @@ it("keeps recovery drafts independent of the current request, the selected token
   const view = render(<PendingDepositRecovery token={token} />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={query}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
           {children}
-        </RuntimeConfigProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>
     ),
   });
@@ -307,9 +307,9 @@ it.each(LOOKUP_CASES)(
     const view = render(<PendingDepositRecovery token={token} />, {
       wrapper: ({ children }) => (
         <QueryClientProvider client={query}>
-          <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+          <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
             {children}
-          </RuntimeConfigProvider>
+          </ConfigurationProvider>
         </QueryClientProvider>
       ),
     });

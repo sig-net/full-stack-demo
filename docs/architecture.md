@@ -7,16 +7,20 @@ instance changes the meaning of a result.
 
 ## Vault identity and binding
 
-`VaultIdentityProvider` owns the validated applied secret in page memory and operates independently
-of wallet, configuration and query providers. Home and toolbar editors share that applied value,
-while each panel owns a temporary draft and unique input identifiers. Closing a panel clears its
-draft and feedback. The identity status indicates an applied secret.
+`ConfigurationProvider` owns one store holding the applied public configuration, the validated
+vault secret in page memory and local faucet eligibility. The secret is a separate section of that
+store: applying it never changes the public configuration revision, and applying public
+configuration never clears it. Home and toolbar editors share the applied secret, while each panel
+owns a temporary draft and unique input identifiers. Closing a panel clears its draft and
+feedback. The identity status indicates an applied secret. The provider clears the secret when it
+unmounts.
 
-`VaultProvider` subscribes to synchronous identity invalidation. Replacing or clearing the secret
-disposes the captured session and removes its query before the identity action returns. Captured
-bindings reject further work immediately. Wallet disconnect retains the applied identity and
-invalidates the binding through the vault owner's disconnect action. Clearing identity retains the
-wallet. Wallet replacement and configuration invalidation continue to guard dependent sessions.
+`VaultProvider` subscribes to the store's synchronous invalidation bus. An identity change
+invalidates the `identity` and `vault` scopes, so replacing or clearing the secret disposes the
+captured session and removes its query before the identity action returns. Captured bindings
+reject further work immediately. Wallet disconnect retains the applied identity and invalidates
+the binding through the vault owner's disconnect action. Clearing identity retains the wallet.
+Wallet replacement and configuration invalidation continue to guard dependent sessions.
 
 ## Vault execution
 

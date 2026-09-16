@@ -18,8 +18,8 @@ import {
 } from "@/components/ui/popover";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { useConfiguration } from "@/providers/configuration-context";
 import { useVault } from "@/providers/vault-context";
-import { useVaultIdentity } from "@/providers/vault-identity-context";
 
 const identityHelpLines = [
   "Your secret vault identity across interactions requiring multiple vault transactions",
@@ -27,8 +27,8 @@ const identityHelpLines = [
   "Perferably a different seed from either your Midnight or EVM wallet",
   "Keep a copy: losing it can prevent access to vault funds during pending interactions",
   "Required on refresh to resume pending interactions",
-  "KEEP SECRET!"
-]
+  "KEEP SECRET!",
+];
 
 function IdentityHelpList({ id }: { id?: string }): React.JSX.Element {
   return (
@@ -60,7 +60,7 @@ export function VaultIdentityButton({
   const titleId = useId();
   const descriptionId = useId();
   const vault = useVault();
-  const identity = useVaultIdentity();
+  const { owner, identity } = useConfiguration();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [validation, setValidation] = useState("");
@@ -68,23 +68,23 @@ export function VaultIdentityButton({
   const changeOpen = (value: boolean): void => {
     if (value) focusAfterApply.current = false;
     setOpen(value);
-    setInput(value ? identity.identitySecret : "");
+    setInput(value ? identity.secret : "");
     setValidation("");
     reset();
   };
   return (
     <Popover open={open} onOpenChange={changeOpen}>
-      <Tooltip title={`Vault identity: ${identity.identitySecret ? "set" : "not set"}`}>
+      <Tooltip title={`Vault identity: ${identity.secret ? "set" : "not set"}`}>
         <PopoverTrigger asChild>
           <Button
             ref={triggerRef}
             variant="ghost"
             size="sm"
-            aria-label={`Vault identity: ${identity.identitySecret ? "set" : "not set"}`}
+            aria-label={`Vault identity: ${identity.secret ? "set" : "not set"}`}
           >
             <KeyRound aria-hidden="true" />
             <span>Vault identity</span>
-            <StatusDot tone={identity.identitySecret ? "success" : "neutral"} />
+            <StatusDot tone={identity.secret ? "success" : "neutral"} />
           </Button>
         </PopoverTrigger>
       </Tooltip>
@@ -109,7 +109,7 @@ export function VaultIdentityButton({
           onSubmit={(event) => {
             event.preventDefault();
             try {
-              identity.setIdentitySecret(input);
+              owner.setIdentity(input);
               focusAfterApply.current = vault.status !== "disconnected";
               changeOpen(false);
             } catch (failure) {
@@ -177,12 +177,12 @@ export function VaultIdentityButton({
           >
             Cancel
           </Button>
-          {identity.identitySecret && (
+          {identity.secret && (
             <Button
               type="button"
               variant="outline"
               onClick={() => {
-                identity.clearIdentity();
+                owner.clearIdentity();
                 changeOpen(false);
               }}
             >

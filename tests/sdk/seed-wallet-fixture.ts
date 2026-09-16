@@ -2,7 +2,7 @@ import type { FacadeState } from "@midnightntwrk/wallet-sdk-facade";
 import { Subject } from "rxjs";
 import { type MockInstance, vi } from "vitest";
 
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { NETWORK_DEFAULTS } from "@/lib/config/runtime";
 import * as seedlib from "@/lib/midnight/seedlib";
 import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
 
@@ -26,7 +26,7 @@ export interface SeedWalletFixture {
  * @returns A real seed wallet with manually controlled facade lifecycle boundaries.
  */
 export async function createSeedWalletFixture(seed = "07".repeat(32)): Promise<SeedWalletFixture> {
-  const configuration = createMidnightChainConfig({});
+  const configuration = NETWORK_DEFAULTS.midnight.undeployed;
   const { facade, state } = await createWalletFacadeFixture(configuration, seed);
   const construction = Promise.withResolvers<seedlib.WalletFacade>();
   const starting = Promise.withResolvers<undefined>();

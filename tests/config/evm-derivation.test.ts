@@ -2,15 +2,14 @@ import { deriveEvmAddress, hexToBytes } from "@sig-net/midnight";
 import { VAULT_PATH_HEX } from "@sig-net/midnight-examples-erc20-vault-contract";
 import { expect, it } from "vitest";
 
-import { createEvmChainConfig } from "@/lib/config/evm";
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { NETWORK_DEFAULTS, sepoliaChainConfig } from "@/lib/config/runtime";
 import { createVaultEnvironment } from "@/lib/midnight/env";
 import { derivePathAddress, resolvePathRendering } from "@/lib/midnight/evm-addresses";
 
 it("derives both deployment renderings including binary paths and rejects a mismatched vault", () => {
   const environment = createVaultEnvironment(
-    createMidnightChainConfig({}),
-    createEvmChainConfig("https://rpc.example.invalid"),
+    NETWORK_DEFAULTS.midnight.undeployed,
+    sepoliaChainConfig("https://rpc.example.invalid"),
     {
       contractAddress: "ab".repeat(32),
       signetContractAddress: "cd".repeat(32),

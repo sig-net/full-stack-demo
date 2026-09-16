@@ -2,10 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, type MockInstance, vi } from "vitest";
 
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { NETWORK_DEFAULTS } from "@/lib/config/runtime";
 import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
 import { LOCAL_NIGHT_GRANT, MINIMUM_MIDNIGHT_DUST } from "@/lib/wallet-funding";
-import { LocalFaucetProvider } from "@/providers/local-faucet-context";
+import { ConfigurationProvider, useConfiguration } from "@/providers/configuration-context";
 import {
   MidnightLocalFundingProvider,
   useMidnightLocalFunding,
@@ -15,7 +15,6 @@ import {
   useMidnightReadiness,
 } from "@/providers/midnight-readiness-context";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
-import { RuntimeConfigProvider, useRuntimeConfiguration } from "@/providers/runtime-config-context";
 
 import { LOCAL_FAUCET_DESCRIPTOR_FIXTURE } from "../config/local-faucet-fixture";
 import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
@@ -28,7 +27,7 @@ function fixture(): {
   register: MockInstance<SeedWallet["registerNightForDust"]>;
   client: QueryClient;
 } {
-  const wallet = new SeedWallet(createMidnightChainConfig({}), "07".repeat(32));
+  const wallet = new SeedWallet(NETWORK_DEFAULTS.midnight.undeployed, "07".repeat(32));
   vi.spyOn(wallet, "getDustBalance").mockResolvedValue(MINIMUM_MIDNIGHT_DUST);
   vi.spyOn(wallet, "getUnshieldedBalances").mockResolvedValue({ night: LOCAL_NIGHT_GRANT });
   vi.spyOn(wallet, "getUnregisteredNightBalance").mockResolvedValue(LOCAL_NIGHT_GRANT);
@@ -66,11 +65,12 @@ function FixtureProviders({
 }): React.JSX.Element {
   return (
     <QueryClientProvider client={client}>
-      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
-        <LocalFaucetProvider descriptor={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
-          <MidnightReadinessProvider>{children}</MidnightReadinessProvider>
-        </LocalFaucetProvider>
-      </RuntimeConfigProvider>
+      <ConfigurationProvider
+        localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}
+        initialConfiguration={testRuntimeConfiguration()}
+      >
+        <MidnightReadinessProvider>{children}</MidnightReadinessProvider>
+      </ConfigurationProvider>
     </QueryClientProvider>
   );
 }
@@ -143,7 +143,7 @@ it("registers NIGHT only after an explicit user action", async () => {
 it("does not call the NIGHT faucet after configuration changes during the balance read", async () => {
   const f = fixture();
   const hook = renderHook(
-    () => ({ funding: useMidnightLocalFunding(), runtime: useRuntimeConfiguration() }),
+    () => ({ funding: useMidnightLocalFunding(), runtime: useConfiguration() }),
     {
       wrapper: ({ children }) => (
         <FixtureProviders client={f.client}>

@@ -7,7 +7,7 @@ import {
   ShieldedEncryptionPublicKey,
 } from "@midnightntwrk/wallet-sdk-address-format";
 
-import type { MidnightNodeConfig } from "@/lib/config/midnight";
+import type { MidnightNodeConfig } from "@/lib/config/runtime";
 
 import {
   type AccountKeys,

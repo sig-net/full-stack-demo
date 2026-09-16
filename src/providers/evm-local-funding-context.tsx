@@ -16,9 +16,9 @@ import type { Address } from "viem";
 import { ERC20_TOKENS } from "@/lib/constants/token-metadata";
 import { fundingErrorSchema, hasLocalEvmFunds, MINIMUM_EVM_ETH } from "@/lib/wallet-funding";
 
+import { useConfiguration } from "./configuration-context";
 import { useEvmBalances } from "./evm-balances-context";
 import { useEvmWallet } from "./evm-wallet-context";
-import { useLocalFaucet } from "./local-faucet-context";
 
 interface FundingRecipient {
   address: Address;
@@ -126,7 +126,7 @@ export function useAddressFunding(
 }
 
 function useEvmLocalFundingOwner(): EvmLocalFundingState {
-  const faucet = useLocalFaucet();
+  const { localFaucet: faucet } = useConfiguration();
   const ethFunding = useRef(new Map<Address, Promise<void>>());
   const [fundingAddresses, setFundingAddresses] = useState<readonly Address[]>([]);
   const publishEthFunding = (): void => {

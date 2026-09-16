@@ -8,14 +8,16 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 
-import { getMidnightChainConfig, type MidnightNodeConfig } from "@/lib/config/midnight";
-import { resolveMidnightConfiguration } from "@/lib/config/runtime";
+import type { MidnightNodeConfig } from "@/lib/config/runtime";
 import type { BrowserWalletChoice } from "@/lib/midnight/wallet/BrowserWallet";
 import type { Wallet, WalletAddressSnapshot } from "@/lib/midnight/wallet/Wallet";
+
+import { useConfiguration } from "./configuration-context";
 
 interface MidnightWalletContextValue {
   wallet: Wallet | null;
@@ -35,20 +37,16 @@ interface MidnightWalletContextValue {
 const MidnightWalletContext = createContext<MidnightWalletContextValue | null>(null);
 
 /**
- * Owns one wallet generation and clears pending secrets and resources when it is replaced.
+ * Owns one wallet generation and clears pending secrets and resources when it is replaced. Each
+ * connection captures the Midnight endpoints applied at that moment, and an applied change to the
+ * Midnight scope disconnects the wallet before the new configuration is published.
  *
- * @param props - Provider content and optional applied configuration.
+ * @param props - Provider content.
  * @param props.children - Components sharing the connection owner.
- * @param props.configuration - Captured application endpoints, defaulting to startup values.
  * @returns Connection state with explicit seed, browser and recovery actions.
  */
-export function MidnightWalletProvider({
-  children,
-  configuration: suppliedConfiguration,
-}: {
-  children: ReactNode;
-  configuration?: MidnightNodeConfig;
-}): JSX.Element {
+export function MidnightWalletProvider({ children }: { children: ReactNode }): JSX.Element {
+  const { owner, applied } = useConfiguration();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [addresses, setAddresses] = useState<WalletAddressSnapshot | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -58,7 +56,7 @@ export function MidnightWalletProvider({
   const generation = useRef(0);
   const active = useRef<Wallet | null>(null);
   const installedSeed = useRef<string | null>(null);
-  const configuration = useRef<ReturnType<typeof getMidnightChainConfig> | null>(null);
+  const configuration = useRef<MidnightNodeConfig | null>(null);
   const seedInFlight = useRef<{
     seed: string;
     promise: Promise<Wallet>;
@@ -84,6 +82,13 @@ export function MidnightWalletProvider({
     setError(null);
   };
 
+  const captureConfiguration = (): MidnightNodeConfig => {
+    const { readiness } = owner.getSnapshot().applied;
+    if (readiness.midnight.status === "unavailable")
+      throw new Error(readiness.midnight.reasons.join(" "));
+    return readiness.midnight.value;
+  };
+
   const installSeedWallet = (input: string): Promise<Wallet> => {
     const seed = input.trim().replace(/^0x/i, "").toLowerCase();
     if (!/^(?:[0-9a-f]{2}){16,64}$/.test(seed)) {
@@ -100,9 +105,7 @@ export function MidnightWalletProvider({
     setConnecting(true);
     setSyncStatus("starting wallet…");
     const promise = (async () => {
-      configuration.current = suppliedConfiguration ?? getMidnightChainConfig();
-      const configured = resolveMidnightConfiguration(configuration.current);
-      if (configured.status === "unavailable") throw new Error(configured.reasons.join(" "));
+      configuration.current = captureConfiguration();
       const { SeedWallet } = await import("@/lib/midnight/wallet/SeedWallet");
       if (attempt !== generation.current) throw new Error("Wallet connection superseded.");
       const candidate = new SeedWallet(configuration.current, seed);
@@ -159,9 +162,7 @@ export function MidnightWalletProvider({
     const attempt = generation.current;
     setConnecting(true);
     const promise = (async () => {
-      configuration.current = suppliedConfiguration ?? getMidnightChainConfig();
-      const configured = resolveMidnightConfiguration(configuration.current);
-      if (configured.status === "unavailable") throw new Error(configured.reasons.join(" "));
+      configuration.current = captureConfiguration();
       const { BrowserWallet } = await import("@/lib/midnight/wallet/BrowserWallet");
       if (attempt !== generation.current) throw new Error("Wallet connection superseded.");
       const candidate = new BrowserWallet(choice, configuration.current, (error) => {
@@ -212,6 +213,12 @@ export function MidnightWalletProvider({
     return installSeedWallet(seed);
   };
 
+  useLayoutEffect(() =>
+    owner.onInvalidate((scopes) => {
+      if (scopes.has("midnight")) disconnect();
+    }),
+  );
+
   useEffect(() => {
     const deletion = indexedDB.deleteDatabase("midnight-wallet-cache");
     deletion.onerror = () => undefined;
@@ -229,10 +236,7 @@ export function MidnightWalletProvider({
     <MidnightWalletContext.Provider
       value={{
         wallet,
-        addresses:
-          suppliedConfiguration && addresses?.networkId !== suppliedConfiguration.networkId
-            ? null
-            : addresses,
+        addresses: addresses?.networkId === applied.midnight.networkId ? addresses : null,
         connecting,
         error,
         syncStatus,

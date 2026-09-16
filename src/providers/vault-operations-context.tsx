@@ -15,8 +15,7 @@ import {
 } from "react";
 import { formatUnits } from "viem";
 
-import { resolveEvmChain } from "@/lib/config/evm";
-import type { RuntimeSnapshot } from "@/lib/config/runtime";
+import { resolveEvmChain, type RuntimeSnapshot } from "@/lib/config/runtime";
 import { fetchErc20Decimals } from "@/lib/constants/token-metadata";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import { requireGasReserve } from "@/lib/evm/gas-reserve";
@@ -37,8 +36,8 @@ import {
 } from "@/lib/midnight/tx-history";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
 
+import { useConfiguration } from "./configuration-context";
 import { useMidnightReadiness } from "./midnight-readiness-context";
-import { useRuntimeConfiguration } from "./runtime-config-context";
 import { useVaultBalances } from "./vault-balances-context";
 import { useVault } from "./vault-context";
 const DEAD_ADDRESS = "0x000000000000000000000000000000000000dEaD";
@@ -150,7 +149,7 @@ interface CapturedOperation {
 
 function useVaultOperationOwner(): VaultOperationState {
   const vaultOwner = useVault();
-  const runtime = useRuntimeConfiguration();
+  const runtime = useConfiguration();
   const queries = useQueryClient();
   const readiness = useMidnightReadiness();
   const { refresh } = useVaultBalances();

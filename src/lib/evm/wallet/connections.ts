@@ -1,14 +1,13 @@
-import { BrowserWallet, type BrowserWalletChoice } from "@/lib/evm/wallet/BrowserWallet";
-import { SeedWallet } from "@/lib/evm/wallet/SeedWallet";
-import type { WalletConnection } from "@/lib/evm/wallet/Wallet";
-import { getEthereumProvider } from "@/lib/rpc";
-
 import {
   type EvmChainConfig,
-  getEvmChainConfig,
   requiresRpcChainVerification,
   resolveEvmChain,
-} from "./evm";
+} from "@/lib/config/runtime";
+import { getEthereumProvider } from "@/lib/rpc";
+
+import { BrowserWallet, type BrowserWalletChoice } from "./BrowserWallet";
+import { SeedWallet } from "./SeedWallet";
+import type { WalletConnection } from "./Wallet";
 
 /**
  * Captures the selected browser provider and the app's local-fork verification policy.
@@ -19,7 +18,7 @@ import {
  */
 export function browserWalletConnection(
   choice: BrowserWalletChoice,
-  config: EvmChainConfig = getEvmChainConfig(),
+  config: EvmChainConfig,
 ): WalletConnection {
   return {
     key: choice.provider,
@@ -44,10 +43,7 @@ export function browserWalletConnection(
  * @param config - Public configuration captured for this connection attempt.
  * @returns A connection factory with an identity distinct from other seed attempts.
  */
-export function seedWalletConnection(
-  input: string,
-  config: EvmChainConfig = getEvmChainConfig(),
-): WalletConnection {
+export function seedWalletConnection(input: string, config: EvmChainConfig): WalletConnection {
   let seed = input;
   return {
     key: {},

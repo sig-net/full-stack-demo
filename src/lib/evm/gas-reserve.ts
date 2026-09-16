@@ -1,7 +1,7 @@
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { type Address, getAddress } from "viem";
 
-import type { EvmChainConfig } from "@/lib/config/evm";
+import type { EvmChainConfig } from "@/lib/config/runtime";
 import { getEthereumProvider } from "@/lib/rpc";
 
 /** Distinct observed conditions of a native fee reserve, each with its own user-facing meaning. */

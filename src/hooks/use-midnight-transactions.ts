@@ -4,7 +4,7 @@ import { MidnightNetwork } from "@sig-net/midnight";
 import { z } from "zod";
 
 import type { ActivityExplorerLinks, ActivityTransaction } from "@/components/activity-list-table";
-import type { NetworkId } from "@/lib/config/midnight";
+import type { NetworkId } from "@/lib/config/runtime";
 import {
   evmExplorerLink,
   type EvmExplorerSource,

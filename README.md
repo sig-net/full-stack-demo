@@ -284,9 +284,10 @@ formatting and asset-preparation scripts. `tsconfig.json` maps `@/*` to `src/*` 
 typing with checked indexed access. React Compiler is enabled in `next.config.ts`. Production
 compilation is configured to skip TypeScript errors, so the separate typecheck is essential.
 
-Public chain configuration is defined in `src/lib/config/evm.ts` and
-`src/lib/config/midnight.ts`. `src/lib/config/runtime.ts` composes applied public configuration,
-and `src/lib/midnight/env.ts` captures deployment inputs for lazy address resolution. Explicit
+`src/lib/config/runtime.ts` holds the endpoint defaults for every Midnight and EVM network,
+validates and composes applied public configuration, and owns the configuration store. The
+server-only local faucet policy in `src/lib/config/local-faucet-server.ts` reads the same local
+endpoint defaults. `src/lib/midnight/env.ts` captures deployment inputs for lazy address resolution. Explicit
 vault and Signet address overrides take precedence over package defaults and are required for
 the undeployed network. Server faucet endpoint overrides use the `LOCAL_FAUCET_*` environment
 variables and the NIGHT faucet imports the canonical genesis seed from the deployment package.

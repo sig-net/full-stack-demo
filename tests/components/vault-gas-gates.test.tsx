@@ -28,13 +28,12 @@ import { discoverSwappablePairs, pairKey, quoteBestFeeExactInput } from "@/lib/m
 import { flow } from "@/lib/midnight/flow";
 import * as vault from "@/lib/midnight/vault";
 import type { VaultBalances } from "@/lib/midnight/vault-balances";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { EvmBalancesProvider } from "@/providers/evm-balances-context";
 import { EvmDepositProvider } from "@/providers/evm-deposit-context";
 import { EvmLocalFundingProvider, useEvmLocalFunding } from "@/providers/evm-local-funding-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
-import { LocalFaucetProvider } from "@/providers/local-faucet-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations, VaultOperationsProvider } from "@/providers/vault-operations-context";
@@ -146,17 +145,18 @@ async function mountVaultSurface(content: React.ReactNode): Promise<VaultSurface
   });
   const tree = (): React.JSX.Element => (
     <QueryClientProvider client={client}>
-      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
-        <LocalFaucetProvider descriptor={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
-          <EvmWalletProvider>
-            <EvmBalancesProvider tokens={[]}>
-              <EvmLocalFundingProvider>
-                <VaultOperationsProvider>{content}</VaultOperationsProvider>
-              </EvmLocalFundingProvider>
-            </EvmBalancesProvider>
-          </EvmWalletProvider>
-        </LocalFaucetProvider>
-      </RuntimeConfigProvider>
+      <ConfigurationProvider
+        localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}
+        initialConfiguration={testRuntimeConfiguration()}
+      >
+        <EvmWalletProvider>
+          <EvmBalancesProvider tokens={[]}>
+            <EvmLocalFundingProvider>
+              <VaultOperationsProvider>{content}</VaultOperationsProvider>
+            </EvmLocalFundingProvider>
+          </EvmBalancesProvider>
+        </EvmWalletProvider>
+      </ConfigurationProvider>
     </QueryClientProvider>
   );
   const mounted = render(tree());
@@ -294,25 +294,26 @@ async function mountDepositSurface(sweepReserveExplained = false): Promise<Depos
   const tree = (): React.JSX.Element => (
     <StrictMode>
       <QueryClientProvider client={client}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
-          <LocalFaucetProvider descriptor={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
-            <EvmWalletProvider>
-              <EvmBalancesProvider tokens={[token.erc20Address]}>
-                <EvmLocalFundingProvider>
-                  <VaultOperationsProvider>
-                    <EvmDepositProvider>
-                      <Bridge />
-                      <EvmDepositTransfer
-                        token={token}
-                        sweepReserveExplained={sweepReserveExplained}
-                      />
-                    </EvmDepositProvider>
-                  </VaultOperationsProvider>
-                </EvmLocalFundingProvider>
-              </EvmBalancesProvider>
-            </EvmWalletProvider>
-          </LocalFaucetProvider>
-        </RuntimeConfigProvider>
+        <ConfigurationProvider
+          localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}
+          initialConfiguration={testRuntimeConfiguration()}
+        >
+          <EvmWalletProvider>
+            <EvmBalancesProvider tokens={[token.erc20Address]}>
+              <EvmLocalFundingProvider>
+                <VaultOperationsProvider>
+                  <EvmDepositProvider>
+                    <Bridge />
+                    <EvmDepositTransfer
+                      token={token}
+                      sweepReserveExplained={sweepReserveExplained}
+                    />
+                  </EvmDepositProvider>
+                </VaultOperationsProvider>
+              </EvmLocalFundingProvider>
+            </EvmBalancesProvider>
+          </EvmWalletProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>
     </StrictMode>
   );
@@ -559,9 +560,12 @@ it("rechecks the vault reserve at the operation boundary and leaves the deposit 
   const hook = renderHook(useVaultOperations, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={client}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        <ConfigurationProvider
+          localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}
+          initialConfiguration={testRuntimeConfiguration()}
+        >
           <VaultOperationsProvider>{children}</VaultOperationsProvider>
-        </RuntimeConfigProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>
     ),
   });

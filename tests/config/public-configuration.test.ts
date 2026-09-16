@@ -1,19 +1,20 @@
 import { getSignetContractAddress, MidnightNetwork } from "@sig-net/midnight";
 import { getVaultContractAddress } from "@sig-net/midnight-examples-erc20-vault-contract";
+import { sepolia } from "viem/chains";
 import { expect, it, vi } from "vitest";
 
-import { createEvmChainConfig, getEvmChainConfig, sepolia } from "@/lib/config/evm";
 import {
-  createMidnightChainConfig,
-  getMidnightChainConfig,
+  deriveIndexerWsUrl,
   getZkConfigOrigin,
-  midnightIndexerConfig,
-} from "@/lib/config/midnight";
+  NETWORK_DEFAULTS,
+  sepoliaChainConfig,
+} from "@/lib/config/runtime";
 import { createVaultEnvironment } from "@/lib/midnight/env";
 import { getEthereumProvider } from "@/lib/rpc";
 
 it("preserves endpoint validation, deployment identity and immutable snapshots", () => {
-  const evm = createEvmChainConfig("https://rpc.example.invalid");
+  const evm = sepoliaChainConfig("https://rpc.example.invalid");
+  expect(evm.network).toBe("sepolia");
   expect(evm.chainId).toBe(BigInt(sepolia.id));
   expect(evm.explorerUrl).toBe(sepolia.blockExplorers.default.url);
   const firstClient = getEthereumProvider(evm);
@@ -23,57 +24,30 @@ it("preserves endpoint validation, deployment identity and immutable snapshots",
   expect(firstClient.transport.url).toBe(evm.rpcUrl);
   expect(secondClient.transport.url).toBe(evm.rpcUrl);
   expect(
-    getEthereumProvider(createEvmChainConfig("https://other.example.invalid")).transport.url,
+    getEthereumProvider(sepoliaChainConfig("https://other.example.invalid")).transport.url,
   ).toBe("https://other.example.invalid");
   for (const invalid of ["", "relative", "ws://example.invalid", "file:///etc/passwd"])
-    expect(() => createEvmChainConfig(invalid)).toThrow(/URL/i);
-  expect(createEvmChainConfig(undefined).rpcUrl).toBe("http://127.0.0.1:8545");
-  for (const rpc of [
-    undefined,
-    "http://127.0.0.1:8545",
-    "http://localhost:8545",
-    "http://[::1]:8545",
-  ])
-    expect(createEvmChainConfig(rpc).explorerUrl).toBe("");
-  const local = createMidnightChainConfig({});
+    expect(() => sepoliaChainConfig(invalid)).toThrow(/URL/i);
+  for (const rpc of ["http://127.0.0.1:8545", "http://localhost:8545", "http://[::1]:8545"]) {
+    const local = sepoliaChainConfig(rpc);
+    expect(local).toEqual({
+      network: "local",
+      chainId: BigInt(sepolia.id),
+      rpcUrl: rpc,
+      explorerUrl: "",
+    });
+  }
+  const local = NETWORK_DEFAULTS.midnight.undeployed;
   expect(local.networkId).toBe("undeployed");
   expect(local.indexerWsUrl).toBe("ws://127.0.0.1:8088/api/v4/graphql/ws");
-  for (const protocol of ["http:", "https:"]) {
-    const config = createMidnightChainConfig({
-      indexerUrl: `${protocol}//example.invalid/api/v4/graphql/?token=test`,
-    });
-    expect(config.indexerWsUrl).toBe(
+  expect(Object.isFrozen(local)).toBe(true);
+  for (const protocol of ["http:", "https:"])
+    expect(deriveIndexerWsUrl(`${protocol}//example.invalid/api/v4/graphql/?token=test`)).toBe(
       `${protocol === "https:" ? "wss:" : "ws:"}//example.invalid/api/v4/graphql/ws?token=test`,
     );
-  }
-  const supplied = {
-    networkId: "stagenet",
-    nodeUrl: "wss://node.example.invalid",
-    indexerUrl: "https://indexer.example.invalid/api/v4/graphql",
-    indexerWsUrl: "wss://subscriptions.example.invalid/custom",
-    proofServerUrl: "http://localhost:6300",
-  };
-  const stagenet = createMidnightChainConfig(supplied);
-  expect(stagenet.indexerWsUrl).toBe(supplied.indexerWsUrl);
-  expect(midnightIndexerConfig(stagenet).queryURL).toBe(supplied.indexerUrl);
-  expect(midnightIndexerConfig(stagenet).subscriptionURL).toBe(supplied.indexerWsUrl);
-  expect(stagenet.nodeUrl).toBe(supplied.nodeUrl);
-  const invalidInputs: [Parameters<typeof createMidnightChainConfig>[0], RegExp][] = [
-    [{ networkId: "typo" }, /NEXT_PUBLIC_MIDNIGHT_NETWORK_ID/],
-    [{ nodeUrl: "file:///tmp/node" }, /NEXT_PUBLIC_MIDNIGHT_NODE_URL/],
-    [{ indexerUrl: "wss://example.invalid" }, /NEXT_PUBLIC_MIDNIGHT_INDEXER_URL/],
-    [{ indexerWsUrl: "https://example.invalid" }, /NEXT_PUBLIC_MIDNIGHT_INDEXER_WS_URL/],
-    [{ proofServerUrl: "relative" }, /NEXT_PUBLIC_MIDNIGHT_PROOF_SERVER_URL/],
-  ];
-  expect(invalidInputs.length > 0).toBeTruthy();
-  for (const [input, error] of invalidInputs)
-    expect(() => createMidnightChainConfig(input)).toThrow(error);
-  for (const networkId of Object.values(MidnightNetwork).filter(
-    (network) => network !== MidnightNetwork.Undeployed,
-  ))
-    expect(() => createMidnightChainConfig({ networkId })).toThrow(
-      /NEXT_PUBLIC_MIDNIGHT_INDEXER_URL/,
-    );
+  expect(deriveIndexerWsUrl("")).toBe("");
+  const stagenet = NETWORK_DEFAULTS.midnight.stagenet;
+  expect(stagenet.indexerWsUrl).toBe(deriveIndexerWsUrl(stagenet.indexerUrl));
   const key = "0x024eef776e4f257d68983e45b340c2e9546c5df95447900b6aadfec68fb46fdee2";
   const inputs = { contractAddress: undefined, signetContractAddress: undefined, mpcSecpPub: key };
   const published = createVaultEnvironment(stagenet, evm, inputs);
@@ -98,12 +72,10 @@ it("preserves endpoint validation, deployment identity and immutable snapshots",
     );
   inputs.mpcSecpPub = "invalid";
   expect(published.mpcSecpPub).toBe(key);
-  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_NETWORK_ID", "undeployed");
-  vi.stubEnv("NEXT_PUBLIC_SEPOLIA_RPC_URL", evm.rpcUrl);
   process.env.NEXT_PUBLIC_MPC_SECP256K1_PUBKEY = key;
   vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS", "ab".repeat(32));
   vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS", "cd".repeat(32));
-  const snapshot = createVaultEnvironment(getMidnightChainConfig(), getEvmChainConfig());
+  const snapshot = createVaultEnvironment(local, evm);
   process.env.NEXT_PUBLIC_MPC_SECP256K1_PUBKEY = "invalid";
   expect(snapshot.mpcSecpPub).toBe(key);
   vi.stubEnv("NEXT_PUBLIC_ZK_CONFIG_ORIGIN", undefined);

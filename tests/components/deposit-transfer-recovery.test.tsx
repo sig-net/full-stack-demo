@@ -14,13 +14,12 @@ import {
 } from "@/lib/evm/transfer-failure";
 import type { Erc20Transfer } from "@/lib/evm/wallet/Wallet";
 import { flow } from "@/lib/midnight/flow";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { EvmBalancesProvider, useEvmBalances } from "@/providers/evm-balances-context";
 import { EvmDepositProvider, useEvmDeposit } from "@/providers/evm-deposit-context";
 import { EvmLocalFundingProvider } from "@/providers/evm-local-funding-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
-import { LocalFaucetProvider } from "@/providers/local-faucet-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
@@ -76,22 +75,23 @@ function Harness(properties: {
   return (
     <StrictMode>
       <QueryClientProvider client={client}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
-          <LocalFaucetProvider descriptor={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
-            <EvmWalletProvider>
-              <EvmBalancesProvider tokens={[token.erc20Address]}>
-                <EvmLocalFundingProvider>
-                  <EvmDepositProvider>
-                    <Bridge expose={expose} />
-                    {showSurface && (
-                      <EvmDepositTransfer token={token} sweepReserveExplained={false} />
-                    )}
-                  </EvmDepositProvider>
-                </EvmLocalFundingProvider>
-              </EvmBalancesProvider>
-            </EvmWalletProvider>
-          </LocalFaucetProvider>
-        </RuntimeConfigProvider>
+        <ConfigurationProvider
+          localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}
+          initialConfiguration={testRuntimeConfiguration()}
+        >
+          <EvmWalletProvider>
+            <EvmBalancesProvider tokens={[token.erc20Address]}>
+              <EvmLocalFundingProvider>
+                <EvmDepositProvider>
+                  <Bridge expose={expose} />
+                  {showSurface && (
+                    <EvmDepositTransfer token={token} sweepReserveExplained={false} />
+                  )}
+                </EvmDepositProvider>
+              </EvmLocalFundingProvider>
+            </EvmBalancesProvider>
+          </EvmWalletProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>
     </StrictMode>
   );

@@ -7,12 +7,12 @@ import { formatUnits } from "viem";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Feedback } from "@/components/ui/feedback";
 import { useAppliedExplorerLinks } from "@/hooks/use-explorer-links";
-import { browserWalletConnection, seedWalletConnection } from "@/lib/config/evm-wallet";
 import { ERC20_TOKENS } from "@/lib/constants/token-metadata";
 import { type BrowserWalletChoice, discoverBrowserWallets } from "@/lib/evm/wallet/BrowserWallet";
+import { browserWalletConnection, seedWalletConnection } from "@/lib/evm/wallet/connections";
+import { useConfiguration } from "@/providers/configuration-context";
 import { useEvmBalances } from "@/providers/evm-balances-context";
 import { useEvmWallet } from "@/providers/evm-wallet-context";
-import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 
 import { WalletMenu } from "./wallet-menu";
 
@@ -22,7 +22,7 @@ import { WalletMenu } from "./wallet-menu";
  * @returns The EVM wallet menu.
  */
 export function EvmWalletButton(): React.JSX.Element {
-  const { applied } = useRuntimeConfiguration();
+  const { applied } = useConfiguration();
   const evm = useEvmWallet();
   const balances = useEvmBalances();
   const explorers = useAppliedExplorerLinks();

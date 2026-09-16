@@ -11,8 +11,8 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { VaultIdentityButton, VaultIdentityHelp } from "@/components/vault-identity-controls";
+import { ConfigurationProvider, useConfiguration } from "@/providers/configuration-context";
 import { useVault } from "@/providers/vault-context";
-import { useVaultIdentity, VaultIdentityProvider } from "@/providers/vault-identity-context";
 
 vi.mock(import("@/providers/vault-context"), { spy: true });
 afterEach(cleanup);
@@ -28,50 +28,53 @@ beforeEach(() => {
   });
 });
 
-it("owns one validated identity without wallet, configuration or query providers", () => {
-  const view = renderHook(() => ({ first: useVaultIdentity(), second: useVaultIdentity() }), {
-    wrapper: VaultIdentityProvider,
+it("owns one validated identity without wallet or query providers", () => {
+  const view = renderHook(() => ({ first: useConfiguration(), second: useConfiguration() }), {
+    wrapper: ConfigurationProvider,
   });
-  const invalidated = vi.fn();
-  const unsubscribe = view.result.current.first.onInvalidate(invalidated);
+  const invalidated = vi.fn<(scopes: ReadonlySet<string>) => void>();
+  const unsubscribe = view.result.current.first.owner.onInvalidate(invalidated);
+  const revision = view.result.current.first.applied.revision;
   act(() => {
-    view.result.current.first.setIdentitySecret(` 0X${"A1".repeat(32)} `);
+    view.result.current.first.owner.setIdentity(` 0X${"A1".repeat(32)} `);
   });
-  expect(view.result.current.second.identitySecret).toBe("a1".repeat(32));
+  expect(view.result.current.second.identity.secret).toBe("a1".repeat(32));
+  expect(view.result.current.second.applied.revision).toBe(revision);
   expect(invalidated).toHaveBeenCalledTimes(1);
+  expect(invalidated.mock.calls[0]?.[0]).toEqual(new Set(["identity", "vault"]));
   act(() => {
-    view.result.current.second.setIdentitySecret("a1".repeat(32));
+    view.result.current.second.owner.setIdentity("a1".repeat(32));
   });
   expect(invalidated).toHaveBeenCalledTimes(1);
   expect(() => {
-    view.result.current.first.setIdentitySecret("bad");
+    view.result.current.first.owner.setIdentity("bad");
   }).toThrow("32-byte");
-  expect(view.result.current.first.getIdentitySecret()).toBe("a1".repeat(32));
+  expect(view.result.current.first.owner.getSnapshot().identity.secret).toBe("a1".repeat(32));
   act(() => {
-    view.result.current.second.clearIdentity();
+    view.result.current.second.owner.clearIdentity();
   });
-  expect(view.result.current.first.identitySecret).toBe("");
+  expect(view.result.current.first.identity.secret).toBe("");
   expect(invalidated).toHaveBeenCalledTimes(2);
   unsubscribe();
   act(() => {
-    view.result.current.first.setIdentitySecret("02".repeat(32));
+    view.result.current.first.owner.setIdentity("02".repeat(32));
   });
   expect(invalidated).toHaveBeenCalledTimes(2);
-  const read = view.result.current.first.getIdentitySecret;
+  const { owner } = view.result.current.first;
   view.unmount();
-  expect(read()).toBe("");
+  expect(owner.getSnapshot().identity.secret).toBe("");
 });
 
 it("shares applied status across both editors and discards drafts with focus return", async () => {
   render(
-    <VaultIdentityProvider>
+    <ConfigurationProvider>
       <div aria-label="Toolbar" role="group">
         <VaultIdentityButton />
       </div>
       <div aria-label="Home" role="group">
         <VaultIdentityButton />
       </div>
-    </VaultIdentityProvider>,
+    </ConfigurationProvider>,
   );
   const toolbar = within(screen.getByRole("group", { name: "Toolbar" }));
   const home = within(screen.getByRole("group", { name: "Home" }));
@@ -125,10 +128,10 @@ it("retains loading and retry feedback in the identity surface and clickable hel
     disconnect: vi.fn(),
   });
   render(
-    <VaultIdentityProvider>
+    <ConfigurationProvider>
       <VaultIdentityButton />
       <VaultIdentityHelp />
-    </VaultIdentityProvider>,
+    </ConfigurationProvider>,
   );
   fireEvent.click(screen.getByRole("button", { name: "Vault identity: not set" }));
   expect(screen.getByRole("alert").textContent).toBe("Binding failed");

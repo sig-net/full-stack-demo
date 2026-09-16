@@ -15,10 +15,9 @@ import type { ActivityTransaction } from "@/components/activity-list-table";
 import { TransactionDetailsDialog } from "@/components/activity-list-table/transaction-details-dialog";
 import { useMidnightTransactions } from "@/hooks/use-midnight-transactions";
 import { midnightTxHistory, type MidnightTxRecord } from "@/lib/midnight/tx-history";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { MidnightWalletProvider } from "@/providers/midnight-wallet-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { VaultProvider } from "@/providers/vault-context";
-import { VaultIdentityProvider } from "@/providers/vault-identity-context";
 
 import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
 
@@ -174,15 +173,13 @@ it("keeps selected details open while the selected row updates", async () => {
   const { ActivityListTable } = await import("@/components/activity-list-table");
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+      <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
         <MidnightWalletProvider>
-          <VaultIdentityProvider>
-            <VaultProvider>
-              <ActivityListTable />
-            </VaultProvider>
-          </VaultIdentityProvider>
+          <VaultProvider>
+            <ActivityListTable />
+          </VaultProvider>
         </MidnightWalletProvider>
-      </RuntimeConfigProvider>
+      </ConfigurationProvider>
     </QueryClientProvider>,
   );
   onTestFinished(() => {

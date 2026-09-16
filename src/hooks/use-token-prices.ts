@@ -4,7 +4,7 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { stataAssetsPerShare } from "@/lib/midnight/evm-stata";
-import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
+import { useConfiguration } from "@/providers/configuration-context";
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
 
@@ -83,7 +83,7 @@ async function fetchTokenPrices(
  * @returns Cached display-price query state with periodic foreground refresh.
  */
 export function useTokenPrices(symbols: string[] = []): UseQueryResult<Record<string, TokenPrice>> {
-  const { applied } = useRuntimeConfiguration();
+  const { applied } = useConfiguration();
   return useQuery({
     queryKey: [
       "tokenPrices",

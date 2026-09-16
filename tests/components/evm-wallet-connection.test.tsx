@@ -4,9 +4,10 @@ import { StrictMode } from "react";
 import type { Address } from "viem";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { createEvmChainConfig } from "@/lib/config/evm";
-import { browserWalletConnection } from "@/lib/config/evm-wallet";
+import { sepoliaChainConfig } from "@/lib/config/runtime";
+import { browserWalletConnection } from "@/lib/evm/wallet/connections";
 import * as rpc from "@/lib/rpc";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { useWalletBalances } from "@/providers/evm-balances-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
 
@@ -33,7 +34,9 @@ it("discards pending connections and evicts late balances after disconnect", asy
       wrapper: ({ children }) => (
         <StrictMode>
           <QueryClientProvider client={query}>
-            <EvmWalletProvider>{children}</EvmWalletProvider>
+            <ConfigurationProvider>
+              <EvmWalletProvider>{children}</EvmWalletProvider>
+            </ConfigurationProvider>
           </QueryClientProvider>
         </StrictMode>
       ),
@@ -90,12 +93,14 @@ it("connects a local wallet without a deployment marker", async () => {
   const f = browserWalletFixture();
   f.wallet.disconnect();
   const choice = { id: "local", name: "Local", provider: f.provider };
-  const config = createEvmChainConfig("http://127.0.0.1:8545");
+  const config = sepoliaChainConfig("http://127.0.0.1:8545");
   vi.spyOn(rpc, "getEthereumProvider").mockReturnValue(f.publicClient);
   const { result, unmount } = renderHook(useEvmWallet, {
     wrapper: ({ children }) => (
       <StrictMode>
-        <EvmWalletProvider>{children}</EvmWalletProvider>
+        <ConfigurationProvider>
+          <EvmWalletProvider>{children}</EvmWalletProvider>
+        </ConfigurationProvider>
       </StrictMode>
     ),
   });
@@ -129,7 +134,11 @@ it("connects an independently configured EVM chain without Midnight deployment o
     config,
   );
   const { result, unmount } = renderHook(useEvmWallet, {
-    wrapper: ({ children }) => <EvmWalletProvider>{children}</EvmWalletProvider>,
+    wrapper: ({ children }) => (
+      <ConfigurationProvider>
+        <EvmWalletProvider>{children}</EvmWalletProvider>
+      </ConfigurationProvider>
+    ),
   });
   try {
     await act(async () => {

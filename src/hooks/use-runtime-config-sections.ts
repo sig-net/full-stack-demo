@@ -6,13 +6,15 @@ import { useState } from "react";
 import { createPublicClient, http } from "viem";
 import { z } from "zod";
 
-import { EVM_NETWORKS, type EvmNetwork, selectEvmChain } from "@/lib/config/evm";
-import { deriveIndexerWsUrl } from "@/lib/config/midnight";
 import {
+  deriveIndexerWsUrl,
+  EVM_NETWORKS,
+  type EvmNetwork,
   getRuntimeDefaults,
   type RuntimeConfig,
   type RuntimeScope,
   type RuntimeSnapshot,
+  selectEvmChain,
   updateEvmConfig,
   validateRuntimeConfig,
 } from "@/lib/config/runtime";
@@ -21,8 +23,8 @@ import {
   midnightExplorerLink,
   PUBLIC_KEY_UNSUPPORTED,
 } from "@/lib/explorer";
+import { useConfiguration } from "@/providers/configuration-context";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
-import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
 
 type Draft = Omit<RuntimeConfig, "evm"> & {
   evm: Omit<RuntimeConfig["evm"], "chainId"> & { chainId: string };
@@ -162,7 +164,7 @@ interface ConfigurationSections {
  * @returns One local editor draft with atomic Apply and superseded-revision protection.
  */
 export function useRuntimeConfigSections(): ConfigurationSections {
-  const { owner, applied } = useRuntimeConfiguration();
+  const { owner, applied } = useConfiguration();
   const connection = useMidnightConnection();
   const [editing, setEditing] = useState<{ draft: Draft; revision: number } | null>(null);
   const [errors, setErrors] = useState<

@@ -4,8 +4,8 @@ import { IDBFactory } from "fake-indexeddb";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 
 import { ConfigurationMenu } from "@/components/configuration-menu";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { MidnightWalletProvider } from "@/providers/midnight-wallet-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 
 afterEach(() => {
   cleanup();
@@ -18,11 +18,11 @@ it("keeps incomplete configuration editable, rejects invalid values and stages n
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <RuntimeConfigProvider>
+      <ConfigurationProvider>
         <MidnightWalletProvider>
           <ConfigurationMenu />
         </MidnightWalletProvider>
-      </RuntimeConfigProvider>
+      </ConfigurationProvider>
     </QueryClientProvider>,
   );
   onTestFinished(() => {

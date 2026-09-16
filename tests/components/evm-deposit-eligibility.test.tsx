@@ -4,9 +4,9 @@ import type * as React from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { useEvmDepositEligibility } from "@/hooks/use-evm-deposit-eligibility";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { EvmBalancesProvider } from "@/providers/evm-balances-context";
 import { useEvmWallet } from "@/providers/evm-wallet-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 
 import {
   mockMatchingRuntimeServer,
@@ -52,9 +52,9 @@ it("computes EVM deposit eligibility from observed decimals, balances and fee es
   const wrapper = ({ children }: { children: React.ReactNode }): React.JSX.Element => {
     return (
       <QueryClientProvider client={queryClient}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
           <EvmBalancesProvider tokens={[token]}>{children}</EvmBalancesProvider>
-        </RuntimeConfigProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>
     );
   };

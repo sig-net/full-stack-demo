@@ -6,11 +6,14 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 
 import type { Wallet, WalletConnection } from "@/lib/evm/wallet/Wallet";
+
+import { useConfiguration } from "./configuration-context";
 
 interface EvmWalletState {
   wallet: Wallet | null;
@@ -21,6 +24,7 @@ interface EvmWalletState {
 }
 
 function useEvmWalletOwner(): EvmWalletState {
+  const { owner } = useConfiguration();
   const current = useRef<Wallet | null>(null);
   const pending = useRef<{
     wallet: Wallet;
@@ -79,6 +83,11 @@ function useEvmWalletOwner(): EvmWalletState {
       return Promise.resolve();
     }
   };
+  useLayoutEffect(() =>
+    owner.onInvalidate((scopes) => {
+      if (scopes.has("evm")) disconnect();
+    }),
+  );
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -93,7 +102,8 @@ function useEvmWalletOwner(): EvmWalletState {
 
 const EvmWalletContext = createContext<ReturnType<typeof useEvmWalletOwner> | null>(null);
 /**
- * Owns the signing session and invalidates it when its account, network or provider changes.
+ * Owns the signing session and invalidates it when its account, network or provider changes, or
+ * when the applied EVM configuration changes.
  *
  * @param props - Provider content.
  * @param props.children - Components sharing the signing session.

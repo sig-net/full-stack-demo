@@ -8,7 +8,7 @@ import * as polkadot from "@polkadot/api";
 import { Effect } from "effect";
 import { afterEach, expect, it, type MockInstance, vi } from "vitest";
 
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { NETWORK_DEFAULTS } from "@/lib/config/runtime";
 import type { WalletFacade } from "@/lib/midnight/seedlib";
 
 import { createWalletFacadeFixture } from "./wallet-facade-fixture";
@@ -73,7 +73,7 @@ async function fixture(handshake = false): Promise<{
           );
       }
     });
-  const { facade } = await createWalletFacadeFixture(createMidnightChainConfig({}));
+  const { facade } = await createWalletFacadeFixture(NETWORK_DEFAULTS.midnight.undeployed);
   return { facade, apis, submit };
 }
 

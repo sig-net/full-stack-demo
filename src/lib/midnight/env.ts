@@ -1,7 +1,7 @@
-import type { EvmChainConfig } from "../config/evm";
-import type { MidnightNodeConfig } from "../config/midnight";
 import {
+  type EvmChainConfig,
   getRuntimeDefaults,
+  type MidnightNodeConfig,
   resolveVaultConfiguration,
   validateRuntimeConfig,
 } from "../config/runtime";

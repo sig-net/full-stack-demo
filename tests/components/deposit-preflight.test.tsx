@@ -4,11 +4,11 @@ import { StrictMode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { EvmBalancesProvider } from "@/providers/evm-balances-context";
 import { EvmDepositProvider, useEvmDeposit } from "@/providers/evm-deposit-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
@@ -92,13 +92,13 @@ it("serialises EVM deposit preflight and preserves confirmed transfer state", as
       wrapper: ({ children }) => (
         <StrictMode>
           <QueryClientProvider client={queryClient}>
-            <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+            <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
               <EvmWalletProvider>
                 <EvmBalancesProvider tokens={[token.erc20Address]}>
                   <EvmDepositProvider>{children}</EvmDepositProvider>
                 </EvmBalancesProvider>
               </EvmWalletProvider>
-            </RuntimeConfigProvider>
+            </ConfigurationProvider>
           </QueryClientProvider>
         </StrictMode>
       ),

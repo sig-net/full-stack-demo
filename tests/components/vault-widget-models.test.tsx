@@ -21,7 +21,7 @@ import type { LendingPosition, MidnightTxRecord } from "@/lib/midnight/tx-histor
 import { deriveIdentity } from "@/lib/midnight/vault";
 import type { VaultBalances } from "@/lib/midnight/vault-balances";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
-import { RuntimeConfigProvider, useRuntimeConfiguration } from "@/providers/runtime-config-context";
+import { ConfigurationProvider, useConfiguration } from "@/providers/configuration-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
@@ -137,9 +137,9 @@ async function fixture(): Promise<WidgetFixture> {
   });
   const wrapper = ({ children }: PropsWithChildren): React.JSX.Element => (
     <QueryClientProvider client={query}>
-      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+      <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
         {children}
-      </RuntimeConfigProvider>
+      </ConfigurationProvider>
     </QueryClientProvider>
   );
   return {
@@ -175,7 +175,7 @@ it.each(["amount", "token", "network", "identity"] as const)(
     vi.mocked(quoteBestFeeExactInput)
       .mockReturnValueOnce(quote.promise)
       .mockResolvedValue({ fee: 3000n, amountOut: 300_000_000n });
-    const hook = renderHook(() => ({ swap: useVaultSwap(), runtime: useRuntimeConfiguration() }), {
+    const hook = renderHook(() => ({ swap: useVaultSwap(), runtime: useConfiguration() }), {
       wrapper: f.wrapper,
     });
     try {
@@ -243,7 +243,7 @@ it.each(
     const completion = Promise.withResolvers<{ refunded: boolean }>();
     f.swap.mockReturnValueOnce(completion.promise);
     const error = vi.spyOn(toast, "error");
-    const hook = renderHook(() => ({ swap: useVaultSwap(), runtime: useRuntimeConfiguration() }), {
+    const hook = renderHook(() => ({ swap: useVaultSwap(), runtime: useConfiguration() }), {
       wrapper: f.wrapper,
     });
     try {
@@ -406,12 +406,9 @@ it.each(["supply", "redeem"] as const)(
     f[kind].mockReturnValueOnce(completion.promise);
     const success = vi.spyOn(toast, "success");
     const error = vi.spyOn(toast, "error");
-    const hook = renderHook(
-      () => ({ lending: useVaultLending(), runtime: useRuntimeConfiguration() }),
-      {
-        wrapper: f.wrapper,
-      },
-    );
+    const hook = renderHook(() => ({ lending: useVaultLending(), runtime: useConfiguration() }), {
+      wrapper: f.wrapper,
+    });
     try {
       act(() => {
         if (kind === "supply") hook.result.current.lending.setSupplyAmount("1");

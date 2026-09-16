@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-import { type EvmChainConfig, getEvmNetworkDefaults } from "@/lib/config/evm";
-import { browserWalletConnection, seedWalletConnection } from "@/lib/config/evm-wallet";
+import { type EvmChainConfig, NETWORK_DEFAULTS } from "@/lib/config/runtime";
+import { browserWalletConnection, seedWalletConnection } from "@/lib/evm/wallet/connections";
 
 import { browserWalletFixture } from "./browser-wallet-fixture";
 
@@ -10,7 +10,7 @@ afterEach(() => vi.restoreAllMocks());
 it.each(["sepolia", "mainnet"] as const)(
   "connects both %s adapters without requesting the app RPC chain ID",
   async (network) => {
-    const config = getEvmNetworkDefaults(network);
+    const config = NETWORK_DEFAULTS.evm[network];
     const f = browserWalletFixture();
     f.controls.chain = network === "mainnet" ? "0x1" : "0xaa36a7";
     const browser = browserWalletConnection(f.wallet.choice, config).create(vi.fn());
@@ -34,8 +34,8 @@ it.each(["local", "override"] as const)(
   async (mode) => {
     const config: EvmChainConfig =
       mode === "local"
-        ? { ...getEvmNetworkDefaults("local"), chainId: 31337n }
-        : { ...getEvmNetworkDefaults("sepolia"), chainId: 31337n };
+        ? { ...NETWORK_DEFAULTS.evm.local, chainId: 31337n }
+        : { ...NETWORK_DEFAULTS.evm.sepolia, chainId: 31337n };
     const f = browserWalletFixture();
     f.controls.chain = "0x7a69";
     const browser = browserWalletConnection(f.wallet.choice, config).create(vi.fn());
@@ -54,7 +54,7 @@ it("rejects extension chain mismatch even when public RPC discovery is disabled"
   const f = browserWalletFixture();
   f.controls.chain = "0x1";
   f.controls.refuseSwitch = true;
-  const wallet = browserWalletConnection(f.wallet.choice, getEvmNetworkDefaults("sepolia")).create(
+  const wallet = browserWalletConnection(f.wallet.choice, NETWORK_DEFAULTS.evm.sepolia).create(
     vi.fn(),
   );
   const probe = vi

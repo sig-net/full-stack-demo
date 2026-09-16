@@ -11,7 +11,7 @@ import { POST as fundErc20 } from "@/app/api/evm/erc20-faucet/route";
 import { POST as fundEth } from "@/app/api/evm/eth-faucet/route";
 import { POST as fundNight } from "@/app/api/midnight/night-faucet/route";
 import * as localFaucet from "@/lib/config/local-faucet-server";
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { NETWORK_DEFAULTS } from "@/lib/config/runtime";
 import * as tokens from "@/lib/constants/token-metadata";
 import * as rpc from "@/lib/rpc";
 import { LOCAL_EVM_ETH_TARGET, LOCAL_NIGHT_GRANT } from "@/lib/wallet-funding";
@@ -152,7 +152,7 @@ it("uses ERC-20 decimals, restores each probe and serialises concurrent storage 
 });
 
 it("grants the fixed NIGHT amount through the canonical genesis wallet without registration", async () => {
-  const midnight = createMidnightChainConfig({});
+  const midnight = NETWORK_DEFAULTS.midnight.undeployed;
   const publicKey = signatureVerifyingKey({ tag: "schnorr", value: "01".repeat(32) });
   const address = MidnightBech32m.encode(
     "undeployed",

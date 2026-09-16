@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { LocalFaucetDescriptor } from "./local-faucet";
-import { isLoopbackEndpoint } from "./loopback-endpoint";
+import { isLoopbackEndpoint, NETWORK_DEFAULTS } from "./runtime";
 
 const endpoint = z.url({ protocol: /^(https?|wss?)$/ });
 const httpEndpoint = z.url({ protocol: /^https?$/ });
@@ -32,33 +32,34 @@ function localEndpoint(
  */
 export function getLocalFaucetConfiguration(): LocalFaucetConfiguration {
   if (typeof window !== "undefined") throw new Error("Local faucet configuration is server-only.");
+  const local = NETWORK_DEFAULTS.midnight.undeployed;
   const indexerUrl = localEndpoint(
     process.env.LOCAL_FAUCET_MIDNIGHT_INDEXER_URL,
-    "http://127.0.0.1:8088/api/v4/graphql",
+    local.indexerUrl,
     "LOCAL_FAUCET_MIDNIGHT_INDEXER_URL",
     httpEndpoint,
   );
   const indexerWsUrl = localEndpoint(
     process.env.LOCAL_FAUCET_MIDNIGHT_INDEXER_WS_URL,
-    "ws://127.0.0.1:8088/api/v4/graphql/ws",
+    local.indexerWsUrl,
     "LOCAL_FAUCET_MIDNIGHT_INDEXER_WS_URL",
     wsEndpoint,
   );
   const nodeUrl = localEndpoint(
     process.env.LOCAL_FAUCET_MIDNIGHT_NODE_URL,
-    "http://127.0.0.1:9944",
+    local.nodeUrl,
     "LOCAL_FAUCET_MIDNIGHT_NODE_URL",
     httpEndpoint,
   );
   const proofServerUrl = localEndpoint(
     process.env.LOCAL_FAUCET_MIDNIGHT_PROOF_SERVER_URL,
-    "http://127.0.0.1:6300",
+    local.proofServerUrl,
     "LOCAL_FAUCET_MIDNIGHT_PROOF_SERVER_URL",
     httpEndpoint,
   );
   const rpcUrl = localEndpoint(
     process.env.LOCAL_FAUCET_EVM_RPC_URL,
-    "http://127.0.0.1:8545",
+    NETWORK_DEFAULTS.evm.local.rpcUrl,
     "LOCAL_FAUCET_EVM_RPC_URL",
     httpEndpoint,
   );

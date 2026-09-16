@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { expect, it } from "vitest";
 
-import type { EvmChainConfig } from "@/lib/config/evm";
+import type { EvmChainConfig } from "@/lib/config/runtime";
 import {
   describeGasReserve,
   type GasReserveKind,

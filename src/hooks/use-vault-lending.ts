@@ -6,7 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { formatUnits } from "viem";
 
-import { resolveEvmChain } from "@/lib/config/evm";
+import { resolveEvmChain } from "@/lib/config/runtime";
 import {
   AAVE_USDC,
   STATA_USDC,
@@ -16,7 +16,7 @@ import {
 import type { FlowKind } from "@/lib/midnight/flow";
 import { attributedLendingHistory, lendingNetCost } from "@/lib/midnight/lending-position";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
-import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
+import { useConfiguration } from "@/providers/configuration-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
@@ -56,7 +56,7 @@ interface VaultLendingModel {
  * @returns Current balances, independent amount inputs and session-guarded lending actions.
  */
 export function useVaultLending(): VaultLendingModel {
-  const { applied } = useRuntimeConfiguration();
+  const { applied } = useConfiguration();
   const { binding } = useVault();
   const { balances } = useVaultBalances();
   const operations = useVaultOperations();

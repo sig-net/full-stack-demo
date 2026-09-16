@@ -18,7 +18,7 @@ import {
 } from "@sig-net/midnight-examples-erc20-vault-contract";
 import { vi } from "vitest";
 
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { NETWORK_DEFAULTS } from "@/lib/config/runtime";
 import { depositAddress, deriveIdentity, vaultAddress } from "@/lib/midnight/vault";
 import { buildVaultProviders } from "@/lib/midnight/vault-providers";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
@@ -33,7 +33,7 @@ export async function createVaultFixture(): Promise<
   VaultBinding & { contract: DeployedVaultContract }
 > {
   if (typeof window === "undefined") vi.stubGlobal("window", globalThis);
-  const configuration = createMidnightChainConfig({});
+  const configuration = NETWORK_DEFAULTS.midnight.undeployed;
   const wallet = new SeedWallet(configuration, "07".repeat(32));
   const providers = buildVaultProviders(wallet, configuration, "https://zk.example.invalid");
   const identity = deriveIdentity(new Uint8Array(32).fill(7));

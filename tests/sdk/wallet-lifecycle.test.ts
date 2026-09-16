@@ -12,7 +12,7 @@ import { MidnightNetwork } from "@sig-net/midnight";
 import { Subject } from "rxjs";
 import { expect, it, vi } from "vitest";
 
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { NETWORK_DEFAULTS } from "@/lib/config/runtime";
 import * as seedlib from "@/lib/midnight/seedlib";
 import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
 import type { WalletAddressSnapshot } from "@/lib/midnight/wallet/Wallet";
@@ -33,13 +33,7 @@ it("accepts every SDK seed length from 16 through 64 bytes and rejects values ou
 it("publishes all encoded addresses before facade construction across every network", async () => {
   const seed = "07".repeat(32);
   for (const networkId of Object.values(MidnightNetwork)) {
-    const configuration = createMidnightChainConfig({
-      networkId,
-      indexerUrl: "http://127.0.0.1:8088/api/v4/graphql",
-      indexerWsUrl: "ws://127.0.0.1:8088/api/v4/graphql/ws",
-      nodeUrl: "http://127.0.0.1:9944",
-      proofServerUrl: "http://127.0.0.1:6300",
-    });
+    const configuration = { ...NETWORK_DEFAULTS.midnight.undeployed, networkId };
     const { facade, keys } = await createWalletFacadeFixture(configuration, seed);
     const construction = Promise.withResolvers<seedlib.WalletFacade>();
     vi.mocked(seedlib.initialiseWalletFacade).mockReturnValueOnce(construction.promise);
@@ -185,7 +179,7 @@ it.each(["construction", "start", "sync"] as const)(
 );
 
 it("serialises opaque shielded and DUST state through their public SDK capabilities", async () => {
-  const { facade } = await createWalletFacadeFixture(createMidnightChainConfig({}));
+  const { facade } = await createWalletFacadeFixture(NETWORK_DEFAULTS.midnight.undeployed);
   try {
     const snapshots = await Promise.all([
       facade.shielded.serializeState(),
@@ -199,7 +193,7 @@ it("serialises opaque shielded and DUST state through their public SDK capabilit
 });
 
 it("coalesces DUST registration and disconnect prevents late signing or submission", async () => {
-  const configuration = createMidnightChainConfig({});
+  const configuration = NETWORK_DEFAULTS.midnight.undeployed;
   const { facade, state } = await createWalletFacadeFixture(configuration);
   vi.spyOn(state, "isSynced", "get").mockReturnValue(true);
   vi.spyOn(state.dust, "balance").mockReturnValue(0n);

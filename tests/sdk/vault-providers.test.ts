@@ -6,7 +6,7 @@ import { FetchZkConfigProvider } from "@midnight-ntwrk/midnight-js-fetch-zk-conf
 import * as indexer from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
 import { expect, it, vi } from "vitest";
 
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { deriveIndexerWsUrl, type MidnightNodeConfig } from "@/lib/config/runtime";
 import * as seedlib from "@/lib/midnight/seedlib";
 import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
 import {
@@ -31,12 +31,14 @@ it("captures provider origins and shares or evicts the bounded prover-key reques
   const { buildVaultProviders, joinVault } = await import("@/lib/midnight/vault-providers");
   expect(networkWrite).not.toHaveBeenCalled();
   expect(compiledAssets).not.toHaveBeenCalled();
-  const configuration = createMidnightChainConfig({
+  const indexerUrl = "https://indexer.example.invalid/api/v4/graphql";
+  const configuration: MidnightNodeConfig = {
     networkId: "stagenet",
-    indexerUrl: "https://indexer.example.invalid/api/v4/graphql",
+    indexerUrl,
+    indexerWsUrl: deriveIndexerWsUrl(indexerUrl),
     nodeUrl: "wss://node.example.invalid",
     proofServerUrl: "https://proof.example.invalid",
-  });
+  };
   const wallet = new SeedWallet(configuration, "07".repeat(32));
   const providers = buildVaultProviders(wallet, configuration, "https://zk.example.invalid/root");
   try {

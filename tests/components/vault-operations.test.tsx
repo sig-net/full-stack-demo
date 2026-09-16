@@ -15,8 +15,8 @@ import {
 } from "@/lib/midnight/flow";
 import { midnightTxHistory } from "@/lib/midnight/tx-history";
 import * as vault from "@/lib/midnight/vault";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations, VaultOperationsProvider } from "@/providers/vault-operations-context";
@@ -207,9 +207,9 @@ it.each(scenarios)(
       wrapper: ({ children }) => (
         <StrictMode>
           <QueryClientProvider client={query}>
-            <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+            <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
               <VaultOperationsProvider>{children}</VaultOperationsProvider>
-            </RuntimeConfigProvider>
+            </ConfigurationProvider>
           </QueryClientProvider>
         </StrictMode>
       ),
@@ -415,9 +415,9 @@ it("retains the confirmed deposit when manual recovery fails validation", async 
   const view = renderHook(() => useVaultOperations(), {
     wrapper: ({ children }) => (
       <QueryClientProvider client={query}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
           <VaultOperationsProvider>{children}</VaultOperationsProvider>
-        </RuntimeConfigProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>
     ),
   });
@@ -494,9 +494,9 @@ it.each(["failed", "completed"] as const)(
         wrapper: ({ children }) => (
           <StrictMode>
             <QueryClientProvider client={query}>
-              <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+              <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
                 <VaultOperationsProvider>{children}</VaultOperationsProvider>
-              </RuntimeConfigProvider>
+              </ConfigurationProvider>
             </QueryClientProvider>
           </StrictMode>
         ),

@@ -1,21 +1,21 @@
 import { MidnightNetwork } from "@sig-net/midnight";
 import { describe, expect, it, vi } from "vitest";
 
-import { createEvmChainConfig } from "@/lib/config/evm";
-import { createMidnightChainConfig } from "@/lib/config/midnight";
 import {
   createRuntimeConfigDto,
   createRuntimeConfiguration,
   getRuntimeDefaults,
+  NETWORK_DEFAULTS,
   runtimeConfigurationSchema,
   runtimeFingerprint,
+  sepoliaChainConfig,
   validateRuntimeConfig,
 } from "@/lib/config/runtime";
 
 function complete() {
   return {
-    midnight: createMidnightChainConfig({}),
-    evm: createEvmChainConfig(undefined),
+    midnight: NETWORK_DEFAULTS.midnight.undeployed,
+    evm: sepoliaChainConfig(NETWORK_DEFAULTS.evm.local.rpcUrl),
     vault: {
       contractAddress: "ab".repeat(32),
       signetContractAddress: "cd".repeat(32),

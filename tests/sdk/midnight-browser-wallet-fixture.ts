@@ -8,7 +8,7 @@ import {
 } from "@midnightntwrk/wallet-sdk-address-format";
 import { vi } from "vitest";
 
-import { createMidnightChainConfig, type NetworkId } from "@/lib/config/midnight";
+import { type MidnightNodeConfig, NETWORK_DEFAULTS, type NetworkId } from "@/lib/config/runtime";
 import { deriveAccountKeys } from "@/lib/midnight/seedlib";
 import { BrowserWallet, type BrowserWalletChoice } from "@/lib/midnight/wallet/BrowserWallet";
 
@@ -31,7 +31,7 @@ export interface BrowserWalletFixture {
     getDustAddress: ReturnType<typeof vi.fn<ConnectedAPI["getDustAddress"]>>;
   };
   readonly addresses: BrowserWalletAddresses;
-  readonly configuration: ReturnType<typeof createMidnightChainConfig>;
+  readonly configuration: MidnightNodeConfig;
 }
 
 export function createBrowserWalletAddresses(networkId: NetworkId): BrowserWalletAddresses {
@@ -66,7 +66,7 @@ export function createBrowserWalletAddresses(networkId: NetworkId): BrowserWalle
 }
 
 export function createBrowserWalletFixture(): BrowserWalletFixture {
-  const configuration = createMidnightChainConfig({});
+  const configuration = NETWORK_DEFAULTS.midnight.undeployed;
   const addresses = createBrowserWalletAddresses(configuration.networkId);
   const unavailable = <Result>(): Promise<Result> =>
     Promise.reject(new Error("This connector fixture method is not used."));

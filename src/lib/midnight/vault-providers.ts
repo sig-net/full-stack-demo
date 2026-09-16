@@ -19,7 +19,7 @@ import {
   witnesses,
 } from "@sig-net/midnight-examples-erc20-vault-contract";
 
-import type { MidnightNodeConfig } from "../config/midnight";
+import type { MidnightNodeConfig } from "../config/runtime";
 import { createCrossContractProofServerProvider } from "./seedlib";
 import { createVaultPrivateStateProvider } from "./vault-private-state";
 import type { Wallet } from "./wallet/Wallet";

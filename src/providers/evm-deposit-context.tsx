@@ -21,10 +21,10 @@ import {
 import type { VaultBinding } from "@/lib/midnight/vault-session";
 import { parseTokenAmount } from "@/lib/utils/token-amount";
 
+import { useConfiguration } from "./configuration-context";
 import { useEvmBalances } from "./evm-balances-context";
 import { useEvmWallet } from "./evm-wallet-context";
 import { useMidnightReadiness } from "./midnight-readiness-context";
-import { useRuntimeConfiguration } from "./runtime-config-context";
 import { useVaultBalances } from "./vault-balances-context";
 import { useVault } from "./vault-context";
 import { useVaultOperations } from "./vault-operations-context";
@@ -93,7 +93,7 @@ function isUnresolved(record: DepositTransfer | null): boolean {
 }
 
 function useEvmDepositOwner(): EvmDepositState {
-  const runtime = useRuntimeConfiguration();
+  const runtime = useConfiguration();
   const { wallet } = useEvmWallet();
   const balances = useEvmBalances();
   const queries = useQueryClient();

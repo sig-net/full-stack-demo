@@ -11,7 +11,7 @@ import {
   type DepositStepStatus,
 } from "@/lib/midnight/deposit-steps";
 import type { FlowEvent } from "@/lib/midnight/flow";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
 
@@ -132,9 +132,9 @@ async function mountStepper(input: StepperInput = {}): Promise<{
   const view = render(<DepositStepper token={token} />, {
     wrapper: ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={query}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
           {children}
-        </RuntimeConfigProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>
     ),
   });

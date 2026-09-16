@@ -43,8 +43,8 @@ import {
   VAULT_SWAP_REQUESTS_PATH,
 } from "@sig-net/midnight-examples-erc20-vault-contract";
 import { Contract as EthersContract, type ContractMethod, type Transaction } from "ethers";
+import { sepolia } from "viem/chains";
 
-import { sepolia } from "@/lib/config/evm";
 import { withEthersProvider } from "@/lib/evm/ethers-provider";
 import { assertGasReserve } from "@/lib/evm/gas-reserve";
 

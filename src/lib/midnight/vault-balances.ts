@@ -1,4 +1,4 @@
-import { createEvmChainConfig } from "@/lib/config/evm";
+import { sepoliaChainConfig } from "@/lib/config/runtime";
 import { fetchErc20Decimals } from "@/lib/constants/token-metadata";
 
 import { type Env, erc20Balance, vaultTokenType } from "./vault";
@@ -57,7 +57,7 @@ export async function readBalances(
       const [depositUnits, vaultPoolUnits, decimals] = await Promise.all([
         depAddr ? erc20Balance(env.evmRpcUrl, erc20, depAddr).catch(() => null) : null,
         vAddr ? erc20Balance(env.evmRpcUrl, erc20, vAddr).catch(() => null) : null,
-        fetchErc20Decimals(erc20, createEvmChainConfig(env.evmRpcUrl)).catch(() => null),
+        fetchErc20Decimals(erc20, sepoliaChainConfig(env.evmRpcUrl)).catch(() => null),
       ]);
       const vaultUnits =
         shieldedByType === null

@@ -9,7 +9,7 @@ import { PublicIdentifier } from "@/components/ui/public-identifier";
 import { useAppliedExplorerLinks } from "@/hooks/use-explorer-links";
 import { useLocalEthFunding } from "@/hooks/use-local-eth-funding";
 import type { VaultGasReserveObservation } from "@/hooks/use-vault-gas-reserves";
-import type { ResolvedEvmChainConfig } from "@/lib/config/evm";
+import type { ResolvedEvmChainConfig } from "@/lib/config/runtime";
 
 interface VaultGasAccountProps {
   heading: string;

@@ -4,8 +4,8 @@ import { IDBFactory } from "fake-indexeddb";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { useRuntimeConfigSections } from "@/hooks/use-runtime-config-sections";
+import { ConfigurationProvider, useConfiguration } from "@/providers/configuration-context";
 import { MidnightWalletProvider } from "@/providers/midnight-wallet-context";
-import { RuntimeConfigProvider, useRuntimeConfiguration } from "@/providers/runtime-config-context";
 
 import {
   mockMatchingRuntimeServer,
@@ -21,14 +21,14 @@ function fixture() {
     () => ({
       first: useRuntimeConfigSections(),
       second: useRuntimeConfigSections(),
-      runtime: useRuntimeConfiguration(),
+      runtime: useConfiguration(),
     }),
     {
       wrapper: ({ children }) => (
         <QueryClientProvider client={query}>
-          <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+          <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
             <MidnightWalletProvider>{children}</MidnightWalletProvider>
-          </RuntimeConfigProvider>
+          </ConfigurationProvider>
         </QueryClientProvider>
       ),
     },

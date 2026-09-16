@@ -18,12 +18,11 @@ import { MPC_OPERATION_ETH_RESERVE } from "@/lib/midnight/evm-envelope";
 import { flow } from "@/lib/midnight/flow";
 import * as vault from "@/lib/midnight/vault";
 import type { VaultBalances } from "@/lib/midnight/vault-balances";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { EvmBalancesProvider } from "@/providers/evm-balances-context";
 import { EvmLocalFundingProvider } from "@/providers/evm-local-funding-context";
 import { EvmWalletProvider } from "@/providers/evm-wallet-context";
-import { LocalFaucetProvider } from "@/providers/local-faucet-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { VaultOperationsProvider } from "@/providers/vault-operations-context";
@@ -160,24 +159,25 @@ async function mountSweepSurface(input: SweepSurfaceInput = {}): Promise<SweepSu
   const started = vi.fn<(units: bigint) => void>();
   const tree = (): React.JSX.Element => (
     <QueryClientProvider client={client}>
-      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
-        <LocalFaucetProvider descriptor={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
-          <EvmWalletProvider>
-            <EvmBalancesProvider tokens={[]}>
-              <EvmLocalFundingProvider>
-                <VaultOperationsProvider>
-                  <ObservedDepositAddress
-                    token={token}
-                    network={network}
-                    depositAddress={binding.depositAddress}
-                    onStartDeposit={started}
-                  />
-                </VaultOperationsProvider>
-              </EvmLocalFundingProvider>
-            </EvmBalancesProvider>
-          </EvmWalletProvider>
-        </LocalFaucetProvider>
-      </RuntimeConfigProvider>
+      <ConfigurationProvider
+        localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}
+        initialConfiguration={testRuntimeConfiguration()}
+      >
+        <EvmWalletProvider>
+          <EvmBalancesProvider tokens={[]}>
+            <EvmLocalFundingProvider>
+              <VaultOperationsProvider>
+                <ObservedDepositAddress
+                  token={token}
+                  network={network}
+                  depositAddress={binding.depositAddress}
+                  onStartDeposit={started}
+                />
+              </VaultOperationsProvider>
+            </EvmLocalFundingProvider>
+          </EvmBalancesProvider>
+        </EvmWalletProvider>
+      </ConfigurationProvider>
     </QueryClientProvider>
   );
   const mounted = render(tree());

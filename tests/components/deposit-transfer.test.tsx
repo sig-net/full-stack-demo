@@ -6,13 +6,12 @@ import { afterEach, expect, it, vi } from "vitest";
 import { EvmDepositTransfer } from "@/components/deposit-dialog/evm-deposit-transfer";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { EvmBalancesProvider, useEvmBalances } from "@/providers/evm-balances-context";
 import { EvmDepositProvider, useEvmDeposit } from "@/providers/evm-deposit-context";
 import { EvmLocalFundingProvider } from "@/providers/evm-local-funding-context";
 import { EvmWalletProvider, useEvmWallet } from "@/providers/evm-wallet-context";
-import { LocalFaucetProvider } from "@/providers/local-faucet-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
@@ -109,20 +108,21 @@ it.each([false, true])("retains transfer ownership with supersession=%s", async 
       wrapper: ({ children }) => (
         <StrictMode>
           <QueryClientProvider client={query}>
-            <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
-              <LocalFaucetProvider descriptor={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}>
-                <EvmWalletProvider>
-                  <EvmBalancesProvider tokens={[token.erc20Address]}>
-                    <EvmLocalFundingProvider>
-                      <EvmDepositProvider>
-                        {children}
-                        <EvmDepositTransfer token={token} sweepReserveExplained={false} />
-                      </EvmDepositProvider>
-                    </EvmLocalFundingProvider>
-                  </EvmBalancesProvider>
-                </EvmWalletProvider>
-              </LocalFaucetProvider>
-            </RuntimeConfigProvider>
+            <ConfigurationProvider
+              localFaucet={LOCAL_FAUCET_DESCRIPTOR_FIXTURE}
+              initialConfiguration={testRuntimeConfiguration()}
+            >
+              <EvmWalletProvider>
+                <EvmBalancesProvider tokens={[token.erc20Address]}>
+                  <EvmLocalFundingProvider>
+                    <EvmDepositProvider>
+                      {children}
+                      <EvmDepositTransfer token={token} sweepReserveExplained={false} />
+                    </EvmDepositProvider>
+                  </EvmLocalFundingProvider>
+                </EvmBalancesProvider>
+              </EvmWalletProvider>
+            </ConfigurationProvider>
           </QueryClientProvider>
         </StrictMode>
       ),

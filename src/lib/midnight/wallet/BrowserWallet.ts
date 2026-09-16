@@ -9,9 +9,10 @@ import {
   ShieldedEncryptionPublicKey,
   UnshieldedAddress,
 } from "@midnightntwrk/wallet-sdk-address-format";
+import { MidnightNetwork } from "@sig-net/midnight";
 import { z } from "zod";
 
-import { createMidnightChainConfig, type MidnightNodeConfig } from "@/lib/config/midnight";
+import type { MidnightNodeConfig } from "@/lib/config/runtime";
 
 import type { Wallet, WalletAddressSnapshot, WalletTransactions } from "./Wallet";
 
@@ -24,6 +25,14 @@ export type BrowserWalletChoice = Omit<InitialAPI, "connect"> & {
 type ShieldedAddresses = Awaited<ReturnType<ConnectedAPI["getShieldedAddresses"]>>;
 type AddressListener = (snapshot: WalletAddressSnapshot) => void;
 type DustAddressCapability = Pick<ConnectedAPI, "getDustAddress">;
+
+/** Endpoints the extension reports for its connected network, checked before any SDK use. */
+const reportedConfigurationSchema = z.object({
+  networkId: z.enum(MidnightNetwork),
+  indexerUri: z.url({ protocol: /^https?$/ }),
+  indexerWsUri: z.url({ protocol: /^wss?$/ }),
+  substrateNodeUri: z.url({ protocol: /^(https?|wss?)$/ }),
+});
 
 const injectedConnectorSchema = z.custom<InitialAPI>(
   (value) =>
@@ -172,11 +181,14 @@ export class BrowserWallet implements Wallet {
       throw new Error(
         `Switch ${this.name} to ${this.expected.networkId} and reconnect. The wallet reports ${configuration.networkId}.`,
       );
-    this.config = createMidnightChainConfig({
-      networkId: configuration.networkId,
-      indexerUrl: configuration.indexerUri,
-      indexerWsUrl: configuration.indexerWsUri,
-      nodeUrl: configuration.substrateNodeUri,
+    const reported = reportedConfigurationSchema.safeParse(configuration);
+    if (!reported.success)
+      throw new Error(`${this.name} reported an invalid network configuration. Reconnect it.`);
+    this.config = Object.freeze({
+      networkId: reported.data.networkId,
+      indexerUrl: reported.data.indexerUri,
+      indexerWsUrl: reported.data.indexerWsUri,
+      nodeUrl: reported.data.substrateNodeUri,
       proofServerUrl: this.expected.proofServerUrl,
     });
     await Promise.all([

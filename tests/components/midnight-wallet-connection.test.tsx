@@ -8,17 +8,17 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { MidnightWalletButton } from "@/components/midnight-wallet-button";
 import { WalletMenu } from "@/components/wallet-menu";
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { getRuntimeDefaults, NETWORK_DEFAULTS } from "@/lib/config/runtime";
 import * as seedlib from "@/lib/midnight/seedlib";
 import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
 import type { Wallet, WalletAddressSnapshot } from "@/lib/midnight/wallet/Wallet";
 import { MINIMUM_MIDNIGHT_DUST } from "@/lib/wallet-funding";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import {
   MidnightReadinessProvider,
   useMidnightReadiness,
 } from "@/providers/midnight-readiness-context";
 import { MidnightWalletProvider, useMidnightConnection } from "@/providers/midnight-wallet-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import * as vault from "@/providers/vault-context";
 
 import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
@@ -49,16 +49,17 @@ it.each(["synced", "funded", "failed"] as const)(
   "publishes addresses before SDK startup while readiness stays unavailable until %s",
   async (settlement) => {
     const fixture = await createSeedWalletFixture();
-    const configuration = createMidnightChainConfig({});
     const query = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const { result, unmount } = renderHook(
       () => ({ connection: useMidnightConnection(), readiness: useMidnightReadiness() }),
       {
         wrapper: ({ children }) => (
           <QueryClientProvider client={query}>
-            <MidnightWalletProvider configuration={configuration}>
-              <MidnightReadinessProvider>{children}</MidnightReadinessProvider>
-            </MidnightWalletProvider>
+            <ConfigurationProvider initialConfiguration={getRuntimeDefaults("undeployed")}>
+              <MidnightWalletProvider>
+                <MidnightReadinessProvider>{children}</MidnightReadinessProvider>
+              </MidnightWalletProvider>
+            </ConfigurationProvider>
           </QueryClientProvider>
         ),
       },
@@ -116,7 +117,7 @@ it.each(["synced", "funded", "failed"] as const)(
 it.each(["resolve", "reject"] as const)(
   "keeps the current wallet after an obsolete connection's late %s",
   async (settlement) => {
-    const configuration = createMidnightChainConfig({});
+    const configuration = NETWORK_DEFAULTS.midnight.undeployed;
     const builds: {
       wallet: SeedWallet;
       ready: PromiseWithResolvers<undefined>;
@@ -136,7 +137,9 @@ it.each(["resolve", "reject"] as const)(
     const deletion = vi.spyOn(indexedDB, "deleteDatabase");
     const { result, unmount } = renderHook(useMidnightConnection, {
       wrapper: ({ children }) => (
-        <MidnightWalletProvider configuration={configuration}>{children}</MidnightWalletProvider>
+        <ConfigurationProvider initialConfiguration={getRuntimeDefaults("undeployed")}>
+          <MidnightWalletProvider>{children}</MidnightWalletProvider>
+        </ConfigurationProvider>
       ),
     });
     const begin = (seed: string): Promise<Wallet> => {
@@ -232,7 +235,9 @@ it.each(["resolve", "reject"] as const)(
     unmount();
     const fresh = renderHook(useMidnightConnection, {
       wrapper: ({ children }) => (
-        <MidnightWalletProvider configuration={configuration}>{children}</MidnightWalletProvider>
+        <ConfigurationProvider initialConfiguration={getRuntimeDefaults("undeployed")}>
+          <MidnightWalletProvider>{children}</MidnightWalletProvider>
+        </ConfigurationProvider>
       ),
     });
     expect(fresh.result.current.wallet).toBeNull();
@@ -256,10 +261,11 @@ it.each(["construction", "start", "sync"] as const)(
     const previous = await createSeedWalletFixture("07".repeat(32));
     const current = await createSeedWalletFixture("08".repeat(32));
     vi.spyOn(current.state, "isSynced", "get").mockReturnValue(true);
-    const configuration = createMidnightChainConfig({});
     const { result } = renderHook(useMidnightConnection, {
       wrapper: ({ children }) => (
-        <MidnightWalletProvider configuration={configuration}>{children}</MidnightWalletProvider>
+        <ConfigurationProvider initialConfiguration={getRuntimeDefaults("undeployed")}>
+          <MidnightWalletProvider>{children}</MidnightWalletProvider>
+        </ConfigurationProvider>
       ),
     });
     let obsolete: Promise<Wallet | null> | undefined;
@@ -336,11 +342,11 @@ it("unmounts a pending wallet button without reporting its delayed rejection as 
   const initialise = vi.spyOn(SeedWallet.prototype, "initialise").mockReturnValue(ready.promise);
   const error = vi.spyOn(toast, "error");
   const view = render(
-    <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
-      <MidnightWalletProvider configuration={createMidnightChainConfig({})}>
+    <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
+      <MidnightWalletProvider>
         <MidnightWalletButton />
       </MidnightWalletProvider>
-    </RuntimeConfigProvider>,
+    </ConfigurationProvider>,
   );
   fireEvent.click(view.getByRole("button", { name: "Install seed" }));
   await waitFor(() => {

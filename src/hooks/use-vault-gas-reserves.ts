@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import type { ResolvedEvmChainConfig } from "@/lib/config/evm";
+import type { ResolvedEvmChainConfig } from "@/lib/config/runtime";
 import {
   describeGasReserve,
   type GasReserve,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/evm/gas-reserve";
 import { MPC_OPERATION_ETH_RESERVE, VAULT_EVM_ETH_RESERVE } from "@/lib/midnight/evm-envelope";
 import type { FlowKind } from "@/lib/midnight/flow";
-import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
+import { useConfiguration } from "@/providers/configuration-context";
 import { useVault } from "@/providers/vault-context";
 
 /** One paying account's observed reserve, its account and the freshness of that observation. */
@@ -88,7 +88,7 @@ function useReserve(inputs: ReserveInputs): VaultGasReserveObservation {
  * @returns The applied chain, one observation per paying account and the per-operation requirement.
  */
 export function useVaultGasReserves(): VaultGasReserves {
-  const { applied } = useRuntimeConfiguration();
+  const { applied } = useConfiguration();
   const vault = useVault();
   const network = applied.readiness.evm.status === "ready" ? applied.readiness.evm.value : null;
   const binding = vault.binding;

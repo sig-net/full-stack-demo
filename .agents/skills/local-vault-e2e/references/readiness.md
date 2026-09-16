@@ -20,7 +20,7 @@ short timeout. Return only public status fields, never full environment or log o
 
 Local funding eligibility compares the applied node/indexer/prover/EVM endpoints against the
 public faucet descriptor supplied with the app. Inspect `src/lib/config/local-faucet.ts` and
-`src/providers/local-faucet-context.tsx`. Wallet/vault operations use client configuration.
+`src/providers/configuration-context.tsx`. Wallet/vault operations use client configuration.
 There is no server deployment attestation API. Public or mixed configurations must issue no
 faucet requests. Do not alter intentional overrides merely to enable funding.
 

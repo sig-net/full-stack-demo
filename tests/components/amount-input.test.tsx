@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { WithdrawToken } from "@/components/withdraw-dialog";
 import { AmountInput } from "@/components/withdraw-dialog/amount-input";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 
 import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
 
@@ -36,9 +36,9 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false 
 function TestProviders({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
-      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+      <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
         {children}
-      </RuntimeConfigProvider>
+      </ConfigurationProvider>
     </QueryClientProvider>
   );
 }

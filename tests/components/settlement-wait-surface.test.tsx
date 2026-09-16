@@ -8,7 +8,7 @@ import { SettlementWaitDetail } from "@/components/settlement-wait-detail";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import type { FlowEvent, FlowKind } from "@/lib/midnight/flow";
 import type { VaultBinding } from "@/lib/midnight/vault-session";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { useVault } from "@/providers/vault-context";
 
 import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
@@ -85,9 +85,9 @@ function mountWait(
   const wrapper = ({ children }: { children: React.ReactNode }): React.JSX.Element => (
     <StrictMode>
       <QueryClientProvider client={client}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
           {children}
-        </RuntimeConfigProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>
     </StrictMode>
   );

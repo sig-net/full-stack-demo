@@ -5,7 +5,7 @@ import { createContext, type JSX, type ReactNode, useContext, useEffect, useRef 
 
 import { fundingErrorSchema, LOCAL_NIGHT_GRANT } from "@/lib/wallet-funding";
 
-import { useLocalFaucet } from "./local-faucet-context";
+import { useConfiguration } from "./configuration-context";
 import { useMidnightReadiness } from "./midnight-readiness-context";
 import { useMidnightConnection } from "./midnight-wallet-context";
 
@@ -16,7 +16,7 @@ interface LocalFundingState {
 }
 
 function useLocalFundingOwner(): LocalFundingState {
-  const faucet = useLocalFaucet();
+  const { localFaucet: faucet } = useConfiguration();
   const connection = useMidnightConnection();
   const { wallet, balances } = useMidnightReadiness();
   const pending = useRef<Promise<void> | null>(null);

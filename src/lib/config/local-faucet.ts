@@ -1,4 +1,4 @@
-import type { RuntimeConfig } from "./runtime";
+import { NETWORK_DEFAULTS, type RuntimeConfig } from "./runtime";
 
 /** Public endpoint settings that identify the server's fixed local faucets. */
 export interface LocalFaucetDescriptor {
@@ -15,6 +15,13 @@ export interface LocalFaucetDescriptor {
     readonly rpcUrl: string;
   };
 }
+
+/** Descriptor of a server that serves no local faucets, naming the local stack it would fund. */
+export const LOCAL_FAUCET_UNAVAILABLE: LocalFaucetDescriptor = Object.freeze({
+  available: false,
+  midnight: Object.freeze({ ...NETWORK_DEFAULTS.midnight.undeployed, networkId: "undeployed" }),
+  evm: Object.freeze({ chainId: "11155111", rpcUrl: NETWORK_DEFAULTS.evm.local.rpcUrl }),
+});
 
 /**
  * Checks whether the browser's applied configuration names the same local services.

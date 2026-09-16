@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-import { knownEvmChain } from "./config/evm";
-import type { NetworkId } from "./config/midnight";
+import { knownEvmChain, type NetworkId } from "./config/runtime";
 
 const explorerOrigin = z.url({ protocol: /^https?$/ });
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;

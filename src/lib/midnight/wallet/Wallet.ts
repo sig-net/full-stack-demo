@@ -2,7 +2,7 @@ import type { ConnectedAPI } from "@midnight-ntwrk/dapp-connector-api";
 import type { MidnightProvider, WalletProvider } from "@midnight-ntwrk/midnight-js/types";
 import type { SignatureVerifyingKey } from "@midnightntwrk/ledger-v9";
 
-import type { MidnightNodeConfig, NetworkId } from "@/lib/config/midnight";
+import type { MidnightNodeConfig, NetworkId } from "@/lib/config/runtime";
 import type { WalletMetadata } from "@/lib/wallet-metadata";
 
 /** SDK signing and submission capabilities supplied by a connected adapter. */

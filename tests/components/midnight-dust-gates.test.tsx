@@ -18,7 +18,7 @@ import { WithdrawDialog, type WithdrawToken } from "@/components/withdraw-dialog
 import { useMidnightHistory } from "@/hooks/use-midnight-history";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
-import { createMidnightChainConfig } from "@/lib/config/midnight";
+import { NETWORK_DEFAULTS } from "@/lib/config/runtime";
 import { MIDNIGHT_TOKENS } from "@/lib/constants/token-metadata";
 import { describeDustGate, type DustGateKind } from "@/lib/midnight/dust-gate";
 import {
@@ -34,12 +34,12 @@ import type { VaultBalances } from "@/lib/midnight/vault-balances";
 import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
 import type { Wallet } from "@/lib/midnight/wallet/Wallet";
 import { LOCAL_NIGHT_GRANT, MINIMUM_MIDNIGHT_DUST } from "@/lib/wallet-funding";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import {
   MidnightReadinessProvider,
   useMidnightReadiness,
 } from "@/providers/midnight-readiness-context";
 import { useMidnightConnection } from "@/providers/midnight-wallet-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations, VaultOperationsProvider } from "@/providers/vault-operations-context";
@@ -91,7 +91,7 @@ interface ReadinessFixture {
 }
 
 function connectedFixture(dust: bigint): ReadinessFixture {
-  const wallet = new SeedWallet(createMidnightChainConfig({}), "07".repeat(32));
+  const wallet = new SeedWallet(NETWORK_DEFAULTS.midnight.undeployed, "07".repeat(32));
   const dustRead = vi.spyOn(wallet, "getDustBalance").mockResolvedValue(dust);
   vi.spyOn(wallet, "getUnshieldedBalances").mockResolvedValue({ night: LOCAL_NIGHT_GRANT });
   vi.spyOn(wallet, "getUnregisteredNightBalance").mockResolvedValue(0n);
@@ -378,9 +378,9 @@ async function mountSurface(content: React.ReactNode): Promise<OperationSurface>
   });
   const tree = (): React.JSX.Element => (
     <QueryClientProvider client={client}>
-      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+      <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
         <VaultOperationsProvider>{content}</VaultOperationsProvider>
-      </RuntimeConfigProvider>
+      </ConfigurationProvider>
     </QueryClientProvider>
   );
   const mounted = render(tree());
@@ -586,9 +586,9 @@ it.each(operationCalls)(
     const hook = renderHook(useVaultOperations, {
       wrapper: ({ children }) => (
         <QueryClientProvider client={client}>
-          <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+          <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
             <VaultOperationsProvider>{children}</VaultOperationsProvider>
-          </RuntimeConfigProvider>
+          </ConfigurationProvider>
         </QueryClientProvider>
       ),
     });

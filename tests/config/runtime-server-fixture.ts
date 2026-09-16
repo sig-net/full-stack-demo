@@ -1,10 +1,10 @@
-import { getEvmChainConfig } from "@/lib/config/evm";
-import { getMidnightChainConfig } from "@/lib/config/midnight";
 import {
   createRuntimeConfiguration,
   getRuntimeDefaults,
+  NETWORK_DEFAULTS,
   type RuntimeConfig,
   type RuntimeConfiguration,
+  sepoliaChainConfig,
   validateRuntimeConfig,
 } from "@/lib/config/runtime";
 
@@ -12,8 +12,10 @@ import {
 export function testRuntimeConfiguration(): RuntimeConfig {
   const defaults = getRuntimeDefaults("stagenet");
   return validateRuntimeConfig({
-    midnight: getMidnightChainConfig(),
-    evm: getEvmChainConfig(),
+    midnight: NETWORK_DEFAULTS.midnight.undeployed,
+    evm: sepoliaChainConfig(
+      process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL ?? NETWORK_DEFAULTS.evm.local.rpcUrl,
+    ),
     vault: {
       contractAddress:
         process.env.NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS ?? defaults.vault.contractAddress,

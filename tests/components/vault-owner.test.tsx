@@ -7,10 +7,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import * as vault from "@/lib/midnight/vault";
 import * as assembly from "@/lib/midnight/vault-providers";
 import { SeedWallet } from "@/lib/midnight/wallet/SeedWallet";
+import { ConfigurationProvider, useConfiguration } from "@/providers/configuration-context";
 import { MidnightWalletProvider, useMidnightConnection } from "@/providers/midnight-wallet-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVault, VaultProvider } from "@/providers/vault-context";
-import { useVaultIdentity, VaultIdentityProvider } from "@/providers/vault-identity-context";
 
 import { testRuntimeConfiguration } from "../config/runtime-server-fixture";
 import { createVaultFixture } from "../sdk/vault-fixture";
@@ -35,20 +34,18 @@ it("reconciles wallet and identity replacements through the mounted effect event
   const mounted = renderHook(
     () => ({
       vault: useVault(),
-      identity: useVaultIdentity(),
+      configuration: useConfiguration(),
       connection: useMidnightConnection(),
     }),
     {
       wrapper: ({ children }) => (
         <StrictMode>
           <QueryClientProvider client={query}>
-            <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+            <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
               <MidnightWalletProvider>
-                <VaultIdentityProvider>
-                  <VaultProvider>{children}</VaultProvider>
-                </VaultIdentityProvider>
+                <VaultProvider>{children}</VaultProvider>
               </MidnightWalletProvider>
-            </RuntimeConfigProvider>
+            </ConfigurationProvider>
           </QueryClientProvider>
         </StrictMode>
       ),
@@ -58,10 +55,10 @@ it("reconciles wallet and identity replacements through the mounted effect event
     expect(mounted.result.current.vault.status).toBe("disconnected");
     for (const value of ["", "zz".repeat(32), "01"])
       expect(() => {
-        mounted.result.current.identity.setIdentitySecret(value);
+        mounted.result.current.configuration.owner.setIdentity(value);
       }).toThrow("32-byte");
     act(() => {
-      mounted.result.current.identity.setIdentitySecret(` 0X${"06".repeat(32)} `);
+      mounted.result.current.configuration.owner.setIdentity(` 0X${"06".repeat(32)} `);
     });
     expect(assembly.joinVault).not.toHaveBeenCalled();
     await act(async () => {
@@ -82,7 +79,7 @@ it("reconciles wallet and identity replacements through the mounted effect event
     ).not.toContain("06".repeat(32));
     const publicDispose = vi.spyOn(first.providers.publicDataProvider, "dispose");
     act(() => {
-      mounted.result.current.identity.setIdentitySecret("08".repeat(32));
+      mounted.result.current.configuration.owner.setIdentity("08".repeat(32));
       expect(first.assertActive).toThrow("superseded");
       expect(mounted.result.current.vault.requireBinding).toThrow("not ready");
     });
@@ -110,7 +107,7 @@ it("reconciles wallet and identity replacements through the mounted effect event
     expect(mounted.result.current.connection.wallet).not.toBe(previousWallet);
     const connected = mounted.result.current.connection.wallet;
     act(() => {
-      mounted.result.current.identity.clearIdentity();
+      mounted.result.current.configuration.owner.clearIdentity();
       expect(third.assertActive).toThrow("superseded");
       expect(mounted.result.current.vault.requireBinding).toThrow("not ready");
     });
@@ -126,7 +123,7 @@ it("reconciles wallet and identity replacements through the mounted effect event
         .filter((entry) => entry.queryKey[1] !== "disabled"),
     ).toHaveLength(0);
     act(() => {
-      mounted.result.current.identity.setIdentitySecret("08".repeat(32));
+      mounted.result.current.configuration.owner.setIdentity("08".repeat(32));
     });
     await waitFor(() => {
       expect(mounted.result.current.vault.status).toBe("ready");
@@ -136,7 +133,7 @@ it("reconciles wallet and identity replacements through the mounted effect event
       mounted.result.current.vault.disconnect();
       expect(beforeDisconnect.assertActive).toThrow("superseded");
     });
-    expect(mounted.result.current.identity.identitySecret).toBe("08".repeat(32));
+    expect(mounted.result.current.configuration.identity.secret).toBe("08".repeat(32));
     expect(mounted.result.current.connection.wallet).toBeNull();
     await act(async () => {
       await mounted.result.current.connection.installSeedWallet("09".repeat(32));
@@ -151,14 +148,14 @@ it("reconciles wallet and identity replacements through the mounted effect event
     vi.mocked(assembly.joinVault).mockReturnValueOnce(pendingJoin.promise);
     const beforeDelayedJoin = vi.mocked(assembly.joinVault).mock.calls.length;
     act(() => {
-      mounted.result.current.identity.setIdentitySecret("05".repeat(32));
+      mounted.result.current.configuration.owner.setIdentity("05".repeat(32));
     });
     await waitFor(() => {
       expect(assembly.joinVault).toHaveBeenCalledTimes(beforeDelayedJoin + 1);
     });
     expect(mounted.result.current.vault.status).toBe("loading");
     act(() => {
-      mounted.result.current.identity.setIdentitySecret("06".repeat(32));
+      mounted.result.current.configuration.owner.setIdentity("06".repeat(32));
     });
     await waitFor(() => {
       expect(mounted.result.current.vault.status).toBe("ready");
@@ -171,8 +168,8 @@ it("reconciles wallet and identity replacements through the mounted effect event
     expect(mounted.result.current.vault.requireBinding()).toBe(currentBinding);
     expect(currentBinding.identity.secretKey).toEqual(new Uint8Array(32).fill(6));
     act(() => {
-      mounted.result.current.identity.setIdentitySecret("07".repeat(32));
-      mounted.result.current.identity.setIdentitySecret("06".repeat(32));
+      mounted.result.current.configuration.owner.setIdentity("07".repeat(32));
+      mounted.result.current.configuration.owner.setIdentity("06".repeat(32));
       expect(currentBinding.assertActive).toThrow("superseded");
     });
     await waitFor(() => {

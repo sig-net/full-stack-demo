@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import type { MidnightNodeConfig } from "../config/midnight";
+import type { MidnightNodeConfig } from "../config/runtime";
 import type { Env, Identity, VaultSessionEnvironment } from "./vault";
 import type { AppVaultProviders, StandaloneVaultContract } from "./vault-providers";
 import type { Wallet } from "./wallet/Wallet";

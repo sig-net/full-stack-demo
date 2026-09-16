@@ -1,7 +1,6 @@
 import { createPublicClient, http, type PublicClient } from "viem";
 
-import type { EvmChainConfig } from "@/lib/config/evm";
-import { resolveEvmChain } from "@/lib/config/evm";
+import { type EvmChainConfig, resolveEvmChain } from "@/lib/config/runtime";
 
 /**
  * Constructs an HTTP client owned by the caller for its captured chain and endpoint.

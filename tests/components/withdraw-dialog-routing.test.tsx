@@ -8,8 +8,8 @@ import { WithdrawDialog } from "@/components/withdraw-dialog";
 import { AmountInput } from "@/components/withdraw-dialog/amount-input";
 import { useMidnightProgress } from "@/hooks/use-midnight-progress";
 import { useVaultGasReserves } from "@/hooks/use-vault-gas-reserves";
+import { ConfigurationProvider } from "@/providers/configuration-context";
 import { useMidnightReadiness } from "@/providers/midnight-readiness-context";
-import { RuntimeConfigProvider } from "@/providers/runtime-config-context";
 import { useVaultBalances } from "@/providers/vault-balances-context";
 import { useVault } from "@/providers/vault-context";
 import { useVaultOperations } from "@/providers/vault-operations-context";
@@ -46,9 +46,9 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false 
 function Providers({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
-      <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+      <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
         {children}
-      </RuntimeConfigProvider>
+      </ConfigurationProvider>
     </QueryClientProvider>
   );
 }
@@ -134,14 +134,14 @@ describe("withdrawal routing", () => {
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
           <WithdrawDialog
             open
             onOpenChange={onOpenChange}
             availableTokens={[token]}
             preSelectedToken={token}
           />
-        </RuntimeConfigProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>,
     );
     enterTransfer("1.234567", `0x${"12".repeat(20)}`);
@@ -232,14 +232,14 @@ describe("withdrawal routing", () => {
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <RuntimeConfigProvider initialConfiguration={testRuntimeConfiguration()}>
+        <ConfigurationProvider initialConfiguration={testRuntimeConfiguration()}>
           <WithdrawDialog
             open
             onOpenChange={onOpenChange}
             availableTokens={[token]}
             preSelectedToken={token}
           />
-        </RuntimeConfigProvider>
+        </ConfigurationProvider>
       </QueryClientProvider>,
     );
     enterTransfer("1.2345678", `0x${"12".repeat(20)}`);

@@ -14,13 +14,12 @@ import {
 } from "react";
 import { hexToBytes } from "viem";
 
-import { getZkConfigOrigin } from "@/lib/config/midnight";
+import { getZkConfigOrigin } from "@/lib/config/runtime";
 import { createVaultSession, type VaultBinding } from "@/lib/midnight/vault-session";
 import type { Wallet } from "@/lib/midnight/wallet/Wallet";
 
+import { useConfiguration } from "./configuration-context";
 import { useMidnightConnection } from "./midnight-wallet-context";
-import { useRuntimeConfiguration } from "./runtime-config-context";
-import { useVaultIdentity } from "./vault-identity-context";
 
 type VaultSession = ReturnType<typeof createVaultSession>;
 /** Binding eligibility keeps missing credentials, deployment failures and active loading distinct. */
@@ -51,10 +50,8 @@ const VaultContext = createContext<VaultContextValue | null>(null);
  */
 export function VaultProvider({ children }: { children: ReactNode }): JSX.Element {
   const connection = useMidnightConnection();
-  const runtime = useRuntimeConfiguration();
+  const { owner, identity } = useConfiguration();
   const queryClient = useQueryClient();
-  const identity = useVaultIdentity();
-  const { identitySecret } = identity;
   const revision = useRef(0);
   const current = useRef<{ session: VaultSession; wallet: Wallet } | null>(null);
   const [session, setSession] = useState<VaultSession | null>(null);
@@ -81,16 +78,8 @@ export function VaultProvider({ children }: { children: ReactNode }): JSX.Elemen
   };
 
   useLayoutEffect(() =>
-    runtime.owner.onInvalidate((scopes) => {
+    owner.onInvalidate((scopes) => {
       if (!scopes.has("vault")) return;
-      revision.current += 1;
-      clearSession();
-      setRetryRevision((value) => value + 1);
-    }),
-  );
-
-  useLayoutEffect(() =>
-    identity.onInvalidate(() => {
       revision.current += 1;
       clearSession();
       setRetryRevision((value) => value + 1);
@@ -99,8 +88,8 @@ export function VaultProvider({ children }: { children: ReactNode }): JSX.Elemen
 
   const startSession = (wallet: Wallet): VaultSession => {
     clearSession();
-    if (!identity.getIdentitySecret()) throw new Error("Enter a vault secret first.");
-    const captured = runtime.owner.getSnapshot().applied;
+    const { applied: captured, identity: secret } = owner.getSnapshot();
+    if (!secret.secret) throw new Error("Enter a vault secret first.");
     const { midnight, readiness } = captured;
     if (readiness.vault.status === "unavailable")
       throw new Error(readiness.vault.reasons.join(" "));
@@ -109,7 +98,7 @@ export function VaultProvider({ children }: { children: ReactNode }): JSX.Elemen
     const attempt = revision.current;
     const next = createVaultSession({
       wallet,
-      secret: hexToBytes(`0x${identity.getIdentitySecret()}`),
+      secret: hexToBytes(`0x${secret.secret}`),
       configuration: midnight,
       environment,
       zkOrigin,
@@ -193,7 +182,7 @@ export function VaultProvider({ children }: { children: ReactNode }): JSX.Elemen
     if (recovering.current) return;
     if (wallet && current.current?.wallet === wallet && connection.isCurrent(wallet)) return;
     clearSession();
-    if (!wallet || !identity.getIdentitySecret()) return;
+    if (!wallet || !owner.getSnapshot().identity.secret) return;
     try {
       startSession(wallet);
     } catch (error) {
@@ -206,7 +195,7 @@ export function VaultProvider({ children }: { children: ReactNode }): JSX.Elemen
   });
   useEffect(() => {
     onSessionInputsChanged(connection.wallet);
-  }, [connection.wallet, connection.session, identitySecret, retryRevision]);
+  }, [connection.wallet, connection.session, identity.secret, retryRevision]);
 
   useEffect(
     () => () => {
@@ -225,7 +214,7 @@ export function VaultProvider({ children }: { children: ReactNode }): JSX.Elemen
 
   const status: VaultStatus = !connection.wallet
     ? "disconnected"
-    : !identitySecret
+    : !identity.secret
       ? "missing-identity"
       : deploymentError
         ? "missing-deployment"

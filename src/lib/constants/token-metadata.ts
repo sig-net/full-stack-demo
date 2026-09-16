@@ -1,6 +1,6 @@
 import { erc20Abi, type Hex } from "viem";
 
-import type { EvmChainConfig } from "@/lib/config/evm";
+import type { EvmChainConfig } from "@/lib/config/runtime";
 import { queryClient } from "@/lib/query-client";
 import { getEthereumProvider } from "@/lib/rpc";
 

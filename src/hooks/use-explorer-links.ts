@@ -6,7 +6,7 @@ import {
   type ExplorerAvailability,
   midnightExplorerLink,
 } from "@/lib/explorer";
-import { useRuntimeConfiguration } from "@/providers/runtime-config-context";
+import { useConfiguration } from "@/providers/configuration-context";
 
 /** Explorer destinations for identifiers that belong to the currently applied configuration. */
 export interface AppliedExplorerLinks {
@@ -23,7 +23,7 @@ export interface AppliedExplorerLinks {
  * @returns Builders bound to the applied EVM chain and Midnight network.
  */
 export function useAppliedExplorerLinks(): AppliedExplorerLinks {
-  const { applied } = useRuntimeConfiguration();
+  const { applied } = useConfiguration();
   const evmSource: EvmExplorerSource = {
     explorerUrl: applied.evm.explorerUrl,
     chainId: applied.evm.chainId,

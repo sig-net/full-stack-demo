@@ -3,31 +3,26 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import type * as React from "react";
-import { useLayoutEffect } from "react";
 
 import { MidnightProgressToaster } from "@/components/midnight-progress-toaster";
 import type { LocalFaucetDescriptor } from "@/lib/config/local-faucet";
 import { ERC20_TOKENS } from "@/lib/constants/token-metadata";
 import { queryClient } from "@/lib/query-client";
 
+import { ConfigurationProvider, useConfiguration } from "./configuration-context";
 import { EvmBalancesProvider } from "./evm-balances-context";
 import { EvmDepositProvider } from "./evm-deposit-context";
 import { EvmLocalFundingProvider } from "./evm-local-funding-context";
-import { useEvmWallet } from "./evm-wallet-context";
 import { EvmWalletProvider } from "./evm-wallet-context";
-import { LocalFaucetProvider } from "./local-faucet-context";
 import { MidnightLocalFundingProvider } from "./midnight-local-funding-context";
 import { MidnightReadinessProvider } from "./midnight-readiness-context";
-import { useMidnightConnection } from "./midnight-wallet-context";
 import { MidnightWalletProvider } from "./midnight-wallet-context";
-import { RuntimeConfigProvider, useRuntimeConfiguration } from "./runtime-config-context";
 import { VaultBalancesProvider } from "./vault-balances-context";
 import { VaultProvider } from "./vault-context";
-import { VaultIdentityProvider } from "./vault-identity-context";
 import { VaultOperationsProvider } from "./vault-operations-context";
 
 function ConfiguredEvmBalances({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const { applied } = useRuntimeConfiguration();
+  const { applied } = useConfiguration();
   return (
     <EvmBalancesProvider
       tokens={
@@ -37,27 +32,6 @@ function ConfiguredEvmBalances({ children }: { children: React.ReactNode }): Rea
       {children}
     </EvmBalancesProvider>
   );
-}
-function RuntimeWallets({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const runtime = useRuntimeConfiguration();
-  return (
-    <MidnightWalletProvider configuration={runtime.applied.midnight}>
-      <RuntimeWalletInvalidation />
-      {children}
-    </MidnightWalletProvider>
-  );
-}
-function RuntimeWalletInvalidation(): null {
-  const { owner } = useRuntimeConfiguration();
-  const evm = useEvmWallet();
-  const midnight = useMidnightConnection();
-  useLayoutEffect(() =>
-    owner.onInvalidate((scopes) => {
-      if (scopes.has("evm")) evm.disconnect();
-      if (scopes.has("midnight")) midnight.disconnect();
-    }),
-  );
-  return null;
 }
 
 /**
@@ -77,35 +51,31 @@ export function Providers({
 }): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
-      <RuntimeConfigProvider>
-        <LocalFaucetProvider descriptor={localFaucet}>
-          <EvmWalletProvider>
+      <ConfigurationProvider localFaucet={localFaucet}>
+        <EvmWalletProvider>
+          <MidnightWalletProvider>
             <ConfiguredEvmBalances>
               <EvmLocalFundingProvider>
-                <RuntimeWallets>
-                  <MidnightReadinessProvider>
-                    <MidnightLocalFundingProvider>
-                      <VaultIdentityProvider>
-                        <VaultProvider>
-                          <VaultBalancesProvider>
-                            <VaultOperationsProvider>
-                              <EvmDepositProvider>
-                                {children}
-                                <MidnightProgressToaster />
-                              </EvmDepositProvider>
-                            </VaultOperationsProvider>
-                          </VaultBalancesProvider>
-                        </VaultProvider>
-                      </VaultIdentityProvider>
-                    </MidnightLocalFundingProvider>
-                  </MidnightReadinessProvider>
-                </RuntimeWallets>
+                <MidnightReadinessProvider>
+                  <MidnightLocalFundingProvider>
+                    <VaultProvider>
+                      <VaultBalancesProvider>
+                        <VaultOperationsProvider>
+                          <EvmDepositProvider>
+                            {children}
+                            <MidnightProgressToaster />
+                          </EvmDepositProvider>
+                        </VaultOperationsProvider>
+                      </VaultBalancesProvider>
+                    </VaultProvider>
+                  </MidnightLocalFundingProvider>
+                </MidnightReadinessProvider>
               </EvmLocalFundingProvider>
             </ConfiguredEvmBalances>
-            <ReactQueryDevtools initialIsOpen={false} />
-          </EvmWalletProvider>
-        </LocalFaucetProvider>
-      </RuntimeConfigProvider>
+          </MidnightWalletProvider>
+          <ReactQueryDevtools initialIsOpen={false} />
+        </EvmWalletProvider>
+      </ConfigurationProvider>
     </QueryClientProvider>
   );
 }
