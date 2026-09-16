@@ -53,6 +53,37 @@ it("retains endpoints when all deployment lookups throw and detects malformed su
   lookups.vault.mockReturnValue("invalid");
   expect(() => getRuntimeDefaults("mainnet")).toThrow(/contract address/);
 });
+it("applies public deployment variables to the startup network only and validates them", () => {
+  published();
+  const key = "0x024eef776e4f257d68983e45b340c2e9546c5df95447900b6aadfec68fb46fdee2";
+  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_NETWORK_ID", "undeployed");
+  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS", "0x" + "EF".repeat(32));
+  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS", "12".repeat(32));
+  vi.stubEnv("NEXT_PUBLIC_MPC_SECP256K1_PUBKEY", key.slice(2));
+  expect(getRuntimeDefaults().vault).toEqual({
+    contractAddress: "ef".repeat(32),
+    signetContractAddress: "12".repeat(32),
+    mpcPubkey: key,
+  });
+  expect(getRuntimeDefaults("preview").vault.contractAddress).toBe("ab".repeat(32));
+  expect(getRuntimeDefaults("preview").vault.mpcPubkey).toBe(key);
+  expect(getRuntimeDefaults("undeployed").vault.mpcPubkey).toBe(key);
+  const owner = createRuntimeConfiguration();
+  owner.setMidnight("networkId", "preview");
+  owner.setMidnight("networkId", "undeployed");
+  expect(owner.getSnapshot().applied.vault.contractAddress).toBe("ef".repeat(32));
+  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_NETWORK_ID", "preview");
+  expect(getRuntimeDefaults().vault.contractAddress).toBe("ef".repeat(32));
+  expect(getRuntimeDefaults("undeployed").vault.contractAddress).toBe("");
+  expect(getRuntimeDefaults("undeployed").vault.mpcPubkey).toBe("");
+  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS", "");
+  expect(getRuntimeDefaults().vault.signetContractAddress).toBe("cd".repeat(32));
+  vi.stubEnv("NEXT_PUBLIC_MPC_SECP256K1_PUBKEY", "02" + "00".repeat(32));
+  expect(() => getRuntimeDefaults()).toThrow(/public key/);
+  vi.stubEnv("NEXT_PUBLIC_MPC_SECP256K1_PUBKEY", "");
+  vi.stubEnv("NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS", "invalid");
+  expect(() => getRuntimeDefaults()).toThrow(/contract address/);
+});
 it.each(Object.values(MidnightNetwork).filter((network) => network !== MidnightNetwork.Undeployed))(
   "picks up future publication for %s on reset",
   (network) => {

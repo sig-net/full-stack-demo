@@ -62,7 +62,7 @@ yarn dev
 
 The asset command verifies complete vault and Signet trees in staging before replacing `public/zk`. The vault uses `/zk/{keys,zkir,compiler}` and Signet uses `/zk/signet/{keys,zkir,compiler}`. A failed or incomplete preparation preserves the serving tree. The package manifests and browser-pinned hashes must agree. `NEXT_PUBLIC_ZK_CONFIG_ORIGIN` defaults to this app's `/zk` URL.
 
-Open [the local app](http://localhost:3000). The browser starts with **undeployed** and EVM **Local testnet** selected. Midnight connection/deployment fields are empty, and the local EVM chain ID is discovered from Anvil. Open the header **Configuration** gear and enter the generated public values from the UI `.env.local`:
+Open [the local app](http://localhost:3000). The browser starts with **undeployed** and EVM **Local testnet** selected. The ERC20 vault section comes from the UI `.env.local`, and the local EVM chain ID is discovered from Anvil. Open the header **Configuration** gear and check the generated public values against the UI `.env.local`:
 
 | Section | Field | Generated value |
 | --- | --- | --- |
@@ -154,7 +154,7 @@ change at settlement. Completed Activity and the resulting balances establish su
 
 ## Runtime configuration
 
-The header gear opens **Configuration**, grouped into ERC20 vault, Midnight and EVM. Browser initialisation uses the selected Midnight network's defaults. `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID` selects that initial network. Generated endpoint, address and MPC environment values configure the server. Enter those public values explicitly in the browser for a local stack.
+The header gear opens **Configuration**, grouped into ERC20 vault, Midnight and EVM. Browser initialisation uses the selected Midnight network's defaults. `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID` selects that initial network, and `NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS`, `NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS` and `NEXT_PUBLIC_MPC_SECP256K1_PUBKEY` supply that network's vault deployment, so a page reload on a local stack restores it.
 
 | Midnight network | Connection defaults | EVM and vault defaults |
 | --- | --- | --- |

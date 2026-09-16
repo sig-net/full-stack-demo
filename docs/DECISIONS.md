@@ -4,7 +4,7 @@
 
 Midnight endpoints, the EVM chain and vault deployment are independent records. They share one immutable transaction owner so validation completes before dependent resources are invalidated and a revision is published. The editor owns its draft. Multiple editors cannot overwrite a newer applied configuration through stale Apply.
 
-Browser startup uses network defaults. Generated local endpoints and deployment values remain server inputs and are entered explicitly into the browser editor. Clearing fields preserves an incomplete but editable configuration. The independent vault identity stays in page memory across configuration changes.
+Browser startup uses network defaults, with the public vault address, Signet address and MPC key variables applied to the startup network only. Generated local endpoints are entered explicitly into the browser editor. Clearing fields preserves an incomplete but editable configuration. The independent vault identity stays in page memory across configuration changes.
 
 Deployment defaults use each installed package lookup independently. Missing publications leave only the corresponding field empty. Reset resolves the lookups again, including publications added by future package releases. Stagenet endpoint literals intentionally mirror the integration repository source requested for this application. Public Preview, Preprod and Mainnet endpoints use the documented v4 paths.
 

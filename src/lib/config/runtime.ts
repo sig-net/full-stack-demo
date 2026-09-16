@@ -251,14 +251,24 @@ export function getZkConfigOrigin(browserOrigin: string): string {
 }
 
 /**
- * @param networkId - Selected network, defaulting only from its public startup selector.
- * @returns Independently resolved deployment publications and network endpoint defaults.
+ * @returns The network selected by the public startup selector, defaulting to undeployed.
+ * @throws {Error} If the selector names an unknown network.
  */
-export function getRuntimeDefaults(
-  networkId: NetworkId = z
-    .enum(MidnightNetwork)
-    .parse(process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID ?? "undeployed"),
-): RuntimeConfig {
+function startupNetwork(): MidnightNetwork {
+  return z.enum(MidnightNetwork).parse(process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID ?? "undeployed");
+}
+/**
+ * @param networkId - Selected network, defaulting to the startup network.
+ * @returns Independently resolved deployment publications and network endpoint defaults. The
+ * public vault address, Signet address and MPC key variables describe a deployment on the startup
+ * network, so they replace that network's published values and leave every other network's
+ * defaults alone.
+ * @throws {Error} If a set address variable is not a 32-byte hexadecimal address, or a set key
+ * variable is not a secp256k1 public key.
+ */
+export function getRuntimeDefaults(networkId: NetworkId = startupNetwork()): RuntimeConfig {
+  const generated = (value: string | undefined): string | undefined =>
+    value === undefined || value === "" ? undefined : value;
   const optional = (lookup: () => string): string => {
     try {
       return lookup();
@@ -267,17 +277,31 @@ export function getRuntimeDefaults(
     }
   };
   const network = z.enum(MidnightNetwork).parse(networkId);
+  const published =
+    network === MidnightNetwork.Undeployed
+      ? { contractAddress: "", signetContractAddress: "", mpcPubkey: "" }
+      : {
+          contractAddress: optional(() => getVaultContractAddress(network)),
+          signetContractAddress: optional(() => getSignetContractAddress(network)),
+          mpcPubkey: optional(() => getMpcRootPublicKey(network)),
+        };
   return validateRuntimeConfig({
     midnight: NETWORK_DEFAULTS.midnight[networkId],
     evm: NETWORK_DEFAULTS.evm[evmNetworkForMidnight(networkId)],
     vault:
-      network === MidnightNetwork.Undeployed
-        ? { contractAddress: "", signetContractAddress: "", mpcPubkey: "" }
-        : {
-            contractAddress: optional(() => getVaultContractAddress(network)),
-            signetContractAddress: optional(() => getSignetContractAddress(network)),
-            mpcPubkey: optional(() => getMpcRootPublicKey(network)),
-          },
+      network === startupNetwork()
+        ? {
+            ...published,
+            contractAddress:
+              generated(process.env.NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS) ??
+              published.contractAddress,
+            signetContractAddress:
+              generated(process.env.NEXT_PUBLIC_MIDNIGHT_SIGNET_CONTRACT_ADDRESS) ??
+              published.signetContractAddress,
+            mpcPubkey:
+              generated(process.env.NEXT_PUBLIC_MPC_SECP256K1_PUBKEY) ?? published.mpcPubkey,
+          }
+        : published,
   });
 }
 
