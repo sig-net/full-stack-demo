@@ -58,8 +58,7 @@ RUN set -eu; \
     rm /tmp/compact.tar.xz /tmp/compactc.zip; \
     compact update "$compiler" || ln -sfn "$versions"/* "$HOME/.compact/bin/"; \
     compact compile "+${compiler}" --version
-COPY scripts/prepare-zk-assets.mjs scripts/
-COPY src/lib/midnight/zk-manifest-hashes.ts src/lib/midnight/
+COPY scripts/prepare-zk-assets.mjs scripts/zk-manifest-hashes.ts scripts/
 RUN yarn zk-assets
 
 # Next.js inlines NEXT_PUBLIC_ values into the browser bundle at build time. Pass the deployment's

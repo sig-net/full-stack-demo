@@ -38,7 +38,8 @@ query ($address: HexEncoded!) {
 
 Require no GraphQL errors and a non-null matching address. This establishes indexed contract
 presence, not every ledger invariant. Compare served `/zk/compiler/contract-manifest.json` and
-`/zk/signet/compiler/contract-manifest.json` bytes with `src/lib/midnight/zk-manifest-hashes.ts` using SHA-256.
+`/zk/signet/compiler/contract-manifest.json` bytes with the installed contract package manifests
+using SHA-256, as `scripts/zk-manifest-hashes.ts` computes them.
 
 Use the session's identified browser owner as relay. If ownership is unknown, make one tab-list
 attempt. If the prepared profile is owned elsewhere, ask that owner for

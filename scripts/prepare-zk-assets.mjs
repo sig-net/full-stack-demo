@@ -14,27 +14,16 @@ import {
   ZK_MANIFEST_FILE_NAME,
 } from "@midnight-ntwrk/midnight-js/utils";
 
-import {
-  SIGNET_ZK_MANIFEST_SHA256,
-  VAULT_ZK_MANIFEST_SHA256,
-} from "../src/lib/midnight/zk-manifest-hashes.ts";
+import { readZkManifestHashes, ZK_MANIFEST_SOURCES } from "./zk-manifest-hashes.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = `${ZK_MANIFEST_DIR}/${ZK_MANIFEST_FILE_NAME}`;
-const trees = [
-  {
-    child: "",
-    manifestUrl: import.meta
-      .resolve("@sig-net/midnight-examples-erc20-vault-contract/managed/erc20-vault/compiler/contract-manifest.json"),
-    pin: VAULT_ZK_MANIFEST_SHA256,
-  },
-  {
-    child: "signet",
-    manifestUrl: import.meta
-      .resolve("@sig-net/midnight-contract/managed/compiler/contract-manifest.json"),
-    pin: SIGNET_ZK_MANIFEST_SHA256,
-  },
-];
+const pins = readZkManifestHashes();
+const trees = ZK_MANIFEST_SOURCES.map(({ child, manifestUrl }) => ({
+  child,
+  manifestUrl,
+  pin: child === "signet" ? pins.signet : pins.vault,
+}));
 
 /** @returns {void} */
 function reportManifests() {

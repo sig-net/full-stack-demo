@@ -22,7 +22,7 @@ it("verifies and atomically promotes small complete assets using the real SDK an
       join(root, "node_modules/@midnight-ntwrk"),
       "dir",
     );
-    const pins: string[] = [];
+    let manifests = 0;
     for (const [child, packageName, exported] of [
       [
         "",
@@ -60,18 +60,13 @@ it("verifies and atomically promotes small complete assets using the real SDK an
         }),
       );
       await write(`${packageRoot}/${exported}`, manifest);
-      pins.push(createHash("sha256").update(manifest).digest("hex"));
+      manifests += 1;
     }
-    expect(pins).toHaveLength(2);
-    const [vaultPin, signetPin] = pins;
-    if (!vaultPin || !signetPin) throw new Error("Both fixture integrity pins are required");
-    await write(
-      "src/lib/midnight/zk-manifest-hashes.ts",
-      `export const VAULT_ZK_MANIFEST_SHA256 = "${vaultPin}";\nexport const SIGNET_ZK_MANIFEST_SHA256 = "${signetPin}";\n`,
-    );
+    expect(manifests).toBe(2);
     const script = "scripts/prepare-zk-assets.mjs";
+    const hashes = "scripts/zk-manifest-hashes.ts";
     const harness = "tests/assets/fixtures/staging.ts";
-    for (const relative of [script, harness]) {
+    for (const relative of [script, hashes, harness]) {
       await mkdir(dirname(join(root, relative)), { recursive: true });
       await copyFile(relative, join(root, relative));
       expect(await readFile(join(root, relative))).toStrictEqual(await readFile(relative));

@@ -60,7 +60,7 @@ yarn zk-assets
 yarn dev
 ```
 
-The asset command verifies complete vault and Signet trees in staging before replacing `public/zk`. The vault uses `/zk/{keys,zkir,compiler}` and Signet uses `/zk/signet/{keys,zkir,compiler}`. A failed or incomplete preparation preserves the serving tree. The package manifests and browser-pinned hashes must agree. `NEXT_PUBLIC_ZK_CONFIG_ORIGIN` defaults to this app's `/zk` URL.
+The asset command verifies complete vault and Signet trees in staging before replacing `public/zk`. The vault uses `/zk/{keys,zkir,compiler}` and Signet uses `/zk/signet/{keys,zkir,compiler}`. A failed or incomplete preparation preserves the serving tree. The browser pins each served tree to the SHA-256 of the installed contract package's manifest, inlined by `next.config.ts` at build time, so a contract package upgrade needs only `yarn zk-assets` and a rebuild. `NEXT_PUBLIC_ZK_CONFIG_ORIGIN` defaults to this app's `/zk` URL.
 
 Open [the local app](http://localhost:3000). The browser starts with **undeployed** and EVM **Local testnet** selected. The ERC20 vault section comes from the UI `.env.local`, and the local EVM chain ID is discovered from Anvil. Open the header **Configuration** gear and check the generated public values against the UI `.env.local`:
 
@@ -295,8 +295,9 @@ variables and the NIGHT faucet imports the canonical genesis seed from the deplo
 The vault package `@sig-net/midnight-examples-erc20-vault-contract` supplies generated contract
 types, witnesses and deployment defaults. `@sig-net/midnight` supplies the Signet SDK and its
 deployment defaults. Vault provider assembly is in `src/lib/midnight/vault-providers.ts`,
-including the bounded prover-key cache and manifest verification against the hashes in
-`src/lib/midnight/zk-manifest-hashes.ts`. The asset preparation workflow is described above.
+including the bounded prover-key cache and manifest verification against the pins that
+`scripts/zk-manifest-hashes.ts` computes from the installed contract packages. The asset
+preparation workflow is described above.
 
 Run the required UI checks:
 

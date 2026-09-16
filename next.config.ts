@@ -1,6 +1,17 @@
 import type { NextConfig } from "next";
 
+import { readZkManifestHashes } from "./scripts/zk-manifest-hashes.ts";
+
+const zkManifestHashes = readZkManifestHashes();
+
 const nextConfig: NextConfig = {
+  // The browser refuses a proving-asset origin whose manifest differs from these pins, so they
+  // are inlined from the installed contract packages rather than read from the origin.
+  env: {
+    VAULT_ZK_MANIFEST_SHA256: zkManifestHashes.vault,
+    SIGNET_ZK_MANIFEST_SHA256: zkManifestHashes.signet,
+  },
+
   // Enable React Compiler for automatic memoization
   reactCompiler: true,
 
