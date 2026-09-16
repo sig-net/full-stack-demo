@@ -33,7 +33,7 @@ it("captures provider origins and shares or evicts the bounded prover-key reques
   expect(compiledAssets).not.toHaveBeenCalled();
   const configuration = createMidnightChainConfig({
     networkId: "stagenet",
-    indexerUrl: "https://indexer.example.invalid/api/v3/graphql",
+    indexerUrl: "https://indexer.example.invalid/api/v4/graphql",
     nodeUrl: "wss://node.example.invalid",
     proofServerUrl: "https://proof.example.invalid",
   });

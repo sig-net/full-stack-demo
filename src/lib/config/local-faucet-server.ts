@@ -34,13 +34,13 @@ export function getLocalFaucetConfiguration(): LocalFaucetConfiguration {
   if (typeof window !== "undefined") throw new Error("Local faucet configuration is server-only.");
   const indexerUrl = localEndpoint(
     process.env.LOCAL_FAUCET_MIDNIGHT_INDEXER_URL,
-    "http://127.0.0.1:8088/api/v3/graphql",
+    "http://127.0.0.1:8088/api/v4/graphql",
     "LOCAL_FAUCET_MIDNIGHT_INDEXER_URL",
     httpEndpoint,
   );
   const indexerWsUrl = localEndpoint(
     process.env.LOCAL_FAUCET_MIDNIGHT_INDEXER_WS_URL,
-    "ws://127.0.0.1:8088/api/v3/graphql/ws",
+    "ws://127.0.0.1:8088/api/v4/graphql/ws",
     "LOCAL_FAUCET_MIDNIGHT_INDEXER_WS_URL",
     wsEndpoint,
   );

@@ -30,9 +30,9 @@ describe("nested runtime configuration", () => {
     expect(config).toEqual({
       midnight: {
         networkId: "undeployed",
-        indexerUrl: "",
-        indexerWsUrl: "",
-        nodeUrl: "",
+        indexerUrl: "http://127.0.0.1:8088/api/v4/graphql",
+        indexerWsUrl: "ws://127.0.0.1:8088/api/v4/graphql/ws",
+        nodeUrl: "http://127.0.0.1:9944",
         proofServerUrl: "http://127.0.0.1:6300",
       },
       evm: { network: "local", chainId: null, rpcUrl: "http://127.0.0.1:8545", explorerUrl: "" },
@@ -48,13 +48,9 @@ describe("nested runtime configuration", () => {
       const config = getRuntimeDefaults(network);
       expect(config.midnight.networkId).toBe(network);
       expect(config.midnight.proofServerUrl).toBe("http://127.0.0.1:6300");
-      expect(config.midnight.indexerUrl.includes("/api/v4/graphql")).toBe(
-        network !== MidnightNetwork.Undeployed,
-      );
+      expect(config.midnight.indexerUrl).toContain("/api/v4/graphql");
       expect(config.midnight.indexerWsUrl).toBe(
-        network === MidnightNetwork.Undeployed
-          ? ""
-          : config.midnight.indexerUrl.replace("https:", "wss:") + "/ws",
+        config.midnight.indexerUrl.replace(/^http/, "ws") + "/ws",
       );
       expect(config.evm.chainId).toBe(
         network === MidnightNetwork.Undeployed

@@ -16,7 +16,7 @@ short timeout. Return only public status fields, never full environment or log o
 | Prover version       | GET http://127.0.0.1:6300/version                          | Version text, compare with expected stack image         |
 | Midnight node        | JSON-RPC system_health at http://127.0.0.1:9944            | isSyncing false, local peer policy considered           |
 | Anvil                | JSON-RPC eth_chainId and anvil_metadata at the EVM RPC  | Chain 11155111 and a live Anvil instance          |
-| Indexer              | POST http://127.0.0.1:8088/api/v3/graphql with query below | Current block and configured contract presence          |
+| Indexer              | POST http://127.0.0.1:8088/api/v4/graphql with query below | Current block and configured contract presence          |
 
 Local funding eligibility compares the applied node/indexer/prover/EVM endpoints against the
 public faucet descriptor supplied with the app. Inspect `src/lib/config/local-faucet.ts` and

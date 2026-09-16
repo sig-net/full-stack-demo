@@ -35,8 +35,8 @@ it("publishes all encoded addresses before facade construction across every netw
   for (const networkId of Object.values(MidnightNetwork)) {
     const configuration = createMidnightChainConfig({
       networkId,
-      indexerUrl: "http://127.0.0.1:8088/api/v3/graphql",
-      indexerWsUrl: "ws://127.0.0.1:8088/api/v3/graphql/ws",
+      indexerUrl: "http://127.0.0.1:8088/api/v4/graphql",
+      indexerWsUrl: "ws://127.0.0.1:8088/api/v4/graphql/ws",
       nodeUrl: "http://127.0.0.1:9944",
       proofServerUrl: "http://127.0.0.1:6300",
     });

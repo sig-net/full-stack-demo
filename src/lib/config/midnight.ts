@@ -53,7 +53,7 @@ export function createMidnightChainConfig(input: {
     return result.data;
   };
   const indexerUrl = validateUrl(
-    input.indexerUrl ?? (local ? "http://127.0.0.1:8088/api/v3/graphql" : undefined),
+    input.indexerUrl ?? (local ? "http://127.0.0.1:8088/api/v4/graphql" : undefined),
     "NEXT_PUBLIC_MIDNIGHT_INDEXER_URL",
   );
   return Object.freeze({

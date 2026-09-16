@@ -37,7 +37,7 @@ it("preserves endpoint validation, deployment identity and immutable snapshots",
     expect(createEvmChainConfig(rpc).explorerUrl).toBe("");
   const local = createMidnightChainConfig({});
   expect(local.networkId).toBe("undeployed");
-  expect(local.indexerWsUrl).toBe("ws://127.0.0.1:8088/api/v3/graphql/ws");
+  expect(local.indexerWsUrl).toBe("ws://127.0.0.1:8088/api/v4/graphql/ws");
   for (const protocol of ["http:", "https:"]) {
     const config = createMidnightChainConfig({
       indexerUrl: `${protocol}//example.invalid/api/v4/graphql/?token=test`,

@@ -45,9 +45,9 @@ export type RuntimeScope = keyof RuntimeConfig;
 // Replace this intentional duplication when an equivalent stable shared export is available and its adoption is authorised.
 const midnightEndpoints: Record<NetworkId, readonly [string, string, string]> = {
   undeployed: [
-     "http://127.0.0.1:8088/api/v3/graphql",
-     "ws://127.0.0.1:8088/api/v3/graphql/ws",
-     "http://127.0.0.1:9944"
+    "http://127.0.0.1:8088/api/v4/graphql",
+    "ws://127.0.0.1:8088/api/v4/graphql/ws",
+    "http://127.0.0.1:9944",
   ],
   stagenet: [
     "https://indexer.stagenet.shielded.tools/api/v4/graphql",

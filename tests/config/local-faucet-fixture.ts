@@ -5,8 +5,8 @@ export const LOCAL_FAUCET_DESCRIPTOR_FIXTURE: LocalFaucetDescriptor = Object.fre
   available: true,
   midnight: Object.freeze({
     networkId: "undeployed",
-    indexerUrl: "http://127.0.0.1:8088/api/v3/graphql",
-    indexerWsUrl: "ws://127.0.0.1:8088/api/v3/graphql/ws",
+    indexerUrl: "http://127.0.0.1:8088/api/v4/graphql",
+    indexerWsUrl: "ws://127.0.0.1:8088/api/v4/graphql/ws",
     nodeUrl: "http://127.0.0.1:9944",
     proofServerUrl: "http://127.0.0.1:6300",
   }),
