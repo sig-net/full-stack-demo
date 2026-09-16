@@ -5,13 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { useRuntimeConfigSections } from "@/hooks/use-runtime-config-sections";
 import { MidnightWalletProvider } from "@/providers/midnight-wallet-context";
-import {
-  RuntimeConfigProvider,
-  useERC20VaultConfig,
-  useEVMChainConfig,
-  useMidnightChainConfig,
-  useRuntimeConfiguration,
-} from "@/providers/runtime-config-context";
+import { RuntimeConfigProvider, useRuntimeConfiguration } from "@/providers/runtime-config-context";
 
 import {
   mockMatchingRuntimeServer,
@@ -28,9 +22,6 @@ function fixture() {
       first: useRuntimeConfigSections(),
       second: useRuntimeConfigSections(),
       runtime: useRuntimeConfiguration(),
-      midnight: useMidnightChainConfig(),
-      evm: useEVMChainConfig(),
-      vault: useERC20VaultConfig(),
     }),
     {
       wrapper: ({ children }) => (
@@ -89,30 +80,33 @@ it("keeps two drafts independent and rejects an Apply superseded by the other ed
     hook.close();
   }
 });
-it("publishes immediate typed setters independently and retains drafts across direct-setter supersession", () => {
+it("applies direct owner setters independently and retains drafts across direct-setter supersession", () => {
   const hook = fixture();
   try {
     act(() => {
       hook.result.current.first.edit("contractAddress", "ef".repeat(32));
     });
     act(() => {
-      hook.result.current.midnight.setIndexerUrl("http://localhost:7070/api/v4/graphql");
+      hook.result.current.runtime.owner.setMidnight(
+        "indexerUrl",
+        "http://localhost:7070/api/v4/graphql",
+      );
     });
-    expect(hook.result.current.midnight.config.indexerWsUrl).toBe(
+    expect(hook.result.current.runtime.applied.midnight.indexerWsUrl).toBe(
       "ws://localhost:7070/api/v4/graphql/ws",
     );
     act(() => {
       expect(hook.result.current.first.apply()).toBe(false);
     });
     act(() => {
-      hook.result.current.evm.setChainId(null);
+      hook.result.current.runtime.owner.setEvm("chainId", null);
     });
-    expect(hook.result.current.evm.caip2Id).toBeNull();
-    expect(hook.result.current.evm.config.rpcUrl).toBe("");
+    expect(hook.result.current.runtime.applied.evm.chainId).toBeNull();
+    expect(hook.result.current.runtime.applied.evm.rpcUrl).toBe("");
     act(() => {
-      hook.result.current.vault.setSignetContractAddress("ee".repeat(32));
+      hook.result.current.runtime.owner.setVault("signetContractAddress", "ee".repeat(32));
     });
-    expect(hook.result.current.vault.config.signetContractAddress).toBe("ee".repeat(32));
+    expect(hook.result.current.runtime.applied.vault.signetContractAddress).toBe("ee".repeat(32));
   } finally {
     hook.close();
   }
