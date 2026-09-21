@@ -1,4 +1,0 @@
-interface:
-  display_name: "Local Vault E2E"
-  short_description: "Verify the local vault through a real browser wallet"
-  default_prompt: "Use $local-vault-e2e to verify the requested local vault browser flow and record settlement evidence."
