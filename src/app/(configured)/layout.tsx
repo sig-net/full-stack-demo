@@ -1,8 +1,8 @@
 import { connection } from 'next/server'
 import { Suspense, type ReactNode } from 'react'
 
+import { ConfigProvider } from '@/components/contexts/ConfigContext'
 import { SplashScreen } from '@/components/splash-screen'
-import { ConfigProvider } from '@/contexts/config-provider'
 import { getClientConfig } from '@/lib/config/server-config'
 
 export default async function ConfiguredLayout({ children }: LayoutProps<'/'>): Promise<ReactNode> {

@@ -26,7 +26,7 @@
       }
     },
     {
-      "files": ["src/components/ui/**/*.tsx"],
+      "files": ["src/components/ui/**/*.tsx", "src/components/contexts/**/*.tsx"],
       "rules": {
         "react/only-export-components": "off"
       }

@@ -41,16 +41,16 @@ described under [Configuration](#configuration).
 
 ## Layout
 
-| Path                   | Contents                                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------ |
-| `src/app`              | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS. |
-| `src/app/(configured)` | Routes that render inside `ConfigProvider`, gated by its layout.                                 |
-| `src/components`       | Application React components.                                                                    |
-| `src/components/ui`    | Components written by the shadcn CLI.                                                            |
-| `src/contexts`         | React contexts, their providers and their hooks.                                                 |
-| `src/lib`              | Non-React modules.                                                                               |
-| `src/lib/config`       | Server configuration loading and the client configuration type.                                  |
-| `public/icons`         | The sig.network wordmark and swan, in black and white variants.                                  |
+| Path                      | Contents                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------ |
+| `src/app`                 | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS. |
+| `src/app/(configured)`    | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.              |
+| `src/components`          | Application React components.                                                                    |
+| `src/components/ui`       | Components written by the shadcn CLI.                                                            |
+| `src/components/contexts` | React contexts: each file holds a context, its provider and its `use<Name>` hook.                |
+| `src/lib`                 | Non-React modules.                                                                               |
+| `src/lib/config`          | Server configuration loading and the client configuration type.                                  |
+| `public/icons`            | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.       |
 
 Pages and layouts are server components. A component opts into the browser with `'use client'`
 only when it needs state, effects or browser APIs, as `src/components/mode-toggle.tsx` does.
@@ -86,14 +86,15 @@ so the next request retries.
 ### Injection into the browser
 
 `src/app/(configured)/layout.tsx` waits for the request with `connection()`, starts
-`getClientConfig()` without awaiting it, and passes the promise to `ConfigProvider`
-(`src/contexts/config-provider.tsx`), a client component that unwraps it with React's `use()`.
-Client components under the group read it with `useConfig()` from `src/contexts/config-context.ts`:
+`getClientConfig()` without awaiting it, and passes the promise to `ConfigProvider`, a client
+component that unwraps it with React's `use()`. The provider and the `useConfig()` hook
+live together in `src/components/contexts/ConfigContext.tsx`. Client components under the group
+read the configuration with the hook:
 
 ```tsx
 'use client'
 
-import { useConfig } from '@/contexts/config-context'
+import { useConfig } from '@/components/contexts/ConfigContext'
 
 export function NodeLink() {
   const { nodeURL } = useConfig()
@@ -102,7 +103,7 @@ export function NodeLink() {
 ```
 
 While the promise is pending, the layout's `Suspense` boundary shows `SplashScreen`
-(`src/components/splash-screen.tsx`) inside the app bar and footer. The HTML shell with the splash
+(`src/components/splash-screen.tsx`) under the app bar. The HTML shell with the splash
 is streamed first and the configured content follows when the load settles.
 
 ### Error boundaries
@@ -110,7 +111,7 @@ is streamed first and the configured content follows when the load settles.
 - `src/app/error.tsx` wraps the nested layouts and pages, so a configuration load that fails ends
   up here with the validation message and a "Try again" button. `retry()` re-renders the
   `(configured)` layout, which loads the configuration again. It renders inside the root layout,
-  so the app bar, footer and theme stay in place, and it deliberately runs outside
+  so the app bar and theme stay in place, and it deliberately runs outside
   `ConfigProvider`.
 - `src/app/global-error.tsx` replaces the root layout when the root layout itself throws. It owns
   its own `<html>` and `<body>` and imports the global stylesheet, and it follows the operating
@@ -127,8 +128,14 @@ semantic tokens (`background`, `primary`, `muted`, `border` and so on) onto that
 light theme under `:root` and for the dark theme under `.dark`. Components use the semantic
 tokens, never palette values directly.
 
+The light theme values come from the Product UI design in Figma: `border` is dark neutral 50
+(dividers), `input` is dark neutral 300 (control borders), `primary` is the polar 200 button fill
+with dark neutral 400 text and border. The `Button` variants map onto the design's hierarchies:
+`default` is Primary, `secondary` is Secondary, `ghost` is Tertiary and `link` is Link, with sizes
+`default` (40px) and `lg` (44px) matching Size md and lg.
+
 `next-themes` owns the light or dark choice. It follows the operating system until the visitor
-uses the toggle in the app bar, then remembers the choice in local storage.
+uses the toggle on the `/design` page, then remembers the choice in local storage.
 
 Typography follows the sig.network brand assets in Notion: Elza Text for interface text and
 Söhne Mono for numbers, addresses and other technical content.

@@ -164,6 +164,7 @@
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
@@ -188,17 +189,18 @@
   --card-foreground: var(--color-dark-neutral-900);
   --popover: #ffffff;
   --popover-foreground: var(--color-dark-neutral-900);
-  --primary: var(--color-dark-neutral-900);
-  --primary-foreground: var(--color-clamshell-50);
+  --primary: var(--color-polar-200);
+  --primary-hover: var(--color-polar-500);
+  --primary-foreground: var(--color-dark-neutral-400);
   --secondary: var(--color-clamshell-200);
-  --secondary-foreground: var(--color-dark-neutral-700);
+  --secondary-foreground: var(--color-dark-neutral-600);
   --muted: var(--color-clamshell-100);
   --muted-foreground: var(--color-dark-neutral-400);
   --accent: var(--color-brand-300);
   --accent-foreground: var(--color-dark-neutral-900);
   --destructive: var(--color-error-600);
-  --border: var(--color-clamshell-300);
-  --input: var(--color-clamshell-300);
+  --border: var(--color-dark-neutral-50);
+  --input: var(--color-dark-neutral-300);
   --ring: var(--color-clamshell-700);
   --chart-1: var(--color-brand-500);
   --chart-2: var(--color-clamshell-500);
@@ -212,7 +214,7 @@
   --sidebar-primary-foreground: var(--color-clamshell-50);
   --sidebar-accent: var(--color-clamshell-200);
   --sidebar-accent-foreground: var(--color-dark-neutral-900);
-  --sidebar-border: var(--color-clamshell-300);
+  --sidebar-border: var(--color-dark-neutral-50);
   --sidebar-ring: var(--color-clamshell-700);
 }
 
@@ -224,6 +226,7 @@
   --popover: var(--color-dark-neutral-900);
   --popover-foreground: var(--color-clamshell-50);
   --primary: var(--color-brand-300);
+  --primary-hover: var(--color-brand-500);
   --primary-foreground: var(--color-dark-neutral-950);
   --secondary: var(--color-dark-neutral-800);
   --secondary-foreground: var(--color-clamshell-100);

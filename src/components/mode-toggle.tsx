@@ -14,7 +14,7 @@ export function ModeToggle(): ReactNode {
     // and the label stays theme-neutral: both render identically on server and client.
     <Button
       variant="ghost"
-      size="icon"
+      size="icon-xs"
       aria-label="Toggle colour theme"
       onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
     >

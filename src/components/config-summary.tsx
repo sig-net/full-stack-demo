@@ -2,8 +2,8 @@
 
 import type { ReactNode } from 'react'
 
+import { useConfig } from '@/components/contexts/ConfigContext'
 import { Badge } from '@/components/ui/badge'
-import { useConfig } from '@/contexts/config-context'
 
 export function ConfigSummary(): ReactNode {
   const config = useConfig()

@@ -6,7 +6,7 @@ export function BrandEmblem({ className }: { className?: string }): ReactNode {
   return (
     <span className={className}>
       <Image
-        src="/icons/signetwork-swan-black.svg"
+        src="/icons/signetwork-swan-brown.svg"
         alt=""
         width={100}
         height={120}

@@ -3,7 +3,6 @@ import { ThemeProvider } from 'next-themes'
 import type { ReactNode } from 'react'
 
 import { AppBar } from '@/components/app-bar'
-import { AppFooter } from '@/components/app-footer'
 import { soehneMono } from '@/app/fonts/soehne-mono'
 
 import './globals.css'
@@ -35,7 +34,6 @@ export default function RootLayout({ children }: LayoutProps<'/'>): ReactNode {
           <div className="flex min-h-dvh flex-col">
             <AppBar />
             {children}
-            <AppFooter />
           </div>
         </ThemeProvider>
       </body>

@@ -119,6 +119,37 @@ Keep setup instructions and application reference material in README.md and docs
   callee documentation. Keep human instructions self-contained, update stale references and verify
   durable factual claims by execution. Run documented commands verbatim before publishing them.
 
+## UI components
+
+- Every UI element is built from shadcn/ui components. Before building anything, check
+  `src/components/ui` for the component it needs. If it is not there, install it with the shadcn
+  CLI (`yarn shadcn add <component>`) rather than writing it by hand.
+- If shadcn has no component for what is asked, stop and say so. Do not invent a substitute,
+  hand-roll a primitive, or pull in another component library.
+- Never put a cursor class on a control. One unlayered rule at the end of `src/app/globals.css`
+  gives every enabled clickable control the pointer cursor, by element and ARIA role, and it
+  outranks the `cursor-default` utility shadcn sets on menu and select items. A per-component
+  `cursor-pointer` hides a gap in that rule from every other component with the same gap. When a
+  control lacks the pointer, add its element or role to that rule's selector list. Disabled
+  controls keep their own cursor: keep the rule's `:not(...)` exclusions intact.
+
+## File layout
+
+- File code by what it is and who owns it, never by feature name. `src/lib` holds every
+  non-React module: domain sets, defaults, parsers, formatters. A domain with several modules
+  gets a folder under it (`src/lib/config/`). `src/components` holds React components,
+  `src/components/ui` only what the shadcn CLI writes, `src/components/contexts` React
+  contexts, and `src/app` App Router files only (layouts, pages, error and not-found files,
+  route handlers). Do not create new top-level folders under `src` for a feature; the folder
+  name is decided by the kind of code, then the domain.
+- Split files by ownership, not by export type. A React context, its provider and its accessor
+  hook are one unit with one owner and always change together, so they live in one file:
+  `src/components/contexts/<Name>Context.tsx` exporting the value type, the provider and the
+  `use<Name>` hook. The same holds for any cluster that only ever changes as a whole. Split a
+  file only when a piece gains a consumer that must not import the rest (a non-React runtime, a
+  test that must avoid JSX). The Fast Refresh lint warning about mixed exports is not a reason
+  to split; it is switched off for `src/components/contexts`.
+
 ## NEVER BREAK: Skills are written in agent-agnostic prose.
 
 - A skill is a single copy under `.agents/skills/<name>/` that every coding agent reads.
