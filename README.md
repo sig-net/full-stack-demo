@@ -58,8 +58,15 @@ tokens, never palette values directly.
 `next-themes` owns the light or dark choice. It follows the operating system until the visitor
 uses the toggle in the app bar, then remembers the choice in local storage.
 
-Geist Sans and Geist Mono come from the `geist` package, which loads its bundled font files
-through `next/font/local`, so the application serves the fonts itself.
+Typography follows the sig.network brand assets in Notion: Elza Text for interface text and
+Söhne Mono for numbers, addresses and other technical content.
+
+- Elza Text is served by the sig.network Adobe Fonts kit, linked from `src/app/layout.tsx`, and
+  reached through the `font-sans` utility (`--font-sans` in `globals.css`). The kit provides
+  weights 300 to 700 in upright and italic.
+- Söhne Mono is licensed from Klim Type Foundry. Its WOFF2 files live in `src/app/fonts` and load
+  through `next/font/local` (`src/app/fonts/soehne-mono.ts`), reached through the `font-mono`
+  utility. Weights 200 (Extraleicht), 300 (Leicht), 400 (Buch) and 500 (Kräftig) are included.
 
 ## Adding a UI component
 

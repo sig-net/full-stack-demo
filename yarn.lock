@@ -2582,7 +2582,6 @@ __metadata:
     class-variance-authority: "npm:^0.7.1"
     cn: "npm:^0.3.0"
     eslint-plugin-better-tailwindcss: "npm:^4.7.0"
-    geist: "npm:^1.7.2"
     lucide-react: "npm:^1.47.0"
     next: "npm:16.3.5"
     next-themes: "npm:^0.4.6"
@@ -2609,15 +2608,6 @@ __metadata:
   version: 3.1.0
   resolution: "fuzzysort@npm:3.1.0"
   checksum: 10c0/da9bb32de16f2a5c2c000b99031d9f4f8a01380c12d5d3b67296443a1152c55987ce3c4ddbfe97481b0e9b6f2fb77d61dceba29a93ad36ee23ef5bab6a31afb8
-  languageName: node
-  linkType: hard
-
-"geist@npm:^1.7.2":
-  version: 1.7.2
-  resolution: "geist@npm:1.7.2"
-  peerDependencies:
-    next: ">=13.2.0"
-  checksum: 10c0/ee523706786297a72db6adc62cf56a8d31e51926d785c195403e7115bfa1dea71bdef84853a9c1a362699b1b91484a8c2fc98048a0cfef7efdd0b478d403cc65
   languageName: node
   linkType: hard
 

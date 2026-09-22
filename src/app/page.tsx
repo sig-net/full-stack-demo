@@ -59,6 +59,26 @@ export default function HomePage(): ReactNode {
 
       <Card>
         <CardHeader>
+          <CardTitle>Typography</CardTitle>
+          <CardDescription>
+            Elza Text for interface text, Söhne Mono for technical content.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-2xl font-light">Elza Text Light 300</p>
+          <p className="text-2xl">Elza Text Regular 400</p>
+          <p className="text-2xl font-medium">Elza Text Medium 500</p>
+          <p className="text-2xl font-semibold">Elza Text Semibold 600</p>
+          <p className="text-2xl font-bold">Elza Text Bold 700</p>
+          <p className="font-mono text-xl font-extralight">Söhne Mono Extraleicht 200</p>
+          <p className="font-mono text-xl font-light">Söhne Mono Leicht 300</p>
+          <p className="font-mono text-xl">Söhne Mono Buch 400 0x10B4…6dFa</p>
+          <p className="font-mono text-xl font-medium">Söhne Mono Kräftig 500 $6888.02</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Theme</CardTitle>
           <CardDescription>
             Semantic colours from the sig.network palette. They follow the light and dark theme.
