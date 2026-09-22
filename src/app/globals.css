@@ -1,0 +1,286 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* sig.network palette, transcribed from the brand assets in Notion. */
+@theme {
+  --color-brand-50: #f2ddc4;
+  --color-brand-100: #f2e0c5;
+  --color-brand-200: #f1e2c5;
+  --color-brand-300: #f1e4c6;
+  --color-brand-400: #f0e7c6;
+  --color-brand-500: #f0e9c7;
+  --color-brand-600: #f0ebc7;
+  --color-brand-700: #efedc8;
+  --color-brand-800: #efefc8;
+  --color-brand-900: #eceec9;
+  --color-brand-950: #eaeec9;
+
+  --color-clamshell-50: #f5f0ee;
+  --color-clamshell-100: #f3edea;
+  --color-clamshell-200: #e9dfda;
+  --color-clamshell-300: #dfd2cb;
+  --color-clamshell-400: #d5c4bb;
+  --color-clamshell-500: #cbb7ad;
+  --color-clamshell-600: #c0aa9e;
+  --color-clamshell-700: #b59c90;
+  --color-clamshell-800: #a98f82;
+  --color-clamshell-900: #9d8274;
+  --color-clamshell-950: #907668;
+
+  --color-dark-neutral-50: #c6b3b2;
+  --color-dark-neutral-100: #b49e9e;
+  --color-dark-neutral-200: #a28b8a;
+  --color-dark-neutral-300: #8e7777;
+  --color-dark-neutral-400: #786767;
+  --color-dark-neutral-500: #625757;
+  --color-dark-neutral-600: #4c4646;
+  --color-dark-neutral-700: #3d3939;
+  --color-dark-neutral-800: #2e2c2c;
+  --color-dark-neutral-900: #201e1e;
+  --color-dark-neutral-950: #111111;
+
+  --color-green-white-50: #fcfdfc;
+  --color-green-white-100: #f6f9f6;
+  --color-green-white-200: #f0f4f0;
+  --color-green-white-300: #ebf0ea;
+  --color-green-white-400: #e6ece4;
+  --color-green-white-500: #e1e7de;
+
+  --color-mercury-50: #fdfcfc;
+  --color-mercury-100: #f9f6f6;
+  --color-mercury-200: #f4f1f1;
+  --color-mercury-300: #f0ecec;
+  --color-mercury-400: #eae7e7;
+  --color-mercury-500: #e5e3e3;
+
+  --color-mystic-50: #fcfdfd;
+  --color-mystic-100: #f6f9f9;
+  --color-mystic-200: #f0f5f5;
+  --color-mystic-300: #e9f1f1;
+  --color-mystic-400: #e3edec;
+  --color-mystic-500: #dde9e8;
+
+  --color-pampas-50: #fdfdfc;
+  --color-pampas-100: #fcfbfa;
+  --color-pampas-200: #fafaf8;
+  --color-pampas-300: #f9f8f5;
+  --color-pampas-400: #f7f6f3;
+  --color-pampas-500: #f6f4f1;
+
+  --color-polar-50: #fbfefe;
+  --color-polar-100: #f6fdfd;
+  --color-polar-200: #f2fcfb;
+  --color-polar-300: #edfafa;
+  --color-polar-400: #e9f9f9;
+  --color-polar-500: #e4f8f7;
+
+  --color-swiss-coffee-50: #fdfcfc;
+  --color-swiss-coffee-100: #f8f5f5;
+  --color-swiss-coffee-200: #f3eeee;
+  --color-swiss-coffee-300: #efe8e7;
+  --color-swiss-coffee-400: #eae1e0;
+  --color-swiss-coffee-500: #e5dbd9;
+
+  --color-error-25: #fffbfa;
+  --color-error-50: #fef3f2;
+  --color-error-100: #fee4e2;
+  --color-error-200: #fecdca;
+  --color-error-300: #fda29b;
+  --color-error-400: #f97066;
+  --color-error-500: #f04438;
+  --color-error-600: #d92d20;
+  --color-error-700: #b42318;
+  --color-error-800: #912018;
+  --color-error-900: #7a271a;
+  --color-error-950: #55160c;
+
+  --color-gray-blue-25: #fcfcfd;
+  --color-gray-blue-50: #f8f9fc;
+  --color-gray-blue-100: #eaecf5;
+  --color-gray-blue-200: #d5d9eb;
+  --color-gray-blue-300: #b3b8db;
+  --color-gray-blue-400: #717bbc;
+  --color-gray-blue-500: #4e5ba6;
+  --color-gray-blue-600: #3e4784;
+  --color-gray-blue-700: #363f72;
+  --color-gray-blue-800: #293056;
+  --color-gray-blue-900: #101323;
+  --color-gray-blue-950: #0d0f1c;
+
+  --color-success-25: #f6fef9;
+  --color-success-50: #ecfdf3;
+  --color-success-100: #dcfae6;
+  --color-success-200: #abefc6;
+  --color-success-300: #75e0a7;
+  --color-success-400: #47cd89;
+  --color-success-500: #17b26a;
+  --color-success-600: #079455;
+  --color-success-700: #067647;
+  --color-success-800: #085d3a;
+  --color-success-900: #074d31;
+  --color-success-950: #053321;
+
+  --color-warning-25: #fffcf5;
+  --color-warning-50: #fffaeb;
+  --color-warning-100: #fef0c7;
+  --color-warning-200: #fedf89;
+  --color-warning-300: #fec84b;
+  --color-warning-400: #fdb022;
+  --color-warning-500: #f79009;
+  --color-warning-600: #dc6803;
+  --color-warning-700: #b54708;
+  --color-warning-800: #93370d;
+  --color-warning-900: #7a2e0e;
+  --color-warning-950: #4e1d09;
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-geist-sans), sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: var(--color-clamshell-50);
+  --foreground: var(--color-dark-neutral-900);
+  --card: #ffffff;
+  --card-foreground: var(--color-dark-neutral-900);
+  --popover: #ffffff;
+  --popover-foreground: var(--color-dark-neutral-900);
+  --primary: var(--color-dark-neutral-900);
+  --primary-foreground: var(--color-clamshell-50);
+  --secondary: var(--color-clamshell-200);
+  --secondary-foreground: var(--color-dark-neutral-700);
+  --muted: var(--color-clamshell-100);
+  --muted-foreground: var(--color-dark-neutral-400);
+  --accent: var(--color-brand-300);
+  --accent-foreground: var(--color-dark-neutral-900);
+  --destructive: var(--color-error-600);
+  --border: var(--color-clamshell-300);
+  --input: var(--color-clamshell-300);
+  --ring: var(--color-clamshell-700);
+  --chart-1: var(--color-brand-500);
+  --chart-2: var(--color-clamshell-500);
+  --chart-3: var(--color-gray-blue-400);
+  --chart-4: var(--color-success-400);
+  --chart-5: var(--color-warning-400);
+  --radius: 0.625rem;
+  --sidebar: var(--color-clamshell-100);
+  --sidebar-foreground: var(--color-dark-neutral-900);
+  --sidebar-primary: var(--color-dark-neutral-900);
+  --sidebar-primary-foreground: var(--color-clamshell-50);
+  --sidebar-accent: var(--color-clamshell-200);
+  --sidebar-accent-foreground: var(--color-dark-neutral-900);
+  --sidebar-border: var(--color-clamshell-300);
+  --sidebar-ring: var(--color-clamshell-700);
+}
+
+.dark {
+  --background: var(--color-dark-neutral-950);
+  --foreground: var(--color-clamshell-50);
+  --card: var(--color-dark-neutral-900);
+  --card-foreground: var(--color-clamshell-50);
+  --popover: var(--color-dark-neutral-900);
+  --popover-foreground: var(--color-clamshell-50);
+  --primary: var(--color-brand-300);
+  --primary-foreground: var(--color-dark-neutral-950);
+  --secondary: var(--color-dark-neutral-800);
+  --secondary-foreground: var(--color-clamshell-100);
+  --muted: var(--color-dark-neutral-800);
+  --muted-foreground: var(--color-clamshell-600);
+  --accent: var(--color-dark-neutral-700);
+  --accent-foreground: var(--color-clamshell-50);
+  --destructive: var(--color-error-400);
+  --border: var(--color-dark-neutral-700);
+  --input: var(--color-dark-neutral-600);
+  --ring: var(--color-clamshell-950);
+  --chart-1: var(--color-brand-500);
+  --chart-2: var(--color-clamshell-500);
+  --chart-3: var(--color-gray-blue-400);
+  --chart-4: var(--color-success-400);
+  --chart-5: var(--color-warning-400);
+  --sidebar: var(--color-dark-neutral-900);
+  --sidebar-foreground: var(--color-clamshell-50);
+  --sidebar-primary: var(--color-brand-300);
+  --sidebar-primary-foreground: var(--color-dark-neutral-950);
+  --sidebar-accent: var(--color-dark-neutral-800);
+  --sidebar-accent-foreground: var(--color-clamshell-50);
+  --sidebar-border: var(--color-dark-neutral-700);
+  --sidebar-ring: var(--color-clamshell-950);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/*
+ * Every enabled control a click activates shows the pointer cursor. Unlayered, so it outranks the
+ * `cursor-default` utility the shadcn menu and select items carry.
+ */
+:is(
+  button,
+  summary,
+  select,
+  label[for],
+  [role='button'],
+  [role='tab'],
+  [role='menuitem'],
+  [role='menuitemradio'],
+  [role='menuitemcheckbox'],
+  [role='option'],
+  [role='combobox'],
+  [role='checkbox'],
+  [role='radio'],
+  [role='switch']
+):not(:disabled, [aria-disabled='true'], [data-disabled]) {
+  cursor: pointer;
+}
