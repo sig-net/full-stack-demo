@@ -3,7 +3,8 @@ import 'server-only'
 import { z } from 'zod'
 
 import type { ClientConfig } from '@/lib/config/client-config'
-import { environmentSchema } from '@/lib/config/environment'
+import { ethereumConfigFromEnv, ethereumEnvSchema } from '@/lib/config/ethereum-config'
+import { midnightConfigFromEnv, midnightEnvSchema } from '@/lib/config/midnight-config'
 
 export interface SecretConfig {
   readonly dbConnectionString: string
@@ -15,9 +16,9 @@ export interface ServerConfig {
 }
 
 const envSchema = z.object({
-  ENVIRONMENT: environmentSchema,
-  NODE_URL: z.url(),
   DB_CONNECTION_STRING: z.string().min(1),
+  ...midnightEnvSchema.shape,
+  ...ethereumEnvSchema.shape,
 })
 
 async function loadServerConfig(): Promise<ServerConfig> {
@@ -28,7 +29,7 @@ async function loadServerConfig(): Promise<ServerConfig> {
   const env = parsed.data
   return {
     secret: { dbConnectionString: env.DB_CONNECTION_STRING },
-    client: { environment: env.ENVIRONMENT, nodeURL: env.NODE_URL },
+    client: { midnight: midnightConfigFromEnv(env), ethereum: ethereumConfigFromEnv(env) },
   }
 }
 

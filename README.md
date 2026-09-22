@@ -60,19 +60,27 @@ only when it needs state, effects or browser APIs, as `src/components/mode-toggl
 Configuration is read from environment variables on the server at request time. Nothing is baked
 in at build time, so one build serves every environment. `.env.example` lists the variables:
 
-| Variable               | Secret | Example                                    |
-| ---------------------- | ------ | ------------------------------------------ |
-| `ENVIRONMENT`          | No     | `local`, `testnet` or `mainnet`            |
-| `NODE_URL`             | No     | `http://localhost:9944`                    |
-| `DB_CONNECTION_STRING` | Yes    | `postgres://demo:demo@localhost:5432/demo` |
+| Variable                    | Secret | Purpose                                                                                              |
+| --------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| `MIDNIGHT_NETWORK_ID`       | No     | `undeployed`, `stagenet`, `preview`, `preprod` or `mainnet`. Selects the default Midnight endpoints. |
+| `MIDNIGHT_INDEXER_URL`      | No     | Optional override of the indexer GraphQL endpoint.                                                   |
+| `MIDNIGHT_INDEXER_WS_URL`   | No     | Optional override of the indexer subscription endpoint.                                              |
+| `MIDNIGHT_NODE_URL`         | No     | Optional override of the node RPC endpoint.                                                          |
+| `MIDNIGHT_PROOF_SERVER_URL` | No     | Optional override of the proof server, `http://127.0.0.1:6300` by default.                           |
+| `EVM_CHAIN_ID`              | No     | Ethereum chain ID. `1`, `11155111` and `31337` have a default RPC.                                   |
+| `EVM_RPC_URL`               | No     | Optional override of the RPC endpoint, required for other chains.                                    |
+| `DB_CONNECTION_STRING`      | Yes    | Example secret.                                                                                      |
+
+The defaults live in `src/lib/config/midnight-config.ts` and `src/lib/config/ethereum-config.ts`,
+each of which owns its variables' schema and builds its section of the client configuration.
 
 Next.js reads `.env.local` from the project root, never from `src`. In deployed environments the
 same variables are set on the process.
 
 ### Server and client halves
 
-`src/lib/config/server-config.ts` validates `process.env` with a zod schema and produces a
-`ServerConfig` with two halves: `secret` and `client`. A validation failure names the offending
+`src/lib/config/server-config.ts` validates `process.env` with one zod schema composed from the
+section modules and produces a `ServerConfig` with two halves: `secret` and `client`. A validation failure names the offending
 variable. The load is shared by every request through one promise, and a rejected load is dropped
 so the next request retries.
 
@@ -97,8 +105,8 @@ read the configuration with the hook:
 import { useConfig } from '@/components/contexts/ConfigContext'
 
 export function NodeLink() {
-  const { nodeURL } = useConfig()
-  return <a href={nodeURL}>{nodeURL}</a>
+  const { midnight } = useConfig()
+  return <a href={midnight.nodeURL}>{midnight.nodeURL}</a>
 }
 ```
 
