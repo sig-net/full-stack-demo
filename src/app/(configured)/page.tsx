@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { BrandEmblem } from '@/components/brand-emblem'
+import { ConfigSummary } from '@/components/config-summary'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -29,10 +30,23 @@ export default function HomePage(): ReactNode {
         <div>
           <h1 className="font-heading text-2xl font-semibold">Full stack demo</h1>
           <p className="text-muted-foreground">
-            The application shell: theme, palette and component library.
+            The application shell: configuration, theme, palette and component library.
           </p>
         </div>
       </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Configuration</CardTitle>
+          <CardDescription>
+            The client configuration, read from the server at request time and injected through
+            ConfigProvider.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ConfigSummary />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

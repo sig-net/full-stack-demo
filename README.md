@@ -16,10 +16,15 @@ yarn install
 ```
 
 ```bash
+cp .env.example .env.local
+```
+
+```bash
 yarn dev
 ```
 
-The development server listens on http://localhost:3000.
+The development server listens on http://localhost:3000. The variables in `.env.local` are
+described under [Configuration](#configuration).
 
 ## Scripts
 
@@ -36,16 +41,83 @@ The development server listens on http://localhost:3000.
 
 ## Layout
 
-| Path                | Contents                                                               |
-| ------------------- | ---------------------------------------------------------------------- |
-| `src/app`           | App Router files: layouts, pages, `not-found`, `icon.svg`, global CSS. |
-| `src/components`    | Application React components.                                          |
-| `src/components/ui` | Components written by the shadcn CLI.                                  |
-| `src/lib`           | Non-React modules.                                                     |
-| `public/icons`      | The sig.network wordmark and swan, in black and white variants.        |
+| Path                   | Contents                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `src/app`              | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS. |
+| `src/app/(configured)` | Routes that render inside `ConfigProvider`, gated by its layout.                                 |
+| `src/components`       | Application React components.                                                                    |
+| `src/components/ui`    | Components written by the shadcn CLI.                                                            |
+| `src/contexts`         | React contexts, their providers and their hooks.                                                 |
+| `src/lib`              | Non-React modules.                                                                               |
+| `src/lib/config`       | Server configuration loading and the client configuration type.                                  |
+| `public/icons`         | The sig.network wordmark and swan, in black and white variants.                                  |
 
 Pages and layouts are server components. A component opts into the browser with `'use client'`
 only when it needs state, effects or browser APIs, as `src/components/mode-toggle.tsx` does.
+
+## Configuration
+
+Configuration is read from environment variables on the server at request time. Nothing is baked
+in at build time, so one build serves every environment. `.env.example` lists the variables:
+
+| Variable               | Secret | Example                                    |
+| ---------------------- | ------ | ------------------------------------------ |
+| `ENVIRONMENT`          | No     | `local`, `testnet` or `mainnet`            |
+| `NODE_URL`             | No     | `http://localhost:9944`                    |
+| `DB_CONNECTION_STRING` | Yes    | `postgres://demo:demo@localhost:5432/demo` |
+
+Next.js reads `.env.local` from the project root, never from `src`. In deployed environments the
+same variables are set on the process.
+
+### Server and client halves
+
+`src/lib/config/server-config.ts` validates `process.env` with a zod schema and produces a
+`ServerConfig` with two halves: `secret` and `client`. A validation failure names the offending
+variable. The load is shared by every request through one promise, and a rejected load is dropped
+so the next request retries.
+
+- Server code (layouts, pages, route handlers, server actions) calls `getServerConfig()` and may
+  read both halves.
+- `getClientConfig()` returns the `client` half only. `ClientConfig` (`src/lib/config/client-config.ts`)
+  is the one place that defines what the browser may see, and a secret can only reach the browser by
+  being added to that type.
+- The module imports `server-only`, so importing it from a client component fails the build.
+
+### Injection into the browser
+
+`src/app/(configured)/layout.tsx` waits for the request with `connection()`, starts
+`getClientConfig()` without awaiting it, and passes the promise to `ConfigProvider`
+(`src/contexts/config-provider.tsx`), a client component that unwraps it with React's `use()`.
+Client components under the group read it with `useConfig()` from `src/contexts/config-context.ts`:
+
+```tsx
+'use client'
+
+import { useConfig } from '@/contexts/config-context'
+
+export function NodeLink() {
+  const { nodeURL } = useConfig()
+  return <a href={nodeURL}>{nodeURL}</a>
+}
+```
+
+While the promise is pending, the layout's `Suspense` boundary shows `SplashScreen`
+(`src/components/splash-screen.tsx`) inside the app bar and footer. The HTML shell with the splash
+is streamed first and the configured content follows when the load settles.
+
+### Error boundaries
+
+- `src/app/error.tsx` wraps the nested layouts and pages, so a configuration load that fails ends
+  up here with the validation message and a "Try again" button. `retry()` re-renders the
+  `(configured)` layout, which loads the configuration again. It renders inside the root layout,
+  so the app bar, footer and theme stay in place, and it deliberately runs outside
+  `ConfigProvider`.
+- `src/app/global-error.tsx` replaces the root layout when the root layout itself throws. It owns
+  its own `<html>` and `<body>` and imports the global stylesheet, and it follows the operating
+  system colour scheme since the theme class on `<html>` is not applied there.
+
+Both render `src/components/error-notice.tsx`, which shows the message and the error digest when
+Next.js provides one.
 
 ## Styling and theme
 
