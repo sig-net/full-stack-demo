@@ -22,6 +22,9 @@ const THEME_SWATCHES: readonly ThemeSwatch[] = [
   { name: 'Accent', className: 'bg-accent' },
   { name: 'Destructive', className: 'bg-destructive' },
   { name: 'Border', className: 'bg-border' },
+  { name: 'Side column', className: 'bg-side-column' },
+  { name: 'Pink', className: 'bg-pink' },
+  { name: 'Green', className: 'bg-green' },
 ]
 
 export const metadata: Metadata = { title: 'Design' }
@@ -65,14 +68,29 @@ export default function DesignPage(): ReactNode {
             <Button variant="ghost">Tertiary</Button>
             <Button variant="link">Link</Button>
             <Button variant="destructive">Destructive</Button>
+            <Button variant="pink">Pink</Button>
+            <Button variant="green">Green</Button>
             <Button disabled>Disabled</Button>
+            <Button variant="pink" disabled>
+              Pink disabled
+            </Button>
+            <Button variant="green" disabled>
+              Green disabled
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm">Small</Button>
+            <Button>Medium</Button>
             <Button size="lg">Large</Button>
+            <Button size="xl">Extra large</Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge>Default</Badge>
             <Badge variant="secondary">Secondary</Badge>
             <Badge variant="outline">Outline</Badge>
             <Badge variant="destructive">Destructive</Badge>
+            <Badge variant="success">Complete</Badge>
+            <Badge variant="warning">Pending</Badge>
           </div>
         </CardContent>
       </Card>

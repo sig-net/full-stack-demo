@@ -17,7 +17,10 @@ export default async function ConfiguredLayout({ children }: LayoutProps<'/'>): 
     <Suspense fallback={<SplashScreen />}>
       <ConfigProvider config={config}>
         <MidnightWalletProvider>
-          <AppBar />
+          {/* Below md the app bar stays at the top while the page scrolls under it. */}
+          <div className="sticky top-0 z-10 md:static">
+            <AppBar />
+          </div>
           {children}
         </MidnightWalletProvider>
       </ConfigProvider>

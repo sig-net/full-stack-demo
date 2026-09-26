@@ -170,6 +170,28 @@ global `Buffer` and binds `fetch` before the SDK modules load.
 `package.json` pins `@midnightntwrk/ledger-v9` through `resolutions`, so the wallet SDK and the
 contract packages share one ledger runtime.
 
+## Home page
+
+The home page shows three sections on dummy data, each owned by one file that reads the data
+and passes typed props down, so a real data source replaces the dummy module without touching
+the presentation.
+
+- `BalancesSection` (`src/components/balances-section.tsx`) reads `src/lib/balances/dummy-balances.ts`
+  and renders a `BalanceBox` per asset: the amount, its US dollar value, the `TokenIcon`
+  (`src/components/token-icon.tsx`, the asset icon with the network badge over its bottom right
+  corner) and the Swap and Send buttons. The Deposit, Swap and Send buttons do nothing yet.
+- `ActivitySection` (`src/components/activity-section.tsx`) reads `src/lib/activity/dummy-activity.ts`
+  and renders `ActivityTable`. Each entry is a collapsible table body: from the `md` breakpoint up
+  every column shows, below it a chevron expands the timestamp and block explorer details. The
+  entry types live in `src/lib/activity/activity-entry.ts`.
+- `SwapPanel` (`src/components/swap-panel.tsx`) holds the local form state for two
+  `SwapAmountField`s and the disabled Swap call to action. The token list comes from
+  `src/lib/swap/dummy-swap-tokens.ts`.
+
+`AssetAmount` (`src/lib/asset-amount.ts`) is the one shape for an amount of an asset on a network,
+shared by the balances and the activity entries. Icons are lucide placeholders until the asset
+and network artwork arrives.
+
 ## Styling and theme
 
 `src/app/globals.css` is the single source of the theme. It defines the sig.network palette as
@@ -180,9 +202,22 @@ tokens, never palette values directly.
 
 The light theme values come from the Product UI design in Figma: `border` is dark neutral 50
 (dividers), `input` is dark neutral 300 (control borders), `primary` is the polar 200 button fill
-with dark neutral 400 text and border. The `Button` variants map onto the design's hierarchies:
-`default` is Primary, `secondary` is Secondary, `ghost` is Tertiary and `link` is Link, with sizes
-`default` (40px) and `lg` (44px) matching Size md and lg.
+with dark neutral 400 text and border. The `Button` variants map onto the design's button sets:
+`default` is the BlueButton Primary, `secondary` is Secondary, `ghost` is Tertiary and `link` is
+Link, while `pink` and `green` are the PinkButton and GreenButton Primary. Sizes `sm` (36px),
+`default` (40px), `lg` (44px) and `xl` (48px) match Size sm, md, lg and xl. The `Badge` variants
+`success` and `warning` are the design's status badges, and draw their own leading dot.
+
+The home page tokens (`side-column`, `section-rule`, `table-rule`, the `swap-panel-*` and
+`balance-*` groups, and the text shades `tertiary-foreground`, `subtle-foreground` and
+`fiat-foreground`) come from the home page design. `balance-foreground`, `fiat-foreground`,
+`table-rule` and `swap-panel-foreground` hold values that are not on the brand palette, as the
+design renders them.
+
+`HomeLayout` (`src/components/home-layout.tsx`) lays out the home page. From the `md` breakpoint
+up it fills the viewport under the app bar and the page does not scroll: balances above activity
+on the left and the 413px swap column on the right. Below it the sections stack as swap, balances,
+activity and the page scrolls under the app bar, which the `(configured)` layout keeps at the top.
 
 `next-themes` owns the light or dark choice. It follows the operating system until the visitor
 uses the toggle on the `/design` page, then remembers the choice in local storage.
