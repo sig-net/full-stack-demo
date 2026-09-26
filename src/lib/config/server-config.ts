@@ -4,7 +4,18 @@ import { z } from 'zod'
 
 import type { ClientConfig } from '@/lib/config/client-config'
 import { ethereumConfigFromEnv, ethereumEnvSchema } from '@/lib/config/ethereum-config'
-import { midnightConfigFromEnv, midnightEnvSchema } from '@/lib/config/midnight-config'
+import {
+  midnightNetworkConfigFromEnv,
+  midnightNetworkEnvSchema,
+} from '@/lib/config/midnight-network-config'
+import {
+  midnightSignetConfigFromEnv,
+  midnightSignetEnvSchema,
+} from '@/lib/config/midnight-signet-config'
+import {
+  midnightVaultConfigFromEnv,
+  midnightVaultEnvSchema,
+} from '@/lib/config/midnight-vault-config'
 
 export interface SecretConfig {
   readonly dbConnectionString: string
@@ -17,7 +28,9 @@ export interface ServerConfig {
 
 const envSchema = z.object({
   DB_CONNECTION_STRING: z.string().min(1),
-  ...midnightEnvSchema.shape,
+  ...midnightNetworkEnvSchema.shape,
+  ...midnightSignetEnvSchema.shape,
+  ...midnightVaultEnvSchema.shape,
   ...ethereumEnvSchema.shape,
 })
 
@@ -27,9 +40,15 @@ async function loadServerConfig(): Promise<ServerConfig> {
     throw new Error(`Invalid server configuration:\n${z.prettifyError(parsed.error)}`)
   }
   const env = parsed.data
+  const midnightNetwork = midnightNetworkConfigFromEnv(env)
   return {
     secret: { dbConnectionString: env.DB_CONNECTION_STRING },
-    client: { midnight: midnightConfigFromEnv(env), ethereum: ethereumConfigFromEnv(env) },
+    client: {
+      midnightNetwork,
+      midnightSignet: midnightSignetConfigFromEnv(midnightNetwork.networkId, env),
+      midnightVault: midnightVaultConfigFromEnv(midnightNetwork.networkId, env),
+      ethereum: ethereumConfigFromEnv(env),
+    },
   }
 }
 

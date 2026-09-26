@@ -60,19 +60,26 @@ only when it needs state, effects or browser APIs, as `src/components/mode-toggl
 Configuration is read from environment variables on the server at request time. Nothing is baked
 in at build time, so one build serves every environment. `.env.example` lists the variables:
 
-| Variable                    | Secret | Purpose                                                                                              |
-| --------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
-| `MIDNIGHT_NETWORK_ID`       | No     | `undeployed`, `stagenet`, `preview`, `preprod` or `mainnet`. Selects the default Midnight endpoints. |
-| `MIDNIGHT_INDEXER_URL`      | No     | Optional override of the indexer GraphQL endpoint.                                                   |
-| `MIDNIGHT_INDEXER_WS_URL`   | No     | Optional override of the indexer subscription endpoint.                                              |
-| `MIDNIGHT_NODE_URL`         | No     | Optional override of the node RPC endpoint.                                                          |
-| `MIDNIGHT_PROOF_SERVER_URL` | No     | Optional override of the proof server, `http://127.0.0.1:6300` by default.                           |
-| `EVM_CHAIN_ID`              | No     | Ethereum chain ID. `1`, `11155111` and `31337` have a default RPC.                                   |
-| `EVM_RPC_URL`               | No     | Optional override of the RPC endpoint, required for other chains.                                    |
-| `DB_CONNECTION_STRING`      | Yes    | Example secret.                                                                                      |
+| Variable                              | Secret | Purpose                                                                                                           |
+| ------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
+| `MIDNIGHT_NETWORK_ID`                 | No     | `undeployed` or `stagenet`. Selects the default Midnight endpoints and the published contract values.             |
+| `MIDNIGHT_INDEXER_URL`                | No     | Optional override of the indexer GraphQL endpoint.                                                                |
+| `MIDNIGHT_INDEXER_WS_URL`             | No     | Optional override of the indexer subscription endpoint.                                                           |
+| `MIDNIGHT_NODE_URL`                   | No     | Optional override of the node RPC endpoint.                                                                       |
+| `MIDNIGHT_PROOF_SERVER_URL`           | No     | Optional override of the proof server, `http://127.0.0.1:6300` by default.                                        |
+| `MIDNIGHT_SIGNET_CONTRACT_ADDRESS`    | No     | 32-byte hex. Overrides the SDK's published signet singleton address, required for `undeployed`.                   |
+| `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY` | No     | secp256k1 key in SEC1 hex or `secp256k1:base58`. Overrides the published MPC root key, required for `undeployed`. |
+| `MIDNIGHT_VAULT_CONTRACT_ADDRESS`     | No     | 32-byte hex. Overrides the published ERC20 vault address, required for `undeployed`.                              |
+| `EVM_CHAIN_ID`                        | No     | Ethereum chain ID. `1`, `11155111` and `31337` have a default RPC.                                                |
+| `EVM_RPC_URL`                         | No     | Optional override of the RPC endpoint, required for other chains.                                                 |
+| `DB_CONNECTION_STRING`                | Yes    | Example secret.                                                                                                   |
 
-The defaults live in `src/lib/config/midnight-config.ts` and `src/lib/config/ethereum-config.ts`,
-each of which owns its variables' schema and builds its section of the client configuration.
+Each section of the client configuration is owned by one module under `src/lib/config`
+(`midnight-network-config.ts`, `midnight-signet-config.ts`, `midnight-vault-config.ts`,
+`ethereum-config.ts`): it declares the schema of its variables, holds its defaults and builds its
+section. The Midnight network set is the SDK's `MidnightNetwork` enum narrowed to the two networks
+the application supports, and contract addresses and public keys are validated and normalised with
+the SDK's own parsers.
 
 Next.js reads `.env.local` from the project root, never from `src`. In deployed environments the
 same variables are set on the process.
@@ -105,8 +112,8 @@ read the configuration with the hook:
 import { useConfig } from '@/components/contexts/ConfigContext'
 
 export function NodeLink() {
-  const { midnight } = useConfig()
-  return <a href={midnight.nodeURL}>{midnight.nodeURL}</a>
+  const { midnightNetwork } = useConfig()
+  return <a href={midnightNetwork.nodeURL}>{midnightNetwork.nodeURL}</a>
 }
 ```
 
