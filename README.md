@@ -137,12 +137,14 @@ Next.js provides one.
 
 ## Midnight wallet
 
-`src/lib/midnight/wallet` holds the wallet layer, and nothing else in the application consumes it
-yet.
+`src/lib/midnight/wallet` holds the wallet layer. `MidnightWalletProvider` drives it, and the
+wallet components read its types and the connection status label.
 
 - `wallet.ts` defines `WALLET_KINDS` (only `seed` today), `WalletMetadata`, the `Wallet`
   interface with its optional transaction, funding and recovery capabilities, and
   `WalletAddressSnapshot`, the public addresses a wallet publishes before it has synchronised.
+- `connection-status.ts` defines `WalletConnectionStatus`, the status label the wallet components
+  show, and derives it from the provider's state.
 - `seed-wallet.ts` is the seed implementation: it derives account-zero keys from a hex seed,
   publishes the shielded, unshielded and DUST addresses immediately, starts the wallet SDK facade
   against the configured Midnight endpoints, reports synchronisation progress, and clears the
@@ -157,8 +159,10 @@ yet.
   restored on the next load, so a refresh reconnects the same wallet. While a seed is stored, no
   other seed can connect: disconnecting clears the store, and so does a failed connection. This
   keeps a wallet secret in a persistent store on purpose, as a convenience for a demo.
-- `WalletMenu` in the app bar is the only user of `useMidnightWallet()`: a popover with the
-  connection status and dot, the addresses once known, the seed dialog and disconnect.
+- `WalletPanel` (`src/components/wallet-panel.tsx`) renders the wallet for both layouts: the
+  connection status, the addresses once known, the seed dialog and disconnect. From the `md`
+  breakpoint up, `WalletPopover` shows it from the app bar button that carries the status dot.
+  Below it, the `MobileMenu` sheet shows it under a collapsible Wallet item.
 
 One shim exists for the wallet SDK in the browser: `src/lib/midnight/buffer-shim.ts` installs a
 global `Buffer` and binds `fetch` before the SDK modules load.

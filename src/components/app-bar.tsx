@@ -3,9 +3,9 @@ import type { ReactNode } from 'react'
 import { BrandEmblem } from '@/components/brand-emblem'
 import { BrandLogo } from '@/components/brand-logo'
 import { MobileMenu } from '@/components/mobile-menu'
-import { SettingsMenu } from '@/components/settings-menu'
+import { SettingsPopover } from '@/components/settings-popover'
 import { TotalBalance } from '@/components/total-balance'
-import { WalletMenu } from '@/components/wallet-menu'
+import { WalletPopover } from '@/components/wallet-popover'
 
 export function AppBar(): ReactNode {
   return (
@@ -20,10 +20,10 @@ export function AppBar(): ReactNode {
         <TotalBalance />
       </div>
       <div className="hidden w-38.75 items-center justify-center border-r md:flex">
-        <SettingsMenu />
+        <SettingsPopover />
       </div>
       <div className="hidden w-64.25 items-center justify-center md:flex">
-        <WalletMenu />
+        <WalletPopover />
       </div>
       <div className="flex items-center px-5 md:hidden">
         <MobileMenu />

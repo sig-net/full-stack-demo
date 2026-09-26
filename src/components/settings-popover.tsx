@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
-export function SettingsMenu(): ReactNode {
+export function SettingsPopover(): ReactNode {
   return (
     <Popover>
       <PopoverTrigger
