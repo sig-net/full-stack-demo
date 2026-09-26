@@ -158,6 +158,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -199,6 +200,7 @@
   --accent: var(--color-brand-300);
   --accent-foreground: var(--color-dark-neutral-900);
   --destructive: var(--color-error-600);
+  --success: var(--color-success-600);
   --border: var(--color-dark-neutral-50);
   --input: var(--color-dark-neutral-300);
   --ring: var(--color-clamshell-700);
@@ -235,6 +237,7 @@
   --accent: var(--color-dark-neutral-700);
   --accent-foreground: var(--color-clamshell-50);
   --destructive: var(--color-error-400);
+  --success: var(--color-success-400);
   --border: var(--color-dark-neutral-700);
   --input: var(--color-dark-neutral-600);
   --ring: var(--color-clamshell-950);

@@ -1,7 +1,9 @@
 import { connection } from 'next/server'
 import { Suspense, type ReactNode } from 'react'
 
+import { AppBar } from '@/components/app-bar'
 import { ConfigProvider } from '@/components/contexts/ConfigContext'
+import { MidnightWalletProvider } from '@/components/contexts/MidnightWalletContext'
 import { SplashScreen } from '@/components/splash-screen'
 import { getClientConfig } from '@/lib/config/server-config'
 
@@ -13,7 +15,12 @@ export default async function ConfiguredLayout({ children }: LayoutProps<'/'>): 
   void config.catch(() => undefined)
   return (
     <Suspense fallback={<SplashScreen />}>
-      <ConfigProvider config={config}>{children}</ConfigProvider>
+      <ConfigProvider config={config}>
+        <MidnightWalletProvider>
+          <AppBar />
+          {children}
+        </MidnightWalletProvider>
+      </ConfigProvider>
     </Suspense>
   )
 }

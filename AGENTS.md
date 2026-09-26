@@ -69,10 +69,15 @@ Keep setup instructions and application reference material in README.md and docs
   eligibility. Gate each action on its own prerequisites and leave setup/recovery reachable.
   Failed reads remain unavailable, never zero. Fetch authoritative token decimals, reject excess
   input precision before conversion and preserve exact amounts throughout display and execution.
-- User seeds and independent vault secrets stay in page memory. Clear transient secret inputs on
-  close and release owned credential references on replacement or disconnect. Keep secrets out of
-  persistent stores, URLs, public configuration, logs and evidence. Inspect checkpoint contents
-  before treating them as safe. Browser-wallet credentials remain under extension ownership.
+- The connected Midnight wallet's seed is the one secret the browser persists: local storage
+  holds it from connection until disconnect or a failed connection, so a reload restores the same
+  wallet. Every other secret (vault identity, transient inputs) stays in page memory. Clear
+  transient secret inputs on close and release owned credential references on disconnect. Keep
+  secrets out of URLs, public configuration, logs and evidence. Inspect checkpoint contents before
+  treating them as safe. Browser-wallet credentials remain under extension ownership.
+- One Midnight wallet is connected at a time, whatever its kind. A connect call refuses while a
+  wallet is active, connecting or stored; the user disconnects first. Wallets never replace each
+  other implicitly.
 
 ## Presentation and React
 

@@ -135,6 +135,37 @@ is streamed first and the configured content follows when the load settles.
 Both render `src/components/error-notice.tsx`, which shows the message and the error digest when
 Next.js provides one.
 
+## Midnight wallet
+
+`src/lib/midnight/wallet` holds the wallet layer, and nothing else in the application consumes it
+yet.
+
+- `wallet.ts` defines `WALLET_KINDS` (only `seed` today), `WalletMetadata`, the `Wallet`
+  interface with its optional transaction, funding and recovery capabilities, and
+  `WalletAddressSnapshot`, the public addresses a wallet publishes before it has synchronised.
+- `seed-wallet.ts` is the seed implementation: it derives account-zero keys from a hex seed,
+  publishes the shielded, unshielded and DUST addresses immediately, starts the wallet SDK facade
+  against the configured Midnight endpoints, reports synchronisation progress, and clears the
+  seed and keys on disconnect. `seed-wallet-facade.ts` holds the key derivation, the facade
+  construction and the transaction provider it builds on.
+- `MidnightWalletProvider` (`src/components/contexts/MidnightWalletContext.tsx`) owns one wallet
+  at a time. It reads the Midnight network from `useConfig()`, so it renders inside
+  `ConfigProvider`, which is why `AppBar` sits in the `(configured)` layout. Each connection
+  advances a generation: a superseded connection's results are dropped and its wallet is
+  disconnected exactly once. The SDK loads on the first connection through a dynamic import.
+  The connected seed is written to local storage (`src/lib/midnight/wallet/seed-storage.ts`) and
+  restored on the next load, so a refresh reconnects the same wallet. While a seed is stored, no
+  other seed can connect: disconnecting clears the store, and so does a failed connection. This
+  keeps a wallet secret in a persistent store on purpose, as a convenience for a demo.
+- `WalletMenu` in the app bar is the only user of `useMidnightWallet()`: a popover with the
+  connection status and dot, the addresses once known, the seed dialog and disconnect.
+
+One shim exists for the wallet SDK in the browser: `src/lib/midnight/buffer-shim.ts` installs a
+global `Buffer` and binds `fetch` before the SDK modules load.
+
+`package.json` pins `@midnightntwrk/ledger-v9` through `resolutions`, so the wallet SDK and the
+contract packages share one ledger runtime.
+
 ## Styling and theme
 
 `src/app/globals.css` is the single source of the theme. It defines the sig.network palette as

@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { ThemeProvider } from 'next-themes'
 import type { ReactNode } from 'react'
 
-import { AppBar } from '@/components/app-bar'
 import { soehneMono } from '@/app/fonts/soehne-mono'
 
 import './globals.css'
@@ -31,10 +30,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>): ReactNode {
           enableSystem
           disableTransitionOnChange
         >
-          <div className="flex min-h-dvh flex-col">
-            <AppBar />
-            {children}
-          </div>
+          <div className="flex min-h-dvh flex-col">{children}</div>
         </ThemeProvider>
       </body>
     </html>
