@@ -174,7 +174,8 @@ contract packages share one ledger runtime.
 
 The home page shows three sections on dummy data, each owned by one file that reads the data
 and passes typed props down, so a real data source replaces the dummy module without touching
-the presentation.
+the presentation. The balance list and the activity table render every entry at full height and
+leave scrolling to `HomeLayout`, described under Styling and theme.
 
 - `BalancesSection` (`src/components/balances-section.tsx`) reads `src/lib/balances/dummy-balances.ts`
   and renders a `BalanceBox` per asset: the amount, its US dollar value, the `TokenIcon`
@@ -216,8 +217,10 @@ design renders them.
 
 `HomeLayout` (`src/components/home-layout.tsx`) lays out the home page. From the `md` breakpoint
 up it fills the viewport under the app bar and the page does not scroll: balances above activity
-on the left and the 413px swap column on the right. Below it the sections stack as swap, balances,
-activity and the page scrolls under the app bar, which the `(configured)` layout keeps at the top.
+in the left pane and the 413px swap column on the right. The left pane is the one scroll region.
+When balances and activity are taller than the space under the app bar it scrolls, while the app
+bar and the swap column stay in place. Below `md` the sections stack as swap, balances, activity
+and the page scrolls under the app bar, which the `(configured)` layout keeps at the top.
 
 `next-themes` owns the light or dark choice. It follows the operating system until the visitor
 uses the toggle on the `/design` page, then remembers the choice in local storage.
