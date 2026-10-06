@@ -1,0 +1,25 @@
+<mxfile host="65bd71144e">
+    <diagram id="-1V80NfuvKHoPDpHMZDg" name="Page-1">
+        <mxGraphModel dx="785" dy="812" grid="1" gridSize="1" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="faA6Lj-x4Ca2nZUkh2yi-143" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=40;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="midnight.deposit.v1.&lt;br&gt;DepositService" vertex="1">
+                    <mxGeometry height="284" width="250" x="268" y="256" as="geometry"/>
+                </mxCell>
+                <mxCell id="faA6Lj-x4Ca2nZUkh2yi-144" parent="faA6Lj-x4Ca2nZUkh2yi-143" style="text;strokeColor=none;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;CreateDeposit(&lt;/span&gt;&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;&lt;br&gt;&amp;nbsp; deposit: Deposit&lt;/span&gt;&lt;br style=&quot;color: rgb(63, 63, 63); scrollbar-color: rgb(226, 226, 226) rgb(251, 251, 251);&quot;&gt;&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;) (Deposit&lt;/span&gt;&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;)&lt;/span&gt;" vertex="1">
+                    <mxGeometry height="62" width="250" y="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="2ys8fsXV_md4bo6jfY4E-5" parent="faA6Lj-x4Ca2nZUkh2yi-143" style="text;strokeColor=none;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;CreateDeposit(&lt;/span&gt;&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;&lt;br&gt;&amp;nbsp; deposit: Deposit&lt;/span&gt;&lt;br style=&quot;color: rgb(63, 63, 63); scrollbar-color: rgb(226, 226, 226) rgb(251, 251, 251);&quot;&gt;&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;) (Deposit&lt;/span&gt;&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;)&lt;/span&gt;" vertex="1">
+                    <mxGeometry height="62" width="250" y="102" as="geometry"/>
+                </mxCell>
+                <mxCell id="faA6Lj-x4Ca2nZUkh2yi-145" parent="faA6Lj-x4Ca2nZUkh2yi-143" style="text;strokeColor=none;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="GetDeposit({&lt;br&gt;&amp;nbsp; &amp;nbsp;name: string&lt;br&gt;}) (Deposit)" vertex="1">
+                    <mxGeometry height="60" width="250" y="164" as="geometry"/>
+                </mxCell>
+                <mxCell id="faA6Lj-x4Ca2nZUkh2yi-146" parent="faA6Lj-x4Ca2nZUkh2yi-143" style="text;strokeColor=none;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="ListDeposits({&lt;br&gt;}): (Deposit[ ])" vertex="1">
+                    <mxGeometry height="60" width="250" y="224" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
