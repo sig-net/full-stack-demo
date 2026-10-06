@@ -11,7 +11,9 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "check": "yarn typecheck && yarn lint && yarn format:check"
+    "check": "yarn typecheck && yarn lint && yarn format:check",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -25,16 +27,19 @@
     "@midnightntwrk/wallet-sdk-node-client": "2.0.0-beta.2",
     "@midnightntwrk/wallet-sdk-shielded": "4.0.0-beta.2",
     "@midnightntwrk/wallet-sdk-unshielded-wallet": "4.0.0-beta.2",
+    "@platformatic/kafka": "^2.13.0",
     "@polkadot/api": "16.5.6",
     "@sig-net/midnight": "^0.24.0",
     "@sig-net/midnight-examples-erc20-vault-contract": "0.4.0-rc.2",
     "buffer": "^6.0.3",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.0",
+    "drizzle-orm": "^0.45.3",
     "effect": "3.22.2",
     "lucide-react": "^1.47.0",
     "next": "16.3.5",
     "next-themes": "^0.4.6",
+    "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
@@ -45,9 +50,11 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.6.2",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "babel-plugin-react-compiler": "^1.0.0",
+    "drizzle-kit": "^0.31.11",
     "eslint-plugin-better-tailwindcss": "^4.7.0",
     "oxfmt": "^0.68.0",
     "oxlint": "^1.83.0",
@@ -59,7 +66,7 @@
     "@midnightntwrk/ledger-v9": "1.0.0-rc.3"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.22.0"
   },
   "packageManager": "yarn@4.18.0"
 }

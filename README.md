@@ -5,9 +5,10 @@ and shadcn/ui components on Base UI.
 
 ## Requirements
 
-- Node.js 22.12 or newer.
+- Node.js 22.22 or newer.
 - Yarn 4, supplied by Corepack from the `packageManager` field in `package.json`. Run
   `corepack enable` once if `yarn --version` does not report 4.x inside this folder.
+- Docker with the Compose plugin, for the local Postgres database and Kafka broker.
 
 ## Getting started
 
@@ -20,11 +21,20 @@ cp .env.example .env.local
 ```
 
 ```bash
+docker compose up -d --wait
+```
+
+```bash
+yarn db:migrate
+```
+
+```bash
 yarn dev
 ```
 
 The development server listens on http://localhost:3000. The variables in `.env.local` are
-described under [Configuration](#configuration).
+described under [Configuration](#configuration), and Postgres and Kafka under
+[Local services](#local-services).
 
 ## Scripts
 
@@ -38,6 +48,8 @@ described under [Configuration](#configuration).
 | `yarn format`       | Format with oxfmt.                                               |
 | `yarn format:check` | Report files that are not formatted.                             |
 | `yarn check`        | Run the type check, the linter and the format check in sequence. |
+| `yarn db:generate`  | Write a SQL migration for the changes made to the schema.        |
+| `yarn db:migrate`   | Apply the migrations that the database has not yet run.          |
 
 ## Layout
 
@@ -50,6 +62,11 @@ described under [Configuration](#configuration).
 | `src/components/contexts` | React contexts: each file holds a context, its provider and its `use<Name>` hook.                |
 | `src/lib`                 | Non-React modules.                                                                               |
 | `src/lib/config`          | Server configuration loading and the client configuration type.                                  |
+| `src/lib/db`              | The Drizzle schema and the Postgres connection pool.                                             |
+| `src/lib/kafka`           | The Kafka producer and consumer construction.                                                    |
+| `src/app/api`             | Route handlers.                                                                                  |
+| `src/instrumentation.ts`  | Runs once when the server process starts, and starts the Kafka consumers.                        |
+| `drizzle`                 | SQL migrations and their snapshots, written by `yarn db:generate`.                               |
 | `public/icons`            | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.       |
 
 Pages and layouts are server components. A component opts into the browser with `'use client'`
@@ -72,7 +89,8 @@ in at build time, so one build serves every environment. `.env.example` lists th
 | `MIDNIGHT_VAULT_CONTRACT_ADDRESS`     | No     | 32-byte hex. Overrides the published ERC20 vault address, required for `undeployed`.                              |
 | `EVM_CHAIN_ID`                        | No     | Ethereum chain ID. `1`, `11155111` and `31337` have a default RPC.                                                |
 | `EVM_RPC_URL`                         | No     | Optional override of the RPC endpoint, required for other chains.                                                 |
-| `DB_CONNECTION_STRING`                | Yes    | Example secret.                                                                                                   |
+| `DB_CONNECTION_STRING`                | Yes    | Postgres connection string. The value in `.env.example` points at the [local database](#local-services).          |
+| `KAFKA_BROKERS`                       | No     | Kafka bootstrap brokers as comma-separated `host:port`. Server-only: it is not part of the client configuration.  |
 
 Each section of the client configuration is owned by one module under `src/lib/config`
 (`midnight-network-config.ts`, `midnight-signet-config.ts`, `midnight-vault-config.ts`,
@@ -87,15 +105,15 @@ same variables are set on the process.
 ### Server and client halves
 
 `src/lib/config/server-config.ts` validates `process.env` with one zod schema composed from the
-section modules and produces a `ServerConfig` with two halves: `secret` and `client`. A validation failure names the offending
+section modules and produces a `ServerConfig` with two halves: `serverOnly` and `client`. A validation failure names the offending
 variable. The load is shared by every request through one promise, and a rejected load is dropped
 so the next request retries.
 
 - Server code (layouts, pages, route handlers, server actions) calls `getServerConfig()` and may
   read both halves.
 - `getClientConfig()` returns the `client` half only. `ClientConfig` (`src/lib/config/client-config.ts`)
-  is the one place that defines what the browser may see, and a secret can only reach the browser by
-  being added to that type.
+  is the one place that defines what the browser may see, and a server-only value can only reach the
+  browser by being added to that type.
 - The module imports `server-only`, so importing it from a client component fails the build.
 
 ### Injection into the browser
@@ -134,6 +152,108 @@ is streamed first and the configured content follows when the load settles.
 
 Both render `src/components/error-notice.tsx`, which shows the message and the error digest when
 Next.js provides one.
+
+## Local services
+
+`compose.yaml` runs the two services the backend depends on, the same engines the deployed
+application uses:
+
+- Postgres 18 on `127.0.0.1:5432`, with the user, password and database all named `demo`.
+- Kafka 4.2 on `127.0.0.1:9092`, a single node in KRaft mode without authentication. Topics are
+  created on first use.
+
+`DB_CONNECTION_STRING` and `KAFKA_BROKERS` in `.env.example` point at them. Their data lives in
+the `full-stack-demo_postgres-data` and `full-stack-demo_kafka-data` Docker volumes and survives
+a restart of the containers.
+
+Start them and wait until both accept connections:
+
+```bash
+docker compose up -d --wait
+```
+
+Stop them and keep the data:
+
+```bash
+docker compose down
+```
+
+Stop them and delete the data, so the next start begins with an empty database and broker:
+
+```bash
+docker compose down --volumes
+```
+
+## Database
+
+The backend reaches Postgres through [Drizzle ORM](https://orm.drizzle.team) on the `pg` driver.
+
+- `src/lib/db/schema.ts` declares every table. It is the source the migrations are generated from.
+- `src/lib/db/database.ts` exports `getDatabase()`, which builds one connection pool for the
+  server process from `DB_CONNECTION_STRING`.
+- `drizzle.config.ts` configures drizzle-kit. It reads `DB_CONNECTION_STRING` from the environment,
+  or from `.env.local` when that file exists.
+
+To change the schema, edit `src/lib/db/schema.ts`, then write the migration and commit the files
+it adds under `drizzle`:
+
+```bash
+yarn db:generate --name describe_the_change
+```
+
+Apply the migrations the database has not yet run:
+
+```bash
+yarn db:migrate
+```
+
+## Kafka
+
+The backend reaches Kafka through [`@platformatic/kafka`](https://github.com/platformatic/kafka),
+which documents support for Apache Kafka 3.5.0 to 4.2.0. `src/lib/kafka/clients.ts` owns the
+connection options: `getProducer()` returns the one producer of the server process, and
+`createConsumer(groupId)` builds a consumer that its caller owns and closes. Keys, values and
+headers are strings.
+
+Consumers run inside the Next.js server process. `src/instrumentation.ts` starts them from
+`register()`, which Next.js calls once when the process starts. Every replica of the application
+joins the same consumer group, and Kafka divides the topic's partitions among them.
+
+## Examples
+
+Two small, independent examples show how the backend uses each service.
+
+### Storing a row from the UI
+
+`saveExampleNote(text)` in `src/lib/example-notes/example-note-actions.ts` is a server action: a
+client component imports it and calls it like a function, and Next.js runs it on the server. It
+validates the text, inserts a row into the `example_notes` table and returns the new row's `id`,
+or the validation message when the text is empty or longer than 500 characters.
+
+```tsx
+'use client'
+
+import { saveExampleNote } from '@/lib/example-notes/example-note-actions'
+
+const result = await saveExampleNote('hello')
+```
+
+### Publishing and consuming a Kafka message
+
+`POST /api/example-messages` validates the JSON body against `exampleMessageSchema` and publishes
+it to the `full-stack-demo.example-messages` topic. It answers `202` once the broker has
+acknowledged the record, or `400` with the validation message.
+
+The consumer in `src/lib/example-messages/example-message-consumer.ts` reads the topic as the
+`full-stack-demo.example-messages` group and logs each record to the server output. After a
+failure it restarts five seconds later.
+
+With the services and the development server running, publish a message and watch the server
+output:
+
+```bash
+curl -X POST -H 'content-type: application/json' -d '{"text":"hello"}' http://localhost:3000/api/example-messages
+```
 
 ## Midnight wallet
 

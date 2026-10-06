@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import type { ClientConfig } from '@/lib/config/client-config'
 import { ethereumConfigFromEnv, ethereumEnvSchema } from '@/lib/config/ethereum-config'
+import { type KafkaConfig, kafkaConfigFromEnv, kafkaEnvSchema } from '@/lib/config/kafka-config'
 import {
   midnightNetworkConfigFromEnv,
   midnightNetworkEnvSchema,
@@ -17,17 +18,19 @@ import {
   midnightVaultEnvSchema,
 } from '@/lib/config/midnight-vault-config'
 
-export interface SecretConfig {
+export interface ServerOnlyConfig {
   readonly dbConnectionString: string
+  readonly kafka: KafkaConfig
 }
 
 export interface ServerConfig {
-  readonly secret: SecretConfig
+  readonly serverOnly: ServerOnlyConfig
   readonly client: ClientConfig
 }
 
 const envSchema = z.object({
   DB_CONNECTION_STRING: z.string().min(1),
+  ...kafkaEnvSchema.shape,
   ...midnightNetworkEnvSchema.shape,
   ...midnightSignetEnvSchema.shape,
   ...midnightVaultEnvSchema.shape,
@@ -42,7 +45,10 @@ async function loadServerConfig(): Promise<ServerConfig> {
   const env = parsed.data
   const midnightNetwork = midnightNetworkConfigFromEnv(env)
   return {
-    secret: { dbConnectionString: env.DB_CONNECTION_STRING },
+    serverOnly: {
+      dbConnectionString: env.DB_CONNECTION_STRING,
+      kafka: kafkaConfigFromEnv(env),
+    },
     client: {
       midnightNetwork,
       midnightSignet: midnightSignetConfigFromEnv(midnightNetwork.networkId, env),
