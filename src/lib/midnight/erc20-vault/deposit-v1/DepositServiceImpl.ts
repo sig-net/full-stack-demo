@@ -3,27 +3,35 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
-import { getDatabase } from '@/lib/db/database'
 import { type Deposit, depositName } from '@/lib/midnight/erc20-vault/deposit-v1/Deposit'
 import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/DepositRepository'
-import { DepositRepositorySQLImpl } from '@/lib/midnight/erc20-vault/deposit-v1/DepositRepositorySQLImpl'
+import { getDepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/DepositRepositorySQLImpl'
 import type {
   CreateDepositArgs,
   DepositService,
   GetDepositArgs,
 } from '@/lib/midnight/erc20-vault/deposit-v1/DepositService'
+import type { DepositStateController } from './DepositStateController'
+import { getDepositStateController } from './DepositStateControllerImpl'
 
 export class DepositServiceImpl implements DepositService {
   private readonly depositRepository: DepositRepository
+  private readonly depositStateController: DepositStateController
 
-  constructor(depositRepository: DepositRepository) {
+  constructor(
+    depositRepository: DepositRepository,
+    depositStateController: DepositStateController,
+  ) {
     this.depositRepository = depositRepository
+    this.depositStateController = depositStateController
   }
 
   createDeposit(caller: Caller, args: CreateDepositArgs): Promise<Deposit> {
-    return this.depositRepository.upsertDeposit({
-      ...args,
-      name: depositName(caller.name, randomUUID()),
+    return this.depositStateController.startDeposit({
+      deposit: {
+        ...args,
+        name: depositName(caller.name, randomUUID()),
+      },
     })
   }
 
@@ -33,15 +41,19 @@ export class DepositServiceImpl implements DepositService {
   }
 }
 
-// One service serves the whole server process.
-let service: Promise<DepositService> | undefined
+// One instance serves the whole server process.
+let depositService: Promise<DepositService> | undefined
 
 export function getDepositService(): Promise<DepositService> {
-  service ??= getDatabase()
-    .then((database) => new DepositServiceImpl(new DepositRepositorySQLImpl(database)))
-    .catch((error: unknown) => {
-      service = undefined
+  depositService ??= (async () => {
+    try {
+      const depositRepository = await getDepositRepository()
+      const depositStateController = await getDepositStateController()
+      return new DepositServiceImpl(depositRepository, depositStateController)
+    } catch (error) {
+      depositService = undefined
       throw error
-    })
-  return service
+    }
+  })()
+  return depositService
 }

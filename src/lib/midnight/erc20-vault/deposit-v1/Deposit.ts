@@ -14,11 +14,16 @@ export const depositNameSchema = z
     `expected callers/{caller}/${DEPOSIT_COLLECTION}/{uuid}`,
   )
 
+export const depositStateSchema = z.enum(['Pending'])
+
+export type DepositState = z.infer<typeof depositStateSchema>
+
 /** The deposit resource. `name` is assigned by the server. */
 export const depositSchema = z.object({
   name: depositNameSchema,
   erc20Address: evmAddressSchema,
   amount: amountSchema,
+  state: depositStateSchema,
 })
 
 export type Deposit = z.infer<typeof depositSchema>

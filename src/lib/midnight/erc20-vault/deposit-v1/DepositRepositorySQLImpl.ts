@@ -6,6 +6,7 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { midnightErc20VaultDepositsV1 } from '@/lib/db/schema'
 import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/Deposit'
 import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/DepositRepository'
+import { getDatabase } from '@/lib/db/database'
 
 type DepositRow = typeof midnightErc20VaultDepositsV1.$inferSelect
 
@@ -45,4 +46,20 @@ export class DepositRepositorySQLImpl implements DepositRepository {
       .limit(1)
     return row === undefined ? undefined : fromDepositRow(row)
   }
+}
+
+// One instance serves the whole server process.
+let depositRepository: Promise<DepositRepository> | undefined
+
+export function getDepositRepository(): Promise<DepositRepository> {
+  depositRepository ??= (async () => {
+    try {
+      const database = await getDatabase()
+      return new DepositRepositorySQLImpl(database)
+    } catch (error) {
+      depositRepository = undefined
+      throw error
+    }
+  })()
+  return depositRepository
 }
