@@ -4,7 +4,7 @@ import {
   type Deposit,
   depositNameSchema,
   depositSchema,
-} from '@/lib/midnight/erc20-vault/deposit-v1/Deposit'
+} from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
 import { callerSecretSchema } from '@/lib/caller/caller'
 
 export interface DepositStateController {

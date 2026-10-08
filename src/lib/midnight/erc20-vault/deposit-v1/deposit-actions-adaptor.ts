@@ -3,14 +3,14 @@
 import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
-import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/Deposit'
+import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
 import {
   type StartDepositArgs,
   startDepositArgsSchema,
   type GetDepositArgs,
   getDepositArgsSchema,
-} from '@/lib/midnight/erc20-vault/deposit-v1/DepositService'
-import { getDepositService } from '@/lib/midnight/erc20-vault/deposit-v1/DepositServiceImpl'
+} from '@/lib/midnight/erc20-vault/deposit-v1/deposit-service'
+import { getDepositService } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-service-impl'
 
 export type DepositResult =
   | { readonly ok: true; readonly deposit: Deposit }

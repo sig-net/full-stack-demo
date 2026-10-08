@@ -267,14 +267,14 @@ is exposed as server actions rather than HTTP routes. A deposit is named
 `callers/{caller}/erc20-vault-deposits/{deposit}`, where the caller is the depositor's
 64-character hex identity commitment and the deposit id is a UUID the server assigns.
 
-- `Deposit.ts` holds the resource schema and its type, with the resource-name format and builder,
+- `deposit.ts` holds the resource schema and its type, with the resource-name format and builder,
   shared by the server and the browser. The generic EVM address, base-unit amount, hex and UUID
   schemas live in `src/lib/value-schemas.ts`.
-- `DepositRepository.ts` is the storage interface and `DepositRepositorySQLImpl.ts` its Postgres
+- `deposit-repository.ts` is the storage interface and `deposit-repository-sql-impl.ts` its Postgres
   implementation over the `midnight_erc20_vault_deposits_v1` table.
-- `DepositService.ts` is the API's method set and `DepositServiceImpl.ts` the implementation,
+- `deposit-service.ts` is the API's method set and `deposit-service-impl.ts` the implementation,
   with `getDepositService()` building the one instance of the server process.
-- `DepositActionsAdaptor.ts` is the adaptor the UI calls. `createDeposit(callerSecret, args)` and
+- `deposit-actions-adaptor.ts` is the adaptor the UI calls. `createDeposit(callerSecret, args)` and
   `getDeposit(callerSecret, args)` are server actions that only translate: the secret becomes a
   `Caller`, the arguments are validated, the service is called, and its result becomes
   `{ ok: true, deposit }` or `{ ok: false, error }`. Amounts cross as `bigint`.
@@ -282,7 +282,7 @@ is exposed as server actions rather than HTTP routes. A deposit is named
 ```tsx
 'use client'
 
-import { createDeposit } from '@/lib/midnight/erc20-vault/deposit-v1/DepositActionsAdaptor'
+import { createDeposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-actions-adaptor'
 
 const result = await createDeposit(callerSecret, { erc20Address, amount: 1000000n })
 ```

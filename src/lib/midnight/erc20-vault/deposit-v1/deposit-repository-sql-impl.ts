@@ -4,8 +4,8 @@ import { eq } from 'drizzle-orm'
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
 
 import { midnightErc20VaultDepositsV1 } from '@/lib/db/schema'
-import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/Deposit'
-import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/DepositRepository'
+import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
+import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-repository'
 import { getDatabase } from '@/lib/db/database'
 
 type DepositRow = typeof midnightErc20VaultDepositsV1.$inferSelect
@@ -25,15 +25,14 @@ export class DepositRepositorySQLImpl implements DepositRepository {
     this.database = database
   }
 
-  async upsertDeposit(deposit: Deposit): Promise<Deposit> {
+  async createDeposit(deposit: Deposit): Promise<Deposit> {
     const row = toDepositRow(deposit)
     const [stored] = await this.database
       .insert(midnightErc20VaultDepositsV1)
       .values(row)
-      .onConflictDoUpdate({ target: midnightErc20VaultDepositsV1.name, set: row })
       .returning()
     if (stored === undefined) {
-      throw new Error('The upsert returned no row')
+      throw new Error('The create returned no row')
     }
     return fromDepositRow(stored)
   }

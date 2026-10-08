@@ -554,7 +554,7 @@ to poll. If a client ever needs operation semantics, the create methods can retu
 `Operation` whose result is the resource without changing the resources themselves.
 
 Transport. This UI is the only client, so the methods are exposed as server actions in
-`DepositActionsAdaptor.ts`, typed end to end, with no HTTP surface. The HTTP column above records the
+`deposit-actions-adaptor.ts`, typed end to end, with no HTTP surface. The HTTP column above records the
 AIP mapping the names and methods were designed against, for the day another client exists.
 
 ### The flow as the UI sees it

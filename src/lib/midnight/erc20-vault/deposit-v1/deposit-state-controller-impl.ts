@@ -1,13 +1,13 @@
 import 'server-only'
 
-import type { Deposit } from './Deposit'
-import type { DepositRepository } from './DepositRepository'
+import type { Deposit } from './deposit'
+import type { DepositRepository } from './deposit-repository'
 import type {
   DepositStateController,
   ResolveDepositStateArgs,
   StartDepositArgs,
-} from './DepositStateController'
-import { getDepositRepository } from './DepositRepositorySQLImpl'
+} from './deposit-state-controller'
+import { getDepositRepository } from './deposit-repository-sql-impl'
 
 export class DepositStateControllerImpl implements DepositStateController {
   private readonly depositRepository: DepositRepository

@@ -3,17 +3,17 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
-import { type Deposit, depositName } from '@/lib/midnight/erc20-vault/deposit-v1/Deposit'
-import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/DepositRepository'
-import { getDepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/DepositRepositorySQLImpl'
+import { type Deposit, depositName } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
+import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-repository'
+import { getDepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-repository-sql-impl'
 import type {
   StartDepositArgs,
   DepositService,
   GetDepositArgs,
   SubmitStartDepositArgs,
-} from '@/lib/midnight/erc20-vault/deposit-v1/DepositService'
-import type { DepositStateController } from './DepositStateController'
-import { getDepositStateController } from './DepositStateControllerImpl'
+} from '@/lib/midnight/erc20-vault/deposit-v1/deposit-service'
+import type { DepositStateController } from './deposit-state-controller'
+import { getDepositStateController } from './deposit-state-controller-impl'
 
 export class DepositServiceImpl implements DepositService {
   private readonly depositRepository: DepositRepository
