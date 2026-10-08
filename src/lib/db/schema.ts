@@ -1,9 +1,9 @@
 import { notInArray } from 'drizzle-orm'
 import {
-  bigint,
   boolean,
   customType,
   index,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -71,13 +71,26 @@ export const ethereumTransactionsV1 = pgTable(
   ],
 )
 
-/** One row per ERC-20 vault deposit resource, keyed by its resource name. */
+/**
+ * One row per ERC-20 vault deposit resource, keyed by its resource name. Contract integers are
+ * unsigned 64 and 128 bit, beyond Postgres's signed `bigint`, so they are stored as `numeric`.
+ */
 export const midnightErc20VaultDepositsV1 = pgTable('midnight_erc20_vault_deposits_v1', {
   name: text('name').primaryKey(),
   erc20Address: text('erc20_address').notNull(),
-  amount: bigint('amount', { mode: 'bigint' }).notNull(),
+  amount: contractInteger('amount').notNull(),
   state: text('state', { enum: DEPOSIT_STATES }).notNull(),
+  inIndex: contractInteger('in_index').notNull(),
+  evmNonce: contractInteger('evm_nonce').notNull(),
+  gasLimit: contractInteger('gas_limit').notNull(),
+  maxFeePerGas: contractInteger('max_fee_per_gas').notNull(),
+  maxPriorityFeePerGas: contractInteger('max_priority_fee_per_gas').notNull(),
 })
+
+/** Wide enough for a `Uint<128>`. */
+function contractInteger(name: string) {
+  return numeric(name, { precision: 39, scale: 0, mode: 'bigint' })
+}
 
 const bytea = customType<{ data: Uint8Array<ArrayBuffer>; driverData: Buffer }>({
   dataType: () => 'bytea',

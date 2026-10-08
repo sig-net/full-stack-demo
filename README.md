@@ -329,7 +329,9 @@ is exposed as server actions rather than HTTP routes. A deposit is named
 
 import { startDeposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-actions-adaptor'
 
-const result = await startDeposit(callerSecret, { erc20Address, amount: 1000000n })
+const result = await startDeposit(callerSecret, {
+  depositRequest: { erc20Address, amount: 1000000n },
+})
 ```
 
 ## Midnight wallet

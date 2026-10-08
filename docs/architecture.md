@@ -431,6 +431,9 @@ class Deposit {
   state: Deposit.State         // OUTPUT_ONLY
   inIndex: bigint              // OUTPUT_ONLY. Backend-chosen random request index
   evmNonce: bigint             // OUTPUT_ONLY. The deposit account's nonce, read from the EVM RPC
+  gasLimit: bigint             // OUTPUT_ONLY. The circuit's GasParams, read from the EVM RPC
+  maxFeePerGas: bigint         // OUTPUT_ONLY
+  maxPriorityFeePerGas: bigint // OUTPUT_ONLY
   vaultRequestId: Hex32        // OUTPUT_ONLY. Known once sendDeposit is on chain
   attestation?: Attestation    // OUTPUT_ONLY. Known once the MPC has attested
   outcome?: Deposit.Outcome    // OUTPUT_ONLY. Known once completeDeposit is on chain

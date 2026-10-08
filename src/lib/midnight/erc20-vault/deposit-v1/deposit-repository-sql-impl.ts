@@ -29,6 +29,11 @@ function toDepositRow(deposit: Deposit): DepositRow {
     erc20Address: deposit.erc20Address,
     amount: deposit.amount,
     state: deposit.state,
+    inIndex: deposit.inIndex,
+    evmNonce: deposit.evmNonce,
+    gasLimit: deposit.gasLimit,
+    maxFeePerGas: deposit.maxFeePerGas,
+    maxPriorityFeePerGas: deposit.maxPriorityFeePerGas,
   }
 }
 
@@ -38,5 +43,10 @@ function fromDepositRow(row: DepositRow): Deposit {
     erc20Address: row.erc20Address,
     amount: row.amount,
     state: row.state,
+    inIndex: row.inIndex,
+    evmNonce: row.evmNonce,
+    gasLimit: row.gasLimit,
+    maxFeePerGas: row.maxFeePerGas,
+    maxPriorityFeePerGas: row.maxPriorityFeePerGas,
   }
 }

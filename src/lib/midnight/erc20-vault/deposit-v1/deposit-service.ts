@@ -4,7 +4,7 @@ import type { Caller } from '@/lib/caller/caller'
 import {
   type Deposit,
   depositNameSchema,
-  depositSchema,
+  depositRequestSchema,
 } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
 
 /** The deposit API's methods, independent of the transport that exposes them. */
@@ -15,7 +15,7 @@ export interface DepositService {
 }
 
 export const startDepositArgsSchema = z.object({
-  depositArgs: depositSchema.omit({ name: true }),
+  depositRequest: depositRequestSchema,
 })
 export type StartDepositArgs = z.infer<typeof startDepositArgsSchema>
 

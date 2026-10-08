@@ -30,10 +30,8 @@ export class DepositServiceImpl implements DepositService {
   startDeposit(caller: Caller, args: StartDepositArgs): Promise<Deposit> {
     return this.depositStateController.startDeposit({
       caller,
-      deposit: {
-        ...args.depositArgs,
-        name: depositName(caller.name, randomUUID()),
-      },
+      name: depositName(caller.name, randomUUID()),
+      depositRequest: args.depositRequest,
     })
   }
 
