@@ -218,8 +218,10 @@ name. `search` takes criteria that must all hold (`exact-text` and `bool` on a n
 optional order, limit and a `lock` of `update-skip-locked` for work that claims rows inside a
 transaction. A resource's repository file is a type alias of that interface, and its SQL
 implementation extends `SQLRepository` in `src/lib/repository/repository-sql-impl.ts` with the
-table and two row mappers, so repositories differ only in the table they name. The table's column
-properties carry the resource's field names, which is how a criterion finds its column.
+table, the resource schema and two row mappers, so repositories differ only in the table they
+name. The table's column properties carry the resource's field names, which is how a criterion
+finds its column. Every row read is parsed with the resource schema, since a stored row is as
+untrusted as wire input: it may have been written by an older version of the code.
 
 To change the schema, edit `src/lib/db/schema.ts`, then write the migration and commit the files
 it adds under `drizzle`:

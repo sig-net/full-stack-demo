@@ -2,6 +2,7 @@ import 'server-only'
 
 import { and, asc, desc, eq, getTableColumns, type SQL } from 'drizzle-orm'
 import type { PgColumn, PgTable, TableConfig } from 'drizzle-orm/pg-core'
+import type { z } from 'zod'
 
 import type { DatabaseExecutor } from '@/lib/db/database'
 import { currentTransaction } from '@/lib/db/unit-of-work'
@@ -10,6 +11,7 @@ import type { Criterion, Repository, SearchArgs } from '@/lib/repository/reposit
 /**
  * A repository over one Drizzle table whose column properties are named exactly as the resource's
  * fields, so a criterion's field resolves to a column by name and the mappers convert values only.
+ * Every row read is parsed with the resource schema, since stored rows are a trust boundary.
  */
 export class SQLRepository<
   Resource extends { name: string },
@@ -17,17 +19,20 @@ export class SQLRepository<
 > implements Repository<Resource> {
   private readonly database: DatabaseExecutor
   private readonly table: Table
+  private readonly schema: z.ZodType<Resource>
   private readonly toRow: (resource: Resource) => Table['$inferInsert']
   private readonly fromRow: (row: Table['$inferSelect']) => Resource
 
   constructor(
     database: DatabaseExecutor,
     table: Table,
+    schema: z.ZodType<Resource>,
     toRow: (resource: Resource) => Table['$inferInsert'],
     fromRow: (row: Table['$inferSelect']) => Resource,
   ) {
     this.database = database
     this.table = table
+    this.schema = schema
     this.toRow = toRow
     this.fromRow = fromRow
   }
@@ -40,7 +45,7 @@ export class SQLRepository<
     if (stored === undefined) {
       throw new Error('The insert returned no row')
     }
-    return this.fromRow(this.typedRow(stored))
+    return this.resource(stored)
   }
 
   async get(name: string): Promise<Resource | undefined> {
@@ -49,7 +54,7 @@ export class SQLRepository<
       .from(this.anyTable())
       .where(eq(this.column('name'), name))
       .limit(1)
-    return row === undefined ? undefined : this.fromRow(this.typedRow(row))
+    return row === undefined ? undefined : this.resource(row)
   }
 
   async update(resource: Resource): Promise<Resource> {
@@ -61,7 +66,7 @@ export class SQLRepository<
     if (stored === undefined) {
       throw new Error(`${resource.name} does not exist`)
     }
-    return this.fromRow(this.typedRow(stored))
+    return this.resource(stored)
   }
 
   async search(args: SearchArgs<Resource>): Promise<Resource[]> {
@@ -77,11 +82,15 @@ export class SQLRepository<
     if (args.limit !== undefined) query = query.limit(args.limit)
     if (args.lock === 'update-skip-locked') query = query.for('update', { skipLocked: true })
     const rows = await query
-    return rows.map((row) => this.fromRow(this.typedRow(row)))
+    return rows.map((row) => this.resource(row))
   }
 
   private executor(): DatabaseExecutor {
     return currentTransaction() ?? this.database
+  }
+
+  private resource(row: PgTable['$inferSelect']): Resource {
+    return this.schema.parse(this.fromRow(this.typedRow(row)))
   }
 
   /** Drizzle's query types resolve only against a concrete table type, so queries run on this. */

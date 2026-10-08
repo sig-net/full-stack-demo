@@ -3,7 +3,10 @@ import 'server-only'
 import { type DatabaseExecutor, getDatabase } from '@/lib/db/database'
 import { midnightTransactionsV1 } from '@/lib/db/schema'
 import { lazySingleton } from '@/lib/lazy-singleton'
-import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
+import {
+  type MidnightTransaction,
+  midnightTransactionSchema,
+} from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import { SQLRepository } from '@/lib/repository/repository-sql-impl'
 
@@ -12,7 +15,13 @@ export class MidnightTransactionRepositorySQLImpl
   implements MidnightTransactionRepository
 {
   constructor(database: DatabaseExecutor) {
-    super(database, midnightTransactionsV1, toMidnightTransactionRow, fromMidnightTransactionRow)
+    super(
+      database,
+      midnightTransactionsV1,
+      midnightTransactionSchema,
+      toMidnightTransactionRow,
+      fromMidnightTransactionRow,
+    )
   }
 }
 

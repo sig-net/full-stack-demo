@@ -2,7 +2,10 @@ import 'server-only'
 
 import { type DatabaseExecutor, getDatabase } from '@/lib/db/database'
 import { ethereumTransactionsV1 } from '@/lib/db/schema'
-import type { EthereumTransaction } from '@/lib/ethereum/transaction-v1/transaction'
+import {
+  type EthereumTransaction,
+  ethereumTransactionSchema,
+} from '@/lib/ethereum/transaction-v1/transaction'
 import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
 import { lazySingleton } from '@/lib/lazy-singleton'
 import { SQLRepository } from '@/lib/repository/repository-sql-impl'
@@ -12,7 +15,13 @@ export class EthereumTransactionRepositorySQLImpl
   implements EthereumTransactionRepository
 {
   constructor(database: DatabaseExecutor) {
-    super(database, ethereumTransactionsV1, toEthereumTransactionRow, fromEthereumTransactionRow)
+    super(
+      database,
+      ethereumTransactionsV1,
+      ethereumTransactionSchema,
+      toEthereumTransactionRow,
+      fromEthereumTransactionRow,
+    )
   }
 }
 

@@ -3,7 +3,7 @@ import 'server-only'
 import { type DatabaseExecutor, getDatabase } from '@/lib/db/database'
 import { midnightErc20VaultDepositsV1 } from '@/lib/db/schema'
 import { lazySingleton } from '@/lib/lazy-singleton'
-import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
+import { type Deposit, depositSchema } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
 import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-repository'
 import { SQLRepository } from '@/lib/repository/repository-sql-impl'
 
@@ -12,7 +12,7 @@ export class DepositRepositorySQLImpl
   implements DepositRepository
 {
   constructor(database: DatabaseExecutor) {
-    super(database, midnightErc20VaultDepositsV1, toDepositRow, fromDepositRow)
+    super(database, midnightErc20VaultDepositsV1, depositSchema, toDepositRow, fromDepositRow)
   }
 }
 

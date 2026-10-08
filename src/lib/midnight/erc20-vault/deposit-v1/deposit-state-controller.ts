@@ -1,25 +1,17 @@
-import { z } from 'zod'
+import type { Caller } from '@/lib/caller/caller'
+import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
 
-import {
-  type Deposit,
-  depositNameSchema,
-  depositSchema,
-} from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
-import { callerSchema } from '@/lib/caller/caller'
-
+/** Drives a deposit through its states. Callers hand it validated values, so it never parses. */
 export interface DepositStateController {
   startDeposit(args: StartDepositArgs): Promise<Deposit>
-
   resolveDepositState(args: ResolveDepositStateArgs): Promise<Deposit>
 }
 
-export const requestStartDepositArgsSchema = z.object({
-  caller: callerSchema,
-  deposit: depositSchema,
-})
-export type StartDepositArgs = z.infer<typeof requestStartDepositArgsSchema>
+export interface StartDepositArgs {
+  caller: Caller
+  deposit: Deposit
+}
 
-export const resolveDepositStateArgsSchema = z.object({
-  name: depositNameSchema,
-})
-export type ResolveDepositStateArgs = z.infer<typeof resolveDepositStateArgsSchema>
+export interface ResolveDepositStateArgs {
+  name: string
+}

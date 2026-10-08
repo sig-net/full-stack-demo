@@ -79,6 +79,19 @@ Keep setup instructions and application reference material in README.md and docs
   never rename, derive or default a field. Application logic, authorisation and naming live in the
   service and state controller, never in a repository.
 
+## Validation boundaries
+
+- A type gets a zod schema when a value of that type crosses a trust boundary: wire input into
+  an adaptor, event data into a consumer, or a row out of a repository. The schema is parsed at
+  that boundary and nowhere else. Resources and service args have schemas for that reason; state
+  controller args, repository search args and every other internal type are plain TypeScript
+  types, since their only callers already hold validated values and the compiler carries the
+  proof between boundaries.
+- An adaptor uses `safeParse`, because a bad input is an expected outcome it reports. A consumer
+  and `SQLRepository` use `parse`, because malformed event data or a malformed row is a bug that
+  must surface. A schema with a transform must accept its own output, so a value parsed twice
+  stays the same.
+
 ## State and asynchronous work
 
 - Use React Query for remote reads, mutations and application data caching. Do not fetch remote

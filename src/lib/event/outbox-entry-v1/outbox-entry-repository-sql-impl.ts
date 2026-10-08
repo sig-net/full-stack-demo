@@ -2,7 +2,7 @@ import 'server-only'
 
 import { type DatabaseExecutor, getDatabase } from '@/lib/db/database'
 import { eventOutboxEntriesV1 } from '@/lib/db/schema'
-import type { OutboxEntry } from '@/lib/event/outbox-entry-v1/outbox-entry'
+import { type OutboxEntry, outboxEntrySchema } from '@/lib/event/outbox-entry-v1/outbox-entry'
 import type { OutboxEntryRepository } from '@/lib/event/outbox-entry-v1/outbox-entry-repository'
 import { lazySingleton } from '@/lib/lazy-singleton'
 import { SQLRepository } from '@/lib/repository/repository-sql-impl'
@@ -12,7 +12,7 @@ export class OutboxEntryRepositorySQLImpl
   implements OutboxEntryRepository
 {
   constructor(database: DatabaseExecutor) {
-    super(database, eventOutboxEntriesV1, toOutboxEntryRow, fromOutboxEntryRow)
+    super(database, eventOutboxEntriesV1, outboxEntrySchema, toOutboxEntryRow, fromOutboxEntryRow)
   }
 }
 

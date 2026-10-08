@@ -2,13 +2,18 @@ import { z } from 'zod'
 
 import { HEX_32_BYTES } from '@/lib/value-schemas'
 
-export const CALLER_COLLECTION = 'callers'
+/** The authenticated caller of a service method, resolved on the server from the caller secret. */
+export interface Caller {
+  /** The 32-byte vault identity secret, the value of the `callerSecretKey` witness. Never logged. */
+  readonly secretKey: Uint8Array
+  /**
+   * `callers/{caller}`, the parent of every resource the caller owns. The caller id is SHA-256 of
+   * the secret under the application's domain tag, in hex, so it depends only on the application.
+   */
+  readonly name: string
+}
 
-export const callerSecretKeySchema = z
-  .custom<Uint8Array>((v) => v instanceof Uint8Array, {
-    message: 'Expected a Uint8Array',
-  })
-  .refine((v) => v.length === 32, { message: 'Expected exactly 32 bytes' })
+export const CALLER_COLLECTION = 'callers'
 
 /** `callers/{caller}`, where the caller is the application's caller id in hex. */
 export const callerNameSchema = z
@@ -17,19 +22,6 @@ export const callerNameSchema = z
     new RegExp(`^${CALLER_COLLECTION}/${HEX_32_BYTES}$`),
     'expected callers/{64 hex characters}',
   )
-
-export const callerSchema = z.object({
-  /** The vault identity secret, the value of the `callerSecretKey` witness. Never logged. */
-  secretKey: callerSecretKeySchema,
-
-  /**
-   * `callers/{caller}`, the parent of every resource the caller owns. The caller id is SHA-256 of
-   * the secret under the application's domain tag, in hex, so it depends only on the application.
-   */
-  name: callerNameSchema,
-})
-
-export type Caller = z.infer<typeof callerSchema>
 
 export function callerName(callerId: string): string {
   return `${CALLER_COLLECTION}/${callerId}`
