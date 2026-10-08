@@ -14,7 +14,24 @@ export const depositNameSchema = z
     `expected callers/{caller}/${DEPOSIT_COLLECTION}/{uuid}`,
   )
 
-export const depositStateSchema = z.enum(['Pending'])
+export const depositStateSchema = z.enum([
+  // RequestStartDeposit
+  'Pending Start Proving',
+
+  // SubmitStartDeposit
+  'Pending Start Signing & Balancing',
+
+  'Start Submission in Progress',
+  'Awaiting Flushing',
+  'Awaiting Sending',
+  'Awaiting EVM Signature',
+  'Awaiting EVM Submission',
+  'Awaiting Attestation',
+  'Attestation Queing in Progress',
+  'Awaiting Attestation Flushing',
+  'Pending Complete Deposit Proving',
+  'Pending Complete Deposit Signing & Balancing',
+])
 
 export type DepositState = z.infer<typeof depositStateSchema>
 
@@ -24,6 +41,10 @@ export const depositSchema = z.object({
   erc20Address: evmAddressSchema,
   amount: amountSchema,
   state: depositStateSchema,
+
+  startDepositMidnightTxn: z.unknown(),
+  depositEVMTxn: z.unknown(),
+  completeDepositMidnightTxn: z.unknown(),
 })
 
 export type Deposit = z.infer<typeof depositSchema>

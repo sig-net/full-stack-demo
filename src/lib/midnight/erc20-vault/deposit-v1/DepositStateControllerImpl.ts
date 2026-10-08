@@ -17,21 +17,13 @@ export class DepositStateControllerImpl implements DepositStateController {
   }
 
   startDeposit(args: StartDepositArgs): Promise<Deposit> {
-    const deposit = args.deposit
-
-    return this.depositRepository.upsertDeposit(args.deposit)
+    throw new Error('Method not implemented.')
   }
 
   resolveDepositState(args: ResolveDepositStateArgs): Promise<Deposit> {
     throw new Error('Method not implemented.')
   }
 }
-
-// type depositAction = ''
-
-// function determineNextAction() {
-
-// }
 
 // One instance serves the whole server process.
 let depositStateController: Promise<DepositStateController> | undefined

@@ -5,8 +5,8 @@ import { z } from 'zod'
 import { resolveCaller } from '@/lib/caller/resolve-caller'
 import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/Deposit'
 import {
-  type CreateDepositArgs,
-  createDepositArgsSchema,
+  type StartDepositArgs,
+  startDepositArgsSchema,
   type GetDepositArgs,
   getDepositArgsSchema,
 } from '@/lib/midnight/erc20-vault/deposit-v1/DepositService'
@@ -17,19 +17,19 @@ export type DepositResult =
   | { readonly ok: false; readonly error: string }
 
 /** CreateDeposit as a server action: the caller secret stands in for the caller. */
-export async function createDeposit(
+export async function startDeposit(
   callerSecret: string,
-  args: CreateDepositArgs,
+  args: StartDepositArgs,
 ): Promise<DepositResult> {
   const caller = resolveCaller(callerSecret)
   // The argument arrives from the browser, so its static type is not a guarantee.
-  const parsed = createDepositArgsSchema.safeParse(args)
+  const parsed = startDepositArgsSchema.safeParse(args)
   if (!parsed.success) {
     return { ok: false, error: z.prettifyError(parsed.error) }
   }
   const service = await getDepositService()
 
-  return { ok: true, deposit: await service.createDeposit(caller, parsed.data) }
+  return { ok: true, deposit: await service.startDeposit(caller, parsed.data) }
 }
 
 /** GetDeposit as a server action: the caller secret stands in for the caller. */
