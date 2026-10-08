@@ -154,6 +154,12 @@ Keep setup instructions and application reference material in README.md and docs
   file only when a piece gains a consumer that must not import the rest (a non-React runtime, a
   test that must avoid JSX). The Fast Refresh lint warning about mixed exports is not a reason
   to split; it is switched off for `src/components/contexts`.
+- Within a file, the declaration the file exists for comes first, straight after the imports:
+  the type, interface, class or function it is named after. Supporting helpers, constants,
+  schemas and private functions follow it, in the order a reader needs them; hoisting resolves
+  the downward references. The one limit is a module-level value evaluated at load time (a zod
+  schema, a Drizzle table), which cannot read a later `const`: keep those in evaluation order,
+  or move the supporting values into their own file.
 
 ## NEVER BREAK: Skills are written in agent-agnostic prose.
 
