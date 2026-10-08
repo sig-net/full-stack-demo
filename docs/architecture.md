@@ -403,24 +403,24 @@ one `COMPLETE_DEPOSIT`) and gains another whenever an attempt expires or is aban
 every attempt stays on record and nothing is mutated back into an earlier state.
 
 ```
-accounts/{account}
-accounts/{account}/deposits/{deposit}
-accounts/{account}/deposits/{deposit}/transactions/{transaction}
+callers/{caller}
+callers/{caller}/deposits/{deposit}
+callers/{caller}/deposits/{deposit}/transactions/{transaction}
 ```
 
-`{account}` is the depositor's identity commitment, the public hash the contract computes
-from the vault identity secret (`userCommitment`). The UI derives it with the compiled
-contract's exported pure circuit of the same name before the first call, and the backend
-recomputes it from the secret it receives and rejects a mismatch. It is the natural parent:
-it is public, it names the deposit account the MPC derives, and listing a user's deposits is a
-list under it.
+`{caller}` is the application's caller id for the depositor, a SHA-256 of the vault identity
+secret under an application domain tag. The server derives it from the caller secret that every
+server action takes as its first argument (see Caller authentication in the README), so a caller
+can only name their own caller as a parent. It is independent of the contract's `userCommitment`
+of the same secret, so the application's names survive a change to the contract's hashing. Listing
+a user's deposits is a list under it.
 
 ```ts
 class Deposit {
-  name: string                 // OUTPUT_ONLY. accounts/{account}/deposits/{deposit}
+  name: string                 // OUTPUT_ONLY. callers/{caller}/deposits/{deposit}
   erc20Address: Hex20          // REQUIRED, IMMUTABLE
   amount: bigint               // REQUIRED, IMMUTABLE. Base units, 1 to 2^64 - 1
-  caller: WalletKeys           // REQUIRED, IMMUTABLE. The wallet that signs both legs
+  wallet: WalletKeys           // REQUIRED, IMMUTABLE. The wallet that signs both legs
   state: Deposit.State         // OUTPUT_ONLY
   inIndex: bigint              // OUTPUT_ONLY. Backend-chosen random request index
   evmNonce: bigint             // OUTPUT_ONLY. The deposit account's nonce, read from the EVM RPC
@@ -473,7 +473,7 @@ transaction that expires or is abandoned returns the deposit to the state before
 class Transaction {
   name: string                 // OUTPUT_ONLY. .../deposits/{deposit}/transactions/{transaction}
   circuit: Transaction.Circuit // REQUIRED, IMMUTABLE
-  caller?: WalletKeys          // IMMUTABLE. Defaults to the deposit's caller
+  wallet?: WalletKeys          // IMMUTABLE. Defaults to the deposit's wallet
   state: Transaction.State     // OUTPUT_ONLY
   unboundTx?: Hex              // OUTPUT_ONLY. Proven, unbalanced. Present in PENDING_WALLET
   expireTime?: Timestamp       // OUTPUT_ONLY. The intent TTL. Present from PENDING_WALLET
@@ -529,16 +529,16 @@ service DepositService {
 }
 ```
 
-| Method               | HTTP                                                   | What the backend does                                                                                                                                                                                                                                                                                                                                                            |
-| -------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CreateDeposit`      | `POST /v1/{parent=accounts/*}/deposits`                | Validates the ERC-20 is allowed and the amount is in range, derives the account from `secretKey` and checks it against `parent`, chooses `inIndex`, reads `evmNonce` and gas from the EVM side, writes the deposit in `STARTING`, and creates its `START_DEPOSIT` transaction in `PREPARING`. Returns the deposit with `activeTransaction` set. Build and proof run on a worker. |
-| `GetDeposit`         | `GET /v1/{name=accounts/*/deposits/*}`                 | Returns the deposit. This is what the UI polls: `state` tells it whether to wait, hand `activeTransaction.unboundTx` to the wallet, or create the completion transaction.                                                                                                                                                                                                        |
-| `ListDeposits`       | `GET /v1/{parent=accounts/*}/deposits`                 | Lists the account's deposits. `filter` follows AIP-160, for instance `state = ATTESTED`.                                                                                                                                                                                                                                                                                         |
-| `CreateTransaction`  | `POST /v1/{parent=accounts/*/deposits/*}/transactions` | With `circuit = COMPLETE_DEPOSIT`: allowed only in `ATTESTED`. Builds and proves `completeDeposit` from `vaultRequestId`, `attestation.serializedOutput`, `mintNonce`, `recipient` and `secretKey`, moves the deposit to `COMPLETING`. With `circuit = START_DEPOSIT`: allowed only in `STARTING` with no active transaction, for a retry after expiry or abandonment.           |
-| `GetTransaction`     | `GET /v1/{name=.../transactions/*}`                    | Returns one attempt. Useful after the deposit has moved on, to see what happened to an earlier attempt.                                                                                                                                                                                                                                                                          |
-| `ListTransactions`   | `GET /v1/{parent=.../deposits/*}/transactions`         | Every attempt of the deposit, newest first.                                                                                                                                                                                                                                                                                                                                      |
-| `SubmitTransaction`  | `POST /v1/{name=.../transactions/*}:submit`            | Allowed only in `PENDING_WALLET` before `expireTime`. Checks the sealed bytes still carry the call it proved, stores them, moves to `SUBMITTED`, submits and watches. Returns the transaction. The deposit advances when the watcher records the result.                                                                                                                         |
-| `AbandonTransaction` | `POST /v1/{name=.../transactions/*}:abandon`           | Allowed in `PREPARING` or `PENDING_WALLET`. Moves to `ABANDONED` and clears the deposit's `activeTransaction`. A `SUBMITTED` transaction cannot be abandoned: the chain decides.                                                                                                                                                                                                 |
+| Method               | HTTP                                                  | What the backend does                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CreateDeposit`      | `POST /v1/{parent=callers/*}/deposits`                | Validates the ERC-20 is allowed and the amount is in range, derives the caller from `secretKey` and checks it against `parent`, chooses `inIndex`, reads `evmNonce` and gas from the EVM side, writes the deposit in `STARTING`, and creates its `START_DEPOSIT` transaction in `PREPARING`. Returns the deposit with `activeTransaction` set. Build and proof run on a worker. |
+| `GetDeposit`         | `GET /v1/{name=callers/*/deposits/*}`                 | Returns the deposit. This is what the UI polls: `state` tells it whether to wait, hand `activeTransaction.unboundTx` to the wallet, or create the completion transaction.                                                                                                                                                                                                       |
+| `ListDeposits`       | `GET /v1/{parent=callers/*}/deposits`                 | Lists the caller's deposits. `filter` follows AIP-160, for instance `state = ATTESTED`.                                                                                                                                                                                                                                                                                         |
+| `CreateTransaction`  | `POST /v1/{parent=callers/*/deposits/*}/transactions` | With `circuit = COMPLETE_DEPOSIT`: allowed only in `ATTESTED`. Builds and proves `completeDeposit` from `vaultRequestId`, `attestation.serializedOutput`, `mintNonce`, `recipient` and `secretKey`, moves the deposit to `COMPLETING`. With `circuit = START_DEPOSIT`: allowed only in `STARTING` with no active transaction, for a retry after expiry or abandonment.          |
+| `GetTransaction`     | `GET /v1/{name=.../transactions/*}`                   | Returns one attempt. Useful after the deposit has moved on, to see what happened to an earlier attempt.                                                                                                                                                                                                                                                                         |
+| `ListTransactions`   | `GET /v1/{parent=.../deposits/*}/transactions`        | Every attempt of the deposit, newest first.                                                                                                                                                                                                                                                                                                                                     |
+| `SubmitTransaction`  | `POST /v1/{name=.../transactions/*}:submit`           | Allowed only in `PENDING_WALLET` before `expireTime`. Checks the sealed bytes still carry the call it proved, stores them, moves to `SUBMITTED`, submits and watches. Returns the transaction. The deposit advances when the watcher records the result.                                                                                                                        |
+| `AbandonTransaction` | `POST /v1/{name=.../transactions/*}:abandon`          | Allowed in `PREPARING` or `PENDING_WALLET`. Moves to `ABANDONED` and clears the deposit's `activeTransaction`. A `SUBMITTED` transaction cannot be abandoned: the chain decides.                                                                                                                                                                                                |
 
 `requestId` on both create methods is the AIP-155 idempotency token, a client-generated UUID.
 A repeat with the same token returns the existing resource. It is distinct from
@@ -553,11 +553,15 @@ the resource name anyway. An operation would duplicate the state field and add a
 to poll. If a client ever needs operation semantics, the create methods can return an
 `Operation` whose result is the resource without changing the resources themselves.
 
+Transport. This UI is the only client, so the methods are exposed as server actions in
+`DepositActionsAdaptor.ts`, typed end to end, with no HTTP surface. The HTTP column above records the
+AIP mapping the names and methods were designed against, for the day another client exists.
+
 ### The flow as the UI sees it
 
 ```ts
 // 1. Start.
-let deposit = await CreateDeposit(account, { erc20Address, amount, caller }, secretKey, uuid())
+let deposit = await CreateDeposit(caller, { erc20Address, amount, wallet }, secretKey, uuid())
 // deposit.state == STARTING, deposit.activeTransaction.state == PREPARING
 
 deposit = await pollUntil(
@@ -603,7 +607,7 @@ deposit = await pollUntil(
 
 `pollUntil` stands for a React Query query with a refetch interval, or a server-sent event
 stream on the deposit name that pushes the same resource. A page reload loses nothing: the
-UI lists the account's deposits, finds the one with an `activeTransaction`, and carries on.
+UI lists the caller's deposits, finds the one with an `activeTransaction`, and carries on.
 
 ### Relation to the sketch
 

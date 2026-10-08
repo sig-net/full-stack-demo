@@ -2,6 +2,7 @@ import { connection } from 'next/server'
 import { Suspense, type ReactNode } from 'react'
 
 import { AppBar } from '@/components/app-bar'
+import { CallerProvider } from '@/components/contexts/CallerContext'
 import { ConfigProvider } from '@/components/contexts/ConfigContext'
 import { MidnightWalletProvider } from '@/components/contexts/MidnightWalletContext'
 import { SplashScreen } from '@/components/splash-screen'
@@ -16,13 +17,15 @@ export default async function ConfiguredLayout({ children }: LayoutProps<'/'>): 
   return (
     <Suspense fallback={<SplashScreen />}>
       <ConfigProvider config={config}>
-        <MidnightWalletProvider>
-          {/* Below md the app bar stays at the top while the page scrolls under it. */}
-          <div className="sticky top-0 z-10 md:static">
-            <AppBar />
-          </div>
-          {children}
-        </MidnightWalletProvider>
+        <CallerProvider>
+          <MidnightWalletProvider>
+            {/* Below md the app bar stays at the top while the page scrolls under it. */}
+            <div className="sticky top-0 z-10 md:static">
+              <AppBar />
+            </div>
+            {children}
+          </MidnightWalletProvider>
+        </CallerProvider>
       </ConfigProvider>
     </Suspense>
   )

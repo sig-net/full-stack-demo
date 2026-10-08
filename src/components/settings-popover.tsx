@@ -1,6 +1,7 @@
 import { Settings } from 'lucide-react'
 import type { ReactNode } from 'react'
 
+import { CallerPanel } from '@/components/caller-panel'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
@@ -18,7 +19,9 @@ export function SettingsPopover(): ReactNode {
         <Settings className="size-5" />
         Settings
       </PopoverTrigger>
-      <PopoverContent align="end">Settings</PopoverContent>
+      <PopoverContent align="end">
+        <CallerPanel />
+      </PopoverContent>
     </Popover>
   )
 }

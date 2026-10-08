@@ -1,7 +1,8 @@
-import { integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { bigint, pgTable, text } from 'drizzle-orm/pg-core'
 
-export const exampleNotes = pgTable('example_notes', {
-  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
-  text: text('text').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+/** One row per ERC-20 vault deposit resource, keyed by its resource name. */
+export const midnightErc20VaultDepositsV1 = pgTable('midnight_erc20_vault_deposits_v1', {
+  name: text('name').primaryKey(),
+  erc20Address: text('erc20_address').notNull(),
+  amount: bigint('amount', { mode: 'bigint' }).notNull(),
 })

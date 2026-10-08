@@ -45,6 +45,18 @@ Keep setup instructions and application reference material in README.md and docs
   whole-repository search for invalidated names and updates to imports, configuration, manifests,
   tests and documentation in the same change.
 
+## Service methods
+
+- Every service method has one shape: `action<Resource>(caller: Caller, args: Action<Resource>Args)`,
+  returning `Promise<Resource>`, `Promise<Resource | undefined>` when the resource may be absent,
+  `Promise<Resource[]>` for several, or `Promise<void>` when there is nothing to return. When a
+  list needs paging, it returns a page type carrying the resources and a continuation token, not a
+  bare array with paging bolted onto the args.
+- Each method owns its `Action<Resource>Args` type and the zod schema it is inferred from, declared
+  in the service module after the interface. Adaptors validate wire input with that schema, so the
+  service is typed against exactly what reaches it. Nothing but the caller is positional, so adding
+  an input never changes a signature.
+
 ## State and asynchronous work
 
 - Use React Query for remote reads, mutations and application data caching. Do not fetch remote
@@ -158,8 +170,10 @@ Keep setup instructions and application reference material in README.md and docs
   the type, interface, class or function it is named after. Supporting helpers, constants,
   schemas and private functions follow it, in the order a reader needs them; hoisting resolves
   the downward references. The one limit is a module-level value evaluated at load time (a zod
-  schema, a Drizzle table), which cannot read a later `const`: keep those in evaluation order,
-  or move the supporting values into their own file.
+  schema, a Drizzle table), which cannot read a later `const`. A resource file keeps its own
+  supporting schemas (its name format, its collection constant) above the resource schema for
+  that reason; generic value schemas go to `src/lib/value-schemas.ts` instead of a file of their
+  own.
 
 ## NEVER BREAK: Skills are written in agent-agnostic prose.
 

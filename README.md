@@ -53,21 +53,22 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 
 ## Layout
 
-| Path                      | Contents                                                                                         |
-| ------------------------- | ------------------------------------------------------------------------------------------------ |
-| `src/app`                 | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS. |
-| `src/app/(configured)`    | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.              |
-| `src/components`          | Application React components.                                                                    |
-| `src/components/ui`       | Components written by the shadcn CLI.                                                            |
-| `src/components/contexts` | React contexts: each file holds a context, its provider and its `use<Name>` hook.                |
-| `src/lib`                 | Non-React modules.                                                                               |
-| `src/lib/config`          | Server configuration loading and the client configuration type.                                  |
-| `src/lib/db`              | The Drizzle schema and the Postgres connection pool.                                             |
-| `src/lib/kafka`           | The Kafka producer and consumer construction.                                                    |
-| `src/app/api`             | Route handlers.                                                                                  |
-| `src/instrumentation.ts`  | Runs once when the server process starts, and starts the Kafka consumers.                        |
-| `drizzle`                 | SQL migrations and their snapshots, written by `yarn db:generate`.                               |
-| `public/icons`            | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.       |
+| Path                           | Contents                                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `src/app`                      | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.   |
+| `src/app/(configured)`         | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                |
+| `src/components`               | Application React components.                                                                      |
+| `src/components/ui`            | Components written by the shadcn CLI.                                                              |
+| `src/components/contexts`      | React contexts: each file holds a context, its provider and its `use<Name>` hook.                  |
+| `src/lib`                      | Non-React modules.                                                                                 |
+| `src/lib/config`               | Server configuration loading and the client configuration type.                                    |
+| `src/lib/db`                   | The Drizzle schema and the Postgres connection pool.                                               |
+| `src/lib/kafka`                | The Kafka producer and consumer construction.                                                      |
+| `src/lib/midnight/erc20-vault` | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service. |
+| `src/app/api`                  | Route handlers.                                                                                    |
+| `src/instrumentation.ts`       | Runs once when the server process starts, and starts the Kafka consumers.                          |
+| `drizzle`                      | SQL migrations and their snapshots, written by `yarn db:generate`.                                 |
+| `public/icons`                 | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.         |
 
 Pages and layouts are server components. A component opts into the browser with `'use client'`
 only when it needs state, effects or browser APIs, as `src/components/mode-toggle.tsx` does.
@@ -221,22 +222,7 @@ joins the same consumer group, and Kafka divides the topic's partitions among th
 
 ## Examples
 
-Two small, independent examples show how the backend uses each service.
-
-### Storing a row from the UI
-
-`saveExampleNote(text)` in `src/lib/example-notes/example-note-actions.ts` is a server action: a
-client component imports it and calls it like a function, and Next.js runs it on the server. It
-validates the text, inserts a row into the `example_notes` table and returns the new row's `id`,
-or the validation message when the text is empty or longer than 500 characters.
-
-```tsx
-'use client'
-
-import { saveExampleNote } from '@/lib/example-notes/example-note-actions'
-
-const result = await saveExampleNote('hello')
-```
+One small example shows how the backend uses Kafka.
 
 ### Publishing and consuming a Kafka message
 
@@ -253,6 +239,52 @@ output:
 
 ```bash
 curl -X POST -H 'content-type: application/json' -d '{"text":"hello"}' http://localhost:3000/api/example-messages
+```
+
+## Caller authentication
+
+The vault identifies a user by a 32-byte secret, the value of the contract's `callerSecretKey`
+witness. The application calls it the caller secret. The caller id it names is a SHA-256 of the secret under an
+application domain tag, in hex, computed on the server. It is kept independent of the
+contract's own `userCommitment` of the same secret on purpose: the contract may change its hashing
+at a fork, and the application's resource names must survive that.
+
+- A user logs in through the Settings popover by pasting a caller secret or generating a fresh
+  one. `CallerProvider` (`src/components/contexts/CallerContext.tsx`) holds the secret in page
+  memory only, so a reload logs out, and `useCaller()` exposes it with the caller name and the
+  login state.
+- Every server action takes the caller secret as its first argument. `resolveCaller()`
+  (`src/lib/caller/resolve-caller.ts`) validates it and derives the caller id and its
+  `callers/{caller}` name, and the action compares every resource name it receives against that
+  name, so a caller only ever creates or reads under their own caller. The
+  shared schemas and name helpers live in `src/lib/caller/caller.ts`.
+
+## ERC-20 vault deposit API
+
+`src/lib/midnight/erc20-vault/deposit-v1` is the skeleton of a resource-oriented API for vault
+deposits, designed in `docs/architecture.md` under Deposit API. This UI is its only client, so it
+is exposed as server actions rather than HTTP routes. A deposit is named
+`callers/{caller}/erc20-vault-deposits/{deposit}`, where the caller is the depositor's
+64-character hex identity commitment and the deposit id is a UUID the server assigns.
+
+- `Deposit.ts` holds the resource schema and its type, with the resource-name format and builder,
+  shared by the server and the browser. The generic EVM address, base-unit amount, hex and UUID
+  schemas live in `src/lib/value-schemas.ts`.
+- `DepositRepository.ts` is the storage interface and `DepositRepositorySQLImpl.ts` its Postgres
+  implementation over the `midnight_erc20_vault_deposits_v1` table.
+- `DepositService.ts` is the API's method set and `DepositServiceImpl.ts` the implementation,
+  with `getDepositService()` building the one instance of the server process.
+- `DepositActionsAdaptor.ts` is the adaptor the UI calls. `createDeposit(callerSecret, args)` and
+  `getDeposit(callerSecret, args)` are server actions that only translate: the secret becomes a
+  `Caller`, the arguments are validated, the service is called, and its result becomes
+  `{ ok: true, deposit }` or `{ ok: false, error }`. Amounts cross as `bigint`.
+
+```tsx
+'use client'
+
+import { createDeposit } from '@/lib/midnight/erc20-vault/deposit-v1/DepositActionsAdaptor'
+
+const result = await createDeposit(callerSecret, { erc20Address, amount: 1000000n })
 ```
 
 ## Midnight wallet
