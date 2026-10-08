@@ -1,6 +1,5 @@
 import 'server-only'
 
-import type { DatabaseExecutor } from '@/lib/db/database'
 import type { Event } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
 import { outboxEntryName } from '@/lib/event/outbox-entry-v1/outbox-entry'
@@ -16,17 +15,14 @@ export class EventPublisherOutboxImpl implements EventPublisher {
     this.outboxEntryRepository = outboxEntryRepository
   }
 
-  async publishEvent(event: Event, executor?: DatabaseExecutor): Promise<void> {
-    await this.outboxEntryRepository.createOutboxEntry(
-      {
-        name: outboxEntryName(event.id),
-        type: event.type,
-        data: new TextEncoder().encode(JSON.stringify(event)),
-        sent: false,
-        createdAt: new Date(),
-      },
-      executor,
-    )
+  async publishEvent(event: Event): Promise<void> {
+    await this.outboxEntryRepository.createOutboxEntry({
+      name: outboxEntryName(event.id),
+      type: event.type,
+      data: new TextEncoder().encode(JSON.stringify(event)),
+      sent: false,
+      createdAt: new Date(),
+    })
   }
 }
 

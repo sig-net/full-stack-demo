@@ -1,13 +1,12 @@
-import type { DatabaseExecutor } from '@/lib/db/database'
 import type { OutboxEntry } from '@/lib/event/outbox-entry-v1/outbox-entry'
 
-/** Durable storage of outbox entries. Every method runs on `executor` when one is given. */
+/** Durable storage of outbox entries. Every method joins the transaction open on its call chain. */
 export interface OutboxEntryRepository {
-  createOutboxEntry(outboxEntry: OutboxEntry, executor?: DatabaseExecutor): Promise<OutboxEntry>
+  createOutboxEntry(outboxEntry: OutboxEntry): Promise<OutboxEntry>
   /**
-   * The oldest unsent entries, locked for the executor's transaction and skipping entries another
+   * The oldest unsent entries, locked for the open transaction and skipping entries another
    * transaction already holds, so concurrent processors never relay the same entry.
    */
-  listUnsentOutboxEntries(limit: number, executor?: DatabaseExecutor): Promise<OutboxEntry[]>
-  updateOutboxEntry(outboxEntry: OutboxEntry, executor?: DatabaseExecutor): Promise<OutboxEntry>
+  listUnsentOutboxEntries(limit: number): Promise<OutboxEntry[]>
+  updateOutboxEntry(outboxEntry: OutboxEntry): Promise<OutboxEntry>
 }

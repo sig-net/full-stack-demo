@@ -56,6 +56,14 @@ Keep setup instructions and application reference material in README.md and docs
   in the service module after the interface. Adaptors validate wire input with that schema, so the
   service is typed against exactly what reaches it. Nothing but the caller is positional, so adding
   an input never changes a signature.
+- Write boundaries open the transaction, reads never do. An adaptor method that creates, updates
+  or starts something, a consumer's `handleEvent`, and an outbox batch each run inside one
+  `runInTransaction()` (`src/lib/db/unit-of-work.ts`), which every repository call on the same
+  async chain joins. A read boundary (`get`, `list`) runs on the plain database: optimistic,
+  lock-free, re-checked by the write that acts on it. A transaction wraps one boundary call and
+  never a slow external call, and nothing inside one may detach work from the async chain, since
+  detached work silently runs outside it. The outbox relay's Kafka send is the one documented
+  exception.
 
 ## State and asynchronous work
 

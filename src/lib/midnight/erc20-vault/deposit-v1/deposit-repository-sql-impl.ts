@@ -6,7 +6,8 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { midnightErc20VaultDepositsV1 } from '@/lib/db/schema'
 import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
 import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-repository'
-import { getDatabase } from '@/lib/db/database'
+import { type DatabaseExecutor, getDatabase } from '@/lib/db/database'
+import { currentTransaction } from '@/lib/db/unit-of-work'
 import { lazySingleton } from '@/lib/lazy-singleton'
 
 type DepositRow = typeof midnightErc20VaultDepositsV1.$inferSelect
@@ -26,9 +27,13 @@ export class DepositRepositorySQLImpl implements DepositRepository {
     this.database = database
   }
 
+  private executor(): DatabaseExecutor {
+    return currentTransaction() ?? this.database
+  }
+
   async createDeposit(deposit: Deposit): Promise<Deposit> {
     const row = toDepositRow(deposit)
-    const [stored] = await this.database
+    const [stored] = await this.executor()
       .insert(midnightErc20VaultDepositsV1)
       .values(row)
       .returning()
@@ -39,7 +44,7 @@ export class DepositRepositorySQLImpl implements DepositRepository {
   }
 
   async getDeposit(name: string): Promise<Deposit | undefined> {
-    const [row] = await this.database
+    const [row] = await this.executor()
       .select()
       .from(midnightErc20VaultDepositsV1)
       .where(eq(midnightErc20VaultDepositsV1.name, name))

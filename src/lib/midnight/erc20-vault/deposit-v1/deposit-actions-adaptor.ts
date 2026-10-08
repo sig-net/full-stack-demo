@@ -3,6 +3,7 @@
 import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
+import { runInTransaction } from '@/lib/db/unit-of-work'
 import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
 import {
   type StartDepositArgs,
@@ -28,8 +29,9 @@ export async function startDeposit(
     return { ok: false, error: z.prettifyError(parsed.error) }
   }
   const service = await getDepositService()
-
-  return { ok: true, deposit: await service.startDeposit(caller, parsed.data) }
+  // A write boundary: one transaction around the whole call. Reads such as getDeposit open none.
+  const deposit = await runInTransaction(() => service.startDeposit(caller, parsed.data))
+  return { ok: true, deposit }
 }
 
 /** GetDeposit as a server action: the caller secret stands in for the caller. */

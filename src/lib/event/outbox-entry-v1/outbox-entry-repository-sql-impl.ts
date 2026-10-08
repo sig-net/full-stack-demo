@@ -4,6 +4,7 @@ import { asc, eq } from 'drizzle-orm'
 
 import { type DatabaseExecutor, getDatabase } from '@/lib/db/database'
 import { eventOutboxEntriesV1 } from '@/lib/db/schema'
+import { currentTransaction } from '@/lib/db/unit-of-work'
 import type { OutboxEntry } from '@/lib/event/outbox-entry-v1/outbox-entry'
 import type { OutboxEntryRepository } from '@/lib/event/outbox-entry-v1/outbox-entry-repository'
 import { lazySingleton } from '@/lib/lazy-singleton'
@@ -17,11 +18,12 @@ export class OutboxEntryRepositorySQLImpl implements OutboxEntryRepository {
     this.database = database
   }
 
-  async createOutboxEntry(
-    outboxEntry: OutboxEntry,
-    executor: DatabaseExecutor = this.database,
-  ): Promise<OutboxEntry> {
-    const [stored] = await executor
+  private executor(): DatabaseExecutor {
+    return currentTransaction() ?? this.database
+  }
+
+  async createOutboxEntry(outboxEntry: OutboxEntry): Promise<OutboxEntry> {
+    const [stored] = await this.executor()
       .insert(eventOutboxEntriesV1)
       .values(toOutboxEntryRow(outboxEntry))
       .returning()
@@ -31,11 +33,8 @@ export class OutboxEntryRepositorySQLImpl implements OutboxEntryRepository {
     return fromOutboxEntryRow(stored)
   }
 
-  async listUnsentOutboxEntries(
-    limit: number,
-    executor: DatabaseExecutor = this.database,
-  ): Promise<OutboxEntry[]> {
-    const rows = await executor
+  async listUnsentOutboxEntries(limit: number): Promise<OutboxEntry[]> {
+    const rows = await this.executor()
       .select()
       .from(eventOutboxEntriesV1)
       .where(eq(eventOutboxEntriesV1.sent, false))
@@ -45,11 +44,8 @@ export class OutboxEntryRepositorySQLImpl implements OutboxEntryRepository {
     return rows.map(fromOutboxEntryRow)
   }
 
-  async updateOutboxEntry(
-    outboxEntry: OutboxEntry,
-    executor: DatabaseExecutor = this.database,
-  ): Promise<OutboxEntry> {
-    const [stored] = await executor
+  async updateOutboxEntry(outboxEntry: OutboxEntry): Promise<OutboxEntry> {
+    const [stored] = await this.executor()
       .update(eventOutboxEntriesV1)
       .set(toOutboxEntryRow(outboxEntry))
       .where(eq(eventOutboxEntriesV1.name, outboxEntry.name))

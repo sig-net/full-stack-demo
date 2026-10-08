@@ -196,6 +196,18 @@ The backend reaches Postgres through [Drizzle ORM](https://orm.drizzle.team) on 
 - `drizzle.config.ts` configures drizzle-kit. It reads `DB_CONNECTION_STRING` from the environment,
   or from `.env.local` when that file exists.
 
+### Transactions
+
+`src/lib/db/unit-of-work.ts` carries the current transaction on the async call chain with
+`AsyncLocalStorage`, so no method signature mentions it. A write boundary (an adaptor method that
+creates, updates or starts something, a consumer's `handleEvent`, an outbox batch) wraps its call
+in `runInTransaction()`, and every repository method beneath it resolves
+`currentTransaction() ?? database`, joining the open transaction or falling through to the pool. A
+read boundary (`get`, `list`) never opens one: it reads committed state, holds nothing, and the
+write that acts on it re-checks inside its own transaction. Work that leaves the async chain (an
+un-awaited promise, a timer callback) runs outside the transaction, so a boundary awaits everything
+it starts.
+
 To change the schema, edit `src/lib/db/schema.ts`, then write the migration and commit the files
 it adds under `drizzle`:
 
@@ -270,8 +282,8 @@ the resource and acts on its current state, so a redelivered event is harmless.
 
 - `event.ts` holds the event schema, `newEvent()` and the `full-stack-demo.events` topic.
 - `event-publisher.ts` is the publishing interface with two implementations. The domain uses
-  `event-publisher-outbox-impl.ts`, which writes an outbox entry on the database executor it is
-  given, so the event becomes visible exactly when the surrounding transaction commits. The relay
+  `event-publisher-outbox-impl.ts`, which writes an outbox entry on the transaction open on the
+  call chain, so the event becomes visible exactly when the surrounding transaction commits. The relay
   uses `event-publisher-kafka-impl.ts`, which sends to Kafka and resolves on the broker's
   acknowledgement.
 - `outbox-entry-v1` holds the `OutboxEntry` resource (`outbox-entries/{id}`), its repository over

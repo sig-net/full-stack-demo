@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 import { MessagesStreamFallbackModes, MessagesStreamModes } from '@platformatic/kafka'
 
+import { runInTransaction } from '@/lib/db/unit-of-work'
 import { type Event, eventSchema, EVENTS_TOPIC } from '@/lib/event/event'
 import type { EventConsumer } from '@/lib/event/event-consumer'
 import type { EventConsumerHub } from '@/lib/event/event-consumer-hub'
@@ -17,9 +18,10 @@ export class EventConsumerHubImpl implements EventConsumerHub {
     this.consumers.push(consumer)
   }
 
+  /** Each handler runs in its own transaction, so one failing handler rolls back only its own work. */
   async dispatchEvent(event: Event): Promise<void> {
     for (const consumer of this.consumers) {
-      if (consumer.wantsEvent(event)) await consumer.handleEvent(event)
+      if (consumer.wantsEvent(event)) await runInTransaction(() => consumer.handleEvent(event))
     }
   }
 }

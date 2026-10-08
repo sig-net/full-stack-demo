@@ -2,9 +2,8 @@ import 'server-only'
 
 import { setTimeout as delay } from 'node:timers/promises'
 
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
-
-import { getDatabase, getDatabasePool } from '@/lib/db/database'
+import { getDatabasePool } from '@/lib/db/database'
+import { runInTransaction } from '@/lib/db/unit-of-work'
 import { eventSchema } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
 import { getKafkaEventPublisher } from '@/lib/event/event-publisher-kafka-impl'
@@ -16,18 +15,12 @@ import { lazySingleton } from '@/lib/lazy-singleton'
 const BATCH_SIZE = 100
 
 export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
-  private readonly database: NodePgDatabase
   private readonly outboxEntryRepository: OutboxEntryRepository
   private readonly kafkaEventPublisher: EventPublisher
   private running: Promise<void> | undefined
   private runAgain = false
 
-  constructor(
-    database: NodePgDatabase,
-    outboxEntryRepository: OutboxEntryRepository,
-    kafkaEventPublisher: EventPublisher,
-  ) {
-    this.database = database
+  constructor(outboxEntryRepository: OutboxEntryRepository, kafkaEventPublisher: EventPublisher) {
     this.outboxEntryRepository = outboxEntryRepository
     this.kafkaEventPublisher = kafkaEventPublisher
   }
@@ -50,17 +43,19 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
     } while (this.runAgain)
   }
 
-  /** Relays one locked batch and resolves with its size. */
+  /**
+   * Relays one locked batch and resolves with its size. The Kafka send happens inside the
+   * transaction on purpose: an entry is marked sent only once the broker acknowledged it, so a
+   * commit that fails afterwards relays the entry again rather than losing it.
+   */
   private relayBatch(): Promise<number> {
-    return this.database.transaction(async (tx) => {
-      const entries = await this.outboxEntryRepository.listUnsentOutboxEntries(BATCH_SIZE, tx)
+    return runInTransaction(async () => {
+      const entries = await this.outboxEntryRepository.listUnsentOutboxEntries(BATCH_SIZE)
       for (const entry of entries) {
-        // A Kafka acknowledgement before a failed commit relays the entry again later: delivery
-        // is at least once, and consumers are idempotent for that reason.
         await this.kafkaEventPublisher.publishEvent(
           eventSchema.parse(JSON.parse(new TextDecoder().decode(entry.data))),
         )
-        await this.outboxEntryRepository.updateOutboxEntry({ ...entry, sent: true }, tx)
+        await this.outboxEntryRepository.updateOutboxEntry({ ...entry, sent: true })
       }
       return entries.length
     })
@@ -70,11 +65,7 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
 /** One instance serves the whole server process. */
 export const getOutboxEntryProcessor: () => Promise<OutboxEntryProcessor> = lazySingleton(
   async () =>
-    new OutboxEntryProcessorImpl(
-      await getDatabase(),
-      await getOutboxEntryRepository(),
-      await getKafkaEventPublisher(),
-    ),
+    new OutboxEntryProcessorImpl(await getOutboxEntryRepository(), await getKafkaEventPublisher()),
 )
 
 /** The channel the outbox table's insert trigger notifies. */
