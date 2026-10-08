@@ -7,6 +7,7 @@ import { midnightErc20VaultDepositsV1 } from '@/lib/db/schema'
 import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
 import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-repository'
 import { getDatabase } from '@/lib/db/database'
+import { lazySingleton } from '@/lib/lazy-singleton'
 
 type DepositRow = typeof midnightErc20VaultDepositsV1.$inferSelect
 
@@ -47,18 +48,7 @@ export class DepositRepositorySQLImpl implements DepositRepository {
   }
 }
 
-// One instance serves the whole server process.
-let depositRepository: Promise<DepositRepository> | undefined
-
-export function getDepositRepository(): Promise<DepositRepository> {
-  depositRepository ??= (async () => {
-    try {
-      const database = await getDatabase()
-      return new DepositRepositorySQLImpl(database)
-    } catch (error) {
-      depositRepository = undefined
-      throw error
-    }
-  })()
-  return depositRepository
-}
+/** One instance serves the whole server process. */
+export const getDepositRepository: () => Promise<DepositRepository> = lazySingleton(
+  async () => new DepositRepositorySQLImpl(await getDatabase()),
+)

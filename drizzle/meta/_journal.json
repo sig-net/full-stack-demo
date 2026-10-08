@@ -8,6 +8,20 @@
       "when": 1791298326726,
       "tag": "0000_erc20_vault_deposits_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791480888713,
+      "tag": "0001_event_outbox_entries_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791480889238,
+      "tag": "0002_event_outbox_notify",
+      "breakpoints": true
     }
   ]
 }

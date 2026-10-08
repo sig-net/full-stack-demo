@@ -2,15 +2,37 @@ import { z } from 'zod'
 
 import { HEX_32_BYTES } from '@/lib/value-schemas'
 
-/** The caller behind a server action call, resolved from the caller secret on the server. */
-export interface Caller {
+export const CALLER_COLLECTION = 'callers'
+
+export const callerSecretKeySchema = z
+  .custom<Uint8Array>((v) => v instanceof Uint8Array, {
+    message: 'Expected a Uint8Array',
+  })
+  .refine((v) => v.length === 32, { message: 'Expected exactly 32 bytes' })
+
+/** `callers/{caller}`, where the caller is the application's caller id in hex. */
+export const callerNameSchema = z
+  .string()
+  .regex(
+    new RegExp(`^${CALLER_COLLECTION}/${HEX_32_BYTES}$`),
+    'expected callers/{64 hex characters}',
+  )
+
+export const callerSchema = z.object({
   /** The vault identity secret, the value of the `callerSecretKey` witness. Never logged. */
-  readonly secretKey: Uint8Array
+  secretKey: callerSecretKeySchema,
+
   /**
    * `callers/{caller}`, the parent of every resource the caller owns. The caller id is SHA-256 of
    * the secret under the application's domain tag, in hex, so it depends only on the application.
    */
-  readonly name: string
+  name: callerNameSchema,
+})
+
+export type Caller = z.infer<typeof callerSchema>
+
+export function callerName(callerId: string): string {
+  return `${CALLER_COLLECTION}/${callerId}`
 }
 
 /** True when the resource is the caller itself or lives under it. */
@@ -31,18 +53,4 @@ export const callerSecretSchema = z
 export function generateCallerSecret(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32))
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
-export const CALLER_COLLECTION = 'callers'
-
-/** `callers/{caller}`, where the caller is the application's caller id in hex. */
-export const callerNameSchema = z
-  .string()
-  .regex(
-    new RegExp(`^${CALLER_COLLECTION}/${HEX_32_BYTES}$`),
-    'expected callers/{64 hex characters}',
-  )
-
-export function callerName(callerId: string): string {
-  return `${CALLER_COLLECTION}/${callerId}`
 }

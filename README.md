@@ -64,6 +64,7 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/config`               | Server configuration loading and the client configuration type.                                    |
 | `src/lib/db`                   | The Drizzle schema and the Postgres connection pool.                                               |
 | `src/lib/kafka`                | The Kafka producer and consumer construction.                                                      |
+| `src/lib/event`                | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.   |
 | `src/lib/midnight/erc20-vault` | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service. |
 | `src/app/api`                  | Route handlers.                                                                                    |
 | `src/instrumentation.ts`       | Runs once when the server process starts, and starts the Kafka consumers.                          |
@@ -258,6 +259,42 @@ at a fork, and the application's resource names must survive that.
   `callers/{caller}` name, and the action compares every resource name it receives against that
   name, so a caller only ever creates or reads under their own caller. The
   shared schemas and name helpers live in `src/lib/caller/caller.ts`.
+
+## Events
+
+`src/lib/event` lets the backend announce a fact (a transaction was created, a deposit changed
+state) after the database write that made it true, and lets workers in the same process react
+to it. An event is `{ id, type, key, data }`: `type` names what happened, `key` orders events
+about one resource, and `data` names the resource and never carries a secret. A consumer loads
+the resource and acts on its current state, so a redelivered event is harmless.
+
+- `event.ts` holds the event schema, `newEvent()` and the `full-stack-demo.events` topic.
+- `event-publisher.ts` is the publishing interface with two implementations. The domain uses
+  `event-publisher-outbox-impl.ts`, which writes an outbox entry on the database executor it is
+  given, so the event becomes visible exactly when the surrounding transaction commits. The relay
+  uses `event-publisher-kafka-impl.ts`, which sends to Kafka and resolves on the broker's
+  acknowledgement.
+- `outbox-entry-v1` holds the `OutboxEntry` resource (`outbox-entries/{id}`), its repository over
+  the `event_outbox_entries_v1` table, and the processor. `OutboxEntryProcessor.process()`
+  relays unsent entries oldest first in locked batches (`FOR UPDATE SKIP LOCKED`, so several
+  replicas never relay the same entry) and marks them sent. A trigger on the table calls
+  `pg_notify` when an entry's transaction commits, the processor holds one dedicated connection
+  that listens for it, and a sweep every 30 seconds catches anything a lost notification missed.
+  Delivery is at least once.
+- `event-consumer.ts` is the consumer interface (`wantsEvent`, `handleEvent`), and
+  `event-consumer-hub.ts` the hub that owns the process's consumers. `startEventConsumerHub()`
+  reads the topic as the `full-stack-demo.events` group, hands each event to every consumer that
+  wants it in registration order, and commits the offset only after they all return. A handler
+  that throws leaves the offset uncommitted, so the event is redelivered after a restart delay.
+
+`src/instrumentation.ts` starts the hub and the processor with the server process, and it is
+where consumers are registered. Next.js evaluates instrumentation and request code (server
+actions, route handlers) in separate module graphs, so each graph has its own instance of every
+module-level singleton: a consumer registered from a server action joins a hub that never
+consumes. Request code only publishes. Every long-lived component is built once per module graph
+by `lazySingleton()` in `src/lib/lazy-singleton.ts`, which drops a failed build so the next call
+retries. The Kafka client is listed in `serverExternalPackages` in `next.config.ts`, since it
+resolves its own files through `import.meta.url` and only works unbundled.
 
 ## ERC-20 vault deposit API
 

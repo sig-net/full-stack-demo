@@ -8,6 +8,7 @@ import type {
   StartDepositArgs,
 } from './deposit-state-controller'
 import { getDepositRepository } from './deposit-repository-sql-impl'
+import { lazySingleton } from '@/lib/lazy-singleton'
 
 export class DepositStateControllerImpl implements DepositStateController {
   private readonly depositRepository: DepositRepository
@@ -25,18 +26,7 @@ export class DepositStateControllerImpl implements DepositStateController {
   }
 }
 
-// One instance serves the whole server process.
-let depositStateController: Promise<DepositStateController> | undefined
-
-export function getDepositStateController(): Promise<DepositStateController> {
-  depositStateController ??= (async () => {
-    try {
-      const depositRepository = await getDepositRepository()
-      return new DepositStateControllerImpl(depositRepository)
-    } catch (error) {
-      depositStateController = undefined
-      throw error
-    }
-  })()
-  return depositStateController
-}
+/** One instance serves the whole server process. */
+export const getDepositStateController: () => Promise<DepositStateController> = lazySingleton(
+  async () => new DepositStateControllerImpl(await getDepositRepository()),
+)

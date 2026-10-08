@@ -9,6 +9,7 @@ import {
 } from '@platformatic/kafka'
 
 import { getServerConfig } from '@/lib/config/server-config'
+import { lazySingleton } from '@/lib/lazy-singleton'
 
 export type StringProducer = Producer<string, string, string, string>
 export type StringConsumer = Consumer<string, string, string, string>
@@ -27,16 +28,8 @@ async function createProducer(): Promise<StringProducer> {
   return new Producer({ ...(await connectionOptions()), serializers: stringSerializers })
 }
 
-// One producer serves the whole server process.
-let producer: Promise<StringProducer> | undefined
-
-export function getProducer(): Promise<StringProducer> {
-  producer ??= createProducer().catch((error: unknown) => {
-    producer = undefined
-    throw error
-  })
-  return producer
-}
+/** One producer serves the whole server process. */
+export const getProducer: () => Promise<StringProducer> = lazySingleton(createProducer)
 
 /** The caller owns the returned consumer and closes it. */
 export async function createConsumer(groupId: string): Promise<StringConsumer> {

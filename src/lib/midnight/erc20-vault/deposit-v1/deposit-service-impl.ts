@@ -10,10 +10,10 @@ import type {
   StartDepositArgs,
   DepositService,
   GetDepositArgs,
-  SubmitStartDepositArgs,
 } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-service'
 import type { DepositStateController } from './deposit-state-controller'
 import { getDepositStateController } from './deposit-state-controller-impl'
+import { lazySingleton } from '@/lib/lazy-singleton'
 
 export class DepositServiceImpl implements DepositService {
   private readonly depositRepository: DepositRepository
@@ -28,17 +28,12 @@ export class DepositServiceImpl implements DepositService {
   }
 
   startDeposit(caller: Caller, args: StartDepositArgs): Promise<Deposit> {
-    return this.depositStateController.startDeposit({
-      callerSecret: caller.secretKey,
+    return this.depositStateController.startDeposit(caller, {
       deposit: {
         ...args.depositArgs,
         name: depositName(caller.name, randomUUID()),
       },
     })
-  }
-
-  submitStartDeposit(caller: Caller, args: SubmitStartDepositArgs): Promise<Deposit> {
-    throw new Error('Method not implemented.')
   }
 
   async getDeposit(caller: Caller, args: GetDepositArgs): Promise<Deposit | undefined> {
@@ -47,19 +42,8 @@ export class DepositServiceImpl implements DepositService {
   }
 }
 
-// One instance serves the whole server process.
-let depositService: Promise<DepositService> | undefined
-
-export function getDepositService(): Promise<DepositService> {
-  depositService ??= (async () => {
-    try {
-      const depositRepository = await getDepositRepository()
-      const depositStateController = await getDepositStateController()
-      return new DepositServiceImpl(depositRepository, depositStateController)
-    } catch (error) {
-      depositService = undefined
-      throw error
-    }
-  })()
-  return depositService
-}
+/** One instance serves the whole server process. */
+export const getDepositService: () => Promise<DepositService> = lazySingleton(
+  async () =>
+    new DepositServiceImpl(await getDepositRepository(), await getDepositStateController()),
+)
