@@ -346,7 +346,7 @@ wallet that implements proving delegation, at the cost of the mobile story.
 
 | Piece             | Where                                                                                                                                                                                                                                                                                           |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Route handlers    | `src/app/api/transactions/` beside the existing `example-messages` handler. They validate with zod, write the job row and publish to Kafka. They never prove or submit inline.                                                                                                                  |
+| Route handlers    | `src/app/api/transactions/`. They validate with zod, write the job row and publish to Kafka. They never prove or submit inline.                                                                                                                                                                 |
 | Job store         | A `midnight_transaction_jobs` table in `src/lib/db/schema.ts`: id, idempotency key, circuit, request id, coin public key, state, unbound hex, sealed hex, identifiers, TTL, status, error, timestamps. Witness values and the unproven transaction in a separate table with a deletion rule.    |
 | Workers           | Consumers started from `src/instrumentation.ts`, one group per stage: build and prove, submit and watch. Every replica joins the groups, Kafka partitions the jobs.                                                                                                                             |
 | Builder providers | A server-side `MidnightProviders` set: the indexer as public data provider, the proof server as proof provider, the zk assets as the zk config provider, an in-memory private state provider seeded per job, and a wallet provider that only returns the job's coin and encryption public keys. |
@@ -404,9 +404,16 @@ every attempt stays on record and nothing is mutated back into an earlier state.
 
 ```
 callers/{caller}
-callers/{caller}/deposits/{deposit}
-callers/{caller}/deposits/{deposit}/transactions/{transaction}
+callers/{caller}/erc20-vault-deposits/{deposit}
+callers/{caller}/midnight-transactions/{transaction}
+callers/{caller}/ethereum-transactions/{transaction}
 ```
+
+Transactions are not nested under the deposit. Each transaction names the resource it serves in
+its `parent` field, so a deposit's attempts are a search for its name, and the transaction
+modules serve any resource that needs a call on chain. A partial unique index on `(parent,
+circuit)` over the non-terminal states allows one live attempt per deposit step, so two
+resolvers racing to retry cannot both create one.
 
 `{caller}` is the application's caller id for the depositor, a SHA-256 of the vault identity
 secret under an application domain tag. The server derives it from the caller secret that every
@@ -417,7 +424,7 @@ a user's deposits is a list under it.
 
 ```ts
 class Deposit {
-  name: string                 // OUTPUT_ONLY. callers/{caller}/deposits/{deposit}
+  name: string                 // OUTPUT_ONLY. callers/{caller}/erc20-vault-deposits/{deposit}
   erc20Address: Hex20          // REQUIRED, IMMUTABLE
   amount: bigint               // REQUIRED, IMMUTABLE. Base units, 1 to 2^64 - 1
   wallet: WalletKeys           // REQUIRED, IMMUTABLE. The wallet that signs both legs
@@ -471,7 +478,8 @@ transaction that expires or is abandoned returns the deposit to the state before
 
 ```ts
 class Transaction {
-  name: string                 // OUTPUT_ONLY. .../deposits/{deposit}/transactions/{transaction}
+  name: string                 // OUTPUT_ONLY. callers/{caller}/midnight-transactions/{transaction}
+  parent: string               // REQUIRED, IMMUTABLE. The deposit the attempt serves
   circuit: Transaction.Circuit // REQUIRED, IMMUTABLE
   wallet?: WalletKeys          // IMMUTABLE. Defaults to the deposit's wallet
   state: Transaction.State     // OUTPUT_ONLY

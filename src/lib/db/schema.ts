@@ -1,6 +1,75 @@
-import { bigint, boolean, customType, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { notInArray } from 'drizzle-orm'
+import {
+  bigint,
+  boolean,
+  customType,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 
+import {
+  ETHEREUM_TRANSACTION_STATES,
+  ETHEREUM_TRANSACTION_TERMINAL_STATES,
+} from '@/lib/ethereum/transaction-v1/transaction'
 import { DEPOSIT_STATES } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
+import {
+  MIDNIGHT_TRANSACTION_STATES,
+  MIDNIGHT_TRANSACTION_TERMINAL_STATES,
+} from '@/lib/midnight/transaction-v1/transaction'
+
+/**
+ * One row per Midnight transaction resource, keyed by its resource name. The partial unique index
+ * allows one live transaction per parent and circuit, so two resolvers cannot both start a retry.
+ */
+export const midnightTransactionsV1 = pgTable(
+  'midnight_transactions_v1',
+  {
+    name: text('name').primaryKey(),
+    parent: text('parent').notNull(),
+    state: text('state', { enum: MIDNIGHT_TRANSACTION_STATES }).notNull(),
+    circuit: text('circuit').notNull(),
+    unprovenTx: text('unproven_tx'),
+    unboundTx: text('unbound_tx'),
+    finalizedTx: text('finalized_tx'),
+    expireTime: timestamp('expire_time', { withTimezone: true }),
+    txId: text('tx_id'),
+    error: text('error'),
+    createTime: timestamp('create_time', { withTimezone: true }).notNull(),
+    updateTime: timestamp('update_time', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('midnight_transactions_v1_live')
+      .on(table.parent, table.circuit)
+      .where(notInArray(table.state, [...MIDNIGHT_TRANSACTION_TERMINAL_STATES]).inlineParams()),
+  ],
+)
+
+/**
+ * One row per Ethereum transaction resource, keyed by its resource name. The partial unique index
+ * allows one live transaction per parent, so two resolvers cannot both start a retry.
+ */
+export const ethereumTransactionsV1 = pgTable(
+  'ethereum_transactions_v1',
+  {
+    name: text('name').primaryKey(),
+    parent: text('parent').notNull(),
+    state: text('state', { enum: ETHEREUM_TRANSACTION_STATES }).notNull(),
+    unsignedTx: text('unsigned_tx'),
+    signedTx: text('signed_tx'),
+    txHash: text('tx_hash'),
+    error: text('error'),
+    createTime: timestamp('create_time', { withTimezone: true }).notNull(),
+    updateTime: timestamp('update_time', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('ethereum_transactions_v1_live')
+      .on(table.parent)
+      .where(notInArray(table.state, [...ETHEREUM_TRANSACTION_TERMINAL_STATES]).inlineParams()),
+  ],
+)
 
 /** One row per ERC-20 vault deposit resource, keyed by its resource name. */
 export const midnightErc20VaultDepositsV1 = pgTable('midnight_erc20_vault_deposits_v1', {
@@ -8,9 +77,6 @@ export const midnightErc20VaultDepositsV1 = pgTable('midnight_erc20_vault_deposi
   erc20Address: text('erc20_address').notNull(),
   amount: bigint('amount', { mode: 'bigint' }).notNull(),
   state: text('state', { enum: DEPOSIT_STATES }).notNull(),
-  startDepositMidnightTxn: text('start_deposit_midnight_txn'),
-  depositEVMTxn: text('deposit_evm_txn'),
-  completeDepositMidnightTxn: text('complete_deposit_midnight_txn'),
 })
 
 const bytea = customType<{ data: Uint8Array<ArrayBuffer>; driverData: Buffer }>({

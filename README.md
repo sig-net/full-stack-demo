@@ -53,24 +53,25 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 
 ## Layout
 
-| Path                           | Contents                                                                                           |
-| ------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `src/app`                      | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.   |
-| `src/app/(configured)`         | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                |
-| `src/components`               | Application React components.                                                                      |
-| `src/components/ui`            | Components written by the shadcn CLI.                                                              |
-| `src/components/contexts`      | React contexts: each file holds a context, its provider and its `use<Name>` hook.                  |
-| `src/lib`                      | Non-React modules.                                                                                 |
-| `src/lib/config`               | Server configuration loading and the client configuration type.                                    |
-| `src/lib/db`                   | The Drizzle schema and the Postgres connection pool.                                               |
-| `src/lib/kafka`                | The Kafka producer and consumer construction.                                                      |
-| `src/lib/event`                | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.   |
-| `src/lib/repository`           | The repository contract every resource's storage implements, and its Postgres base class.          |
-| `src/lib/midnight/erc20-vault` | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service. |
-| `src/app/api`                  | Route handlers.                                                                                    |
-| `src/instrumentation.ts`       | Runs once when the server process starts, and starts the Kafka consumers.                          |
-| `drizzle`                      | SQL migrations and their snapshots, written by `yarn db:generate`.                                 |
-| `public/icons`                 | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.         |
+| Path                              | Contents                                                                                           |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `src/app`                         | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.   |
+| `src/app/(configured)`            | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                |
+| `src/components`                  | Application React components.                                                                      |
+| `src/components/ui`               | Components written by the shadcn CLI.                                                              |
+| `src/components/contexts`         | React contexts: each file holds a context, its provider and its `use<Name>` hook.                  |
+| `src/lib`                         | Non-React modules.                                                                                 |
+| `src/lib/config`                  | Server configuration loading and the client configuration type.                                    |
+| `src/lib/db`                      | The Drizzle schema and the Postgres connection pool.                                               |
+| `src/lib/kafka`                   | The Kafka producer and consumer construction.                                                      |
+| `src/lib/event`                   | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.   |
+| `src/lib/repository`              | The repository contract every resource's storage implements, and its Postgres base class.          |
+| `src/lib/ethereum/transaction-v1` | The Ethereum transaction resource and its repository.                                              |
+| `src/lib/midnight/erc20-vault`    | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service. |
+| `src/lib/midnight/transaction-v1` | The Midnight transaction resource and its repository.                                              |
+| `src/instrumentation.ts`          | Runs once when the server process starts, and starts the Kafka consumers.                          |
+| `drizzle`                         | SQL migrations and their snapshots, written by `yarn db:generate`.                                 |
+| `public/icons`                    | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.         |
 
 Pages and layouts are server components. A component opts into the browser with `'use client'`
 only when it needs state, effects or browser APIs, as `src/components/mode-toggle.tsx` does.
@@ -244,27 +245,6 @@ headers are strings.
 Consumers run inside the Next.js server process. `src/instrumentation.ts` starts them from
 `register()`, which Next.js calls once when the process starts. Every replica of the application
 joins the same consumer group, and Kafka divides the topic's partitions among them.
-
-## Examples
-
-One small example shows how the backend uses Kafka.
-
-### Publishing and consuming a Kafka message
-
-`POST /api/example-messages` validates the JSON body against `exampleMessageSchema` and publishes
-it to the `full-stack-demo.example-messages` topic. It answers `202` once the broker has
-acknowledged the record, or `400` with the validation message.
-
-The consumer in `src/lib/example-messages/example-message-consumer.ts` reads the topic as the
-`full-stack-demo.example-messages` group and logs each record to the server output. After a
-failure it restarts five seconds later.
-
-With the services and the development server running, publish a message and watch the server
-output:
-
-```bash
-curl -X POST -H 'content-type: application/json' -d '{"text":"hello"}' http://localhost:3000/api/example-messages
-```
 
 ## Caller authentication
 

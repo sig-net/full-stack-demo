@@ -20,16 +20,15 @@ export const depositStateSchema = z.enum(DEPOSIT_STATES)
 
 export type DepositState = z.infer<typeof depositStateSchema>
 
-/** The deposit resource. `name` is assigned by the server. */
+/**
+ * The deposit resource. `name` is assigned by the server. The transactions behind its steps name
+ * it as their parent, so its attempts are found through the transaction repositories.
+ */
 export const depositSchema = z.object({
   name: depositNameSchema,
   erc20Address: evmAddressSchema,
   amount: amountSchema,
   state: depositStateSchema,
-  /** The names of the transactions behind each step, null until that step has started. */
-  startDepositMidnightTxn: z.string().nullable(),
-  depositEVMTxn: z.string().nullable(),
-  completeDepositMidnightTxn: z.string().nullable(),
 })
 
 export type Deposit = z.infer<typeof depositSchema>

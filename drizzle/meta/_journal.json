@@ -29,6 +29,20 @@
       "when": 1791483774453,
       "tag": "0003_deposit_state_and_transactions",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791487663725,
+      "tag": "0004_transactions_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791488576570,
+      "tag": "0005_transaction_parents",
+      "breakpoints": true
     }
   ]
 }

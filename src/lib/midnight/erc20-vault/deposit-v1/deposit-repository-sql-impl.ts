@@ -29,9 +29,6 @@ function toDepositRow(deposit: Deposit): DepositRow {
     erc20Address: deposit.erc20Address,
     amount: deposit.amount,
     state: deposit.state,
-    startDepositMidnightTxn: deposit.startDepositMidnightTxn,
-    depositEVMTxn: deposit.depositEVMTxn,
-    completeDepositMidnightTxn: deposit.completeDepositMidnightTxn,
   }
 }
 
@@ -41,8 +38,5 @@ function fromDepositRow(row: DepositRow): Deposit {
     erc20Address: row.erc20Address,
     amount: row.amount,
     state: row.state,
-    startDepositMidnightTxn: row.startDepositMidnightTxn,
-    depositEVMTxn: row.depositEVMTxn,
-    completeDepositMidnightTxn: row.completeDepositMidnightTxn,
   }
 }
