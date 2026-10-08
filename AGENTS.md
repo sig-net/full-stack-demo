@@ -65,6 +65,20 @@ Keep setup instructions and application reference material in README.md and docs
   detached work silently runs outside it. The outbox relay's Kafka send is the one documented
   exception.
 
+## Repositories
+
+- A repository is a typed database driver and nothing more. Every repository is the shared
+  `Repository<Resource>` from `src/lib/repository/repository.ts`, declared as a type alias
+  (`type DepositRepository = Repository<Deposit>`) with no extra members, and its SQL
+  implementation extends `SQLRepository` from `src/lib/repository/repository-sql-impl.ts`,
+  passing only the table and the two row mappers. The method set is `create`, `get`, `update` and
+  `search`; a query a resource needs is expressed as `search` criteria, order, limit and lock, and
+  a need no `SearchArgs` can express extends `SearchArgs` for every resource, never one repository.
+- The table's column properties are named exactly as the resource's fields, so a criterion's field
+  resolves to a column by name. The row mappers convert values (bytea, numeric, enum text) and
+  never rename, derive or default a field. Application logic, authorisation and naming live in the
+  service and state controller, never in a repository.
+
 ## State and asynchronous work
 
 - Use React Query for remote reads, mutations and application data caching. Do not fetch remote

@@ -38,7 +38,7 @@ export class DepositServiceImpl implements DepositService {
 
   async getDeposit(caller: Caller, args: GetDepositArgs): Promise<Deposit | undefined> {
     if (!resourceOwnedByCaller(args.name, caller)) return undefined
-    return this.depositRepository.getDeposit(args.name)
+    return this.depositRepository.get(args.name)
   }
 }
 

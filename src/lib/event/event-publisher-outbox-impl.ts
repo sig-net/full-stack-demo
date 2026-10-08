@@ -16,7 +16,7 @@ export class EventPublisherOutboxImpl implements EventPublisher {
   }
 
   async publishEvent(event: Event): Promise<void> {
-    await this.outboxEntryRepository.createOutboxEntry({
+    await this.outboxEntryRepository.create({
       name: outboxEntryName(event.id),
       type: event.type,
       data: new TextEncoder().encode(JSON.stringify(event)),

@@ -1,55 +1,18 @@
 import 'server-only'
 
-import { eq } from 'drizzle-orm'
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
-
+import { type DatabaseExecutor, getDatabase } from '@/lib/db/database'
 import { midnightErc20VaultDepositsV1 } from '@/lib/db/schema'
+import { lazySingleton } from '@/lib/lazy-singleton'
 import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
 import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-repository'
-import { type DatabaseExecutor, getDatabase } from '@/lib/db/database'
-import { currentTransaction } from '@/lib/db/unit-of-work'
-import { lazySingleton } from '@/lib/lazy-singleton'
+import { SQLRepository } from '@/lib/repository/repository-sql-impl'
 
-type DepositRow = typeof midnightErc20VaultDepositsV1.$inferSelect
-
-export function toDepositRow(deposit: Deposit): DepositRow {
-  return { name: deposit.name, erc20Address: deposit.erc20Address, amount: deposit.amount }
-}
-
-export function fromDepositRow(row: DepositRow): Deposit {
-  return { name: row.name, erc20Address: row.erc20Address, amount: row.amount }
-}
-
-export class DepositRepositorySQLImpl implements DepositRepository {
-  private readonly database: NodePgDatabase
-
-  constructor(database: NodePgDatabase) {
-    this.database = database
-  }
-
-  private executor(): DatabaseExecutor {
-    return currentTransaction() ?? this.database
-  }
-
-  async createDeposit(deposit: Deposit): Promise<Deposit> {
-    const row = toDepositRow(deposit)
-    const [stored] = await this.executor()
-      .insert(midnightErc20VaultDepositsV1)
-      .values(row)
-      .returning()
-    if (stored === undefined) {
-      throw new Error('The create returned no row')
-    }
-    return fromDepositRow(stored)
-  }
-
-  async getDeposit(name: string): Promise<Deposit | undefined> {
-    const [row] = await this.executor()
-      .select()
-      .from(midnightErc20VaultDepositsV1)
-      .where(eq(midnightErc20VaultDepositsV1.name, name))
-      .limit(1)
-    return row === undefined ? undefined : fromDepositRow(row)
+export class DepositRepositorySQLImpl
+  extends SQLRepository<Deposit, typeof midnightErc20VaultDepositsV1>
+  implements DepositRepository
+{
+  constructor(database: DatabaseExecutor) {
+    super(database, midnightErc20VaultDepositsV1, toDepositRow, fromDepositRow)
   }
 }
 
@@ -57,3 +20,29 @@ export class DepositRepositorySQLImpl implements DepositRepository {
 export const getDepositRepository: () => Promise<DepositRepository> = lazySingleton(
   async () => new DepositRepositorySQLImpl(await getDatabase()),
 )
+
+type DepositRow = typeof midnightErc20VaultDepositsV1.$inferSelect
+
+function toDepositRow(deposit: Deposit): DepositRow {
+  return {
+    name: deposit.name,
+    erc20Address: deposit.erc20Address,
+    amount: deposit.amount,
+    state: deposit.state,
+    startDepositMidnightTxn: deposit.startDepositMidnightTxn,
+    depositEVMTxn: deposit.depositEVMTxn,
+    completeDepositMidnightTxn: deposit.completeDepositMidnightTxn,
+  }
+}
+
+function fromDepositRow(row: DepositRow): Deposit {
+  return {
+    name: row.name,
+    erc20Address: row.erc20Address,
+    amount: row.amount,
+    state: row.state,
+    startDepositMidnightTxn: row.startDepositMidnightTxn,
+    depositEVMTxn: row.depositEVMTxn,
+    completeDepositMidnightTxn: row.completeDepositMidnightTxn,
+  }
+}

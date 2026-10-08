@@ -14,7 +14,9 @@ export const depositNameSchema = z
     `expected callers/{caller}/${DEPOSIT_COLLECTION}/{uuid}`,
   )
 
-export const depositStateSchema = z.enum(['Starting'])
+export const DEPOSIT_STATES = ['Starting'] as const
+
+export const depositStateSchema = z.enum(DEPOSIT_STATES)
 
 export type DepositState = z.infer<typeof depositStateSchema>
 
@@ -24,10 +26,10 @@ export const depositSchema = z.object({
   erc20Address: evmAddressSchema,
   amount: amountSchema,
   state: depositStateSchema,
-
-  startDepositMidnightTxn: z.unknown(),
-  depositEVMTxn: z.unknown(),
-  completeDepositMidnightTxn: z.unknown(),
+  /** The names of the transactions behind each step, null until that step has started. */
+  startDepositMidnightTxn: z.string().nullable(),
+  depositEVMTxn: z.string().nullable(),
+  completeDepositMidnightTxn: z.string().nullable(),
 })
 
 export type Deposit = z.infer<typeof depositSchema>

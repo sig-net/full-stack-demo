@@ -65,6 +65,7 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/db`                   | The Drizzle schema and the Postgres connection pool.                                               |
 | `src/lib/kafka`                | The Kafka producer and consumer construction.                                                      |
 | `src/lib/event`                | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.   |
+| `src/lib/repository`           | The repository contract every resource's storage implements, and its Postgres base class.          |
 | `src/lib/midnight/erc20-vault` | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service. |
 | `src/app/api`                  | Route handlers.                                                                                    |
 | `src/instrumentation.ts`       | Runs once when the server process starts, and starts the Kafka consumers.                          |
@@ -208,6 +209,17 @@ write that acts on it re-checks inside its own transaction. Work that leaves the
 un-awaited promise, a timer callback) runs outside the transaction, so a boundary awaits everything
 it starts.
 
+### Repositories
+
+Every resource's storage is the one `Repository<Resource>` interface in
+`src/lib/repository/repository.ts`: `create`, `get`, `update` and `search`, keyed by resource
+name. `search` takes criteria that must all hold (`exact-text` and `bool` on a named field), an
+optional order, limit and a `lock` of `update-skip-locked` for work that claims rows inside a
+transaction. A resource's repository file is a type alias of that interface, and its SQL
+implementation extends `SQLRepository` in `src/lib/repository/repository-sql-impl.ts` with the
+table and two row mappers, so repositories differ only in the table they name. The table's column
+properties carry the resource's field names, which is how a criterion finds its column.
+
 To change the schema, edit `src/lib/db/schema.ts`, then write the migration and commit the files
 it adds under `drizzle`:
 
@@ -288,8 +300,9 @@ the resource and acts on its current state, so a redelivered event is harmless.
   acknowledgement.
 - `outbox-entry-v1` holds the `OutboxEntry` resource (`outbox-entries/{id}`), its repository over
   the `event_outbox_entries_v1` table, and the processor. `OutboxEntryProcessor.process()`
-  relays unsent entries oldest first in locked batches (`FOR UPDATE SKIP LOCKED`, so several
-  replicas never relay the same entry) and marks them sent. A trigger on the table calls
+  relays unsent entries oldest first in locked batches (a `search` with
+  `lock: 'update-skip-locked'`, so several replicas never relay the same entry) and marks them
+  sent. A trigger on the table calls
   `pg_notify` when an entry's transaction commits, the processor holds one dedicated connection
   that listens for it, and a sweep every 30 seconds catches anything a lost notification missed.
   Delivery is at least once.
@@ -319,11 +332,12 @@ is exposed as server actions rather than HTTP routes. A deposit is named
 - `deposit.ts` holds the resource schema and its type, with the resource-name format and builder,
   shared by the server and the browser. The generic EVM address, base-unit amount, hex and UUID
   schemas live in `src/lib/value-schemas.ts`.
-- `deposit-repository.ts` is the storage interface and `deposit-repository-sql-impl.ts` its Postgres
-  implementation over the `midnight_erc20_vault_deposits_v1` table.
+- `deposit-repository.ts` is the storage interface, `Repository<Deposit>`, and
+  `deposit-repository-sql-impl.ts` its Postgres implementation over the
+  `midnight_erc20_vault_deposits_v1` table (see Repositories under Database).
 - `deposit-service.ts` is the API's method set and `deposit-service-impl.ts` the implementation,
   with `getDepositService()` building the one instance of the server process.
-- `deposit-actions-adaptor.ts` is the adaptor the UI calls. `createDeposit(callerSecret, args)` and
+- `deposit-actions-adaptor.ts` is the adaptor the UI calls. `startDeposit(callerSecret, args)` and
   `getDeposit(callerSecret, args)` are server actions that only translate: the secret becomes a
   `Caller`, the arguments are validated, the service is called, and its result becomes
   `{ ok: true, deposit }` or `{ ok: false, error }`. Amounts cross as `bigint`.
@@ -331,9 +345,9 @@ is exposed as server actions rather than HTTP routes. A deposit is named
 ```tsx
 'use client'
 
-import { createDeposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-actions-adaptor'
+import { startDeposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-actions-adaptor'
 
-const result = await createDeposit(callerSecret, { erc20Address, amount: 1000000n })
+const result = await startDeposit(callerSecret, { erc20Address, amount: 1000000n })
 ```
 
 ## Midnight wallet

@@ -22,6 +22,13 @@
       "when": 1791480889238,
       "tag": "0002_event_outbox_notify",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791483774453,
+      "tag": "0003_deposit_state_and_transactions",
+      "breakpoints": true
     }
   ]
 }

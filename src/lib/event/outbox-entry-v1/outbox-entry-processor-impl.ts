@@ -50,12 +50,17 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
    */
   private relayBatch(): Promise<number> {
     return runInTransaction(async () => {
-      const entries = await this.outboxEntryRepository.listUnsentOutboxEntries(BATCH_SIZE)
+      const entries = await this.outboxEntryRepository.search({
+        criteria: [{ type: 'bool', field: 'sent', bool: false }],
+        order: { field: 'createdAt', direction: 'asc' },
+        limit: BATCH_SIZE,
+        lock: 'update-skip-locked',
+      })
       for (const entry of entries) {
         await this.kafkaEventPublisher.publishEvent(
           eventSchema.parse(JSON.parse(new TextDecoder().decode(entry.data))),
         )
-        await this.outboxEntryRepository.updateOutboxEntry({ ...entry, sent: true })
+        await this.outboxEntryRepository.update({ ...entry, sent: true })
       }
       return entries.length
     })
