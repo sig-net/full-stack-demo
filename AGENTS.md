@@ -65,13 +65,39 @@ Keep setup instructions and application reference material in README.md and docs
   service is typed against exactly what reaches it. Nothing but the caller is positional, so adding
   an input never changes a signature.
 - Write boundaries open the transaction, reads never do. An adaptor method that creates, updates
-  or starts something, a consumer's `handleEvent`, and an outbox batch each run inside one
-  `UnitOfWork.runInTransaction()` (`src/lib/db/unit-of-work.ts`), which every repository call
-  on the same async chain joins. A read boundary (`get`, `list`) runs on the plain database: optimistic,
+  or starts something, a resolver's write of one transition, and an outbox batch each run inside
+  one `UnitOfWork.runInTransaction()` (`src/lib/db/unit-of-work.ts`), which every repository
+  call on the same async chain joins. State controllers never open one, and the event consumer
+  hub wraps nothing. A read boundary (`get`, `list`) runs on the plain database: optimistic,
   lock-free, re-checked by the write that acts on it. A transaction wraps one boundary call and
   never a slow external call, and nothing inside one may detach work from the async chain, since
   detached work silently runs outside it. The outbox relay's Kafka send is the one documented
   exception.
+
+## Lifecycle: state machines, controllers, resolvers and events
+
+- A resource with a lifecycle (`src/lib/midnight/transaction-v1` is the model) names each state
+  after what the resource waits for (`AwaitingProof`, `AwaitingWallet`), never after work in
+  progress, so every state is a to-do for exactly one actor and a crash leaves a row that still
+  says what it needs.
+- The legal transitions are a pure table in `<resource>-state-machine.ts`: `nextState(state,
+  action)` over an action union, plus `assertConsistent(resource)` stating which fields each
+  state holds. It has no I/O and is tested over every `(state, action)` pair.
+- The state controller is the only writer of state. Each method is one action from the table:
+  it reads the row with `lock: 'update'`, refuses with a `StateConflict` error when the table
+  refuses, patches, asserts consistency, writes, and publishes the event of the state entered.
+  It opens no transaction. Its interface file also defines its lifecycle events: one
+  `defineEvent()` per state entered, data `{ name }`, keyed by the resource name. Never a
+  generic created or updated event.
+- The state resolver does what the current state needs: the slow external calls (proving,
+  submitting, watching) outside any transaction, then one controller transition inside
+  `UnitOfWork.runInTransaction()`, swallowing the `StateConflict` that means another resolver
+  got there first. It dispatches on the row's state, not on the event, so a lifecycle event is
+  only a nudge and a sweep over waiting rows can call the same `resolve` method to catch lost
+  events and expiry.
+- An event consumer is a dumb adaptor: match the event definitions, `safeParse` the data, call
+  the resolver. No logic lives in a consumer. Slow external systems sit behind one port
+  interface (`TransactionLedger`) so the resolver is tested with a mocked ledger.
 
 ## Repositories
 

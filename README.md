@@ -53,27 +53,27 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 
 ## Layout
 
-| Path                              | Contents                                                                                                       |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `src/app`                         | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.               |
-| `src/app/(configured)`            | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                            |
-| `src/components`                  | Application React components.                                                                                  |
-| `src/components/ui`               | Components written by the shadcn CLI.                                                                          |
-| `src/components/contexts`         | React contexts: each file holds a context, its provider and its `use<Name>` hook.                              |
-| `src/lib`                         | Non-React modules.                                                                                             |
-| `src/lib/config`                  | Server configuration loading and the client configuration type.                                                |
-| `src/lib/db`                      | The Drizzle schema and the Postgres connection pool.                                                           |
-| `src/lib/kafka`                   | The Kafka producer and consumer factories and the connection options.                                          |
-| `src/lib/event`                   | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.               |
-| `src/lib/repository`              | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one. |
-| `src/lib/testing`                 | Test helpers: the `mock()` double for any interface.                                                           |
-| `src/lib/ethereum/transaction-v1` | The Ethereum transaction resource and its repository.                                                          |
-| `src/lib/midnight/erc20-vault`    | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service.             |
-| `src/lib/midnight/transaction-v1` | The Midnight transaction resource and its repository.                                                          |
-| `src/server`                      | The code that runs: the composition root, the server action files and the start-up.                            |
-| `src/instrumentation.ts`          | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                      |
-| `drizzle`                         | SQL migrations and their snapshots, written by `yarn db:generate`.                                             |
-| `public/icons`                    | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.                     |
+| Path                              | Contents                                                                                                         |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `src/app`                         | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.                 |
+| `src/app/(configured)`            | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                              |
+| `src/components`                  | Application React components.                                                                                    |
+| `src/components/ui`               | Components written by the shadcn CLI.                                                                            |
+| `src/components/contexts`         | React contexts: each file holds a context, its provider and its `use<Name>` hook.                                |
+| `src/lib`                         | Non-React modules.                                                                                               |
+| `src/lib/config`                  | Server configuration loading and the client configuration type.                                                  |
+| `src/lib/db`                      | The Drizzle schema and the Postgres connection pool.                                                             |
+| `src/lib/kafka`                   | The Kafka producer and consumer factories and the connection options.                                            |
+| `src/lib/event`                   | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.                 |
+| `src/lib/repository`              | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.   |
+| `src/lib/testing`                 | Test helpers: the `mock()` double for any interface.                                                             |
+| `src/lib/ethereum/transaction-v1` | The Ethereum transaction resource and its repository.                                                            |
+| `src/lib/midnight/erc20-vault`    | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service.               |
+| `src/lib/midnight/transaction-v1` | The Midnight transaction resource, its repository, state machine, state controller, resolver and event consumer. |
+| `src/server`                      | The code that runs: the composition root, the server action files and the start-up.                              |
+| `src/instrumentation.ts`          | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                        |
+| `drizzle`                         | SQL migrations and their snapshots, written by `yarn db:generate`.                                               |
+| `public/icons`                    | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.                       |
 
 Pages and layouts are server components. A component opts into the browser with `'use client'`
 only when it needs state, effects or browser APIs, as `src/components/mode-toggle.tsx` does.
@@ -312,6 +312,14 @@ the resource and acts on its current state, so a redelivered event is harmless.
   reads the topic as the `full-stack-demo.events` group, hands each event to every consumer that
   wants it in registration order, and commits the offset only after they all return. A handler
   that throws leaves the offset uncommitted, so the event is redelivered after a restart delay.
+
+Domain events are lifecycle events, one per state a resource enters, defined with
+`defineEvent(type, dataSchema)` beside the state controller that publishes them (for example
+`TRANSACTION_EVENT_BY_STATE` in `src/lib/midnight/transaction-v1/transaction-state-controller.ts`).
+A definition creates typed events for the publisher and parses event data for the consumer, so
+the consumer is an adaptor for the bus: it matches the definitions it wants, parses the data and
+calls a resolver. Handlers run outside any database transaction, since the resolver behind them
+decides where its writes go.
 
 `src/server/start.ts` starts the hub and the processor with the server process, and it is where
 consumers are registered. Next.js evaluates instrumentation and request code (server actions,

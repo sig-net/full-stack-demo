@@ -1,0 +1,123 @@
+import 'server-only'
+
+import type { UnitOfWork } from '@/lib/db/unit-of-work'
+import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
+import type { TransactionLedger } from '@/lib/midnight/transaction-v1/transaction-ledger'
+import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
+import {
+  TransactionStateConflict,
+  type TransactionStateController,
+} from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import { EXPIRABLE_STATES } from '@/lib/midnight/transaction-v1/transaction-state-machine'
+import type {
+  ResolveTransactionArgs,
+  TransactionStateResolver,
+} from '@/lib/midnight/transaction-v1/transaction-state-resolver'
+
+export class TransactionStateResolverImpl implements TransactionStateResolver {
+  private readonly transactionRepository: MidnightTransactionRepository
+  private readonly stateController: TransactionStateController
+  private readonly ledger: TransactionLedger
+  private readonly unitOfWork: UnitOfWork
+
+  constructor(
+    transactionRepository: MidnightTransactionRepository,
+    stateController: TransactionStateController,
+    ledger: TransactionLedger,
+    unitOfWork: UnitOfWork,
+  ) {
+    this.transactionRepository = transactionRepository
+    this.stateController = stateController
+    this.ledger = ledger
+    this.unitOfWork = unitOfWork
+  }
+
+  /** Reads outside any transaction: the controller re-reads under lock before it writes. */
+  async resolveTransaction({ name }: ResolveTransactionArgs): Promise<void> {
+    const transaction = await this.transactionRepository.get(name)
+    if (transaction === undefined) return
+    if (
+      EXPIRABLE_STATES.includes(transaction.state) &&
+      transaction.expireTime !== null &&
+      transaction.expireTime.getTime() <= Date.now()
+    ) {
+      return this.write(() => this.stateController.expireTransaction({ name }))
+    }
+    switch (transaction.state) {
+      case 'AwaitingProof':
+        return this.resolveAwaitingProof(transaction)
+      case 'AwaitingSubmission':
+        return this.resolveAwaitingSubmission(transaction)
+      case 'AwaitingInclusion':
+        return this.resolveAwaitingInclusion(transaction)
+      case 'AwaitingWallet':
+      case 'Succeeded':
+      case 'Failed':
+      case 'Expired':
+        return
+      default: {
+        const unhandled: never = transaction.state
+        throw new Error(`Unhandled state ${JSON.stringify(unhandled)}`)
+      }
+    }
+  }
+
+  private async resolveAwaitingProof({ name, unprovenTx }: MidnightTransaction): Promise<void> {
+    if (unprovenTx === null) return
+    let unboundTx: string
+    try {
+      unboundTx = await this.ledger.prove(unprovenTx)
+    } catch (error: unknown) {
+      return this.write(() =>
+        this.stateController.recordProofFailure({ name, error: messageOf(error) }),
+      )
+    }
+    return this.write(() => this.stateController.recordProof({ name, unboundTx }))
+  }
+
+  private async resolveAwaitingSubmission({
+    name,
+    finalizedTx,
+  }: MidnightTransaction): Promise<void> {
+    if (finalizedTx === null) return
+    let txId: string
+    try {
+      txId = await this.ledger.submit(finalizedTx)
+    } catch (error: unknown) {
+      return this.write(() =>
+        this.stateController.recordRejection({ name, error: messageOf(error) }),
+      )
+    }
+    return this.write(() => this.stateController.recordSubmission({ name, txId }))
+  }
+
+  private async resolveAwaitingInclusion({ name, txId }: MidnightTransaction): Promise<void> {
+    if (txId === null) return
+    const status = await this.ledger.status(txId)
+    switch (status.outcome) {
+      case 'pending':
+        return
+      case 'succeeded':
+        return this.write(() => this.stateController.recordSuccess({ name }))
+      case 'failed':
+        return this.write(() => this.stateController.recordRejection({ name, error: status.error }))
+      default: {
+        const unhandled: never = status
+        throw new Error(`Unhandled status ${JSON.stringify(unhandled)}`)
+      }
+    }
+  }
+
+  /** One transition per resolve. A conflict means another resolver applied it first. */
+  private async write(transition: () => Promise<MidnightTransaction>): Promise<void> {
+    try {
+      await this.unitOfWork.runInTransaction(transition)
+    } catch (error: unknown) {
+      if (!(error instanceof TransactionStateConflict)) throw error
+    }
+  }
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}

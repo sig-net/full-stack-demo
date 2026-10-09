@@ -1,17 +1,27 @@
 import 'server-only'
 
-import { newEvent } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
-import {
-  MIDNIGHT_TRANSACTION_CREATED_EVENT,
-  type MidnightTransaction,
-  type MidnightTransactionState,
-} from '@/lib/midnight/transaction-v1/transaction'
+import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
-import type {
-  CommitTransactionArgs,
-  TransactionStateController,
+import {
+  type CommitTransactionArgs,
+  type ExpireTransactionArgs,
+  type RecordProofArgs,
+  type RecordProofFailureArgs,
+  type RecordRejectionArgs,
+  type RecordSubmissionArgs,
+  type RecordSuccessArgs,
+  type SubmitTransactionArgs,
+  TRANSACTION_EVENT_BY_STATE,
+  TransactionStateConflict,
+  type TransactionStateController,
 } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import {
+  assertConsistent,
+  COMMITTABLE_STATES,
+  nextState,
+  type TransactionAction,
+} from '@/lib/midnight/transaction-v1/transaction-state-machine'
 
 export class TransactionStateControllerImpl implements TransactionStateController {
   private readonly transactionRepository: MidnightTransactionRepository
@@ -32,54 +42,75 @@ export class TransactionStateControllerImpl implements TransactionStateControlle
       createTime: now,
       updateTime: now,
     }
-    assertCommittable(transaction)
+    if (!COMMITTABLE_STATES.includes(transaction.state)) {
+      throw new Error(`${transaction.name} cannot be committed in state ${transaction.state}`)
+    }
+    assertConsistent(transaction)
     const stored = await this.transactionRepository.create(transaction)
-    await this.eventPublisher.publishEvent(
-      newEvent(MIDNIGHT_TRANSACTION_CREATED_EVENT, stored.name, { name: stored.name }),
-    )
+    await this.publishEntered(stored)
     return stored
   }
-}
 
-/** The fields that carry a value in each state a transaction may be committed in. */
-type CommittableState = Extract<MidnightTransactionState, 'Proving' | 'Signing & Balancing'>
-type StepField = 'unprovenTx' | 'unboundTx' | 'finalizedTx' | 'expireTime' | 'txId' | 'error'
-
-const FIELDS_SET_ON_COMMIT: Record<CommittableState, readonly StepField[]> = {
-  // The TTL is fixed when the unproven transaction is built, so it is known from the start.
-  Proving: ['unprovenTx', 'expireTime'],
-  'Signing & Balancing': ['unboundTx', 'expireTime'],
-}
-
-const STEP_FIELDS: readonly StepField[] = [
-  'unprovenTx',
-  'unboundTx',
-  'finalizedTx',
-  'expireTime',
-  'txId',
-  'error',
-]
-
-/**
- * A committed transaction carries exactly the fields its entry state produced. The bytes
- * themselves are trusted: the caller built them, and the resolver that consumes them is the
- * first thing that can tell whether they are well formed.
- */
-function assertCommittable(transaction: MidnightTransaction): void {
-  if (!isCommittableState(transaction.state)) {
-    throw new Error(`${transaction.name} cannot be committed in state ${transaction.state}`)
+  recordProof({ name, unboundTx }: RecordProofArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'recordProof', { unboundTx, unprovenTx: null })
   }
-  const expected = FIELDS_SET_ON_COMMIT[transaction.state]
-  for (const field of STEP_FIELDS) {
-    const set = transaction[field] !== null
-    if (set !== expected.includes(field)) {
-      throw new Error(
-        `${transaction.name} in state ${transaction.state} must have ${field} ${set ? 'unset' : 'set'}`,
-      )
+
+  recordProofFailure({ name, error }: RecordProofFailureArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'recordProofFailure', { error, unprovenTx: null })
+  }
+
+  submitTransaction({ name, finalizedTx }: SubmitTransactionArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'submit', { finalizedTx })
+  }
+
+  recordSubmission({ name, txId }: RecordSubmissionArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'recordSubmission', { txId })
+  }
+
+  recordRejection({ name, error }: RecordRejectionArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'recordRejection', { error })
+  }
+
+  recordSuccess({ name }: RecordSuccessArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'recordSuccess', {})
+  }
+
+  expireTransaction({ name }: ExpireTransactionArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'expire', { unprovenTx: null })
+  }
+
+  /**
+   * The row is read locked, so two actors applying actions at once are serialised and the second
+   * sees the state the first left, rather than both writing over the same starting state.
+   */
+  private async transition(
+    name: string,
+    action: TransactionAction,
+    patch: Partial<MidnightTransaction>,
+  ): Promise<MidnightTransaction> {
+    const [current] = await this.transactionRepository.search({
+      criteria: [{ type: 'exact-text', field: 'name', text: name }],
+      lock: 'update',
+    })
+    if (current === undefined) {
+      throw new Error(`${name} does not exist`)
     }
+    const state = nextState(current.state, action)
+    if (state === undefined) {
+      throw new TransactionStateConflict(name, current.state, action)
+    }
+    const next: MidnightTransaction = { ...current, ...patch, state, updateTime: new Date() }
+    assertConsistent(next)
+    const stored = await this.transactionRepository.update(next)
+    await this.publishEntered(stored)
+    return stored
   }
-}
 
-function isCommittableState(state: MidnightTransactionState): state is CommittableState {
-  return state in FIELDS_SET_ON_COMMIT
+  private publishEntered(transaction: MidnightTransaction): Promise<void> {
+    return this.eventPublisher.publishEvent(
+      TRANSACTION_EVENT_BY_STATE[transaction.state].create(transaction.name, {
+        name: transaction.name,
+      }),
+    )
+  }
 }

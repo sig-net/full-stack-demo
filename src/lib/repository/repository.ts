@@ -17,8 +17,11 @@ export interface SearchArgs<Resource> {
   criteria: Criterion<Resource>[]
   order?: { field: keyof Resource & string; direction: 'asc' | 'desc' }
   limit?: number
-  /** Locks the matches for the open transaction and skips rows another transaction holds. */
-  lock?: 'update-skip-locked'
+  /**
+   * Locks the matches for the open transaction: `update` waits for a row another transaction
+   * holds, `update-skip-locked` leaves it out.
+   */
+  lock?: 'update' | 'update-skip-locked'
 }
 
 export type Criterion<Resource> =

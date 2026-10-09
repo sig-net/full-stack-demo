@@ -14,11 +14,12 @@ export const midnightTransactionNameSchema = z
     `expected callers/{caller}/${MIDNIGHT_TRANSACTION_COLLECTION}/{uuid}`,
   )
 
+/** Each state names what the transaction waits for, so it is a to-do for exactly one actor. */
 export const MIDNIGHT_TRANSACTION_STATES = [
-  'Proving',
-  'Signing & Balancing',
-  'Submitting',
-  'Pending',
+  'AwaitingProof',
+  'AwaitingWallet',
+  'AwaitingSubmission',
+  'AwaitingInclusion',
   'Succeeded',
   'Failed',
   'Expired',
@@ -65,9 +66,6 @@ export const midnightTransactionSchema = z.object({
 })
 
 export type MidnightTransaction = z.infer<typeof midnightTransactionSchema>
-
-/** Published once a transaction is stored. `data` is `{ name }`. */
-export const MIDNIGHT_TRANSACTION_CREATED_EVENT = 'midnight.transaction-v1.created'
 
 export function midnightTransactionName(parent: string, id: string): string {
   return `${parent}/${MIDNIGHT_TRANSACTION_COLLECTION}/${id}`

@@ -127,7 +127,7 @@ function createEvent(db: DbBackend, kafka: KafkaBackend): EventBackend {
   const repository = new OutboxEntryRepositorySQLImpl(db.database)
   return {
     publisher: new EventPublisherOutboxImpl(repository),
-    consumerHub: new EventConsumerHubImpl(db.unitOfWork),
+    consumerHub: new EventConsumerHubImpl(),
     outboxEntryV1: {
       repository,
       processor: new OutboxEntryProcessorImpl(repository, kafka.publisher, db.unitOfWork),

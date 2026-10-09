@@ -80,6 +80,7 @@ export class SQLRepository<
       query = query.orderBy(direction(this.column(args.order.field)), asc(this.column('name')))
     }
     if (args.limit !== undefined) query = query.limit(args.limit)
+    if (args.lock === 'update') query = query.for('update')
     if (args.lock === 'update-skip-locked') query = query.for('update', { skipLocked: true })
     const rows = await query
     return rows.map((row) => this.resource(row))

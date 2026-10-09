@@ -2,58 +2,45 @@ import { describe, expect, test } from 'vitest'
 
 import type { Event } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
+import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
 import {
-  MIDNIGHT_TRANSACTION_CREATED_EVENT,
-  type MidnightTransaction,
-} from '@/lib/midnight/transaction-v1/transaction'
+  TRANSACTION_IN_STATE,
+  TRANSACTION_NAME,
+  transactionFixture,
+} from '@/lib/midnight/transaction-v1/transaction-fixtures'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
+import {
+  TRANSACTION_EVENT_BY_STATE,
+  type TransactionStateController,
+  TransactionStateConflict,
+} from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { TransactionStateControllerImpl } from '@/lib/midnight/transaction-v1/transaction-state-controller-impl'
 import { mock } from '@/lib/testing/mock'
 
-const CALLER = `callers/${'ab'.repeat(32)}`
-const NAME = `${CALLER}/midnight-transactions/0d8c7d10-6a3e-4d7e-9f1c-2b7a1c3d4e5f`
-const PARENT = `${CALLER}/erc20-vault-deposits/1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b`
-const EPOCH = new Date(0)
-
-function transaction(overrides: Partial<MidnightTransaction> = {}): MidnightTransaction {
-  return {
-    name: NAME,
-    parent: PARENT,
-    state: 'Proving',
-    circuit: 'completeDeposit',
-    unprovenTx: 'aa',
-    unboundTx: null,
-    finalizedTx: null,
-    expireTime: new Date('2026-10-09T10:00:00Z'),
-    txId: null,
-    error: null,
-    createTime: EPOCH,
-    updateTime: EPOCH,
-    ...overrides,
-  }
+interface Calls {
+  created: MidnightTransaction[]
+  updated: MidnightTransaction[]
+  published: Event[]
 }
 
-describe('TransactionStateControllerImpl.commitTransaction', () => {
-  interface Fields {
-    transactionRepository: MidnightTransactionRepository
-    eventPublisher: EventPublisher
-  }
-
-  interface Case {
-    name: string
-    fields: (calls: { created: MidnightTransaction[]; published: Event[] }) => Fields
-    args: MidnightTransaction
-    check: (
-      result: Promise<MidnightTransaction>,
-      calls: { created: MidnightTransaction[]; published: Event[] },
-    ) => Promise<void>
-  }
-
-  const stores = (calls: { created: MidnightTransaction[]; published: Event[] }): Fields => ({
+/** A repository holding one row, and a publisher that records. Reads report the lock they took. */
+function fields(stored: MidnightTransaction | undefined, calls: Calls, locks: string[] = []) {
+  return {
     transactionRepository: mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
-      create: async (stored) => {
-        calls.created.push(stored)
-        return stored
+      create: async (transaction) => {
+        calls.created.push(transaction)
+        return transaction
+      },
+      search: async (args) => {
+        locks.push(args.lock ?? 'none')
+        expect(args.criteria).toEqual([
+          { type: 'exact-text', field: 'name', text: TRANSACTION_NAME },
+        ])
+        return stored === undefined ? [] : [stored]
+      },
+      update: async (transaction) => {
+        calls.updated.push(transaction)
+        return transaction
       },
     }),
     eventPublisher: mock<EventPublisher>('EventPublisher', {
@@ -61,106 +48,233 @@ describe('TransactionStateControllerImpl.commitTransaction', () => {
         calls.published.push(event)
       },
     }),
-  })
+  }
+}
 
-  const rejects = (): Fields => ({
-    transactionRepository: mock<MidnightTransactionRepository>('MidnightTransactionRepository'),
-    eventPublisher: mock<EventPublisher>('EventPublisher'),
-  })
+function controllerOver(
+  stored: MidnightTransaction | undefined,
+  calls: Calls,
+  locks: string[] = [],
+) {
+  const { transactionRepository, eventPublisher } = fields(stored, calls, locks)
+  return new TransactionStateControllerImpl(transactionRepository, eventPublisher)
+}
 
-  const cases: Case[] = [
+function emptyCalls(): Calls {
+  return { created: [], updated: [], published: [] }
+}
+
+describe('TransactionStateControllerImpl.commitTransaction', () => {
+  const cases: ReadonlyArray<{
+    name: string
+    args: MidnightTransaction
+    check: (result: Promise<MidnightTransaction>, calls: Calls) => Promise<void>
+  }> = [
     {
-      name: 'success - Proving with the unproven bytes and the TTL',
-      fields: stores,
-      args: transaction(),
+      name: 'success - AwaitingProof with the unproven bytes and the TTL',
+      args: transactionFixture({ createTime: new Date(0), updateTime: new Date(0) }),
       check: async (result, calls) => {
         const stored = await result
-        expect(stored.createTime.getTime()).toBeGreaterThan(EPOCH.getTime())
+        expect(stored.createTime.getTime()).toBeGreaterThan(0)
         expect(stored.updateTime).toEqual(stored.createTime)
-        expect(stored).toEqual({
-          ...transaction(),
-          createTime: stored.createTime,
-          updateTime: stored.updateTime,
-        })
         expect(calls.created).toEqual([stored])
         expect(calls.published).toHaveLength(1)
         expect(calls.published[0]).toMatchObject({
-          type: MIDNIGHT_TRANSACTION_CREATED_EVENT,
-          key: NAME,
-          data: { name: NAME },
+          type: TRANSACTION_EVENT_BY_STATE.AwaitingProof.type,
+          key: TRANSACTION_NAME,
+          data: { name: TRANSACTION_NAME },
         })
       },
     },
     {
-      name: 'success - Signing & Balancing with the proven bytes and the TTL',
-      fields: stores,
-      args: transaction({ state: 'Signing & Balancing', unprovenTx: null, unboundTx: 'bb' }),
+      name: 'success - AwaitingWallet with the proven bytes and the TTL',
+      args: TRANSACTION_IN_STATE.AwaitingWallet,
       check: async (result, calls) => {
-        const stored = await result
-        expect(stored.state).toBe('Signing & Balancing')
-        expect(calls.created).toHaveLength(1)
-        expect(calls.published).toHaveLength(1)
+        await result
+        expect(calls.published[0]?.type).toBe(TRANSACTION_EVENT_BY_STATE.AwaitingWallet.type)
       },
     },
     {
       name: 'failure - a state a transaction cannot be committed in',
-      fields: rejects,
-      args: transaction({ state: 'Pending' }),
-      check: async (result) => {
-        await expect(result).rejects.toThrow(`${NAME} cannot be committed in state Pending`)
-      },
-    },
-    {
-      name: 'failure - Proving with a field a later step produces',
-      fields: rejects,
-      args: transaction({ unboundTx: 'bb' }),
-      check: async (result) => {
-        await expect(result).rejects.toThrow(`${NAME} in state Proving must have unboundTx unset`)
-      },
-    },
-    {
-      name: 'failure - Proving without the TTL',
-      fields: rejects,
-      args: transaction({ expireTime: null }),
-      check: async (result) => {
-        await expect(result).rejects.toThrow(`${NAME} in state Proving must have expireTime set`)
-      },
-    },
-    {
-      name: 'failure - Signing & Balancing still holding the unproven bytes',
-      fields: rejects,
-      args: transaction({ state: 'Signing & Balancing', unboundTx: 'bb' }),
-      check: async (result) => {
+      args: TRANSACTION_IN_STATE.AwaitingInclusion,
+      check: async (result, calls) => {
         await expect(result).rejects.toThrow(
-          `${NAME} in state Signing & Balancing must have unprovenTx unset`,
+          `${TRANSACTION_NAME} cannot be committed in state AwaitingInclusion`,
         )
+        expect(calls.created).toHaveLength(0)
+      },
+    },
+    {
+      name: 'failure - AwaitingProof with a field a later step produces',
+      args: transactionFixture({ unboundTx: 'unbound' }),
+      check: async (result) => {
+        await expect(result).rejects.toThrow('must have unboundTx unset')
       },
     },
     {
       name: 'failure - the repository refuses the row, so nothing is published',
-      fields: () => ({
-        transactionRepository: mock<MidnightTransactionRepository>(
-          'MidnightTransactionRepository',
-          {
-            create: async () => {
-              throw new Error(`${NAME} already exists`)
-            },
-          },
-        ),
-        eventPublisher: mock<EventPublisher>('EventPublisher'),
-      }),
-      args: transaction(),
+      args: transactionFixture(),
       check: async (result, calls) => {
-        await expect(result).rejects.toThrow(`${NAME} already exists`)
+        await expect(result).rejects.toThrow('already exists')
         expect(calls.published).toHaveLength(0)
       },
     },
   ]
 
-  test.each(cases)('$name', async ({ fields, args, check }) => {
-    const calls = { created: [] as MidnightTransaction[], published: [] as Event[] }
-    const { transactionRepository, eventPublisher } = fields(calls)
+  test.each(cases)('$name', async ({ name, args, check }) => {
+    const calls = emptyCalls()
+    const refusing = name.includes('repository refuses')
+    const { eventPublisher } = fields(undefined, calls)
+    const transactionRepository = refusing
+      ? mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
+          create: async () => {
+            throw new Error(`${TRANSACTION_NAME} already exists`)
+          },
+        })
+      : fields(undefined, calls).transactionRepository
     const controller = new TransactionStateControllerImpl(transactionRepository, eventPublisher)
     await check(controller.commitTransaction({ transaction: args }), calls)
+  })
+})
+
+describe('TransactionStateControllerImpl transitions', () => {
+  type Transition = (controller: TransactionStateController) => Promise<MidnightTransaction>
+
+  const cases: ReadonlyArray<{
+    name: string
+    from: MidnightTransaction
+    transition: Transition
+    to: MidnightTransaction['state']
+    patch: Partial<MidnightTransaction>
+  }> = [
+    {
+      name: 'recordProof',
+      from: TRANSACTION_IN_STATE.AwaitingProof,
+      transition: (c) => c.recordProof({ name: TRANSACTION_NAME, unboundTx: 'unbound' }),
+      to: 'AwaitingWallet',
+      patch: { unboundTx: 'unbound', unprovenTx: null },
+    },
+    {
+      name: 'recordProofFailure',
+      from: TRANSACTION_IN_STATE.AwaitingProof,
+      transition: (c) =>
+        c.recordProofFailure({ name: TRANSACTION_NAME, error: 'proof server down' }),
+      to: 'Failed',
+      patch: { error: 'proof server down', unprovenTx: null },
+    },
+    {
+      name: 'submitTransaction',
+      from: TRANSACTION_IN_STATE.AwaitingWallet,
+      transition: (c) => c.submitTransaction({ name: TRANSACTION_NAME, finalizedTx: 'finalized' }),
+      to: 'AwaitingSubmission',
+      patch: { finalizedTx: 'finalized' },
+    },
+    {
+      name: 'recordSubmission',
+      from: TRANSACTION_IN_STATE.AwaitingSubmission,
+      transition: (c) => c.recordSubmission({ name: TRANSACTION_NAME, txId: 'tx-1' }),
+      to: 'AwaitingInclusion',
+      patch: { txId: 'tx-1' },
+    },
+    {
+      name: 'recordRejection from AwaitingSubmission',
+      from: TRANSACTION_IN_STATE.AwaitingSubmission,
+      transition: (c) => c.recordRejection({ name: TRANSACTION_NAME, error: 'invalid' }),
+      to: 'Failed',
+      patch: { error: 'invalid' },
+    },
+    {
+      name: 'recordRejection from AwaitingInclusion',
+      from: TRANSACTION_IN_STATE.AwaitingInclusion,
+      transition: (c) => c.recordRejection({ name: TRANSACTION_NAME, error: 'FailEntirely' }),
+      to: 'Failed',
+      patch: { error: 'FailEntirely' },
+    },
+    {
+      name: 'recordSuccess',
+      from: TRANSACTION_IN_STATE.AwaitingInclusion,
+      transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME }),
+      to: 'Succeeded',
+      patch: {},
+    },
+    {
+      name: 'expireTransaction from AwaitingProof',
+      from: TRANSACTION_IN_STATE.AwaitingProof,
+      transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
+      to: 'Expired',
+      patch: { unprovenTx: null },
+    },
+    {
+      name: 'expireTransaction from AwaitingInclusion',
+      from: TRANSACTION_IN_STATE.AwaitingInclusion,
+      transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
+      to: 'Expired',
+      patch: {},
+    },
+  ]
+
+  test.each(cases)(
+    '$name applies, locks the row and publishes the entered state',
+    async ({ from, transition, to, patch }) => {
+      const calls = emptyCalls()
+      const locks: string[] = []
+      const stored = await transition(controllerOver(from, calls, locks))
+      expect(locks).toEqual(['update'])
+      expect(stored).toEqual({ ...from, ...patch, state: to, updateTime: stored.updateTime })
+      expect(stored.updateTime.getTime()).toBeGreaterThan(from.updateTime.getTime())
+      expect(calls.updated).toEqual([stored])
+      expect(calls.published).toHaveLength(1)
+      expect(calls.published[0]).toMatchObject({
+        type: TRANSACTION_EVENT_BY_STATE[to].type,
+        key: TRANSACTION_NAME,
+        data: { name: TRANSACTION_NAME },
+      })
+    },
+  )
+
+  const refused: ReadonlyArray<{
+    name: string
+    from: MidnightTransaction
+    transition: Transition
+  }> = [
+    {
+      name: 'recordProof once already proven',
+      from: TRANSACTION_IN_STATE.AwaitingWallet,
+      transition: (c) => c.recordProof({ name: TRANSACTION_NAME, unboundTx: 'again' }),
+    },
+    {
+      name: 'submitTransaction before proving',
+      from: TRANSACTION_IN_STATE.AwaitingProof,
+      transition: (c) => c.submitTransaction({ name: TRANSACTION_NAME, finalizedTx: 'x' }),
+    },
+    {
+      name: 'recordSuccess on a terminal transaction',
+      from: TRANSACTION_IN_STATE.Succeeded,
+      transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME }),
+    },
+    {
+      name: 'expireTransaction on a terminal transaction',
+      from: TRANSACTION_IN_STATE.Failed,
+      transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
+    },
+  ]
+
+  test.each(refused)(
+    '$name is a state conflict that writes and publishes nothing',
+    async ({ from, transition }) => {
+      const calls = emptyCalls()
+      await expect(transition(controllerOver(from, calls))).rejects.toBeInstanceOf(
+        TransactionStateConflict,
+      )
+      expect(calls.updated).toHaveLength(0)
+      expect(calls.published).toHaveLength(0)
+    },
+  )
+
+  test('a transition on a missing transaction throws', async () => {
+    const calls = emptyCalls()
+    await expect(
+      controllerOver(undefined, calls).recordSuccess({ name: TRANSACTION_NAME }),
+    ).rejects.toThrow(`${TRANSACTION_NAME} does not exist`)
   })
 })

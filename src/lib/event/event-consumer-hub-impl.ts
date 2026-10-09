@@ -4,7 +4,6 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 import { MessagesStreamFallbackModes, MessagesStreamModes } from '@platformatic/kafka'
 
-import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { type Event, eventSchema, EVENTS_TOPIC } from '@/lib/event/event'
 import type { EventConsumer } from '@/lib/event/event-consumer'
 import type { EventConsumerHub } from '@/lib/event/event-consumer-hub'
@@ -12,22 +11,15 @@ import type { StringConsumer } from '@/lib/kafka/clients'
 
 export class EventConsumerHubImpl implements EventConsumerHub {
   private readonly consumers: EventConsumer[] = []
-  private readonly unitOfWork: UnitOfWork
-
-  constructor(unitOfWork: UnitOfWork) {
-    this.unitOfWork = unitOfWork
-  }
 
   registerConsumer(consumer: EventConsumer): void {
     this.consumers.push(consumer)
   }
 
-  /** Each handler runs in its own transaction, so one failing handler rolls back only its own work. */
+  /** Handlers run outside any transaction: the resolver behind each one opens its own writes. */
   async dispatchEvent(event: Event): Promise<void> {
     for (const consumer of this.consumers) {
-      if (consumer.wantsEvent(event)) {
-        await this.unitOfWork.runInTransaction(() => consumer.handleEvent(event))
-      }
+      if (consumer.wantsEvent(event)) await consumer.handleEvent(event)
     }
   }
 }
