@@ -2,23 +2,23 @@ import type { ProofProvider, UnboundTransaction } from '@midnight-ntwrk/midnight
 import { Transaction } from '@midnightntwrk/ledger-v9'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
-import type { LedgerTransactionStatus } from '@/lib/midnight/transaction-v1/transaction-ledger'
-import { TransactionLedgerMidnightImpl } from '@/lib/midnight/transaction-v1/transaction-ledger-midnight-impl'
+import type { MidnightLedgerTransactionStatus } from '@/lib/midnight/transaction-v1/transaction-ledger'
+import { MidnightTransactionLedgerImpl } from '@/lib/midnight/transaction-v1/transaction-ledger-midnight-impl'
 import { mock } from '@/lib/testing/mock'
 
 const INDEXER = 'http://indexer.test/graphql'
 const NODE = 'http://node.test'
 const PROVEN_BYTES = Uint8Array.from([1, 2, 255])
 
-function ledgerWith(proofProvider: Partial<ProofProvider> = {}): TransactionLedgerMidnightImpl {
-  return new TransactionLedgerMidnightImpl(
+function ledgerWith(proofProvider: Partial<ProofProvider> = {}): MidnightTransactionLedgerImpl {
+  return new MidnightTransactionLedgerImpl(
     async () => mock<ProofProvider>('ProofProvider', proofProvider),
     INDEXER,
     NODE,
   )
 }
 
-describe('TransactionLedgerMidnightImpl.prove', () => {
+describe('MidnightTransactionLedgerImpl.prove', () => {
   test('deserialises the hex, proves it, and serialises what came back', async () => {
     const unproven = Transaction.fromParts('undeployed')
     const hex = Buffer.from(unproven.serialize()).toString('hex')
@@ -42,7 +42,7 @@ describe('TransactionLedgerMidnightImpl.prove', () => {
   })
 })
 
-describe('TransactionLedgerMidnightImpl.status', () => {
+describe('MidnightTransactionLedgerImpl.status', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -56,7 +56,7 @@ describe('TransactionLedgerMidnightImpl.status', () => {
     return { requests }
   }
 
-  const cases: ReadonlyArray<[string, unknown, LedgerTransactionStatus]> = [
+  const cases: ReadonlyArray<[string, unknown, MidnightLedgerTransactionStatus]> = [
     ['no transaction yet', { data: { transactions: [] } }, { outcome: 'pending' }],
     [
       'SUCCESS',

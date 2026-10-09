@@ -2,30 +2,30 @@ import 'server-only'
 
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
-import type { TransactionLedger } from '@/lib/midnight/transaction-v1/transaction-ledger'
+import type { MidnightTransactionLedger } from '@/lib/midnight/transaction-v1/transaction-ledger'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import {
-  TransactionStateConflict,
-  type TransactionStateController,
+  MidnightTransactionStateConflict,
+  type MidnightTransactionStateController,
 } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { EXPIRABLE_STATES } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 import type {
   ResolveTransactionArgs,
-  TransactionStateResolver,
+  MidnightTransactionStateResolver,
 } from '@/lib/midnight/transaction-v1/transaction-state-resolver'
 import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
 
-export class TransactionStateResolverImpl implements TransactionStateResolver {
+export class MidnightTransactionStateResolverImpl implements MidnightTransactionStateResolver {
   private readonly transactionRepository: MidnightTransactionRepository
-  private readonly stateController: TransactionStateController
-  private readonly ledger: TransactionLedger
+  private readonly stateController: MidnightTransactionStateController
+  private readonly ledger: MidnightTransactionLedger
   private readonly relayerWallet: RelayerWallet
   private readonly unitOfWork: UnitOfWork
 
   constructor(
     transactionRepository: MidnightTransactionRepository,
-    stateController: TransactionStateController,
-    ledger: TransactionLedger,
+    stateController: MidnightTransactionStateController,
+    ledger: MidnightTransactionLedger,
     relayerWallet: RelayerWallet,
     unitOfWork: UnitOfWork,
   ) {
@@ -138,7 +138,7 @@ export class TransactionStateResolverImpl implements TransactionStateResolver {
     try {
       await this.unitOfWork.runInTransaction(transition)
     } catch (error: unknown) {
-      if (!(error instanceof TransactionStateConflict)) throw error
+      if (!(error instanceof MidnightTransactionStateConflict)) throw error
     }
   }
 }

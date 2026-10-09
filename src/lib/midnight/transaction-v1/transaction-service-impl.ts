@@ -9,15 +9,15 @@ import type {
   SubmitTransactionArgs,
   TransactionService,
 } from '@/lib/midnight/transaction-v1/transaction-service'
-import type { TransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 
 export class TransactionServiceImpl implements TransactionService {
   private readonly transactionRepository: MidnightTransactionRepository
-  private readonly stateController: TransactionStateController
+  private readonly stateController: MidnightTransactionStateController
 
   constructor(
     transactionRepository: MidnightTransactionRepository,
-    stateController: TransactionStateController,
+    stateController: MidnightTransactionStateController,
   ) {
     this.transactionRepository = transactionRepository
     this.stateController = stateController

@@ -21,8 +21,8 @@ import { Effect } from 'effect'
 import { z } from 'zod'
 
 import type {
-  LedgerTransactionStatus,
-  TransactionLedger,
+  MidnightLedgerTransactionStatus,
+  MidnightTransactionLedger,
 } from '@/lib/midnight/transaction-v1/transaction-ledger'
 
 /**
@@ -30,7 +30,7 @@ import type {
  * in the ledger's own serialisation, and the id a submission returns is one of the ledger
  * identifiers the indexer answers queries for.
  */
-export class TransactionLedgerMidnightImpl implements TransactionLedger {
+export class MidnightTransactionLedgerImpl implements MidnightTransactionLedger {
   private readonly proofProvider: () => Promise<ProofProvider>
   private readonly indexerQueryURL: string
   private readonly nodeURL: string
@@ -72,7 +72,7 @@ export class TransactionLedgerMidnightImpl implements TransactionLedger {
     return txId
   }
 
-  async status(txId: string): Promise<LedgerTransactionStatus> {
+  async status(txId: string): Promise<MidnightLedgerTransactionStatus> {
     const response = await fetch(this.indexerQueryURL, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

@@ -1,33 +1,34 @@
 import { describe, expect, test } from 'vitest'
 
-import type { Event } from '@/lib/event/event'
-import type { EventPublisher } from '@/lib/event/event-publisher'
-import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
+import type { EthereumTransaction } from '@/lib/ethereum/transaction-v1/transaction'
 import {
-  DEPOSIT_NAME,
   TRANSACTION_IN_STATE,
   TRANSACTION_NAME,
   transactionFixture,
-} from '@/lib/midnight/transaction-v1/transaction-fixtures'
-import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
+  TX_HASH,
+  VAULT_REQUEST_NAME,
+} from '@/lib/ethereum/transaction-v1/transaction-fixtures'
+import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
 import {
-  MIDNIGHT_TRANSACTION_EVENT_BY_STATE,
-  type MidnightTransactionStateController,
-  MidnightTransactionStateConflict,
-} from '@/lib/midnight/transaction-v1/transaction-state-controller'
-import { MidnightTransactionStateControllerImpl } from '@/lib/midnight/transaction-v1/transaction-state-controller-impl'
+  ETHEREUM_TRANSACTION_EVENT_BY_STATE,
+  EthereumTransactionStateConflict,
+  type EthereumTransactionStateController,
+} from '@/lib/ethereum/transaction-v1/transaction-state-controller'
+import { EthereumTransactionStateControllerImpl } from '@/lib/ethereum/transaction-v1/transaction-state-controller-impl'
+import type { Event } from '@/lib/event/event'
+import type { EventPublisher } from '@/lib/event/event-publisher'
 import { mock } from '@/lib/testing/mock'
 
 interface Calls {
-  created: MidnightTransaction[]
-  updated: MidnightTransaction[]
+  created: EthereumTransaction[]
+  updated: EthereumTransaction[]
   published: Event[]
 }
 
 /** A repository holding one row, and a publisher that records. Reads report the lock they took. */
-function fields(stored: MidnightTransaction | undefined, calls: Calls, locks: string[] = []) {
+function fields(stored: EthereumTransaction | undefined, calls: Calls, locks: string[] = []) {
   return {
-    transactionRepository: mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
+    transactionRepository: mock<EthereumTransactionRepository>('EthereumTransactionRepository', {
       create: async (transaction) => {
         calls.created.push(transaction)
         return transaction
@@ -53,26 +54,26 @@ function fields(stored: MidnightTransaction | undefined, calls: Calls, locks: st
 }
 
 function controllerOver(
-  stored: MidnightTransaction | undefined,
+  stored: EthereumTransaction | undefined,
   calls: Calls,
   locks: string[] = [],
 ) {
   const { transactionRepository, eventPublisher } = fields(stored, calls, locks)
-  return new MidnightTransactionStateControllerImpl(transactionRepository, eventPublisher)
+  return new EthereumTransactionStateControllerImpl(transactionRepository, eventPublisher)
 }
 
 function emptyCalls(): Calls {
   return { created: [], updated: [], published: [] }
 }
 
-describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
+describe('EthereumTransactionStateControllerImpl.commitTransaction', () => {
   const cases: ReadonlyArray<{
     name: string
-    args: MidnightTransaction
-    check: (result: Promise<MidnightTransaction>, calls: Calls) => Promise<void>
+    args: EthereumTransaction
+    check: (result: Promise<EthereumTransaction>, calls: Calls) => Promise<void>
   }> = [
     {
-      name: 'success - AwaitingProof with the unproven bytes and the TTL',
+      name: 'success - AwaitingSubmission with the signed bytes',
       args: transactionFixture({ createTime: new Date(0), updateTime: new Date(0) }),
       check: async (result, calls) => {
         const stored = await result
@@ -81,19 +82,19 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
         expect(calls.created).toEqual([stored])
         expect(calls.published).toHaveLength(1)
         expect(calls.published[0]).toMatchObject({
-          type: MIDNIGHT_TRANSACTION_EVENT_BY_STATE.AwaitingProof.type,
+          type: ETHEREUM_TRANSACTION_EVENT_BY_STATE.AwaitingSubmission.type,
           key: TRANSACTION_NAME,
-          data: { name: TRANSACTION_NAME, parent: DEPOSIT_NAME },
+          data: { name: TRANSACTION_NAME, parent: VAULT_REQUEST_NAME },
         })
       },
     },
     {
-      name: 'success - AwaitingWallet with the proven bytes and the TTL',
-      args: TRANSACTION_IN_STATE.AwaitingWallet,
+      name: 'success - without an expiry',
+      args: transactionFixture({ expireTime: null }),
       check: async (result, calls) => {
-        await result
+        expect((await result).expireTime).toBeNull()
         expect(calls.published[0]?.type).toBe(
-          MIDNIGHT_TRANSACTION_EVENT_BY_STATE.AwaitingWallet.type,
+          ETHEREUM_TRANSACTION_EVENT_BY_STATE.AwaitingSubmission.type,
         )
       },
     },
@@ -108,10 +109,10 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
       },
     },
     {
-      name: 'failure - AwaitingProof with a field a later step produces',
-      args: transactionFixture({ unboundTx: 'unbound' }),
+      name: 'failure - AwaitingSubmission with a field the chain produces',
+      args: transactionFixture({ txHash: TX_HASH }),
       check: async (result) => {
-        await expect(result).rejects.toThrow('must have unboundTx unset')
+        await expect(result).rejects.toThrow('must have txHash unset')
       },
     },
     {
@@ -129,13 +130,13 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
     const refusing = name.includes('repository refuses')
     const { eventPublisher } = fields(undefined, calls)
     const transactionRepository = refusing
-      ? mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
+      ? mock<EthereumTransactionRepository>('EthereumTransactionRepository', {
           create: async () => {
             throw new Error(`${TRANSACTION_NAME} already exists`)
           },
         })
       : fields(undefined, calls).transactionRepository
-    const controller = new MidnightTransactionStateControllerImpl(
+    const controller = new EthereumTransactionStateControllerImpl(
       transactionRepository,
       eventPublisher,
     )
@@ -143,74 +144,59 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
   })
 })
 
-describe('MidnightTransactionStateControllerImpl transitions', () => {
-  type Transition = (controller: MidnightTransactionStateController) => Promise<MidnightTransaction>
+describe('EthereumTransactionStateControllerImpl transitions', () => {
+  type Transition = (controller: EthereumTransactionStateController) => Promise<EthereumTransaction>
 
   const cases: ReadonlyArray<{
     name: string
-    from: MidnightTransaction
+    from: EthereumTransaction
     transition: Transition
-    to: MidnightTransaction['state']
-    patch: Partial<MidnightTransaction>
+    to: EthereumTransaction['state']
+    patch: Partial<EthereumTransaction>
   }> = [
-    {
-      name: 'recordProof',
-      from: TRANSACTION_IN_STATE.AwaitingProof,
-      transition: (c) => c.recordProof({ name: TRANSACTION_NAME, unboundTx: 'unbound' }),
-      to: 'AwaitingWallet',
-      patch: { unboundTx: 'unbound', unprovenTx: null },
-    },
-    {
-      name: 'recordProofFailure',
-      from: TRANSACTION_IN_STATE.AwaitingProof,
-      transition: (c) =>
-        c.recordProofFailure({ name: TRANSACTION_NAME, error: 'proof server down' }),
-      to: 'Failed',
-      patch: { failure: 'ProofFailed', error: 'proof server down', unprovenTx: null },
-    },
-    {
-      name: 'submitTransaction',
-      from: TRANSACTION_IN_STATE.AwaitingWallet,
-      transition: (c) => c.submitTransaction({ name: TRANSACTION_NAME, finalizedTx: 'finalized' }),
-      to: 'AwaitingSubmission',
-      patch: { finalizedTx: 'finalized' },
-    },
     {
       name: 'recordSubmission',
       from: TRANSACTION_IN_STATE.AwaitingSubmission,
-      transition: (c) => c.recordSubmission({ name: TRANSACTION_NAME, txId: 'tx-1' }),
+      transition: (c) => c.recordSubmission({ name: TRANSACTION_NAME, txHash: TX_HASH }),
       to: 'AwaitingInclusion',
-      patch: { txId: 'tx-1' },
-    },
-    {
-      name: 'recordRejection from AwaitingSubmission',
-      from: TRANSACTION_IN_STATE.AwaitingSubmission,
-      transition: (c) =>
-        c.recordRejection({ name: TRANSACTION_NAME, failure: 'Rejected', error: 'invalid' }),
-      to: 'Failed',
-      patch: { failure: 'Rejected', error: 'invalid' },
-    },
-    {
-      name: 'recordRejection from AwaitingInclusion',
-      from: TRANSACTION_IN_STATE.AwaitingInclusion,
-      transition: (c) =>
-        c.recordRejection({ name: TRANSACTION_NAME, failure: 'FailEntirely', error: 'rejected' }),
-      to: 'Failed',
-      patch: { failure: 'FailEntirely', error: 'rejected' },
+      patch: { txHash: TX_HASH },
     },
     {
       name: 'recordSuccess',
       from: TRANSACTION_IN_STATE.AwaitingInclusion,
-      transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME }),
+      transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME, blockNumber: 42n }),
       to: 'Succeeded',
-      patch: {},
+      patch: { blockNumber: 42n },
     },
     {
-      name: 'expireTransaction from AwaitingProof',
-      from: TRANSACTION_IN_STATE.AwaitingProof,
+      name: 'recordFailure as Rejected from AwaitingSubmission',
+      from: TRANSACTION_IN_STATE.AwaitingSubmission,
+      transition: (c) =>
+        c.recordFailure({ name: TRANSACTION_NAME, failure: 'Rejected', error: 'invalid sender' }),
+      to: 'Failed',
+      patch: { failure: 'Rejected', error: 'invalid sender' },
+    },
+    {
+      name: 'recordFailure as Reverted from AwaitingInclusion keeps the block',
+      from: TRANSACTION_IN_STATE.AwaitingInclusion,
+      transition: (c) =>
+        c.recordFailure({ name: TRANSACTION_NAME, failure: 'Reverted', blockNumber: 42n }),
+      to: 'Failed',
+      patch: { failure: 'Reverted', blockNumber: 42n },
+    },
+    {
+      name: 'recordFailure as NonceConsumed from AwaitingInclusion',
+      from: TRANSACTION_IN_STATE.AwaitingInclusion,
+      transition: (c) => c.recordFailure({ name: TRANSACTION_NAME, failure: 'NonceConsumed' }),
+      to: 'Failed',
+      patch: { failure: 'NonceConsumed' },
+    },
+    {
+      name: 'expireTransaction from AwaitingSubmission',
+      from: TRANSACTION_IN_STATE.AwaitingSubmission,
       transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
       to: 'Failed',
-      patch: { failure: 'Expired', unprovenTx: null },
+      patch: { failure: 'Expired' },
     },
     {
       name: 'expireTransaction from AwaitingInclusion',
@@ -233,32 +219,32 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
       expect(calls.updated).toEqual([stored])
       expect(calls.published).toHaveLength(1)
       expect(calls.published[0]).toMatchObject({
-        type: MIDNIGHT_TRANSACTION_EVENT_BY_STATE[to].type,
+        type: ETHEREUM_TRANSACTION_EVENT_BY_STATE[to].type,
         key: TRANSACTION_NAME,
-        data: { name: TRANSACTION_NAME, parent: DEPOSIT_NAME },
+        data: { name: TRANSACTION_NAME, parent: VAULT_REQUEST_NAME },
       })
     },
   )
 
   const refused: ReadonlyArray<{
     name: string
-    from: MidnightTransaction
+    from: EthereumTransaction
     transition: Transition
   }> = [
     {
-      name: 'recordProof once already proven',
-      from: TRANSACTION_IN_STATE.AwaitingWallet,
-      transition: (c) => c.recordProof({ name: TRANSACTION_NAME, unboundTx: 'again' }),
+      name: 'recordSubmission once already submitted',
+      from: TRANSACTION_IN_STATE.AwaitingInclusion,
+      transition: (c) => c.recordSubmission({ name: TRANSACTION_NAME, txHash: TX_HASH }),
     },
     {
-      name: 'submitTransaction before proving',
-      from: TRANSACTION_IN_STATE.AwaitingProof,
-      transition: (c) => c.submitTransaction({ name: TRANSACTION_NAME, finalizedTx: 'x' }),
+      name: 'recordSuccess before submission',
+      from: TRANSACTION_IN_STATE.AwaitingSubmission,
+      transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME, blockNumber: 1n }),
     },
     {
-      name: 'recordSuccess on a terminal transaction',
+      name: 'recordFailure on a terminal transaction',
       from: TRANSACTION_IN_STATE.Succeeded,
-      transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME }),
+      transition: (c) => c.recordFailure({ name: TRANSACTION_NAME, failure: 'NonceConsumed' }),
     },
     {
       name: 'expireTransaction on a terminal transaction',
@@ -272,7 +258,7 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
     async ({ from, transition }) => {
       const calls = emptyCalls()
       await expect(transition(controllerOver(from, calls))).rejects.toBeInstanceOf(
-        MidnightTransactionStateConflict,
+        EthereumTransactionStateConflict,
       )
       expect(calls.updated).toHaveLength(0)
       expect(calls.published).toHaveLength(0)
@@ -282,7 +268,7 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
   test('a transition on a missing transaction throws', async () => {
     const calls = emptyCalls()
     await expect(
-      controllerOver(undefined, calls).recordSuccess({ name: TRANSACTION_NAME }),
+      controllerOver(undefined, calls).recordSuccess({ name: TRANSACTION_NAME, blockNumber: 1n }),
     ).rejects.toThrow(`${TRANSACTION_NAME} does not exist`)
   })
 })

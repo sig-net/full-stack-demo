@@ -10,11 +10,11 @@ import {
 
 /**
  * The only writer of a transaction's state. Each method is one transition from the state machine
- * in `transaction-state-machine.ts`: it refuses with `TransactionStateConflict` when the
+ * in `transaction-state-machine.ts`: it refuses with `MidnightTransactionStateConflict` when the
  * transaction is not in a state the action applies to, and publishes the event of the state
- * entered. Methods open no transaction; the caller is the write boundary.
+ * entered. Methods open no transaction: the caller is the write boundary.
  */
-export interface TransactionStateController {
+export interface MidnightTransactionStateController {
   /** Stores a transaction the caller built: `AwaitingProof` with its unproven bytes, or `AwaitingWallet` with its proven bytes. */
   commitTransaction(args: CommitTransactionArgs): Promise<MidnightTransaction>
   /** `AwaitingProof` to `AwaitingWallet`. The unproven bytes are deleted. */
@@ -76,8 +76,8 @@ export interface ExpireTransactionArgs {
 }
 
 /** The transaction is not in a state the action applies to, so another actor got there first. */
-export class TransactionStateConflict extends Error {
-  readonly name = 'TransactionStateConflict'
+export class MidnightTransactionStateConflict extends Error {
+  readonly name = 'MidnightTransactionStateConflict'
 
   constructor(transactionName: string, state: MidnightTransactionState, action: string) {
     super(`${transactionName} is ${state}, which does not allow ${action}`)
@@ -85,35 +85,37 @@ export class TransactionStateConflict extends Error {
 }
 
 /** The parent is carried so that the parent's consumer can match on it without a read. */
-export const transactionEventDataSchema = z.object({
+export const midnightTransactionEventDataSchema = z.object({
   name: midnightTransactionNameSchema,
   parent: z.string().min(1),
 })
 
-export type TransactionEventData = z.infer<typeof transactionEventDataSchema>
+export type MidnightTransactionEventData = z.infer<typeof midnightTransactionEventDataSchema>
 
 /** One lifecycle event per state entered, keyed by the transaction name. */
-export const TRANSACTION_EVENT_BY_STATE: Record<
+export const MIDNIGHT_TRANSACTION_EVENT_BY_STATE: Record<
   MidnightTransactionState,
-  EventDefinition<TransactionEventData>
+  EventDefinition<MidnightTransactionEventData>
 > = {
-  AwaitingProof: defineEvent('midnight.transaction-v1.awaiting-proof', transactionEventDataSchema),
+  AwaitingProof: defineEvent(
+    'midnight.transaction-v1.awaiting-proof',
+    midnightTransactionEventDataSchema,
+  ),
   AwaitingWallet: defineEvent(
     'midnight.transaction-v1.awaiting-wallet',
-    transactionEventDataSchema,
+    midnightTransactionEventDataSchema,
   ),
   AwaitingSubmission: defineEvent(
     'midnight.transaction-v1.awaiting-submission',
-    transactionEventDataSchema,
+    midnightTransactionEventDataSchema,
   ),
   AwaitingInclusion: defineEvent(
     'midnight.transaction-v1.awaiting-inclusion',
-    transactionEventDataSchema,
+    midnightTransactionEventDataSchema,
   ),
-  Succeeded: defineEvent('midnight.transaction-v1.succeeded', transactionEventDataSchema),
-  Failed: defineEvent('midnight.transaction-v1.failed', transactionEventDataSchema),
+  Succeeded: defineEvent('midnight.transaction-v1.succeeded', midnightTransactionEventDataSchema),
+  Failed: defineEvent('midnight.transaction-v1.failed', midnightTransactionEventDataSchema),
 }
 
-export const TRANSACTION_EVENTS: readonly EventDefinition<TransactionEventData>[] = Object.values(
-  TRANSACTION_EVENT_BY_STATE,
-)
+export const MIDNIGHT_TRANSACTION_EVENTS: readonly EventDefinition<MidnightTransactionEventData>[] =
+  Object.values(MIDNIGHT_TRANSACTION_EVENT_BY_STATE)

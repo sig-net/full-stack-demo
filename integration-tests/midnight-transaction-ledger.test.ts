@@ -6,7 +6,7 @@ import type { Backend } from '@/server/backend'
 import { testBackend } from './backend'
 
 /** The ledger implementation against the configured proof server and indexer. */
-describe('TransactionLedgerMidnightImpl against the Midnight services', () => {
+describe('MidnightTransactionLedgerImpl against the Midnight services', () => {
   let backend: Backend
 
   beforeAll(async () => {

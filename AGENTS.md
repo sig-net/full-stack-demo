@@ -110,7 +110,7 @@ Keep setup instructions and application reference material in README.md and docs
   events and expiry.
 - An event consumer is a dumb adaptor: match the event definitions, `safeParse` the data, call
   the resolver. No logic lives in a consumer. Slow external systems sit behind one port
-  interface (`TransactionLedger`) so the resolver is tested with a mocked ledger.
+  interface (`MidnightTransactionLedger`) so the resolver is tested with a mocked ledger.
 
 ## Repositories
 

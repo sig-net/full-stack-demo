@@ -12,9 +12,9 @@ import {
   type RecordSubmissionArgs,
   type RecordSuccessArgs,
   type SubmitTransactionArgs,
-  TRANSACTION_EVENT_BY_STATE,
-  TransactionStateConflict,
-  type TransactionStateController,
+  MIDNIGHT_TRANSACTION_EVENT_BY_STATE,
+  MidnightTransactionStateConflict,
+  type MidnightTransactionStateController,
 } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import {
   assertConsistent,
@@ -23,7 +23,7 @@ import {
   type TransactionAction,
 } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 
-export class TransactionStateControllerImpl implements TransactionStateController {
+export class MidnightTransactionStateControllerImpl implements MidnightTransactionStateController {
   private readonly transactionRepository: MidnightTransactionRepository
   private readonly eventPublisher: EventPublisher
 
@@ -83,10 +83,7 @@ export class TransactionStateControllerImpl implements TransactionStateControlle
     return this.transition(name, 'expire', { failure: 'Expired', unprovenTx: null })
   }
 
-  /**
-   * The row is read locked, so two actors applying actions at once are serialised and the second
-   * sees the state the first left, rather than both writing over the same starting state.
-   */
+  /** The row is read locked, so two actors applying actions at once are serialised and the second sees the state the first left. */
   private async transition(
     name: string,
     action: TransactionAction,
@@ -101,7 +98,7 @@ export class TransactionStateControllerImpl implements TransactionStateControlle
     }
     const state = nextState(current.state, action)
     if (state === undefined) {
-      throw new TransactionStateConflict(name, current.state, action)
+      throw new MidnightTransactionStateConflict(name, current.state, action)
     }
     const next: MidnightTransaction = { ...current, ...patch, state, updateTime: new Date() }
     assertConsistent(next)
@@ -112,7 +109,7 @@ export class TransactionStateControllerImpl implements TransactionStateControlle
 
   private publishEntered(transaction: MidnightTransaction): Promise<void> {
     return this.eventPublisher.publishEvent(
-      TRANSACTION_EVENT_BY_STATE[transaction.state].create(transaction.name, {
+      MIDNIGHT_TRANSACTION_EVENT_BY_STATE[transaction.state].create(transaction.name, {
         name: transaction.name,
         parent: transaction.parent,
       }),

@@ -242,7 +242,7 @@ NODE_OPTIONS=--conditions=react-server node_modules/.bin/tsx <script>
 Stage 2:
 
 - [x] R6. That `createUnprovenCallTx(...).private.unprovenTx.serialize()` yields bytes our
-      `TransactionLedger.prove` accepts (it deserialises with the markers `'signature'`,
+      `MidnightTransactionLedger.prove` accepts (it deserialises with the markers `'signature'`,
       `'pre-proof'`, `'pre-binding'`). Prove it with a throwaway script building a `startDeposit`
       call and proving it through the running proof server.
 - [x] R7. The minimal `PrivateStateProvider` an in-memory implementation must satisfy (members
@@ -316,11 +316,11 @@ export const MIDNIGHT_TRANSACTION_SIGNERS = ['caller', 'relayer'] as const
 - [x] Put the parent in the lifecycle events so a parent's consumer can match without a read:
 
 ```ts
-export const transactionEventDataSchema = z.object({
+export const midnightTransactionEventDataSchema = z.object({
   name: midnightTransactionNameSchema,
   parent: z.string().min(1),
 })
-// controller-impl publishEntered: TRANSACTION_EVENT_BY_STATE[state].create(name, { name, parent })
+// controller-impl publishEntered: MIDNIGHT_TRANSACTION_EVENT_BY_STATE[state].create(name, { name, parent })
 ```
 
 - [x] Add a `RelayerWallet` port, `src/lib/midnight/wallet/relayer-wallet.ts` (a backend-wide capability, not part of the versioned transaction resource):
@@ -527,7 +527,7 @@ export function requestStage(
 Verification:
 
 - [x] A throwaway script builds a `startDeposit` unproven call for a random secret, proves it
-      through the proof server with `TransactionLedgerMidnightImpl.prove`, and prints the unbound
+      through the proof server with `MidnightTransactionLedgerImpl.prove`, and prints the unbound
       length (R6, R8, R9, R10 resolved and logged).
 - [x] Unit tests: `requestStage` over every stage with fake ledger states, `VaultCircuits` is not
       unit tested (it is a thin wrapper over the SDK, covered by the integration test).
@@ -540,7 +540,7 @@ Files: `src/lib/ethereum/transaction-v1/transaction.ts` (exists as a draft), new
 and `transaction-ledger-ethers-impl.ts`, `transaction-state-resolver.ts` and impl,
 `transaction-event-consumer.ts`, `transaction-fixtures.ts`, tests.
 
-- [ ] Rename the draft's states to the awaiting style and add a failure reason. A migration
+- [x] Rename the draft's states to the awaiting style and add a failure reason. A migration
       follows, with the same existing-rows care as Stage 1:
 
 ```ts
@@ -557,24 +557,28 @@ export const ETHEREUM_TRANSACTION_FAILURES = [
   'NonceConsumed',
   'Expired',
 ] as const
-// fields: name, parent, state, signedTx, txHash, expireTime, failure, error, createTime, updateTime
+// fields: name, parent, state, signedTx, txHash, blockNumber, expireTime, failure, error, createTime, updateTime
 // unsignedTx is dropped: the MPC signs, the backend only ever holds signed bytes.
 ```
 
-- [ ] State machine, controller and events mirror the Midnight ones exactly (`nextState`,
-      `assertConsistent`, `EXPIRABLE_STATES`, `TransactionStateConflict`, an event per state
+- [x] State machine, controller and events mirror the Midnight ones exactly (`nextState`,
+      `assertConsistent`, `EXPIRABLE_STATES`, `EthereumTransactionStateConflict`, an event per state
       with type prefix `ethereum.transaction-v1.` and data `{ name, parent }`). Controller
       methods: `commitTransaction`, `recordSubmission` (name, txHash), `recordSuccess`,
       `recordFailure` (name, failure, error), `expireTransaction`.
-- [ ] The ledger port and its ethers impl port the prep repository's broadcast rules:
+- [x] The ledger port and its ethers impl port the prep repository's broadcast rules:
 
 ```ts
 export interface EthereumTransactionLedger {
   /** Sends the signed bytes and resolves with the hash. An already-known or already-mined transaction resolves normally. */
   broadcast(signedTx: string): Promise<string>
-  status(txHash: string, from: string, nonce: bigint): Promise<EthereumLedgerStatus>
+  status(args: {
+    txHash: string
+    from: string
+    nonce: number
+  }): Promise<EthereumLedgerTransactionStatus>
 }
-export type EthereumLedgerStatus =
+export type EthereumLedgerTransactionStatus =
   | { outcome: 'pending' }
   | { outcome: 'mined'; blockNumber: bigint }
   | { outcome: 'reverted'; blockNumber: bigint }
@@ -583,23 +587,25 @@ export type EthereumLedgerStatus =
 
       `broadcast`: parse with ethers `Transaction.from(signedTx)`, `getTransactionReceipt(hash)`
       first and return the hash when mined, then `broadcastTransaction`, swallowing
-      `NONCE_EXPIRED` and the "already known" family of messages. `status`: receipt present means
-      mined or reverted by `receipt.status`, else the nonce check, else pending.
+      `NONCE_EXPIRED` and the "already known" family of messages. `status`: the nonce check first,
+      then the receipt, mined or reverted by `receipt.status`, or `nonceConsumed` when the count
+      passed the nonce without a receipt, else pending.
 
-- [ ] Resolver: `AwaitingSubmission` broadcasts and records the hash (a thrown error other than
+- [x] Resolver: `AwaitingSubmission` broadcasts and records the hash (a thrown error other than
       already-known records `Rejected`), `AwaitingInclusion` maps the status, expiry first as in
       the Midnight resolver. Consumer: every Ethereum transaction event calls
       `resolveTransaction`.
 
 Verification:
 
-- [ ] Unit tests table-driven as the Midnight ones: state machine over every pair, controller per
+- [x] Unit tests table-driven as the Midnight ones: state machine over every pair, controller per
       action, resolver per status.
-- [ ] `yarn db:generate`, `yarn db:migrate`, `\d ethereum_transactions_v1`.
-- [ ] Integration test `integration-tests/ethereum-transaction-broadcast.test.ts`: fund a fresh
+- [x] `yarn db:generate`, `yarn db:migrate`, `\d ethereum_transactions_v1`.
+- [x] Integration test `integration-tests/ethereum-transaction-broadcast.test.ts`: fund a fresh
       anvil account, sign a zero-value self-transfer with ethers, commit it, resolve twice, expect
       `Succeeded` with a hash. Resolve a third time and expect no change.
-- [ ] `yarn check` passes.
+- [x] `yarn check` passes (each step run on its own, since the four pre-existing `TS6133` errors in
+      `deposit-state-controller-impl.ts` are the only typecheck output).
 
 ## Stage 4: the vault request entity
 
@@ -1134,7 +1140,7 @@ the command, file or test that established it.
   `MIDNIGHT_RELAYER_SEED` is the bearer's seed and `MIDNIGHT_USER_SEED` the user's. The
   responder's seed is the fakenet MPC's own wallet and must not be reused.
 - 2026-10-09, R3: the deployed vault allows Aave USDC, Circle USDC (`CIRCLE_USDC`) and Circle
-  EURC; `initialised` is true. Read through `readVaultLedger` over
+  EURC, and `initialised` is true. Read through `readVaultLedger` over
   `indexerPublicDataProvider`.
 - 2026-10-09, R4: the MPC is the `fakenet-responder` container (`ghcr.io/sig-net/fakenet`)
   with no output cache configured, so the output source is `evm-node`. The fork answers
@@ -1144,7 +1150,7 @@ the command, file or test that established it.
   priority fee 1 gwei (`integration-tests/src/evm-transfer.ts`). The deposit service assigns
   the same.
 - 2026-10-09, R6: `createUnprovenCallTx(...).private.unprovenTx.serialize()` is accepted by
-  `TransactionLedgerMidnightImpl.prove` (3144 hex chars in, 9430 out, under a second on a warm
+  `MidnightTransactionLedgerImpl.prove` (3144 hex chars in, 9430 out, under a second on a warm
   proof server), and `RelayerWalletSeedImpl.finalize` balances the result (15964 hex chars).
   Both proved by a script run as `NODE_OPTIONS=--conditions=react-server node_modules/.bin/tsx
 --env-file=.env.local <script>.mts` from a gitignored folder inside the project (a script
@@ -1195,3 +1201,46 @@ localhost:9092 --group full-stack-demo.events --topic full-stack-demo.events --r
 - 2026-10-09, tooling: `yarn vitest run --config vitest.integration.config.ts <file>` runs one
   integration file, and `docker compose exec -T postgres psql -U demo -d demo -c '\dt'` reaches
   the database. Both were run before being quoted in this plan.
+- 2026-10-09, Stage 3 naming: the Ethereum entity's `EthereumTransactionStateController`,
+  `EthereumTransactionLedger`, `EthereumTransactionStateResolver` and
+  `EthereumTransactionEventConsumer` sit beside the Midnight ones in `src/server/backend.ts`, so
+  the Midnight incumbents were qualified in the same change: `MidnightTransactionStateController`
+  (and `Impl`), `MidnightTransactionStateConflict`, `MidnightTransactionLedger`,
+  `MidnightTransactionLedgerImpl` (file name unchanged), `MidnightLedgerTransactionStatus`,
+  `MidnightTransactionStateResolver` (and `Impl`), `MidnightTransactionEventConsumer`,
+  `MIDNIGHT_TRANSACTION_EVENT_BY_STATE`, `MIDNIGHT_TRANSACTION_EVENTS`,
+  `midnightTransactionEventDataSchema` and `MidnightTransactionEventData`. Folder-private names
+  (`nextState`, `assertConsistent`, the args interfaces, the fixtures) stay unqualified in both
+  folders. A whole-repository grep for the bare names finds only `docs/diagramming.md`, which is
+  uncommitted work in progress and was left alone.
+- 2026-10-09, Stage 3 ethers: `AbstractProvider` answers identical requests from a 250 ms cache,
+  so a receipt re-read inside one `status` call returned the earlier null while the raw
+  `eth_getTransactionReceipt` already had the receipt (`.scratch-spike/spike-anvil-receipt-order.mts`
+  printed, for nonce 2, `raw receipt present` beside `ethers receipt NULL`). The first ledger shape
+  (receipt, count, receipt again as the prep code does) therefore failed the integration test
+  once with `Failed` instead of `Succeeded`. The ledger now reads the count first and the receipt
+  once, and `createEthereum` builds the provider with `cacheTimeout: -1`, and the integration test
+  then passed four runs of four. The same probe showed anvil never serving the count ahead of
+  the receipt (three transactions, raw receipt present at the tick the count advanced).
+- 2026-10-09, Stage 3 anvil: the fork runs `anvil_getAutomine` false and `anvil_getIntervalMining`
+  1 (a block a second), its base fee is a few wei, and `eth_sendRawTransaction` of a second
+  transaction at a used nonce answers "nonce too low", which the ledger swallows so that the
+  status read decides `NonceConsumed` (integration test case two).
+- 2026-10-09, Stage 3 tooling: `yarn db:generate` prompts "created or renamed from another
+  column?" for each added column when a column is dropped in the same table, and hangs without a
+  TTY. It was driven through a Python `pty` script answering Enter (the first option, create) per
+  prompt. The generated SQL is `ALTER ... SET NOT NULL`, three `ADD COLUMN` and one
+  `DROP COLUMN "unsigned_tx"`, renamed to `0010_ethereum_transaction_lifecycle`.
+- 2026-10-09, Stage 3 decisions: the ledger's `nonce` is a `number`, as ethers types nonces and
+  transaction counts, while the row's `blockNumber` is a `bigint` over a Postgres `bigint`
+  column. `recordFailure` takes `error` and `blockNumber` as optional, since `Reverted` and
+  `NonceConsumed` carry no node message and only `Reverted` carries a block. `expireTime` is
+  nullable and never required by the state table, and `Expired` means the backend stopped
+  waiting, not that the chain cannot include the transaction. A broadcast that throws anything
+  but the already-known family ends `Rejected`, transport failures included, as the Midnight
+  resolver does for `submit`. The ledger lives under `ethereum.transactionV1` in the backend, as
+  the Stage 3 hand-off placed it, while the Stage 7 sketch draws it one level up.
+- 2026-10-09, Stage 3 typecheck and lint: the pre-existing failure is four `TS6133` errors in
+  `deposit-state-controller-impl.ts` (lines 13, 14, 21 and 25), not three, and `yarn lint`
+  reports two `no-unused-vars` errors in the same file, so `yarn check` stops at typecheck and
+  `yarn lint` exits non-zero before and after this stage.

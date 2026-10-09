@@ -11,7 +11,7 @@ import { testBackend, uniqueCallerName } from './backend'
  * A transaction committed in AwaitingProof is proven by the resolver through the real proof
  * server and stored in AwaitingWallet, with both lifecycle events in the outbox.
  */
-describe('TransactionStateResolver over Postgres and the proof server', () => {
+describe('MidnightTransactionStateResolver over Postgres and the proof server', () => {
   let backend: Backend
   const caller = uniqueCallerName()
 

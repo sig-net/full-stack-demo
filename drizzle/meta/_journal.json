@@ -71,6 +71,13 @@
       "when": 1791551085015,
       "tag": "0009_transaction_signer",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791553869548,
+      "tag": "0010_ethereum_transaction_lifecycle",
+      "breakpoints": true
     }
   ]
 }

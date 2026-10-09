@@ -11,13 +11,21 @@ import {
 import type { VaultCircuitId } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { resolve } from 'node:path'
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
+import { JsonRpcProvider } from 'ethers'
 import type { Pool } from 'pg'
 
 import { getServerConfig, type ServerConfig } from '@/lib/config/server-config'
 import { createDatabase, createDatabasePool } from '@/lib/db/database'
 import { UnitOfWork } from '@/lib/db/unit-of-work'
+import { EthereumTransactionEventConsumer } from '@/lib/ethereum/transaction-v1/transaction-event-consumer'
+import type { EthereumTransactionLedger } from '@/lib/ethereum/transaction-v1/transaction-ledger'
+import { EthereumTransactionLedgerEthersImpl } from '@/lib/ethereum/transaction-v1/transaction-ledger-ethers-impl'
 import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
 import { EthereumTransactionRepositorySQLImpl } from '@/lib/ethereum/transaction-v1/transaction-repository-sql-impl'
+import type { EthereumTransactionStateController } from '@/lib/ethereum/transaction-v1/transaction-state-controller'
+import { EthereumTransactionStateControllerImpl } from '@/lib/ethereum/transaction-v1/transaction-state-controller-impl'
+import type { EthereumTransactionStateResolver } from '@/lib/ethereum/transaction-v1/transaction-state-resolver'
+import { EthereumTransactionStateResolverImpl } from '@/lib/ethereum/transaction-v1/transaction-state-resolver-impl'
 import type { EventConsumerHub } from '@/lib/event/event-consumer-hub'
 import { EventConsumerHubImpl } from '@/lib/event/event-consumer-hub-impl'
 import type { EventPublisher } from '@/lib/event/event-publisher'
@@ -48,18 +56,18 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits-midnight-js-impl'
 import type { VaultLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import { VaultLedgerIndexerImpl } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-indexer-impl'
-import { TransactionEventConsumer } from '@/lib/midnight/transaction-v1/transaction-event-consumer'
-import type { TransactionLedger } from '@/lib/midnight/transaction-v1/transaction-ledger'
-import { TransactionLedgerMidnightImpl } from '@/lib/midnight/transaction-v1/transaction-ledger-midnight-impl'
+import { MidnightTransactionEventConsumer } from '@/lib/midnight/transaction-v1/transaction-event-consumer'
+import type { MidnightTransactionLedger } from '@/lib/midnight/transaction-v1/transaction-ledger'
+import { MidnightTransactionLedgerImpl } from '@/lib/midnight/transaction-v1/transaction-ledger-midnight-impl'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import type { TransactionService } from '@/lib/midnight/transaction-v1/transaction-service'
 import { TransactionServiceAdaptor } from '@/lib/midnight/transaction-v1/transaction-service-adaptor'
 import { TransactionServiceImpl } from '@/lib/midnight/transaction-v1/transaction-service-impl'
 import { MidnightTransactionRepositorySQLImpl } from '@/lib/midnight/transaction-v1/transaction-repository-sql-impl'
-import type { TransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
-import { TransactionStateControllerImpl } from '@/lib/midnight/transaction-v1/transaction-state-controller-impl'
-import type { TransactionStateResolver } from '@/lib/midnight/transaction-v1/transaction-state-resolver'
-import { TransactionStateResolverImpl } from '@/lib/midnight/transaction-v1/transaction-state-resolver-impl'
+import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import { MidnightTransactionStateControllerImpl } from '@/lib/midnight/transaction-v1/transaction-state-controller-impl'
+import type { MidnightTransactionStateResolver } from '@/lib/midnight/transaction-v1/transaction-state-resolver'
+import { MidnightTransactionStateResolverImpl } from '@/lib/midnight/transaction-v1/transaction-state-resolver-impl'
 import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
 import { RelayerWalletSeedImpl } from '@/lib/midnight/wallet/relayer-wallet-seed-impl'
 
@@ -101,6 +109,10 @@ export interface EventBackend {
 export interface EthereumBackend {
   readonly transactionV1: {
     readonly repository: EthereumTransactionRepository
+    readonly stateController: EthereumTransactionStateController
+    readonly ledger: EthereumTransactionLedger
+    readonly stateResolver: EthereumTransactionStateResolver
+    readonly eventConsumer: EthereumTransactionEventConsumer
   }
 }
 
@@ -111,10 +123,10 @@ export interface MidnightBackend {
   readonly publicDataProvider: PublicDataProvider
   readonly transactionV1: {
     readonly repository: MidnightTransactionRepository
-    readonly stateController: TransactionStateController
-    readonly ledger: TransactionLedger
-    readonly stateResolver: TransactionStateResolver
-    readonly eventConsumer: TransactionEventConsumer
+    readonly stateController: MidnightTransactionStateController
+    readonly ledger: MidnightTransactionLedger
+    readonly stateResolver: MidnightTransactionStateResolver
+    readonly eventConsumer: MidnightTransactionEventConsumer
     readonly service: TransactionService
     readonly adaptor: TransactionServiceAdaptor
   }
@@ -145,7 +157,7 @@ export function createBackend(config: ServerConfig): Backend {
   const db = createDb(config)
   const kafka = createKafka(config)
   const event = createEvent(db, kafka)
-  const ethereum = createEthereum(db)
+  const ethereum = createEthereum(db, event, config)
   const midnight = createMidnight(db, event, config)
   return { config, db, kafka, event, ethereum, midnight }
 }
@@ -176,8 +188,28 @@ function createEvent(db: DbBackend, kafka: KafkaBackend): EventBackend {
   }
 }
 
-function createEthereum(db: DbBackend): EthereumBackend {
-  return { transactionV1: { repository: new EthereumTransactionRepositorySQLImpl(db.database) } }
+function createEthereum(db: DbBackend, event: EventBackend, config: ServerConfig): EthereumBackend {
+  const repository = new EthereumTransactionRepositorySQLImpl(db.database)
+  const stateController = new EthereumTransactionStateControllerImpl(repository, event.publisher)
+  // The ledger decides a consumed nonce by a receipt read, which a cached earlier null would spoil.
+  const ledger = new EthereumTransactionLedgerEthersImpl(
+    new JsonRpcProvider(config.client.ethereum.rpcURL, undefined, { cacheTimeout: -1 }),
+  )
+  const stateResolver = new EthereumTransactionStateResolverImpl(
+    repository,
+    stateController,
+    ledger,
+    db.unitOfWork,
+  )
+  return {
+    transactionV1: {
+      repository,
+      stateController,
+      ledger,
+      stateResolver,
+      eventConsumer: new EthereumTransactionEventConsumer(stateResolver),
+    },
+  }
 }
 
 function createMidnight(db: DbBackend, event: EventBackend, config: ServerConfig): MidnightBackend {
@@ -213,7 +245,7 @@ function createMidnightTransactionV1(
 ): MidnightBackend['transactionV1'] {
   const { midnightNetwork } = config.client
   const repository = new MidnightTransactionRepositorySQLImpl(db.database)
-  const stateController = new TransactionStateControllerImpl(repository, event.publisher)
+  const stateController = new MidnightTransactionStateControllerImpl(repository, event.publisher)
   // The registry discovers every contract's key bundle under the root and binds a call to its
   // bundle by verifier key, so one ledger proves for every vault and for cross-contract calls.
   const proofProvider = lazySingleton(async () =>
@@ -223,12 +255,12 @@ function createMidnightTransactionV1(
       timeout: PROOF_TIMEOUT_MS,
     }),
   )
-  const ledger = new TransactionLedgerMidnightImpl(
+  const ledger = new MidnightTransactionLedgerImpl(
     proofProvider,
     midnightNetwork.indexerURL,
     midnightNetwork.nodeURL,
   )
-  const stateResolver = new TransactionStateResolverImpl(
+  const stateResolver = new MidnightTransactionStateResolverImpl(
     repository,
     stateController,
     ledger,
@@ -241,7 +273,7 @@ function createMidnightTransactionV1(
     stateController,
     ledger,
     stateResolver,
-    eventConsumer: new TransactionEventConsumer(stateResolver),
+    eventConsumer: new MidnightTransactionEventConsumer(stateResolver),
     service,
     adaptor: new TransactionServiceAdaptor(service, db.unitOfWork),
   }

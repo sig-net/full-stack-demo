@@ -10,9 +10,10 @@ import { getBackend } from '@/server/backend'
  * hub starts, on the instrumentation module graph's backend: the request graph's never consumes.
  */
 export async function startBackend(): Promise<void> {
-  const { db, kafka, event, midnight } = await getBackend()
+  const { db, kafka, event, ethereum, midnight } = await getBackend()
   startRelayerWallet(midnight.relayerWallet)
   event.consumerHub.registerConsumer(midnight.transactionV1.eventConsumer)
+  event.consumerHub.registerConsumer(ethereum.transactionV1.eventConsumer)
   startEventConsumerHub(event.consumerHub, () => kafka.createConsumer(EVENTS_GROUP_ID))
   startOutboxEntryProcessor(event.outboxEntryV1.processor, db.pool)
 }

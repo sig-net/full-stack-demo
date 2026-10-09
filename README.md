@@ -56,27 +56,27 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 
 ## Layout
 
-| Path                                    | Contents                                                                                                         |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `src/app`                               | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.                 |
-| `src/app/(configured)`                  | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                              |
-| `src/components`                        | Application React components.                                                                                    |
-| `src/components/ui`                     | Components written by the shadcn CLI.                                                                            |
-| `src/components/contexts`               | React contexts: each file holds a context, its provider and its `use<Name>` hook.                                |
-| `src/lib`                               | Non-React modules.                                                                                               |
-| `src/lib/config`                        | Server configuration loading and the client configuration type.                                                  |
-| `src/lib/db`                            | The Drizzle schema and the Postgres connection pool.                                                             |
-| `src/lib/kafka`                         | The Kafka producer and consumer factories and the connection options.                                            |
-| `src/lib/event`                         | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.                 |
-| `src/lib/repository`                    | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.   |
-| `src/lib/testing`                       | Test helpers: the `mock()` double for any interface.                                                             |
-| `src/lib/ethereum/transaction-v1`       | The Ethereum transaction resource and its repository.                                                            |
-| `src/lib/midnight/ethereum-erc20-vault` | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service.               |
-| `src/lib/midnight/transaction-v1`       | The Midnight transaction resource, its repository, state machine, state controller, resolver and event consumer. |
-| `src/server`                            | The code that runs: the composition root, the server action files and the start-up.                              |
-| `src/instrumentation.ts`                | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                        |
-| `drizzle`                               | SQL migrations and their snapshots, written by `yarn db:generate`.                                               |
-| `public/icons`                          | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.                       |
+| Path                                    | Contents                                                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `src/app`                               | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.                         |
+| `src/app/(configured)`                  | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                                      |
+| `src/components`                        | Application React components.                                                                                            |
+| `src/components/ui`                     | Components written by the shadcn CLI.                                                                                    |
+| `src/components/contexts`               | React contexts: each file holds a context, its provider and its `use<Name>` hook.                                        |
+| `src/lib`                               | Non-React modules.                                                                                                       |
+| `src/lib/config`                        | Server configuration loading and the client configuration type.                                                          |
+| `src/lib/db`                            | The Drizzle schema and the Postgres connection pool.                                                                     |
+| `src/lib/kafka`                         | The Kafka producer and consumer factories and the connection options.                                                    |
+| `src/lib/event`                         | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.                         |
+| `src/lib/repository`                    | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.           |
+| `src/lib/testing`                       | Test helpers: the `mock()` double for any interface.                                                                     |
+| `src/lib/ethereum/transaction-v1`       | The Ethereum transaction resource, its repository, state machine, state controller, ledger, resolver and event consumer. |
+| `src/lib/midnight/ethereum-erc20-vault` | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service.                       |
+| `src/lib/midnight/transaction-v1`       | The Midnight transaction resource, its repository, state machine, state controller, resolver and event consumer.         |
+| `src/server`                            | The code that runs: the composition root, the server action files and the start-up.                                      |
+| `src/instrumentation.ts`                | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                                |
+| `drizzle`                               | SQL migrations and their snapshots, written by `yarn db:generate`.                                                       |
+| `public/icons`                          | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.                               |
 
 Pages and layouts are server components. A component opts into the browser with `'use client'`
 only when it needs state, effects or browser APIs, as `src/components/mode-toggle.tsx` does.
@@ -250,7 +250,7 @@ yarn db:migrate
 
 The backend reaches Kafka through [`@platformatic/kafka`](https://github.com/platformatic/kafka),
 which documents support for Apache Kafka 3.5.0 to 4.2.0. `src/lib/kafka/clients.ts` owns the
-connection options and the `createProducer()` and `createConsumer()` factories; the composition
+connection options and the `createProducer()` and `createConsumer()` factories, and the composition
 root builds the one producer of the server process, and a consumer is owned and closed by the
 loop that asked for it. Keys, values and headers are strings.
 
@@ -264,7 +264,7 @@ the topic's partitions among them.
 Unit tests run with [vitest](https://vitest.dev): `yarn test` runs every `src/**/*.test.ts`
 once, and `yarn check` includes it. Integration tests live under `integration-tests/` and run
 with `yarn test:integration` against the [local services](#local-services) and the Midnight
-stack from `.env.local`; they create rows under a caller name of their own and delete them
+stack from `.env.local`. They create rows under a caller name of their own and delete them
 afterwards. Only unit tests sit beside the code. Tests sit beside the code they cover and are table driven: an
 array of cases, each naming the doubles its collaborators are built from, the arguments and a
 check, run through `test.each`. `mock<Interface>(name, methods)` in `src/lib/testing/mock.ts`
@@ -330,7 +330,7 @@ the resource and acts on its current state, so a redelivered event is harmless.
 
 Domain events are lifecycle events, one per state a resource enters, defined with
 `defineEvent(type, dataSchema)` beside the state controller that publishes them (for example
-`TRANSACTION_EVENT_BY_STATE` in `src/lib/midnight/transaction-v1/transaction-state-controller.ts`).
+`MIDNIGHT_TRANSACTION_EVENT_BY_STATE` in `src/lib/midnight/transaction-v1/transaction-state-controller.ts`).
 A definition creates typed events for the publisher and parses event data for the consumer, so
 the consumer is an adaptor for the bus: it matches the definitions it wants, parses the data and
 calls a resolver. Handlers run outside any database transaction, since the resolver behind them
@@ -349,10 +349,10 @@ files through `import.meta.url` and only works unbundled.
 name what the row waits for (`AwaitingProof`, `AwaitingWallet`, `AwaitingSubmission`,
 `AwaitingInclusion`, then `Succeeded` or `Failed` with a `failure` reason), the legal transitions and the
 fields each state holds are the table in `transaction-state-machine.ts`, and
-`TransactionStateController` is the only writer, one method per action, each publishing the
-lifecycle event of the state entered. `TransactionStateResolver` does what the current state
-needs through the `TransactionLedger` port and applies one transition, and
-`TransactionEventConsumer` nudges it on every lifecycle event. Every lifecycle event carries
+`MidnightTransactionStateController` is the only writer, one method per action, each publishing the
+lifecycle event of the state entered. `MidnightTransactionStateResolver` does what the current state
+needs through the `MidnightTransactionLedger` port and applies one transition, and
+`MidnightTransactionEventConsumer` nudges it on every lifecycle event. Every lifecycle event carries
 the transaction's `name` and its `parent`, so the consumer of the parent resource matches on
 the parent's collection without a read.
 
@@ -369,7 +369,7 @@ owns, the browser wallet balances and signs its `unboundTx`, and
 the row from `AwaitingWallet` to `AwaitingSubmission`. The server actions in
 `src/server/actions/transaction-actions.ts` forward to `TransactionServiceAdaptor`.
 
-`TransactionLedgerMidnightImpl` is the ledger behind the local or stagenet services: `prove`
+`MidnightTransactionLedgerImpl` is the ledger behind the local or stagenet services: `prove`
 deserialises the unproven bytes and proves them through the proof server with the prover keys
 under `MIDNIGHT_ZK_ASSETS_ROOT`, `submit` sends the wallet's finalized bytes to the node
 over one WebSocket connection and returns one of the transaction's ledger identifiers, and
@@ -388,7 +388,7 @@ minutes, a `finalize` that arrives mid-sync waits on that start, and an instance
 started refuses to finalise. Next.js evaluates the request graph separately, and its backend
 never starts the wallet, so the one started from instrumentation is the one the process uses.
 The wallet's public keys go into every permissionless circuit call it will later balance. The
-wallet must hold NIGHT registered for DUST on the configured network; on the local stack it is
+wallet must hold NIGHT registered for DUST on the configured network. On the local stack it is
 one of the wallets the stack's test harness funded.
 
 ### Vault circuits and ledger
@@ -431,6 +431,35 @@ signet contract's under `zk-assets/signet/` (both gitignored), verifies them aga
 manifests the packages ship, and skips a bundle that already verifies. A further vault adds its
 own bundle beside them. It needs the compact launcher with the compiler version the package pins,
 and the first build takes minutes.
+
+## Ethereum transactions
+
+`src/lib/ethereum/transaction-v1` carries one signed EVM transaction from committed to on chain,
+with the same lifecycle pattern as the Midnight one. The bytes arrive signed (by the MPC, for a
+vault request), so a row holds them and what the chain returned for them. The states are
+`AwaitingSubmission`, `AwaitingInclusion`, then `Succeeded` with the block that included the
+transaction, or `Failed` with a `failure` reason: `Rejected` (the node refused the bytes),
+`Reverted` (mined with its gas paid and its call not applied, with its block), `NonceConsumed`
+(another transaction from the same sender took the nonce, so this one can never mine) or
+`Expired` (the backend stopped waiting at the row's optional `expireTime`, and the chain may still
+include the transaction). The transitions and the fields each state holds are the table in
+`transaction-state-machine.ts`, `EthereumTransactionStateController` is the only writer, one
+method per action, publishing the `ethereum.transaction-v1.<state>` event of the state entered
+with the transaction's `name` and `parent`, `EthereumTransactionStateResolver` does what the
+current state needs through the `EthereumTransactionLedger` port, and
+`EthereumTransactionEventConsumer` nudges it on every lifecycle event.
+
+`EthereumTransactionLedgerEthersImpl` is the ledger over an ethers `JsonRpcProvider` on
+`EVM_RPC_URL`. `broadcast` sends the signed bytes and resolves with their hash. A node that
+already holds or has mined the same bytes (ethers' `NONCE_EXPIRED`, or a message in the
+"already known", "already imported", "nonce too low" family) is not an error, since the same
+signed bytes can only ever mine once, and any other refusal is recorded as `Rejected` with the
+node's message. `status` reads the sender's transaction count first and the receipt only once
+the chain holds a transaction at that nonce: a receipt means `mined` or `reverted` by its
+status, no receipt means `nonceConsumed`, and a count at or below the nonce means `pending`.
+The resolver reads the sender and nonce from the signed bytes, so the row stores neither. The
+backend builds the provider with ethers' request cache off (`cacheTimeout: -1`), since a cached
+null receipt would make a mined transaction look like a consumed nonce.
 
 ## Composition
 

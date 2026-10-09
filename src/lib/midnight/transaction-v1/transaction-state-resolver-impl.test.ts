@@ -8,15 +8,15 @@ import {
   transactionFixture,
 } from '@/lib/midnight/transaction-v1/transaction-fixtures'
 import type {
-  LedgerTransactionStatus,
-  TransactionLedger,
+  MidnightLedgerTransactionStatus,
+  MidnightTransactionLedger,
 } from '@/lib/midnight/transaction-v1/transaction-ledger'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import {
-  TransactionStateConflict,
-  type TransactionStateController,
+  MidnightTransactionStateConflict,
+  type MidnightTransactionStateController,
 } from '@/lib/midnight/transaction-v1/transaction-state-controller'
-import { TransactionStateResolverImpl } from '@/lib/midnight/transaction-v1/transaction-state-resolver-impl'
+import { MidnightTransactionStateResolverImpl } from '@/lib/midnight/transaction-v1/transaction-state-resolver-impl'
 import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
 import { mock } from '@/lib/testing/mock'
 
@@ -26,9 +26,9 @@ type Transition = { method: string; args: object }
 interface Case {
   name: string
   stored: MidnightTransaction | undefined
-  ledger: Partial<TransactionLedger>
+  ledger: Partial<MidnightTransactionLedger>
   relayerWallet?: Partial<RelayerWallet>
-  controller?: (transitions: Transition[]) => Partial<TransactionStateController>
+  controller?: (transitions: Transition[]) => Partial<MidnightTransactionStateController>
   expectTransitions: Transition[]
   expectWrites?: number
   expectError?: string
@@ -66,7 +66,11 @@ const cases: Case[] = [
     ledger: { prove: async () => 'proven' },
     controller: () => ({
       recordProof: async () => {
-        throw new TransactionStateConflict(TRANSACTION_NAME, 'AwaitingWallet', 'recordProof')
+        throw new MidnightTransactionStateConflict(
+          TRANSACTION_NAME,
+          'AwaitingWallet',
+          'recordProof',
+        )
       },
     }),
     expectTransitions: [],
@@ -128,20 +132,24 @@ const cases: Case[] = [
   {
     name: 'AwaitingInclusion - still pending on the ledger, nothing recorded',
     stored: TRANSACTION_IN_STATE.AwaitingInclusion,
-    ledger: { status: async (): Promise<LedgerTransactionStatus> => ({ outcome: 'pending' }) },
+    ledger: {
+      status: async (): Promise<MidnightLedgerTransactionStatus> => ({ outcome: 'pending' }),
+    },
     expectTransitions: [],
   },
   {
     name: 'AwaitingInclusion - succeeded on the ledger',
     stored: TRANSACTION_IN_STATE.AwaitingInclusion,
-    ledger: { status: async (): Promise<LedgerTransactionStatus> => ({ outcome: 'succeeded' }) },
+    ledger: {
+      status: async (): Promise<MidnightLedgerTransactionStatus> => ({ outcome: 'succeeded' }),
+    },
     expectTransitions: [{ method: 'recordSuccess', args: { name: TRANSACTION_NAME } }],
   },
   {
     name: 'AwaitingInclusion - failed on the ledger',
     stored: TRANSACTION_IN_STATE.AwaitingInclusion,
     ledger: {
-      status: async (): Promise<LedgerTransactionStatus> => ({
+      status: async (): Promise<MidnightLedgerTransactionStatus> => ({
         outcome: 'failed',
         failure: 'FailEntirely',
         error: 'rejected',
@@ -174,7 +182,7 @@ const cases: Case[] = [
   },
 ]
 
-describe('TransactionStateResolverImpl.resolveTransaction', () => {
+describe('MidnightTransactionStateResolverImpl.resolveTransaction', () => {
   test.each(cases)(
     '$name',
     async ({
@@ -192,14 +200,14 @@ describe('TransactionStateResolverImpl.resolveTransaction', () => {
         transitions.push({ method, args })
         return stored ?? transactionFixture()
       }
-      const resolver = new TransactionStateResolverImpl(
+      const resolver = new MidnightTransactionStateResolverImpl(
         mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
           get: async (name) => {
             expect(name).toBe(TRANSACTION_NAME)
             return stored
           },
         }),
-        mock<TransactionStateController>('TransactionStateController', {
+        mock<MidnightTransactionStateController>('MidnightTransactionStateController', {
           recordProof: recording('recordProof'),
           recordProofFailure: recording('recordProofFailure'),
           recordSubmission: recording('recordSubmission'),
@@ -209,7 +217,7 @@ describe('TransactionStateResolverImpl.resolveTransaction', () => {
           expireTransaction: recording('expireTransaction'),
           ...controller?.(transitions),
         }),
-        mock<TransactionLedger>('TransactionLedger', ledger),
+        mock<MidnightTransactionLedger>('MidnightTransactionLedger', ledger),
         mock<RelayerWallet>('RelayerWallet', relayerWallet),
         mock<UnitOfWork>('UnitOfWork', {
           runInTransaction: (work) => {

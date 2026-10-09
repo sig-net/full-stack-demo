@@ -1,5 +1,6 @@
 import { notInArray } from 'drizzle-orm'
 import {
+  bigint,
   boolean,
   customType,
   index,
@@ -11,6 +12,7 @@ import {
 } from 'drizzle-orm/pg-core'
 
 import {
+  ETHEREUM_TRANSACTION_FAILURES,
   ETHEREUM_TRANSACTION_STATES,
   ETHEREUM_TRANSACTION_TERMINAL_STATES,
 } from '@/lib/ethereum/transaction-v1/transaction'
@@ -61,9 +63,11 @@ export const ethereumTransactionsV1 = pgTable(
     name: text('name').primaryKey(),
     parent: text('parent').notNull(),
     state: text('state', { enum: ETHEREUM_TRANSACTION_STATES }).notNull(),
-    unsignedTx: text('unsigned_tx'),
-    signedTx: text('signed_tx'),
+    signedTx: text('signed_tx').notNull(),
     txHash: text('tx_hash'),
+    blockNumber: bigint('block_number', { mode: 'bigint' }),
+    expireTime: timestamp('expire_time', { withTimezone: true }),
+    failure: text('failure', { enum: ETHEREUM_TRANSACTION_FAILURES }),
     error: text('error'),
     createTime: timestamp('create_time', { withTimezone: true }).notNull(),
     updateTime: timestamp('update_time', { withTimezone: true }).notNull(),

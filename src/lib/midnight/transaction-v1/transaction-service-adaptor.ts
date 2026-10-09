@@ -11,7 +11,7 @@ import {
   submitTransactionArgsSchema,
   type TransactionService,
 } from '@/lib/midnight/transaction-v1/transaction-service'
-import { TransactionStateConflict } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import { MidnightTransactionStateConflict } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 
 export class TransactionServiceAdaptor {
   private readonly transactionService: TransactionService
@@ -60,7 +60,8 @@ export class TransactionServiceAdaptor {
       )
       return { ok: true, transaction }
     } catch (error: unknown) {
-      if (error instanceof TransactionStateConflict) return { ok: false, error: error.message }
+      if (error instanceof MidnightTransactionStateConflict)
+        return { ok: false, error: error.message }
       throw error
     }
   }
