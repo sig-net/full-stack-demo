@@ -5,15 +5,20 @@ import {
   type VaultLedgerState,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
+import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
+
 /** The vault contract's public state, read from the indexer. One read is one network round trip. */
-export interface VaultLedger {
+export interface VaultLedger extends RequestLedger {
   state(): Promise<VaultLedgerState>
 }
 
-/** The vault actions this backend drives, named as the contract's `Action` enum names them. */
-export const VAULT_ACTIONS = ['deposit'] as const
+/** The part of the ledger a request resolver reads, so a unit test builds that and nothing else. */
+export interface RequestLedger {
+  state(): Promise<RequestLedgerState>
+}
 
-export type VaultAction = (typeof VAULT_ACTIONS)[number]
+/** The request maps and the response key the attestation posts are verified against. */
+export type RequestLedgerState = RequestLedgerView & Pick<VaultLedgerState, 'mpcResponseKey'>
 
 /**
  * Where the ledger holds a request, from queued at start to settled at complete. Every chain
@@ -28,9 +33,16 @@ export type RequestStage =
       readonly lastSeen: bigint
       readonly requestId: Uint8Array
     }
-  | { readonly stage: 'attestationQueued'; readonly requestId: Uint8Array }
+  | {
+      readonly stage: 'attestationQueued'
+      readonly outIndex: Uint8Array
+      readonly lastSeen: bigint
+      readonly requestId: Uint8Array
+    }
   | {
       readonly stage: 'attestationFlushed'
+      readonly outIndex: Uint8Array
+      readonly lastSeen: bigint
       readonly requestId: Uint8Array
       readonly record: AttestationRecord
     }
@@ -67,12 +79,15 @@ export function requestStage(
   if (state.outputAttestationBuffer.member(requestId)) {
     return {
       stage: 'attestationFlushed',
+      outIndex,
+      lastSeen,
       requestId,
       record: state.outputAttestationBuffer.lookup(requestId),
     }
   }
-  if (state.inputAttestationBuffer.member(requestId))
-    return { stage: 'attestationQueued', requestId }
+  if (state.inputAttestationBuffer.member(requestId)) {
+    return { stage: 'attestationQueued', outIndex, lastSeen, requestId }
+  }
   if (!state.evictionMap.member(requestId)) return { stage: 'flushed', outIndex, lastSeen }
   return { stage: 'sent', outIndex, lastSeen, requestId }
 }

@@ -1,4 +1,3 @@
-import { bytesToHex } from '@sig-net/midnight'
 import {
   Action,
   type AttestationRecord,
@@ -12,23 +11,10 @@ import {
   type RequestStage,
   requestStage,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
-
-/** A ledger map over the entries given, keyed as the generated maps key: by value, not identity. */
-function ledgerMap<Key extends bigint | Uint8Array, Value>(entries: [Key, Value][]) {
-  const keyOf = (key: Key): string => (typeof key === 'bigint' ? key.toString() : bytesToHex(key))
-  const byKey = new Map(entries.map(([key, value]) => [keyOf(key), value]))
-  return {
-    isEmpty: () => byKey.size === 0,
-    size: () => BigInt(byKey.size),
-    member: (key: Key) => byKey.has(keyOf(key)),
-    lookup: (key: Key): Value => {
-      const value = byKey.get(keyOf(key))
-      if (value === undefined) throw new Error(`no entry under ${keyOf(key)}`)
-      return value
-    },
-    [Symbol.iterator]: () => entries[Symbol.iterator](),
-  }
-}
+import {
+  ledgerMap,
+  requestLedgerState,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
 
 const IN_INDEX = 42n
 const OUT_INDEX = new Uint8Array(32).fill(1)
@@ -52,15 +38,7 @@ const args = {
 }
 
 function view(overrides: Partial<RequestLedgerView> = {}): RequestLedgerView {
-  return {
-    inputRequestBuffer: ledgerMap([]),
-    outputRequestBuffer: ledgerMap([]),
-    inputAttestationBuffer: ledgerMap([]),
-    outputAttestationBuffer: ledgerMap([]),
-    evictionMap: ledgerMap([]),
-    depositArgsMap: ledgerMap([[IN_INDEX, args]]),
-    ...overrides,
-  }
+  return requestLedgerState({ depositArgsMap: ledgerMap([[IN_INDEX, args]]), ...overrides })
 }
 
 interface Case {
@@ -118,7 +96,12 @@ const cases: Case[] = [
       inputAttestationBuffer: ledgerMap([[REQUEST_ID, record]]),
     }),
     knownRequestId: REQUEST_ID,
-    expected: { stage: 'attestationQueued', requestId: REQUEST_ID },
+    expected: {
+      stage: 'attestationQueued',
+      outIndex: OUT_INDEX,
+      lastSeen: 100n,
+      requestId: REQUEST_ID,
+    },
   },
   {
     name: 'attestationFlushed: the output attestation buffer holds the record',
@@ -128,7 +111,13 @@ const cases: Case[] = [
       outputAttestationBuffer: ledgerMap([[REQUEST_ID, record]]),
     }),
     knownRequestId: REQUEST_ID,
-    expected: { stage: 'attestationFlushed', requestId: REQUEST_ID, record },
+    expected: {
+      stage: 'attestationFlushed',
+      outIndex: OUT_INDEX,
+      lastSeen: 100n,
+      requestId: REQUEST_ID,
+      record,
+    },
   },
   {
     name: 'settled: the args map has released the index',

@@ -1,7 +1,11 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
-import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
+import {
+  type MidnightTransaction,
+  midnightTransactionStateSchema,
+  type MidnightTransactionState,
+} from '@/lib/midnight/transaction-v1/transaction'
 import {
   TRANSACTION_IN_STATE,
   TRANSACTION_NAME,
@@ -233,4 +237,115 @@ describe('MidnightTransactionStateResolverImpl.resolveTransaction', () => {
       expect(writes).toBe(expectWrites ?? expectTransitions.length)
     },
   )
+})
+
+/** A sweep over the rows each state holds, with the ledger's answers scripted in order. */
+interface SweepCase {
+  name: string
+  rows: Partial<Record<MidnightTransactionState, MidnightTransaction[]>>
+  /** What each `status` read answers, in order: a status, or the error it throws. */
+  statuses: (MidnightLedgerTransactionStatus | Error)[]
+  expectTransitions: Transition[]
+  expectLogged: number
+}
+
+const SECOND_NAME = TRANSACTION_NAME.replace(/[0-9a-f]{12}$/, '0a1b2c3d4e5f')
+
+const sweepCases: SweepCase[] = [
+  {
+    name: 'sweeps every waiting state in order and resolves each row, oldest first',
+    rows: {
+      AwaitingInclusion: [
+        TRANSACTION_IN_STATE.AwaitingInclusion,
+        { ...TRANSACTION_IN_STATE.AwaitingInclusion, name: SECOND_NAME },
+      ],
+    },
+    statuses: [{ outcome: 'succeeded' }, { outcome: 'succeeded' }],
+    expectTransitions: [
+      { method: 'recordSuccess', args: { name: TRANSACTION_NAME } },
+      { method: 'recordSuccess', args: { name: SECOND_NAME } },
+    ],
+    expectLogged: 0,
+  },
+  {
+    name: 'a waiting row past its TTL is expired by the sweep',
+    rows: { AwaitingWallet: [{ ...TRANSACTION_IN_STATE.AwaitingWallet, expireTime: EXPIRED }] },
+    statuses: [],
+    expectTransitions: [{ method: 'expireTransaction', args: { name: TRANSACTION_NAME } }],
+    expectLogged: 0,
+  },
+  {
+    name: "one row's failure is logged and the next row still resolves",
+    rows: {
+      AwaitingInclusion: [
+        TRANSACTION_IN_STATE.AwaitingInclusion,
+        { ...TRANSACTION_IN_STATE.AwaitingInclusion, name: SECOND_NAME },
+      ],
+    },
+    statuses: [new Error('indexer unreachable'), { outcome: 'succeeded' }],
+    expectTransitions: [{ method: 'recordSuccess', args: { name: SECOND_NAME } }],
+    expectLogged: 1,
+  },
+  {
+    name: 'nothing waiting reads no ledger and writes nothing',
+    rows: {},
+    statuses: [],
+    expectTransitions: [],
+    expectLogged: 0,
+  },
+]
+
+describe('MidnightTransactionStateResolverImpl.resolvePending', () => {
+  test.each(sweepCases)('$name', async ({ rows, statuses, expectTransitions, expectLogged }) => {
+    const searched: string[] = []
+    const transitions: Transition[] = []
+    const scripted = [...statuses]
+    const recording = (method: string) => async (args: object) => {
+      transitions.push({ method, args })
+      return transactionFixture()
+    }
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const resolver = new MidnightTransactionStateResolverImpl(
+        mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
+          search: async (args) => {
+            const [criterion] = args.criteria
+            if (criterion?.type !== 'exact-text' || criterion.field !== 'state') {
+              throw new Error(`unexpected search ${JSON.stringify(args)}`)
+            }
+            searched.push(criterion.text)
+            expect(args.order).toEqual({ field: 'createTime', direction: 'asc' })
+            return rows[midnightTransactionStateSchema.parse(criterion.text)] ?? []
+          },
+        }),
+        mock<MidnightTransactionStateController>('MidnightTransactionStateController', {
+          recordSuccess: recording('recordSuccess'),
+          expireTransaction: recording('expireTransaction'),
+        }),
+        mock<MidnightTransactionLedger>('MidnightTransactionLedger', {
+          status: async () => {
+            const answer = scripted.shift()
+            if (answer === undefined)
+              throw new Error('the ledger was read more often than scripted')
+            if (answer instanceof Error) throw answer
+            return answer
+          },
+        }),
+        mock<RelayerWallet>('RelayerWallet'),
+        mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
+      )
+      await resolver.resolvePending()
+      expect(searched).toEqual([
+        'AwaitingProof',
+        'AwaitingWallet',
+        'AwaitingSubmission',
+        'AwaitingInclusion',
+      ])
+      expect(transitions).toEqual(expectTransitions)
+      expect(scripted).toEqual([])
+      expect(logged).toHaveBeenCalledTimes(expectLogged)
+    } finally {
+      logged.mockRestore()
+    }
+  })
 })

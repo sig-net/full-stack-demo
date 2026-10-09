@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { CALLER_COLLECTION } from '@/lib/caller/caller'
-import { HEX_32_BYTES, UUID } from '@/lib/value-schemas'
+import { evmBytesSchema, HEX_32_BYTES, UUID } from '@/lib/value-schemas'
 
 /** The collection segment of an Ethereum transaction's resource name. */
 export const ETHEREUM_TRANSACTION_COLLECTION = 'ethereum-transactions'
@@ -48,9 +48,6 @@ export const ethereumTransactionFailureSchema = z.enum(ETHEREUM_TRANSACTION_FAIL
 
 export type EthereumTransactionFailure = z.infer<typeof ethereumTransactionFailureSchema>
 
-/** Bytes as ethers serialises them: `0x` followed by lower-case hex. */
-const EVM_BYTES = /^0x(?:[0-9a-f]{2})+$/
-
 /** A 32-byte hash as ethers returns it: `0x` followed by 64 lower-case hex digits. */
 const EVM_HASH = /^0x[0-9a-f]{64}$/
 
@@ -65,7 +62,7 @@ export const ethereumTransactionSchema = z.object({
   parent: z.string().min(1),
   state: ethereumTransactionStateSchema,
   /** The signed transaction, what the RPC node receives. */
-  signedTx: z.string().regex(EVM_BYTES, 'expected 0x-prefixed lower-case hex'),
+  signedTx: evmBytesSchema,
   /** The hash the node accepted the bytes under, what the receipt is watched by. */
   txHash: z.string().regex(EVM_HASH, 'expected a 32-byte hash in 0x-prefixed hex').nullable(),
   /** The block that included the transaction, set with `Succeeded` and with a `Reverted` failure. */

@@ -1,9 +1,8 @@
 import 'server-only'
 
-import { setTimeout as delay } from 'node:timers/promises'
-
 import { MessagesStreamFallbackModes, MessagesStreamModes } from '@platformatic/kafka'
 
+import { delayUnlessAborted } from '@/lib/delay-unless-aborted'
 import { type Event, eventSchema, EVENTS_TOPIC } from '@/lib/event/event'
 import type { EventConsumer } from '@/lib/event/event-consumer'
 import type { EventConsumerHub } from '@/lib/event/event-consumer-hub'
@@ -28,7 +27,40 @@ export class EventConsumerHubImpl implements EventConsumerHub {
 export const EVENTS_GROUP_ID = 'full-stack-demo.events'
 const RESTART_DELAY_MS = 5_000
 
-async function consumeEvents(hub: EventConsumerHub, consumer: StringConsumer): Promise<void> {
+/**
+ * Consumes the events topic until the signal aborts, restarting after a failure with a consumer
+ * from `createConsumer`. Resolves once the last consumer is closed and the handler that was
+ * mid-dispatch at the abort has returned.
+ */
+export async function runEventConsumerHub(
+  hub: EventConsumerHub,
+  createConsumer: () => StringConsumer,
+  signal: AbortSignal,
+): Promise<void> {
+  while (!signal.aborted) {
+    try {
+      await consumeEvents(hub, createConsumer(), signal)
+    } catch (error: unknown) {
+      if (!signal.aborted) console.error('Event consumer hub failed, restarting', error)
+    }
+    await delayUnlessAborted(RESTART_DELAY_MS, signal)
+  }
+}
+
+/** Closing the consumer ends the stream, which ends the loop once the record in hand is handled. */
+async function consumeEvents(
+  hub: EventConsumerHub,
+  consumer: StringConsumer,
+  signal: AbortSignal,
+): Promise<void> {
+  let closing: Promise<void> | undefined
+  const close = (): Promise<void> => (closing ??= consumer.close(true))
+  const onAbort = (): void => {
+    close().catch((error: unknown) => {
+      console.error('Closing the event consumer failed', error)
+    })
+  }
+  signal.addEventListener('abort', onAbort, { once: true })
   try {
     const stream = await consumer.consume({
       topics: [EVENTS_TOPIC],
@@ -47,29 +79,11 @@ async function consumeEvents(hub: EventConsumerHub, consumer: StringConsumer): P
           `Event at ${record.partition}:${record.offset.toString()} is malformed and was skipped`,
         )
       }
+      if (signal.aborted) break
       await record.commit()
     }
   } finally {
-    await consumer.close(true)
+    signal.removeEventListener('abort', onAbort)
+    await close()
   }
-}
-
-/**
- * Consumes the events topic for the life of the server process, restarting after a failure with
- * a consumer from `createConsumer`.
- */
-export function startEventConsumerHub(
-  hub: EventConsumerHub,
-  createConsumer: () => StringConsumer,
-): void {
-  void (async (): Promise<never> => {
-    for (;;) {
-      try {
-        await consumeEvents(hub, createConsumer())
-      } catch (error: unknown) {
-        console.error('Event consumer hub failed, restarting', error)
-      }
-      await delay(RESTART_DELAY_MS)
-    }
-  })()
 }

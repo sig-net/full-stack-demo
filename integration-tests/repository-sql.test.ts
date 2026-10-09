@@ -17,12 +17,18 @@ describe('SQLRepository over Postgres', () => {
     name: `${caller}/ethereum-erc20-vault-deposits/${randomUUID()}`,
     erc20Address: `0x${'ab'.repeat(20)}`,
     amount: 5n,
-    state: 'Starting',
+    state: 'AwaitingStartTransaction',
     inIndex: 1n,
     evmNonce: 0n,
     gasLimit: 21_000n,
     maxFeePerGas: 1n,
     maxPriorityFeePerGas: 1n,
+    depositAccount: `0x${'cd'.repeat(20)}`,
+    outcome: null,
+    failure: null,
+    error: null,
+    createTime: new Date(),
+    updateTime: new Date(),
     ...overrides,
   })
 
@@ -65,9 +71,10 @@ describe('SQLRepository over Postgres', () => {
     const name = `${caller}/ethereum-erc20-vault-deposits/${randomUUID()}`
     await backend.db.pool.query(
       `insert into midnight_ethereum_erc20_vault_deposits_v1
-         (name, erc20_address, amount, state, in_index, evm_nonce, gas_limit, max_fee_per_gas, max_priority_fee_per_gas)
-       values ($1, 'not-an-address', 0, 'Starting', 0, 0, 0, 0, 0)`,
-      [name],
+         (name, erc20_address, amount, state, in_index, evm_nonce, gas_limit, max_fee_per_gas,
+          max_priority_fee_per_gas, deposit_account, create_time, update_time)
+       values ($1, 'not-an-address', 0, 'AwaitingStartTransaction', 0, 0, 0, 0, 0, $2, now(), now())`,
+      [name, `0x${'cd'.repeat(20)}`],
     )
     await expect(repository.get(name)).rejects.toThrow()
   })

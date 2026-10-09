@@ -55,10 +55,6 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
     return bytesToHex(finalized.serialize())
   }
 
-  /**
-   * The wallet and midnight provider slots of a midnight-js provider set, once synced. A failed
-   * start is dropped so the next start retries.
-   */
   provider(): Promise<WalletProvider & MidnightProvider> {
     this.starting ??= this.sync().catch((error: unknown) => {
       this.starting = undefined

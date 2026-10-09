@@ -34,6 +34,12 @@ function toDepositRow(deposit: Deposit): DepositRow {
     gasLimit: deposit.gasLimit,
     maxFeePerGas: deposit.maxFeePerGas,
     maxPriorityFeePerGas: deposit.maxPriorityFeePerGas,
+    depositAccount: deposit.depositAccount,
+    outcome: deposit.outcome,
+    failure: deposit.failure,
+    error: deposit.error,
+    createTime: deposit.createTime,
+    updateTime: deposit.updateTime,
   }
 }
 
@@ -48,5 +54,11 @@ function fromDepositRow(row: DepositRow): Deposit {
     gasLimit: row.gasLimit,
     maxFeePerGas: row.maxFeePerGas,
     maxPriorityFeePerGas: row.maxPriorityFeePerGas,
+    depositAccount: row.depositAccount,
+    outcome: row.outcome,
+    failure: row.failure,
+    error: row.error,
+    createTime: row.createTime,
+    updateTime: row.updateTime,
   }
 }

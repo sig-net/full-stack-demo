@@ -3,7 +3,12 @@ import 'server-only'
 import { Transaction } from 'ethers'
 
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
-import type { EthereumTransaction } from '@/lib/ethereum/transaction-v1/transaction'
+import {
+  type EthereumTransaction,
+  ETHEREUM_TRANSACTION_STATES,
+  ETHEREUM_TRANSACTION_TERMINAL_STATES,
+  type EthereumTransactionState,
+} from '@/lib/ethereum/transaction-v1/transaction'
 import type { EthereumTransactionLedger } from '@/lib/ethereum/transaction-v1/transaction-ledger'
 import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
 import {
@@ -38,6 +43,28 @@ export class EthereumTransactionStateResolverImpl implements EthereumTransaction
   async resolveTransaction({ name }: ResolveTransactionArgs): Promise<void> {
     const transaction = await this.transactionRepository.get(name)
     if (transaction === undefined) return
+    await this.resolve(transaction)
+  }
+
+  /** One transaction's failure does not stop the rest. */
+  async resolvePending(): Promise<void> {
+    for (const state of PENDING_STATES) {
+      const transactions = await this.transactionRepository.search({
+        criteria: [{ type: 'exact-text', field: 'state', text: state }],
+        order: { field: 'createTime', direction: 'asc' },
+      })
+      for (const transaction of transactions) {
+        try {
+          await this.resolve(transaction)
+        } catch (error: unknown) {
+          console.error(`Resolving Ethereum transaction ${transaction.name} failed`, error)
+        }
+      }
+    }
+  }
+
+  private resolve(transaction: EthereumTransaction): Promise<void> {
+    const { name } = transaction
     if (
       EXPIRABLE_STATES.includes(transaction.state) &&
       transaction.expireTime !== null &&
@@ -52,7 +79,7 @@ export class EthereumTransactionStateResolverImpl implements EthereumTransaction
         return this.resolveAwaitingInclusion(transaction)
       case 'Succeeded':
       case 'Failed':
-        return
+        return Promise.resolve()
       default: {
         const unhandled: never = transaction.state
         throw new Error(`Unhandled state ${JSON.stringify(unhandled)}`)
@@ -123,6 +150,10 @@ export class EthereumTransactionStateResolverImpl implements EthereumTransaction
     }
   }
 }
+
+const PENDING_STATES: readonly EthereumTransactionState[] = ETHEREUM_TRANSACTION_STATES.filter(
+  (state) => !ETHEREUM_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === state),
+)
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)

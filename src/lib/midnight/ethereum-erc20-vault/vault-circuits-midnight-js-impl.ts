@@ -26,12 +26,13 @@ import {
   witnesses,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
-import type {
-  CompleteDepositCircuitArgs,
-  QueueAttestationCircuitArgs,
-  SendDepositCircuitArgs,
-  StartDepositCircuitArgs,
-  VaultCircuits,
+import {
+  type CompleteDepositCircuitArgs,
+  type QueueAttestationCircuitArgs,
+  queueAttestationCircuit,
+  type SendDepositCircuitArgs,
+  type StartDepositCircuitArgs,
+  type VaultCircuits,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import { PrivateStateProviderMemoryImpl } from '@/lib/midnight/private-state-provider-memory-impl'
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
@@ -62,7 +63,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
 
   startDeposit(args: StartDepositCircuitArgs): Promise<string> {
     return this.build(
-      args.secretKey,
+      createVaultPrivateState(args.secretKey),
       args.wallet,
       this.options('startDeposit', [
         args.inIndex,
@@ -79,7 +80,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
 
   completeDeposit(args: CompleteDepositCircuitArgs): Promise<string> {
     return this.build(
-      args.secretKey,
+      createVaultPrivateState(args.secretKey),
       args.wallet,
       this.options('completeDeposit', [
         args.requestId,
@@ -92,7 +93,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
 
   sendDeposit(args: SendDepositCircuitArgs): Promise<string> {
     return this.build(
-      randomSecret(),
+      permissionlessVaultPrivateState(),
       this.relayerWallet,
       this.options('sendDeposit', [args.outIndex]),
     )
@@ -101,18 +102,31 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
   queueAttestation(args: QueueAttestationCircuitArgs): Promise<string> {
     const attestation = respondBidirectionalEventToCircuitInput(args.attestation)
     const output = args.serializedOutput
-    const options =
-      output.length === 0
-        ? this.options('queueAttestation0', [attestation, output])
-        : output.length === 1
-          ? this.options('queueAttestation1', [attestation, output])
-          : output.length === 32
-            ? this.options('queueAttestation32', [attestation, output])
-            : undefined
-    if (options === undefined) {
-      throw new Error(`No queue circuit takes a ${output.length}-byte output`)
+    const circuit = queueAttestationCircuit(output.length)
+    switch (circuit) {
+      case 'queueAttestation0':
+        return this.build(
+          permissionlessVaultPrivateState(),
+          this.relayerWallet,
+          this.options('queueAttestation0', [attestation, output]),
+        )
+      case 'queueAttestation1':
+        return this.build(
+          permissionlessVaultPrivateState(),
+          this.relayerWallet,
+          this.options('queueAttestation1', [attestation, output]),
+        )
+      case 'queueAttestation32':
+        return this.build(
+          permissionlessVaultPrivateState(),
+          this.relayerWallet,
+          this.options('queueAttestation32', [attestation, output]),
+        )
+      default: {
+        const unhandled: never = circuit
+        throw new Error(`Unhandled circuit ${JSON.stringify(unhandled)}`)
+      }
     }
-    return this.build(randomSecret(), this.relayerWallet, options)
   }
 
   private options<Circuit extends VaultCircuitId>(
@@ -131,13 +145,13 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
 
   /** One private state provider per call: the secret lives only as long as the call it proves. */
   private async build<Circuit extends VaultCircuitId>(
-    secretKey: Uint8Array,
+    privateState: VaultPrivateState,
     wallet: WalletPublicKeys,
     options: CallTxOptions<VaultContract, Circuit>,
   ): Promise<string> {
     const privateStateProvider = new PrivateStateProviderMemoryImpl<VaultPrivateState>()
     privateStateProvider.setContractAddress(this.vaultAddress)
-    await privateStateProvider.set(VAULT_PRIVATE_STATE_ID, createVaultPrivateState(secretKey))
+    await privateStateProvider.set(VAULT_PRIVATE_STATE_ID, privateState)
     const call = await createUnprovenCallTx(
       {
         publicDataProvider: this.publicDataProvider,
@@ -159,7 +173,7 @@ export function compiledVaultContract(assetsPath: string): VaultCompiledContract
   )
 }
 
-/** The call builder reads the wallet's keys; the wallet itself balances later, elsewhere. */
+/** The call builder reads the wallet's keys, and the wallet itself balances later, elsewhere. */
 function walletProviderOf(wallet: WalletPublicKeys): WalletProvider {
   return {
     getCoinPublicKey: () => wallet.coinPublicKey,
@@ -169,8 +183,9 @@ function walletProviderOf(wallet: WalletPublicKeys): WalletProvider {
   }
 }
 
-function randomSecret(): Uint8Array {
-  return crypto.getRandomValues(new Uint8Array(32))
+/** The private state of a permissionless call: those circuits never read the secret witness, so a random one proves. */
+export function permissionlessVaultPrivateState(): VaultPrivateState {
+  return createVaultPrivateState(crypto.getRandomValues(new Uint8Array(32)))
 }
 
 /** `completeDeposit` mints to the caller's own public key when no recipient is named. */

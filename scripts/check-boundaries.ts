@@ -14,7 +14,14 @@ const BACKEND_DIRECTORIES = [
   'src/lib/repository/',
   'src/lib/testing/',
 ]
-const BACKEND_FILES = ['src/lib/lazy-singleton.ts', 'src/lib/caller/resolve-caller.ts']
+const BACKEND_FILES = [
+  'src/lib/delay-unless-aborted.ts',
+  'src/lib/lazy-singleton.ts',
+  'src/lib/sweep.ts',
+  'src/lib/caller/resolve-caller.ts',
+  'src/lib/midnight/ethereum-erc20-vault/signet-readers.ts',
+  'src/lib/midnight/ethereum-erc20-vault/flusher.ts',
+]
 const BACKEND_SUFFIXES = [
   '-impl.ts',
   '-repository.ts',

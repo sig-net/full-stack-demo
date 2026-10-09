@@ -18,6 +18,16 @@ export const hexBytesSchema = z
   .regex(/^(?:0x)?(?:[0-9a-fA-F]{2})*$/, 'expected bytes in hex')
   .transform((value) => value.replace(/^0x/i, '').toLowerCase())
 
+/** Exactly 32 bytes in lower-case hex without a `0x` prefix: a request id, a digest, a buffer index. */
+export const hex32BytesSchema = z
+  .string()
+  .regex(new RegExp(`^${HEX_32_BYTES}$`), 'expected 32 bytes in lower-case hex')
+
+/** Bytes as ethers serialises them: `0x` followed by lower-case hex, at least one byte. */
+export const evmBytesSchema = z
+  .string()
+  .regex(/^0x(?:[0-9a-f]{2})+$/, 'expected 0x-prefixed lower-case hex')
+
 export const UINT64_MAX = 2n ** 64n - 1n
 export const UINT128_MAX = 2n ** 128n - 1n
 

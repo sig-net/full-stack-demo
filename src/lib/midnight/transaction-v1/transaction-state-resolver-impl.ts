@@ -1,7 +1,12 @@
 import 'server-only'
 
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
-import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
+import {
+  type MidnightTransaction,
+  MIDNIGHT_TRANSACTION_STATES,
+  MIDNIGHT_TRANSACTION_TERMINAL_STATES,
+  type MidnightTransactionState,
+} from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionLedger } from '@/lib/midnight/transaction-v1/transaction-ledger'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import {
@@ -40,6 +45,28 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
   async resolveTransaction({ name }: ResolveTransactionArgs): Promise<void> {
     const transaction = await this.transactionRepository.get(name)
     if (transaction === undefined) return
+    await this.resolve(transaction)
+  }
+
+  /** One transaction's failure does not stop the rest. */
+  async resolvePending(): Promise<void> {
+    for (const state of PENDING_STATES) {
+      const transactions = await this.transactionRepository.search({
+        criteria: [{ type: 'exact-text', field: 'state', text: state }],
+        order: { field: 'createTime', direction: 'asc' },
+      })
+      for (const transaction of transactions) {
+        try {
+          await this.resolve(transaction)
+        } catch (error: unknown) {
+          console.error(`Resolving Midnight transaction ${transaction.name} failed`, error)
+        }
+      }
+    }
+  }
+
+  private resolve(transaction: MidnightTransaction): Promise<void> {
+    const { name } = transaction
     if (
       EXPIRABLE_STATES.includes(transaction.state) &&
       transaction.expireTime !== null &&
@@ -58,7 +85,7 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
         return this.resolveAwaitingInclusion(transaction)
       case 'Succeeded':
       case 'Failed':
-        return
+        return Promise.resolve()
       default: {
         const unhandled: never = transaction.state
         throw new Error(`Unhandled state ${JSON.stringify(unhandled)}`)
@@ -79,7 +106,7 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
     return this.write(() => this.stateController.recordProof({ name, unboundTx }))
   }
 
-  /** A caller transaction is the browser wallet's to-do; a relayer transaction is finalised here. */
+  /** A caller transaction is the browser wallet's to-do, and a relayer transaction is finalised here. */
   private async resolveAwaitingWallet({
     name,
     signer,
@@ -142,6 +169,10 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
     }
   }
 }
+
+const PENDING_STATES: readonly MidnightTransactionState[] = MIDNIGHT_TRANSACTION_STATES.filter(
+  (state) => !MIDNIGHT_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === state),
+)
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)

@@ -32,6 +32,11 @@ export function resourceOwnedByCaller(resourceName: string, caller: Caller): boo
   return resourceName === caller.name || resourceName.startsWith(`${caller.name}/`)
 }
 
+/** `callers/{caller}`, the first two segments of any resource name under a caller. */
+export function callerOf(resourceName: string): string {
+  return resourceName.split('/').slice(0, 2).join('/')
+}
+
 /**
  * The caller's 32-byte vault identity secret in hex, the value of the contract's
  * `callerSecretKey` witness. Stored without the `0x` prefix in lower case.

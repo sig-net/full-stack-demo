@@ -5,6 +5,8 @@
  */
 export interface EthereumTransactionStateResolver {
   resolveTransaction(args: ResolveTransactionArgs): Promise<void>
+  /** Every transaction in a non-terminal state, oldest first: the sweep that catches lost events and expiry. */
+  resolvePending(): Promise<void>
 }
 
 export interface ResolveTransactionArgs {

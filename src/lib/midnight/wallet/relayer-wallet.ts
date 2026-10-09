@@ -1,3 +1,5 @@
+import type { MidnightProvider, WalletProvider } from '@midnight-ntwrk/midnight-js/types'
+
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 
 /**
@@ -17,4 +19,9 @@ export interface RelayerWallet {
    * for a start in progress and rejects when the wallet was never started.
    */
   finalize(unboundTx: string): Promise<string>
+  /**
+   * The wallet and midnight provider slots of a midnight-js provider set, once synced. Starts
+   * the wallet when nothing has, and a failed start is dropped so the next call retries.
+   */
+  provider(): Promise<WalletProvider & MidnightProvider>
 }

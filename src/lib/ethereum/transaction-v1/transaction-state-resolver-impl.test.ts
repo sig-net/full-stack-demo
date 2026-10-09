@@ -1,7 +1,11 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
-import type { EthereumTransaction } from '@/lib/ethereum/transaction-v1/transaction'
+import {
+  type EthereumTransaction,
+  ethereumTransactionStateSchema,
+  type EthereumTransactionState,
+} from '@/lib/ethereum/transaction-v1/transaction'
 import {
   SIGNED_TRANSACTION,
   SIGNED_TX,
@@ -202,4 +206,113 @@ describe('EthereumTransactionStateResolverImpl.resolveTransaction', () => {
       expect(writes).toBe(expectWrites ?? expectTransitions.length)
     },
   )
+})
+
+/** A sweep over the rows each state holds, with the chain's answers scripted in order. */
+interface SweepCase {
+  name: string
+  rows: Partial<Record<EthereumTransactionState, EthereumTransaction[]>>
+  /** What each `status` read answers, in order: a status, or the error it throws. */
+  statuses: (EthereumLedgerTransactionStatus | Error)[]
+  expectTransitions: Transition[]
+  expectLogged: number
+}
+
+const SECOND_NAME = TRANSACTION_NAME.replace(/[0-9a-f]{12}$/, '0a1b2c3d4e5f')
+
+const sweepCases: SweepCase[] = [
+  {
+    name: 'sweeps every waiting state in order and resolves each row, oldest first',
+    rows: {
+      AwaitingInclusion: [
+        TRANSACTION_IN_STATE.AwaitingInclusion,
+        { ...TRANSACTION_IN_STATE.AwaitingInclusion, name: SECOND_NAME },
+      ],
+    },
+    statuses: [
+      { outcome: 'mined', blockNumber: 12n },
+      { outcome: 'mined', blockNumber: 13n },
+    ],
+    expectTransitions: [
+      { method: 'recordSuccess', args: { name: TRANSACTION_NAME, blockNumber: 12n } },
+      { method: 'recordSuccess', args: { name: SECOND_NAME, blockNumber: 13n } },
+    ],
+    expectLogged: 0,
+  },
+  {
+    name: 'a waiting row past its expiry is expired by the sweep',
+    rows: {
+      AwaitingSubmission: [{ ...TRANSACTION_IN_STATE.AwaitingSubmission, expireTime: EXPIRED }],
+    },
+    statuses: [],
+    expectTransitions: [{ method: 'expireTransaction', args: { name: TRANSACTION_NAME } }],
+    expectLogged: 0,
+  },
+  {
+    name: "one row's failure is logged and the next row still resolves",
+    rows: {
+      AwaitingInclusion: [
+        TRANSACTION_IN_STATE.AwaitingInclusion,
+        { ...TRANSACTION_IN_STATE.AwaitingInclusion, name: SECOND_NAME },
+      ],
+    },
+    statuses: [new Error('connect ECONNREFUSED'), { outcome: 'mined', blockNumber: 13n }],
+    expectTransitions: [{ method: 'recordSuccess', args: { name: SECOND_NAME, blockNumber: 13n } }],
+    expectLogged: 1,
+  },
+  {
+    name: 'nothing waiting reads no chain and writes nothing',
+    rows: {},
+    statuses: [],
+    expectTransitions: [],
+    expectLogged: 0,
+  },
+]
+
+describe('EthereumTransactionStateResolverImpl.resolvePending', () => {
+  test.each(sweepCases)('$name', async ({ rows, statuses, expectTransitions, expectLogged }) => {
+    const searched: string[] = []
+    const transitions: Transition[] = []
+    const scripted = [...statuses]
+    const recording = (method: string) => async (args: object) => {
+      transitions.push({ method, args })
+      return transactionFixture()
+    }
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const resolver = new EthereumTransactionStateResolverImpl(
+        mock<EthereumTransactionRepository>('EthereumTransactionRepository', {
+          search: async (args) => {
+            const [criterion] = args.criteria
+            if (criterion?.type !== 'exact-text' || criterion.field !== 'state') {
+              throw new Error(`unexpected search ${JSON.stringify(args)}`)
+            }
+            searched.push(criterion.text)
+            expect(args.order).toEqual({ field: 'createTime', direction: 'asc' })
+            return rows[ethereumTransactionStateSchema.parse(criterion.text)] ?? []
+          },
+        }),
+        mock<EthereumTransactionStateController>('EthereumTransactionStateController', {
+          recordSuccess: recording('recordSuccess'),
+          expireTransaction: recording('expireTransaction'),
+        }),
+        mock<EthereumTransactionLedger>('EthereumTransactionLedger', {
+          status: async () => {
+            const answer = scripted.shift()
+            if (answer === undefined) throw new Error('the chain was read more often than scripted')
+            if (answer instanceof Error) throw answer
+            return answer
+          },
+        }),
+        mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
+      )
+      await resolver.resolvePending()
+      expect(searched).toEqual(['AwaitingSubmission', 'AwaitingInclusion'])
+      expect(transitions).toEqual(expectTransitions)
+      expect(scripted).toEqual([])
+      expect(logged).toHaveBeenCalledTimes(expectLogged)
+    } finally {
+      logged.mockRestore()
+    }
+  })
 })

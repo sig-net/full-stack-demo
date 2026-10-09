@@ -78,6 +78,20 @@
       "when": 1791553869548,
       "tag": "0010_ethereum_transaction_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791555940694,
+      "tag": "0011_vault_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791559281490,
+      "tag": "0012_deposit_lifecycle",
+      "breakpoints": true
     }
   ]
 }
