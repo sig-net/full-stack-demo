@@ -17,6 +17,7 @@ import {
 import { DEPOSIT_STATES } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import {
   MIDNIGHT_TRANSACTION_FAILURES,
+  MIDNIGHT_TRANSACTION_SIGNERS,
   MIDNIGHT_TRANSACTION_STATES,
   MIDNIGHT_TRANSACTION_TERMINAL_STATES,
 } from '@/lib/midnight/transaction-v1/transaction'
@@ -32,6 +33,7 @@ export const midnightTransactionsV1 = pgTable(
     parent: text('parent').notNull(),
     state: text('state', { enum: MIDNIGHT_TRANSACTION_STATES }).notNull(),
     circuit: text('circuit').notNull(),
+    signer: text('signer', { enum: MIDNIGHT_TRANSACTION_SIGNERS }).notNull(),
     unprovenTx: text('unproven_tx'),
     unboundTx: text('unbound_tx'),
     finalizedTx: text('finalized_tx'),

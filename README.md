@@ -86,21 +86,25 @@ only when it needs state, effects or browser APIs, as `src/components/mode-toggl
 Configuration is read from environment variables on the server at request time. Nothing is baked
 in at build time, so one build serves every environment. `.env.example` lists the variables:
 
-| Variable                                         | Secret | Purpose                                                                                                                                                             |
-| ------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MIDNIGHT_NETWORK_ID`                            | No     | `undeployed` or `stagenet`. Selects the default Midnight endpoints and the published contract values.                                                               |
-| `MIDNIGHT_INDEXER_URL`                           | No     | Optional override of the indexer GraphQL endpoint.                                                                                                                  |
-| `MIDNIGHT_INDEXER_WS_URL`                        | No     | Optional override of the indexer subscription endpoint.                                                                                                             |
-| `MIDNIGHT_NODE_URL`                              | No     | Optional override of the node RPC endpoint.                                                                                                                         |
-| `MIDNIGHT_PROOF_SERVER_URL`                      | No     | Optional override of the proof server, `http://127.0.0.1:6300` by default.                                                                                          |
-| `MIDNIGHT_SIGNET_CONTRACT_ADDRESS`               | No     | 32-byte hex. Overrides the SDK's published signet singleton address, required for `undeployed`.                                                                     |
-| `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY`            | No     | secp256k1 key in SEC1 hex or `secp256k1:base58`. Overrides the published MPC root key, required for `undeployed`.                                                   |
-| `MIDNIGHT_ETHEREUM_ERC20_VAULT_CONTRACT_ADDRESS` | No     | 32-byte hex. Overrides the published ERC20 vault address, required for `undeployed`.                                                                                |
-| `EVM_CHAIN_ID`                                   | No     | Ethereum chain ID. `1`, `11155111` and `31337` have a default RPC.                                                                                                  |
-| `EVM_RPC_URL`                                    | No     | Optional override of the RPC endpoint, required for other chains.                                                                                                   |
-| `DB_CONNECTION_STRING`                           | Yes    | Postgres connection string. The value in `.env.example` points at the [local database](#local-services).                                                            |
-| `KAFKA_BROKERS`                                  | No     | Kafka bootstrap brokers as comma-separated `host:port`. Server-only: it is not part of the client configuration.                                                    |
-| `MIDNIGHT_ZK_ASSETS_ROOT`                        | No     | The root the backend's proof provider searches for every contract's prover keys and ZKIR, `zk-assets/` by default (see [Proving keys](#proving-keys)). Server-only. |
+| Variable                                         | Secret | Purpose                                                                                                                                                                   |
+| ------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MIDNIGHT_NETWORK_ID`                            | No     | `undeployed` or `stagenet`. Selects the default Midnight endpoints and the published contract values.                                                                     |
+| `MIDNIGHT_INDEXER_URL`                           | No     | Optional override of the indexer GraphQL endpoint.                                                                                                                        |
+| `MIDNIGHT_INDEXER_WS_URL`                        | No     | Optional override of the indexer subscription endpoint.                                                                                                                   |
+| `MIDNIGHT_NODE_URL`                              | No     | Optional override of the node RPC endpoint.                                                                                                                               |
+| `MIDNIGHT_PROOF_SERVER_URL`                      | No     | Optional override of the proof server, `http://127.0.0.1:6300` by default.                                                                                                |
+| `MIDNIGHT_SIGNET_CONTRACT_ADDRESS`               | No     | 32-byte hex. Overrides the SDK's published signet singleton address, required for `undeployed`.                                                                           |
+| `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY`            | No     | secp256k1 key in SEC1 hex or `secp256k1:base58`. Overrides the published MPC root key, required for `undeployed`.                                                         |
+| `MIDNIGHT_ETHEREUM_ERC20_VAULT_CONTRACT_ADDRESS` | No     | 32-byte hex. Overrides the published ERC20 vault address, required for `undeployed`.                                                                                      |
+| `EVM_CHAIN_ID`                                   | No     | Ethereum chain ID. `1`, `11155111` and `31337` have a default RPC.                                                                                                        |
+| `EVM_RPC_URL`                                    | No     | Optional override of the RPC endpoint, required for other chains.                                                                                                         |
+| `DB_CONNECTION_STRING`                           | Yes    | Postgres connection string. The value in `.env.example` points at the [local database](#local-services).                                                                  |
+| `KAFKA_BROKERS`                                  | No     | Kafka bootstrap brokers as comma-separated `host:port`. Server-only: it is not part of the client configuration.                                                          |
+| `MIDNIGHT_ZK_ASSETS_ROOT`                        | No     | The root the backend's proof provider searches for every contract's prover keys and ZKIR, `zk-assets/` by default (see [Proving keys](#proving-keys)). Server-only.       |
+| `MIDNIGHT_RELAYER_SEED`                          | Yes    | 32-byte hex seed of the backend's own Midnight wallet, which finalises and pays for relayer transactions (see [The relayer wallet](#the-relayer-wallet)). Server-only.    |
+| `RESPOND_OUTPUT_SOURCE`                          | No     | Where the backend obtains the bytes an MPC attestation is verified over: `evm-node` (default, traces the mined transaction on `EVM_RPC_URL`) or `mpc-cache`. Server-only. |
+| `MPC_OUTPUT_CACHE_URL`                           | No     | The MPC output cache, required by the `mpc-cache` source. Server-only.                                                                                                    |
+| `MIDNIGHT_USER_SEED`                             | Yes    | Tests only: the funded Midnight wallet the integration tests play the user with. The application never reads it.                                                          |
 
 Each section of the client configuration is owned by one module under `src/lib/config`
 (`midnight-network-config.ts`, `midnight-signet-config.ts`, `midnight-ethereum-erc20-vault-config.ts`,
@@ -348,7 +352,22 @@ fields each state holds are the table in `transaction-state-machine.ts`, and
 `TransactionStateController` is the only writer, one method per action, each publishing the
 lifecycle event of the state entered. `TransactionStateResolver` does what the current state
 needs through the `TransactionLedger` port and applies one transition, and
-`TransactionEventConsumer` nudges it on every lifecycle event.
+`TransactionEventConsumer` nudges it on every lifecycle event. Every lifecycle event carries
+the transaction's `name` and its `parent`, so the consumer of the parent resource matches on
+the parent's collection without a read.
+
+A transaction names its `signer`: `caller` when the depositor's browser wallet balances and
+signs it, `relayer` when the backend's own wallet does, which is the case for every
+permissionless vault circuit (flushes, sends, attestation queues). `AwaitingWallet` is that
+wallet's to-do: a caller transaction waits for the browser to call `submitTransaction`, a
+relayer transaction is finalised by the resolver through the `RelayerWallet` port.
+
+The browser's side of a transaction is `TransactionService` (`transaction-service.ts`):
+`listTransactions(caller, { parent })` finds the live transaction under a resource the caller
+owns, the browser wallet balances and signs its `unboundTx`, and
+`submitTransaction(caller, { name, finalizedTx })` hands the finalized bytes back, which moves
+the row from `AwaitingWallet` to `AwaitingSubmission`. The server actions in
+`src/server/actions/transaction-actions.ts` forward to `TransactionServiceAdaptor`.
 
 `TransactionLedgerMidnightImpl` is the ledger behind the local or stagenet services: `prove`
 deserialises the unproven bytes and proves them through the proof server with the prover keys
@@ -357,6 +376,39 @@ over one WebSocket connection and returns one of the transaction's ledger identi
 `status` asks the indexer for that identifier and maps `SUCCESS`, `PARTIAL_SUCCESS` and
 `FAILURE` to the ledger outcome. A transaction the indexer has not recorded stays pending until
 its TTL expires it.
+
+### The relayer wallet
+
+`RelayerWallet` (`src/lib/midnight/wallet/relayer-wallet.ts`) is the backend's own wallet, and
+`RelayerWalletSeedImpl` runs it over the same seed wallet facade the browser's seed wallet uses
+(`seed-wallet-facade.ts`): the keys derive from `MIDNIGHT_RELAYER_SEED` at construction, and
+`finalize` balances, signs and finalises an unbound transaction with it. One instance syncs per
+process: `startBackend()` starts it the moment the server starts, since a sync can take
+minutes, a `finalize` that arrives mid-sync waits on that start, and an instance that was never
+started refuses to finalise. Next.js evaluates the request graph separately, and its backend
+never starts the wallet, so the one started from instrumentation is the one the process uses.
+The wallet's public keys go into every permissionless circuit call it will later balance. The
+wallet must hold NIGHT registered for DUST on the configured network; on the local stack it is
+one of the wallets the stack's test harness funded.
+
+### Vault circuits and ledger
+
+`src/lib/midnight/ethereum-erc20-vault/vault-circuits.ts` is the port that builds the vault's
+circuit calls as unproven transactions in hex, one method per circuit a deposit needs
+(`startDeposit`, `completeDeposit`, `sendDeposit`, `queueAttestation`). Its implementation
+binds the vault's generated contract to the prover keys under
+`zk-assets/ethereum-erc20-vault/` with compact-js and builds each call with midnight-js's
+`createUnprovenCallTx`, under a private state provider that lives for that one call
+(`src/lib/midnight/private-state-provider-memory-impl.ts`): the caller's secret is the witness
+of the two user circuits, and the permissionless ones prove under a random secret with the
+relayer's wallet keys. The call builder reads the wallet's public keys for every circuit, so
+both user circuits take them as arguments.
+
+`vault-ledger.ts` is the read port over the vault contract's public state through the indexer,
+and `requestStage()` beside it is the pure function that places a request on the vault's
+pipeline (`queued`, `flushed`, `sent`, `attestationQueued`, `attestationFlushed`, `settled`)
+from the six ledger maps it reads. Every chain step the backend takes is read back from there,
+never inferred from its own transaction's outcome.
 
 ### Proving keys
 

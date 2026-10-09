@@ -211,18 +211,18 @@ grouped by the first stage that needs them.
 
 Stage 0:
 
-- [ ] R1. Which seed wallets the local stack funds with NIGHT and dust, and how to fund one more.
+- [x] R1. Which seed wallets the local stack funds with NIGHT and dust, and how to fund one more.
       Needed for `MIDNIGHT_RELAYER_SEED` (backend) and `MIDNIGHT_USER_SEED` (the test's user).
       Look in the stack's compose and env in `midnight-examples-align-with-protocol-spec` (named
       at the top of `.env.local`) and in the prep repository's `integration-tests/src/setup.ts`.
-- [ ] R2. Whether `EVM_RPC_URL` is anvil with cheatcodes (`anvil_setBalance`,
+- [x] R2. Whether `EVM_RPC_URL` is anvil with cheatcodes (`anvil_setBalance`,
       `anvil_setStorageAt`). Ask the node for its client version:
 
 ```bash
 curl -s -X POST "$EVM_RPC_URL" -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"web3_clientVersion","params":[]}'
 ```
 
-- [ ] R3. Which ERC20 the deployed vault allows: read `allowedTokens` with `readVaultLedger`
+- [x] R3. Which ERC20 the deployed vault allows: read `allowedTokens` with `readVaultLedger`
       through a throwaway script run as below. Expect `CIRCLE_USDC`. The prep repository's
       `fork-funding.ts` finds the USDC balance slot by probing `anvil_setStorageAt`, copy that.
 
@@ -230,35 +230,35 @@ curl -s -X POST "$EVM_RPC_URL" -H 'content-type: application/json' -d '{"jsonrpc
 NODE_OPTIONS=--conditions=react-server node_modules/.bin/tsx <script>
 ```
 
-- [ ] R4. Whether an MPC is answering the singleton on this stack and which output source it
+- [x] R4. Whether an MPC is answering the singleton on this stack and which output source it
       serves: `RESPOND_OUTPUT_SOURCE` and `MPC_OUTPUT_CACHE_URL` in the stack's env, and whether
       the fork serves `debug_traceTransaction` (`assertDebugTraceAvailable` in the prep
       repository's `observed-execution.ts` shows the probe).
-- [ ] R5. The gas constants the prep repository uses for a deposit
+- [x] R5. The gas constants the prep repository uses for a deposit
       (`ERC20_TRANSFER_GAS_LIMIT`, `ERC20_TRANSFER_MAX_FEE_PER_GAS`,
       `ERC20_TRANSFER_MAX_PRIORITY_FEE_PER_GAS` in `integration-tests/src/flows/start-deposit.ts`
       or its imports) and their rationale, so the deposit service assigns the same envelope.
 
 Stage 2:
 
-- [ ] R6. That `createUnprovenCallTx(...).private.unprovenTx.serialize()` yields bytes our
+- [x] R6. That `createUnprovenCallTx(...).private.unprovenTx.serialize()` yields bytes our
       `TransactionLedger.prove` accepts (it deserialises with the markers `'signature'`,
       `'pre-proof'`, `'pre-binding'`). Prove it with a throwaway script building a `startDeposit`
       call and proving it through the running proof server.
-- [ ] R7. The minimal `PrivateStateProvider` an in-memory implementation must satisfy (members
+- [x] R7. The minimal `PrivateStateProvider` an in-memory implementation must satisfy (members
       in `node_modules/@midnight-ntwrk/midnight-js-types/dist/index.d.ts` around line 627:
       `setContractAddress`, `get`, `set`, `remove`, `clear`, signing-key methods, export and
       import). Decide between a tiny in-memory class and
       `@midnight-ntwrk/midnight-js-level-private-state-provider`. In-memory is preferred: the
       vault's private state is only the caller secret, which the server never persists.
-- [ ] R8. Whether `nodeZkConfigRegistry(root)` (already used for the proof provider) satisfies the
+- [x] R8. Whether `nodeZkConfigRegistry(root)` (already used for the proof provider) satisfies the
       `zkConfigProvider` slot `createUnprovenCallTx` and `flushPending` expect, or whether a
       `NodeZkConfigProvider<VaultCircuitId>` over `zk-assets/ethereum-erc20-vault` is needed
       beside it.
-- [ ] R9. Whether `createUnprovenCallTx` needs a real `walletProvider` for `startDeposit` (no
+- [x] R9. Whether `createUnprovenCallTx` needs a real `walletProvider` for `startDeposit` (no
       mint) or only for `completeDeposit` (mints to `ownPublicKey()`). Decides whether
       `startDeposit` must take the wallet's public keys too.
-- [ ] R10. How `makeCompiledContract(name, Contract, witnesses, zkAssetsPath)` from
+- [x] R10. How `makeCompiledContract(name, Contract, witnesses, zkAssetsPath)` from
       `@sig-net/midnight-contract-deploy` binds assets, and whether pointing it at
       `zk-assets/ethereum-erc20-vault` works with the layout `yarn zk-assets` produces (`keys/`
       and `zkir/` under that directory). Fallback: build the `CompiledContract` with
@@ -276,24 +276,24 @@ Stage 4:
 
 ## Stage 0: dependencies, configuration and environment
 
-- [ ] Add dependencies, each with the consumer that imports it:
+- [x] Add dependencies, each with the consumer that imports it:
       `@midnight-ntwrk/midnight-js-indexer-public-data-provider@5.0.0-beta.6` (the vault ledger
-      port and the signet reader), `@sig-net/midnight-contract-deploy@0.24.0` (compiled-contract
-      binding, pending R10), `ethers` as a direct dependency at the version `@sig-net/midnight`
-      resolves (EVM broadcast and funding).
-- [ ] Add config modules under `src/lib/config`, following `midnight-prover-config.ts`: - `midnight-relayer-config.ts`: `MIDNIGHT_RELAYER_SEED` (hex), server-only. - `midnight-respond-output-config.ts`: `RESPOND_OUTPUT_SOURCE` (`evm-node` | `mpc-cache`,
+      port and the signet reader), `@midnight-ntwrk/compact-js@2.5.5-rc.7` (the compiled-contract
+      binding, see R10 in the findings log), `ethers@^6.17.0` as a direct dependency (EVM
+      broadcast and funding, consumed from Stage 3).
+- [x] Add config modules under `src/lib/config`, following `midnight-prover-config.ts`: - `midnight-relayer-config.ts`: `MIDNIGHT_RELAYER_SEED` (hex), server-only. - `midnight-respond-output-config.ts`: `RESPOND_OUTPUT_SOURCE` (`evm-node` | `mpc-cache`,
       default `evm-node`) and optional `MPC_OUTPUT_CACHE_URL`, server-only. - Add both to `ServerOnlyConfig` in `server-config.ts` and to `.env.example` with the
       comment style used there.
-- [ ] Add `MIDNIGHT_USER_SEED` to `.env.local` for the integration test only (the test reads it
+- [x] Add `MIDNIGHT_USER_SEED` to `.env.local` for the integration test only (the test reads it
       from `process.env` after `integration-tests/setup.ts` loads the file). Document it in
       `.env.example` under a "tests" comment.
-- [ ] Fund the relayer and user wallets per R1, fund nothing on the EVM yet (the test does that
+- [x] Fund the relayer and user wallets per R1, fund nothing on the EVM yet (the test does that
       per deposit).
 
 Verification:
 
-- [ ] `yarn install` leaves the lockfile consistent and `yarn check` passes.
-- [ ] A throwaway script reads the vault ledger through the new public data provider and prints
+- [x] `yarn install` leaves the lockfile consistent and `yarn check` passes.
+- [x] A throwaway script reads the vault ledger through the new public data provider and prints
       `initialised`, `allowedTokens` and `globalLastSeen` (R3).
 
 ## Stage 1: Midnight transaction additions
@@ -301,7 +301,7 @@ Verification:
 Files: `src/lib/midnight/transaction-v1/transaction.ts`, `transaction-state-controller.ts`,
 `transaction-state-resolver-impl.ts`, `src/lib/db/schema.ts`, a migration, the tests beside them.
 
-- [ ] Add `signer` to the resource and the table:
+- [x] Add `signer` to the resource and the table:
 
 ```ts
 export const MIDNIGHT_TRANSACTION_SIGNERS = ['caller', 'relayer'] as const
@@ -313,7 +313,7 @@ export const MIDNIGHT_TRANSACTION_SIGNERS = ['caller', 'relayer'] as const
       SQL or delete the test rows first. `drizzle-kit migrate` swallows SQL errors, so confirm
       with `docker compose exec -T postgres psql -U demo -d demo -c '\d midnight_transactions_v1'`.
 
-- [ ] Put the parent in the lifecycle events so a parent's consumer can match without a read:
+- [x] Put the parent in the lifecycle events so a parent's consumer can match without a read:
 
 ```ts
 export const transactionEventDataSchema = z.object({
@@ -323,7 +323,7 @@ export const transactionEventDataSchema = z.object({
 // controller-impl publishEntered: TRANSACTION_EVENT_BY_STATE[state].create(name, { name, parent })
 ```
 
-- [ ] Add a `RelayerWallet` port beside the ledger port, `transaction-relayer-wallet.ts`:
+- [x] Add a `RelayerWallet` port, `src/lib/midnight/wallet/relayer-wallet.ts` (a backend-wide capability, not part of the versioned transaction resource):
 
 ```ts
 /** The backend's own wallet, which finalises relayer-signed transactions. */
@@ -333,7 +333,7 @@ export interface RelayerWallet {
 }
 ```
 
-- [ ] Resolver: `AwaitingWallet` gains one branch. The caller's transaction stays the browser's
+- [x] Resolver: `AwaitingWallet` gains one branch. The caller's transaction stays the browser's
       to-do. The relayer's is finalised here and handed to the existing `submitTransaction`
       transition, so the state table does not change:
 
@@ -347,7 +347,7 @@ private async resolveAwaitingWallet({ name, signer, unboundTx }: MidnightTransac
 }
 ```
 
-- [ ] A `TransactionService` for the user's side, `transaction-service.ts` and impl, adaptor and
+- [x] A `TransactionService` for the user's side, `transaction-service.ts` and impl, adaptor and
       action, in the one shape every service has:
 
 ```ts
@@ -363,24 +363,24 @@ export interface TransactionService {
 // Ownership: resourceOwnedByCaller(name, caller) on every method, and the adaptor's submit runs in runInTransaction.
 ```
 
-- [ ] Update `transaction-fixtures.ts` and the four unit test files for the new field and the new
+- [x] Update `transaction-fixtures.ts` and the four unit test files for the new field and the new
       branch (a relayer transaction in `AwaitingWallet` is finalised and submitted, a caller one
       is left alone, a finalise failure propagates).
 
 Verification:
 
-- [ ] `yarn db:generate`, `yarn db:migrate`, `\d midnight_transactions_v1` shows `signer`.
-- [ ] `yarn check` passes, `yarn test:integration` passes (the resolve test now commits with
+- [x] `yarn db:generate`, `yarn db:migrate`, `\d midnight_transactions_v1` shows `signer`.
+- [x] `yarn check` passes, `yarn test:integration` passes (the resolve test now commits with
       `signer: 'caller'`).
 
 ## Stage 2: the relayer wallet, providers and circuits
 
-Files: `src/lib/midnight/relayer/relayer-wallet-seed-impl.ts` (implements the Stage 1 port),
+Files: `src/lib/midnight/wallet/relayer-wallet-seed-impl.ts` (implements the Stage 1 port),
 `src/lib/midnight/ethereum-erc20-vault/vault-providers.ts`, `vault-circuits.ts` and
 `vault-circuits-midnight-js-impl.ts`, `vault-ledger.ts` and `vault-ledger-indexer-impl.ts`,
 `src/lib/midnight/private-state/in-memory-private-state-provider.ts`.
 
-- [ ] `RelayerWalletSeedImpl` reuses the facade module, not the browser `SeedWallet` class:
+- [x] `RelayerWalletSeedImpl` reuses the facade module, not the browser `SeedWallet` class:
 
 ```ts
 export class RelayerWalletSeedImpl implements RelayerWallet {
@@ -419,7 +419,7 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
       `@midnight-ntwrk/midnight-js-types`, the facade file already types it. `setNetworkId` is
       process-global and midnight-js reads it: call it once in `createBackend`.
 
-- [ ] `vault-providers.ts` assembles the `VaultProviders` set the SDK calls take, from parts the
+- [x] (folded into the composition root, see the findings log) `vault-providers.ts` assembles the `VaultProviders` set the SDK calls take, from parts the
       backend already owns plus the new ones:
 
 ```ts
@@ -432,7 +432,7 @@ export function vaultProviders(parts: {
 }): VaultProviders
 ```
 
-- [ ] `vault-circuits.ts` is the port that builds unproven calls as hex, one method per circuit
+- [x] `vault-circuits.ts` is the port that builds unproven calls as hex, one method per circuit
       the deposit needs, each `createCallTxOptions` + `createUnprovenCallTx` + serialise:
 
 ```ts
@@ -471,7 +471,7 @@ export interface WalletPublicKeys {
       calls and a stub returning the user's keys for the user's calls (R9). The result is
       `bytesToHex(call.private.unprovenTx.serialize())` (R6).
 
-- [ ] `vault-ledger.ts` is the read port, one method, and a pure stage function beside it:
+- [x] `vault-ledger.ts` is the read port, one method, and a pure stage function beside it:
 
 ```ts
 export interface VaultLedger {
@@ -520,18 +520,18 @@ export function requestStage(
       linear scan. The generated map types are classes with `member`/`lookup`/iterator, so the
       unit test builds a small fake satisfying that shape.
 
-- [ ] `in-memory-private-state-provider.ts`: the minimal `PrivateStateProvider` (R7), a `Map`
+- [x] (named `private-state-provider-memory-impl.ts`) `in-memory-private-state-provider.ts`: the minimal `PrivateStateProvider` (R7), a `Map`
       keyed by contract address and private state id. Place it under `src/lib/midnight/` since
       every contract will use it.
 
 Verification:
 
-- [ ] A throwaway script builds a `startDeposit` unproven call for a random secret, proves it
+- [x] A throwaway script builds a `startDeposit` unproven call for a random secret, proves it
       through the proof server with `TransactionLedgerMidnightImpl.prove`, and prints the unbound
       length (R6, R8, R9, R10 resolved and logged).
-- [ ] Unit tests: `requestStage` over every stage with fake ledger states, `VaultCircuits` is not
+- [x] Unit tests: `requestStage` over every stage with fake ledger states, `VaultCircuits` is not
       unit tested (it is a thin wrapper over the SDK, covered by the integration test).
-- [ ] `yarn check` passes.
+- [x] `yarn check` passes.
 
 ## Stage 3: the Ethereum transaction entity
 
@@ -1122,13 +1122,76 @@ the command, file or test that established it.
 
 - 2026-10-09, R2: `EVM_RPC_URL` in `.env.local` answers `web3_clientVersion` with
   `anvil/v1.5.1`, so the anvil cheatcodes are available for funding the deposit account.
-  Established by the curl command quoted under R2. The R2 box stays unticked until the
-  `anvil_setStorageAt` probe for the USDC balance slot (R3) also runs.
+  Established by the curl command quoted under R2.
+- 2026-10-09, stack: the running stack is the prep repository's `docker-compose.yaml`
+  (`midnight-examples-fullstack-demo-prep`), not the repository `.env.local` used to name. Its
+  `.env` is the source of the contract values, and the vault had been redeployed since
+  `.env.local` was written: the signet address, the vault address and the MPC public key were
+  all stale and are now synced. When a ledger read fails with "no contract state found", diff
+  `.env.local` against that `.env` first.
+- 2026-10-09, R1: the stack's test harness funds four role wallets from the genesis wallet
+  (`DEPLOYER_SEED`, `USER_SEED`, `MPC_RESPONDER_SEED`, `BEARER_SEED` in the prep `.env`).
+  `MIDNIGHT_RELAYER_SEED` is the bearer's seed and `MIDNIGHT_USER_SEED` the user's. The
+  responder's seed is the fakenet MPC's own wallet and must not be reused.
+- 2026-10-09, R3: the deployed vault allows Aave USDC, Circle USDC (`CIRCLE_USDC`) and Circle
+  EURC; `initialised` is true. Read through `readVaultLedger` over
+  `indexerPublicDataProvider`.
+- 2026-10-09, R4: the MPC is the `fakenet-responder` container (`ghcr.io/sig-net/fakenet`)
+  with no output cache configured, so the output source is `evm-node`. The fork answers
+  `debug_traceTransaction` (a probe with a zero hash returns "resource not found", not
+  "method not found").
+- 2026-10-09, R5: the prep repository's deposit envelope is gas limit 100 000, max fee 30 gwei,
+  priority fee 1 gwei (`integration-tests/src/evm-transfer.ts`). The deposit service assigns
+  the same.
+- 2026-10-09, R6: `createUnprovenCallTx(...).private.unprovenTx.serialize()` is accepted by
+  `TransactionLedgerMidnightImpl.prove` (3144 hex chars in, 9430 out, under a second on a warm
+  proof server), and `RelayerWalletSeedImpl.finalize` balances the result (15964 hex chars).
+  Both proved by a script run as `NODE_OPTIONS=--conditions=react-server node_modules/.bin/tsx
+--env-file=.env.local <script>.mts` from a gitignored folder inside the project (a script
+  outside the project cannot resolve `node_modules`, and `.ts` outside it is treated as
+  CommonJS).
+- 2026-10-09, R7: `PrivateStateProvider` has thirteen members (state get, set, remove, clear,
+  signing-key get, set, remove, clear, and export and import of states and keys). The in-memory
+  implementation refuses the four export and import methods. `SigningKey` and
+  `ContractAddress` are not exported by `@midnight-ntwrk/midnight-js/types`, so both are derived
+  from the interface's own method parameters.
+- 2026-10-09, R8: `nodeZkConfigRegistry` returns a `ZKConfigRegistry`, which is not a
+  `ZKConfigProvider<K>`, so the call builder gets its own
+  `NodeZkConfigProvider<VaultCircuitId>` over `zk-assets/ethereum-erc20-vault/` and the proof
+  provider keeps the registry.
+- 2026-10-09, R9: the call builder reads the wallet provider's coin and encryption public keys
+  for `startDeposit` too (two calls observed), so both user circuits take the wallet's public
+  keys as arguments and the permissionless ones use the relayer's.
+- 2026-10-09, R10: `makeCompiledContract` in `@sig-net/midnight-contract-deploy` is three
+  compact-js calls (`CompiledContract.make`, `withWitnesses`, `withCompiledFileAssets`), and
+  that package drags the wallet SDK and effect platform in. The binding is written here with
+  `@midnight-ntwrk/compact-js` directly, over `zk-assets/ethereum-erc20-vault/`, which holds
+  `keys/`, `zkir/` and `compiler/` exactly as the package's managed directory does.
+- 2026-10-09, decision: no `vault-providers.ts`. Assembling a provider set is construction, so
+  the composition root builds the public data provider and the zk config provider and passes
+  them in. Stage 5's `flushPending` needs a full `VaultProviders` set with the relayer's wallet
+  and midnight provider slots: `RelayerWalletSeedImpl.provider()` returns both.
+- 2026-10-09, decision (review): the relayer wallet lives under `src/lib/midnight/wallet/` as
+  a backend-wide capability, and `startBackend()` starts it at once, since a sync can take
+  minutes. One instance syncs per process by construction: Next evaluates the request graph
+  separately and its backend never starts the wallet, while sharing one instance across graphs
+  through `globalThis` would hand ledger objects between two copies of the wasm module.
+  `finalize` on an unstarted instance throws, and the integration test's `backend.start()`
+  (Stage 7) starts it the same way.
 - 2026-10-09, decision: the stale attestation refusal (`Stale attestation` in the contract's
   `recordAttestation`) is not modelled as a failure state on the vault request or the deposit.
   It is reachable only by starting a request with a nonce an earlier sweep of the same deposit
   account consumed, and this backend assigns that nonce, so the deposit service keeps it
   unreachable and the vault request resolver treats it as a logged invariant violation.
+- 2026-10-09, lesson: adding `parent` to the transaction event data broke the events already
+  on the local Kafka topic. The consumer throws on data the schema rejects, as the rules
+  require, and the hub then restarts on the same uncommitted record forever, so one stale
+  record stalls every consumer. The stale records were skipped by resetting the group to the
+  log end with the server stopped:
+  `docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server
+localhost:9092 --group full-stack-demo.events --topic full-stack-demo.events --reset-offsets
+--to-latest --execute`. A change to an event's data shape is a change to events in flight:
+  from here on, add fields as optional or publish under a new event type.
 - 2026-10-09, tooling: `yarn vitest run --config vitest.integration.config.ts <file>` runs one
   integration file, and `docker compose exec -T postgres psql -U demo -d demo -c '\dt'` reaches
   the database. Both were run before being quoted in this plan.

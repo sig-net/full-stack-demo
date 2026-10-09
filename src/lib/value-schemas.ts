@@ -12,6 +12,12 @@ export const evmAddressSchema = z
   .regex(/^0x[0-9a-fA-F]{40}$/, 'expected an EVM address')
   .transform((value) => value.toLowerCase())
 
+/** Bytes in hex, any length, stored without a `0x` prefix in lower case. */
+export const hexBytesSchema = z
+  .string()
+  .regex(/^(?:0x)?(?:[0-9a-fA-F]{2})*$/, 'expected bytes in hex')
+  .transform((value) => value.replace(/^0x/i, '').toLowerCase())
+
 export const UINT64_MAX = 2n ** 64n - 1n
 export const UINT128_MAX = 2n ** 128n - 1n
 

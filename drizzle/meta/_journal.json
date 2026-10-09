@@ -64,6 +64,13 @@
       "when": 1791538529785,
       "tag": "0008_transaction_failure_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791551085015,
+      "tag": "0009_transaction_signer",
+      "breakpoints": true
     }
   ]
 }

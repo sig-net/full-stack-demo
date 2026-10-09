@@ -51,7 +51,17 @@ export const midnightTransactionFailureSchema = z.enum(MIDNIGHT_TRANSACTION_FAIL
 export type MidnightTransactionFailure = z.infer<typeof midnightTransactionFailureSchema>
 
 /**
- * One attempt to put one circuit call on the Midnight chain through the caller's wallet. A
+ * Whose wallet balances, signs and pays: the caller's browser wallet, or the backend's relayer
+ * wallet for a permissionless circuit. `AwaitingWallet` is that wallet's to-do.
+ */
+export const MIDNIGHT_TRANSACTION_SIGNERS = ['caller', 'relayer'] as const
+
+export const midnightTransactionSignerSchema = z.enum(MIDNIGHT_TRANSACTION_SIGNERS)
+
+export type MidnightTransactionSigner = z.infer<typeof midnightTransactionSignerSchema>
+
+/**
+ * One attempt to put one circuit call on the Midnight chain through the signer's wallet. A
  * resource that needs a call on chain owns a sequence of these, at most one of them live. The
  * transaction bytes are hex in the ledger's serialisation, each null until the step that
  * produces it has run.
@@ -63,6 +73,7 @@ export const midnightTransactionSchema = z.object({
   state: midnightTransactionStateSchema,
   /** The circuit the transaction calls, as the contract names it. */
   circuit: z.string().min(1),
+  signer: midnightTransactionSignerSchema,
   /** Built with the witness values and embedding the private transcript, null once proven. */
   unprovenTx: z.string().nullable(),
   /** Proven and unbalanced, what the wallet balances and signs. */

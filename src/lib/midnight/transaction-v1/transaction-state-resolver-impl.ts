@@ -13,22 +13,26 @@ import type {
   ResolveTransactionArgs,
   TransactionStateResolver,
 } from '@/lib/midnight/transaction-v1/transaction-state-resolver'
+import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
 
 export class TransactionStateResolverImpl implements TransactionStateResolver {
   private readonly transactionRepository: MidnightTransactionRepository
   private readonly stateController: TransactionStateController
   private readonly ledger: TransactionLedger
+  private readonly relayerWallet: RelayerWallet
   private readonly unitOfWork: UnitOfWork
 
   constructor(
     transactionRepository: MidnightTransactionRepository,
     stateController: TransactionStateController,
     ledger: TransactionLedger,
+    relayerWallet: RelayerWallet,
     unitOfWork: UnitOfWork,
   ) {
     this.transactionRepository = transactionRepository
     this.stateController = stateController
     this.ledger = ledger
+    this.relayerWallet = relayerWallet
     this.unitOfWork = unitOfWork
   }
 
@@ -46,11 +50,12 @@ export class TransactionStateResolverImpl implements TransactionStateResolver {
     switch (transaction.state) {
       case 'AwaitingProof':
         return this.resolveAwaitingProof(transaction)
+      case 'AwaitingWallet':
+        return this.resolveAwaitingWallet(transaction)
       case 'AwaitingSubmission':
         return this.resolveAwaitingSubmission(transaction)
       case 'AwaitingInclusion':
         return this.resolveAwaitingInclusion(transaction)
-      case 'AwaitingWallet':
       case 'Succeeded':
       case 'Failed':
         return
@@ -72,6 +77,17 @@ export class TransactionStateResolverImpl implements TransactionStateResolver {
       )
     }
     return this.write(() => this.stateController.recordProof({ name, unboundTx }))
+  }
+
+  /** A caller transaction is the browser wallet's to-do; a relayer transaction is finalised here. */
+  private async resolveAwaitingWallet({
+    name,
+    signer,
+    unboundTx,
+  }: MidnightTransaction): Promise<void> {
+    if (signer === 'caller' || unboundTx === null) return
+    const finalizedTx = await this.relayerWallet.finalize(unboundTx)
+    return this.write(() => this.stateController.submitTransaction({ name, finalizedTx }))
   }
 
   private async resolveAwaitingSubmission({

@@ -23,6 +23,8 @@ const BACKEND_SUFFIXES = [
   '-state-resolver.ts',
   '-event-consumer.ts',
   '-ledger.ts',
+  '-circuits.ts',
+  'relayer-wallet.ts',
   '-adaptor.ts',
   '-fixtures.ts',
 ]

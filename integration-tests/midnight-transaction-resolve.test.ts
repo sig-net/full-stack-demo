@@ -44,6 +44,7 @@ describe('TransactionStateResolver over Postgres and the proof server', () => {
           parent,
           state: 'AwaitingProof',
           circuit: 'startDeposit',
+          signer: 'caller',
           unprovenTx: Buffer.from(Transaction.fromParts(networkId).serialize()).toString('hex'),
           unboundTx: null,
           finalizedTx: null,

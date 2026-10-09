@@ -114,6 +114,7 @@ export class TransactionStateControllerImpl implements TransactionStateControlle
     return this.eventPublisher.publishEvent(
       TRANSACTION_EVENT_BY_STATE[transaction.state].create(transaction.name, {
         name: transaction.name,
+        parent: transaction.parent,
       }),
     )
   }

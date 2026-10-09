@@ -20,6 +20,12 @@ export interface WalletMetadata {
 /** SDK signing and submission capabilities supplied by a connected wallet. */
 export type WalletTransactions = MidnightProvider & WalletProvider
 
+/** The public keys of the wallet that balances a call and receives anything it mints. */
+export interface WalletPublicKeys {
+  readonly coinPublicKey: string
+  readonly encryptionPublicKey: string
+}
+
 /** Public derivation results only. Availability does not establish wallet or balance readiness. */
 export interface WalletAddressSnapshot {
   readonly networkId: MidnightNetworkId

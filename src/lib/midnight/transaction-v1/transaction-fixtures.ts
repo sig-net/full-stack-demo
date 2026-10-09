@@ -9,6 +9,7 @@ export function transactionFixture(
     parent: DEPOSIT_NAME,
     state: 'AwaitingProof',
     circuit: 'completeDeposit',
+    signer: 'caller',
     unprovenTx: 'unproven',
     unboundTx: null,
     finalizedTx: null,

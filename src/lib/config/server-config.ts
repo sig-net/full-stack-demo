@@ -15,6 +15,16 @@ import {
   midnightProverEnvSchema,
 } from '@/lib/config/midnight-prover-config'
 import {
+  type MidnightRelayerConfig,
+  midnightRelayerConfigFromEnv,
+  midnightRelayerEnvSchema,
+} from '@/lib/config/midnight-relayer-config'
+import {
+  type MidnightRespondOutputConfig,
+  midnightRespondOutputConfigFromEnv,
+  midnightRespondOutputEnvSchema,
+} from '@/lib/config/midnight-respond-output-config'
+import {
   midnightSignetConfigFromEnv,
   midnightSignetEnvSchema,
 } from '@/lib/config/midnight-signet-config'
@@ -27,6 +37,8 @@ export interface ServerOnlyConfig {
   readonly dbConnectionString: string
   readonly kafka: KafkaConfig
   readonly midnightProver: MidnightProverConfig
+  readonly midnightRelayer: MidnightRelayerConfig
+  readonly midnightRespondOutput: MidnightRespondOutputConfig
 }
 
 export interface ServerConfig {
@@ -38,6 +50,8 @@ const envSchema = z.object({
   DB_CONNECTION_STRING: z.string().min(1),
   ...kafkaEnvSchema.shape,
   ...midnightProverEnvSchema.shape,
+  ...midnightRelayerEnvSchema.shape,
+  ...midnightRespondOutputEnvSchema.shape,
   ...midnightNetworkEnvSchema.shape,
   ...midnightSignetEnvSchema.shape,
   ...midnightEthereumErc20VaultEnvSchema.shape,
@@ -56,6 +70,8 @@ async function loadServerConfig(): Promise<ServerConfig> {
       dbConnectionString: env.DB_CONNECTION_STRING,
       kafka: kafkaConfigFromEnv(env),
       midnightProver: midnightProverConfigFromEnv(env),
+      midnightRelayer: midnightRelayerConfigFromEnv(env),
+      midnightRespondOutput: midnightRespondOutputConfigFromEnv(env),
     },
     client: {
       midnightNetwork,

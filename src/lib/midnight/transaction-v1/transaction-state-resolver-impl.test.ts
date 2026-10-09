@@ -17,6 +17,7 @@ import {
   type TransactionStateController,
 } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { TransactionStateResolverImpl } from '@/lib/midnight/transaction-v1/transaction-state-resolver-impl'
+import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
 import { mock } from '@/lib/testing/mock'
 
 /** Which controller method a resolve ended in, with its args. */
@@ -26,9 +27,11 @@ interface Case {
   name: string
   stored: MidnightTransaction | undefined
   ledger: Partial<TransactionLedger>
+  relayerWallet?: Partial<RelayerWallet>
   controller?: (transitions: Transition[]) => Partial<TransactionStateController>
   expectTransitions: Transition[]
   expectWrites?: number
+  expectError?: string
 }
 
 const EXPIRED = new Date('2000-01-01T00:00:00Z')
@@ -70,10 +73,34 @@ const cases: Case[] = [
     expectWrites: 1,
   },
   {
-    name: 'AwaitingWallet - nothing to do, the user holds the next step',
+    name: 'AwaitingWallet - a caller transaction is left for the browser wallet',
     stored: TRANSACTION_IN_STATE.AwaitingWallet,
     ledger: {},
     expectTransitions: [],
+  },
+  {
+    name: 'AwaitingWallet - a relayer transaction is finalised by the relayer wallet and submitted',
+    stored: { ...TRANSACTION_IN_STATE.AwaitingWallet, signer: 'relayer' },
+    ledger: {},
+    relayerWallet: { finalize: async (unboundTx) => `finalized(${unboundTx})` },
+    expectTransitions: [
+      {
+        method: 'submitTransaction',
+        args: { name: TRANSACTION_NAME, finalizedTx: 'finalized(unbound)' },
+      },
+    ],
+  },
+  {
+    name: 'AwaitingWallet - the relayer wallet fails, so nothing is recorded and the error surfaces',
+    stored: { ...TRANSACTION_IN_STATE.AwaitingWallet, signer: 'relayer' },
+    ledger: {},
+    relayerWallet: {
+      finalize: async () => {
+        throw new Error('wallet not synced')
+      },
+    },
+    expectTransitions: [],
+    expectError: 'wallet not synced',
   },
   {
     name: 'AwaitingSubmission - submits and records the id the node returned',
@@ -150,7 +177,15 @@ const cases: Case[] = [
 describe('TransactionStateResolverImpl.resolveTransaction', () => {
   test.each(cases)(
     '$name',
-    async ({ stored, ledger, controller, expectTransitions, expectWrites }) => {
+    async ({
+      stored,
+      ledger,
+      relayerWallet,
+      controller,
+      expectTransitions,
+      expectWrites,
+      expectError,
+    }) => {
       const transitions: Transition[] = []
       let writes = 0
       const recording = (method: string) => async (args: object) => {
@@ -170,10 +205,12 @@ describe('TransactionStateResolverImpl.resolveTransaction', () => {
           recordSubmission: recording('recordSubmission'),
           recordRejection: recording('recordRejection'),
           recordSuccess: recording('recordSuccess'),
+          submitTransaction: recording('submitTransaction'),
           expireTransaction: recording('expireTransaction'),
           ...controller?.(transitions),
         }),
         mock<TransactionLedger>('TransactionLedger', ledger),
+        mock<RelayerWallet>('RelayerWallet', relayerWallet),
         mock<UnitOfWork>('UnitOfWork', {
           runInTransaction: (work) => {
             writes += 1
@@ -181,7 +218,9 @@ describe('TransactionStateResolverImpl.resolveTransaction', () => {
           },
         }),
       )
-      await resolver.resolveTransaction({ name: TRANSACTION_NAME })
+      const resolving = resolver.resolveTransaction({ name: TRANSACTION_NAME })
+      if (expectError === undefined) await resolving
+      else await expect(resolving).rejects.toThrow(expectError)
       expect(transitions).toEqual(expectTransitions)
       expect(writes).toBe(expectWrites ?? expectTransitions.length)
     },

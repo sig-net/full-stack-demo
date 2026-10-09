@@ -4,6 +4,7 @@ import type { Event } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
 import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
 import {
+  DEPOSIT_NAME,
   TRANSACTION_IN_STATE,
   TRANSACTION_NAME,
   transactionFixture,
@@ -82,7 +83,7 @@ describe('TransactionStateControllerImpl.commitTransaction', () => {
         expect(calls.published[0]).toMatchObject({
           type: TRANSACTION_EVENT_BY_STATE.AwaitingProof.type,
           key: TRANSACTION_NAME,
-          data: { name: TRANSACTION_NAME },
+          data: { name: TRANSACTION_NAME, parent: DEPOSIT_NAME },
         })
       },
     },
@@ -229,7 +230,7 @@ describe('TransactionStateControllerImpl transitions', () => {
       expect(calls.published[0]).toMatchObject({
         type: TRANSACTION_EVENT_BY_STATE[to].type,
         key: TRANSACTION_NAME,
-        data: { name: TRANSACTION_NAME },
+        data: { name: TRANSACTION_NAME, parent: DEPOSIT_NAME },
       })
     },
   )

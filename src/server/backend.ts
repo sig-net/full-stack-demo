@@ -1,7 +1,15 @@
 import 'server-only'
 
+import { setNetworkId } from '@midnight-ntwrk/midnight-js/network-id'
+import type { PublicDataProvider } from '@midnight-ntwrk/midnight-js/types'
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider'
-import { nodeZkConfigRegistry } from '@midnight-ntwrk/midnight-js-node-zk-config-provider'
+import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider'
+import {
+  nodeZkConfigRegistry,
+  NodeZkConfigProvider,
+} from '@midnight-ntwrk/midnight-js-node-zk-config-provider'
+import type { VaultCircuitId } from '@sig-net/midnight-examples-erc20-vault-contract'
+import { resolve } from 'node:path'
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
 import type { Pool } from 'pg'
 
@@ -33,15 +41,27 @@ import { DepositServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/depos
 import { DepositServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-impl'
 import type { DepositStateController } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
 import { DepositStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller-impl'
+import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import {
+  compiledVaultContract,
+  VaultCircuitsMidnightJsImpl,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-circuits-midnight-js-impl'
+import type { VaultLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
+import { VaultLedgerIndexerImpl } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-indexer-impl'
 import { TransactionEventConsumer } from '@/lib/midnight/transaction-v1/transaction-event-consumer'
 import type { TransactionLedger } from '@/lib/midnight/transaction-v1/transaction-ledger'
 import { TransactionLedgerMidnightImpl } from '@/lib/midnight/transaction-v1/transaction-ledger-midnight-impl'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
+import type { TransactionService } from '@/lib/midnight/transaction-v1/transaction-service'
+import { TransactionServiceAdaptor } from '@/lib/midnight/transaction-v1/transaction-service-adaptor'
+import { TransactionServiceImpl } from '@/lib/midnight/transaction-v1/transaction-service-impl'
 import { MidnightTransactionRepositorySQLImpl } from '@/lib/midnight/transaction-v1/transaction-repository-sql-impl'
 import type { TransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { TransactionStateControllerImpl } from '@/lib/midnight/transaction-v1/transaction-state-controller-impl'
 import type { TransactionStateResolver } from '@/lib/midnight/transaction-v1/transaction-state-resolver'
 import { TransactionStateResolverImpl } from '@/lib/midnight/transaction-v1/transaction-state-resolver-impl'
+import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
+import { RelayerWalletSeedImpl } from '@/lib/midnight/wallet/relayer-wallet-seed-impl'
 
 /**
  * Every long-lived component of the server, grouped as the packages under `src/lib` are. A
@@ -85,14 +105,22 @@ export interface EthereumBackend {
 }
 
 export interface MidnightBackend {
+  /** The backend's own wallet, started once by the start-up; its keys go into the relayer's calls. */
+  readonly relayerWallet: RelayerWallet
+  /** The indexer, as midnight-js reads contract state through it. */
+  readonly publicDataProvider: PublicDataProvider
   readonly transactionV1: {
     readonly repository: MidnightTransactionRepository
     readonly stateController: TransactionStateController
     readonly ledger: TransactionLedger
     readonly stateResolver: TransactionStateResolver
     readonly eventConsumer: TransactionEventConsumer
+    readonly service: TransactionService
+    readonly adaptor: TransactionServiceAdaptor
   }
   readonly ethereumErc20Vault: {
+    readonly circuits: VaultCircuits
+    readonly ledger: VaultLedger
     readonly depositV1: {
       readonly repository: DepositRepository
       readonly stateController: DepositStateController
@@ -112,6 +140,8 @@ export const getBackend: () => Promise<Backend> = lazySingleton(async () =>
 
 /** Builds the packages in dependency order. Nothing here connects until first use. */
 export function createBackend(config: ServerConfig): Backend {
+  // midnight-js reads the network id from process state when it builds a call.
+  setNetworkId(config.client.midnightNetwork.networkId)
   const db = createDb(config)
   const kafka = createKafka(config)
   const event = createEvent(db, kafka)
@@ -151,10 +181,27 @@ function createEthereum(db: DbBackend): EthereumBackend {
 }
 
 function createMidnight(db: DbBackend, event: EventBackend, config: ServerConfig): MidnightBackend {
-  const transactionV1 = createMidnightTransactionV1(db, event, config)
+  const { midnightNetwork } = config.client
+  const relayerWallet = new RelayerWalletSeedImpl(
+    midnightNetwork,
+    config.serverOnly.midnightRelayer.seed,
+  )
+  const publicDataProvider = indexerPublicDataProvider({
+    queryURL: midnightNetwork.indexerURL,
+    subscriptionURL: midnightNetwork.indexerWsURL,
+  })
+  const transactionV1 = createMidnightTransactionV1(db, event, config, relayerWallet)
   return {
+    relayerWallet,
+    publicDataProvider,
     transactionV1,
-    ethereumErc20Vault: { depositV1: createMidnightEthereumErc20VaultDepositV1(db, event) },
+    ethereumErc20Vault: createMidnightEthereumErc20Vault(
+      db,
+      event,
+      config,
+      publicDataProvider,
+      relayerWallet,
+    ),
   }
 }
 
@@ -162,6 +209,7 @@ function createMidnightTransactionV1(
   db: DbBackend,
   event: EventBackend,
   config: ServerConfig,
+  relayerWallet: RelayerWallet,
 ): MidnightBackend['transactionV1'] {
   const { midnightNetwork } = config.client
   const repository = new MidnightTransactionRepositorySQLImpl(db.database)
@@ -184,14 +232,46 @@ function createMidnightTransactionV1(
     repository,
     stateController,
     ledger,
+    relayerWallet,
     db.unitOfWork,
   )
+  const service = new TransactionServiceImpl(repository, stateController)
   return {
     repository,
     stateController,
     ledger,
     stateResolver,
     eventConsumer: new TransactionEventConsumer(stateResolver),
+    service,
+    adaptor: new TransactionServiceAdaptor(service, db.unitOfWork),
+  }
+}
+
+/** The vault's own bundle under the zk-assets root, as `yarn zk-assets` lays it out. */
+const VAULT_ZK_ASSETS_DIRECTORY = 'ethereum-erc20-vault'
+
+function createMidnightEthereumErc20Vault(
+  db: DbBackend,
+  event: EventBackend,
+  config: ServerConfig,
+  publicDataProvider: PublicDataProvider,
+  relayerWallet: RelayerWallet,
+): MidnightBackend['ethereumErc20Vault'] {
+  const vaultAddress = config.client.midnightEthereumErc20Vault.contractAddress
+  const assetsPath = resolve(
+    config.serverOnly.midnightProver.zkAssetsRoot,
+    VAULT_ZK_ASSETS_DIRECTORY,
+  )
+  return {
+    circuits: new VaultCircuitsMidnightJsImpl(
+      publicDataProvider,
+      new NodeZkConfigProvider<VaultCircuitId>(assetsPath),
+      compiledVaultContract(assetsPath),
+      vaultAddress,
+      relayerWallet.publicKeys(),
+    ),
+    ledger: new VaultLedgerIndexerImpl(publicDataProvider, vaultAddress),
+    depositV1: createMidnightEthereumErc20VaultDepositV1(db, event),
   }
 }
 

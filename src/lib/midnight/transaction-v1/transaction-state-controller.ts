@@ -84,7 +84,11 @@ export class TransactionStateConflict extends Error {
   }
 }
 
-export const transactionEventDataSchema = z.object({ name: midnightTransactionNameSchema })
+/** The parent is carried so that the parent's consumer can match on it without a read. */
+export const transactionEventDataSchema = z.object({
+  name: midnightTransactionNameSchema,
+  parent: z.string().min(1),
+})
 
 export type TransactionEventData = z.infer<typeof transactionEventDataSchema>
 
