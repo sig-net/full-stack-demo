@@ -40,6 +40,14 @@ Keep setup instructions and application reference material in README.md and docs
   must work in every consuming runtime. Pass validated immutable configuration into resources.
   Apply related edits atomically and invalidate only affected sessions. Browser input cannot
   redefine server funding authority or privileged configuration.
+- Everything under `src/lib` is inert: classes, functions, schemas and types that take their
+  dependencies as constructor or function arguments. Construction happens once, in
+  `createBackend()` in `src/server/backend.ts`, in dependency order; `getBackend()` memoises it
+  per module graph. No module in `src/lib` exports a `getX()` singleton or imports a sibling
+  implementation to build it. A `'use server'` file may export only async functions, so an action
+  is one line that reaches its adaptor through `getBackend()`, and the adaptor (the class that
+  turns a caller secret and untrusted arguments into a service call and a result) lives in
+  `src/lib` beside its service.
 - Match names to actual responsibilities. Adding a variant reopens sibling and container names.
   Qualify both members when introducing a qualified twin. Moves, deletions and renames require a
   whole-repository search for invalidated names and updates to imports, configuration, manifests,
@@ -58,8 +66,8 @@ Keep setup instructions and application reference material in README.md and docs
   an input never changes a signature.
 - Write boundaries open the transaction, reads never do. An adaptor method that creates, updates
   or starts something, a consumer's `handleEvent`, and an outbox batch each run inside one
-  `runInTransaction()` (`src/lib/db/unit-of-work.ts`), which every repository call on the same
-  async chain joins. A read boundary (`get`, `list`) runs on the plain database: optimistic,
+  `UnitOfWork.runInTransaction()` (`src/lib/db/unit-of-work.ts`), which every repository call
+  on the same async chain joins. A read boundary (`get`, `list`) runs on the plain database: optimistic,
   lock-free, re-checked by the write that acts on it. A transaction wraps one boundary call and
   never a slow external call, and nothing inside one may detach work from the async chain, since
   detached work silently runs outside it. The outbox relay's Kafka send is the one documented
@@ -192,8 +200,10 @@ Keep setup instructions and application reference material in README.md and docs
   gets a folder under it (`src/lib/config/`). `src/components` holds React components,
   `src/components/ui` only what the shadcn CLI writes, `src/components/contexts` React
   contexts, and `src/app` App Router files only (layouts, pages, error and not-found files,
-  route handlers). Do not create new top-level folders under `src` for a feature; the folder
-  name is decided by the kind of code, then the domain.
+  route handlers). `src/server` holds the code that runs: the composition root
+  (`src/server/backend.ts`), the `'use server'` action files under `src/server/actions`, and
+  the start-up that instrumentation calls. Do not create new top-level folders under `src` for a
+  feature; the folder name is decided by the kind of code, then the domain.
 - Split files by ownership, not by export type. A React context, its provider and its accessor
   hook are one unit with one owner and always change together, so they live in one file:
   `src/components/contexts/<Name>Context.tsx` exporting the value type, the provider and the

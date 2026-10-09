@@ -4,23 +4,16 @@ import { drizzle, type NodePgDatabase, type NodePgQueryResultHKT } from 'drizzle
 import type { PgDatabase } from 'drizzle-orm/pg-core'
 import { Pool } from 'pg'
 
-import { getServerConfig } from '@/lib/config/server-config'
-import { lazySingleton } from '@/lib/lazy-singleton'
-
-/** One connection pool serves the whole server process. */
-export const getDatabase: () => Promise<NodePgDatabase> = lazySingleton(async () => {
-  const pool = await getDatabasePool()
+export function createDatabase(pool: Pool): NodePgDatabase {
   return drizzle({ client: pool })
-})
+}
+
+export function createDatabasePool(connectionString: string): Pool {
+  return new Pool({ connectionString })
+}
 
 /**
  * The database itself, or a transaction opened on it: a repository method runs on whichever it is
  * given, so one database transaction can span several repositories.
  */
 export type DatabaseExecutor = PgDatabase<NodePgQueryResultHKT>
-
-/** The pool behind the database, for work that needs a dedicated client such as `LISTEN`. */
-export const getDatabasePool: () => Promise<Pool> = lazySingleton(async () => {
-  const { serverOnly } = await getServerConfig()
-  return new Pool({ connectionString: serverOnly.dbConnectionString })
-})

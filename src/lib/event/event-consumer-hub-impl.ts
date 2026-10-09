@@ -4,15 +4,19 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 import { MessagesStreamFallbackModes, MessagesStreamModes } from '@platformatic/kafka'
 
-import { runInTransaction } from '@/lib/db/unit-of-work'
+import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { type Event, eventSchema, EVENTS_TOPIC } from '@/lib/event/event'
 import type { EventConsumer } from '@/lib/event/event-consumer'
 import type { EventConsumerHub } from '@/lib/event/event-consumer-hub'
-import { createConsumer } from '@/lib/kafka/clients'
-import { lazySingleton } from '@/lib/lazy-singleton'
+import type { StringConsumer } from '@/lib/kafka/clients'
 
 export class EventConsumerHubImpl implements EventConsumerHub {
   private readonly consumers: EventConsumer[] = []
+  private readonly unitOfWork: UnitOfWork
+
+  constructor(unitOfWork: UnitOfWork) {
+    this.unitOfWork = unitOfWork
+  }
 
   registerConsumer(consumer: EventConsumer): void {
     this.consumers.push(consumer)
@@ -21,21 +25,18 @@ export class EventConsumerHubImpl implements EventConsumerHub {
   /** Each handler runs in its own transaction, so one failing handler rolls back only its own work. */
   async dispatchEvent(event: Event): Promise<void> {
     for (const consumer of this.consumers) {
-      if (consumer.wantsEvent(event)) await runInTransaction(() => consumer.handleEvent(event))
+      if (consumer.wantsEvent(event)) {
+        await this.unitOfWork.runInTransaction(() => consumer.handleEvent(event))
+      }
     }
   }
 }
 
-/** One instance serves the whole server process. */
-export const getEventConsumerHub: () => Promise<EventConsumerHub> = lazySingleton(
-  async () => new EventConsumerHubImpl(),
-)
-
-const GROUP_ID = 'full-stack-demo.events'
+/** The consumer group every replica of the application joins. */
+export const EVENTS_GROUP_ID = 'full-stack-demo.events'
 const RESTART_DELAY_MS = 5_000
 
-async function consumeEvents(hub: EventConsumerHub): Promise<void> {
-  const consumer = await createConsumer(GROUP_ID)
+async function consumeEvents(hub: EventConsumerHub, consumer: StringConsumer): Promise<void> {
   try {
     const stream = await consumer.consume({
       topics: [EVENTS_TOPIC],
@@ -61,12 +62,18 @@ async function consumeEvents(hub: EventConsumerHub): Promise<void> {
   }
 }
 
-/** Consumes the events topic for the life of the server process, restarting after a failure. */
-export function startEventConsumerHub(): void {
+/**
+ * Consumes the events topic for the life of the server process, restarting after a failure with
+ * a consumer from `createConsumer`.
+ */
+export function startEventConsumerHub(
+  hub: EventConsumerHub,
+  createConsumer: () => StringConsumer,
+): void {
   void (async (): Promise<never> => {
     for (;;) {
       try {
-        await consumeEvents(await getEventConsumerHub())
+        await consumeEvents(hub, createConsumer())
       } catch (error: unknown) {
         console.error('Event consumer hub failed, restarting', error)
       }

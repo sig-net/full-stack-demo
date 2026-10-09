@@ -8,9 +8,6 @@ import type {
   ResolveDepositStateArgs,
   StartDepositArgs,
 } from './deposit-state-controller'
-import { getDepositRepository } from './deposit-repository-sql-impl'
-import { lazySingleton } from '@/lib/lazy-singleton'
-import { getOutboxEventPublisher } from '@/lib/event/event-publisher-outbox-impl'
 
 export class DepositStateControllerImpl implements DepositStateController {
   private readonly eventPublisher: EventPublisher
@@ -29,9 +26,3 @@ export class DepositStateControllerImpl implements DepositStateController {
     throw new Error('Method not implemented.')
   }
 }
-
-/** One instance serves the whole server process. */
-export const getDepositStateController: () => Promise<DepositStateController> = lazySingleton(
-  async () =>
-    new DepositStateControllerImpl(await getDepositRepository(), await getOutboxEventPublisher()),
-)

@@ -63,13 +63,14 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib`                         | Non-React modules.                                                                                 |
 | `src/lib/config`                  | Server configuration loading and the client configuration type.                                    |
 | `src/lib/db`                      | The Drizzle schema and the Postgres connection pool.                                               |
-| `src/lib/kafka`                   | The Kafka producer and consumer construction.                                                      |
+| `src/lib/kafka`                   | The Kafka producer and consumer factories and the connection options.                              |
 | `src/lib/event`                   | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.   |
 | `src/lib/repository`              | The repository contract every resource's storage implements, and its Postgres base class.          |
 | `src/lib/ethereum/transaction-v1` | The Ethereum transaction resource and its repository.                                              |
 | `src/lib/midnight/erc20-vault`    | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service. |
 | `src/lib/midnight/transaction-v1` | The Midnight transaction resource and its repository.                                              |
-| `src/instrumentation.ts`          | Runs once when the server process starts, and starts the Kafka consumers.                          |
+| `src/server`                      | The code that runs: the composition root, the server action files and the start-up.                |
+| `src/instrumentation.ts`          | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.          |
 | `drizzle`                         | SQL migrations and their snapshots, written by `yarn db:generate`.                                 |
 | `public/icons`                    | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.         |
 
@@ -193,8 +194,8 @@ docker compose down --volumes
 The backend reaches Postgres through [Drizzle ORM](https://orm.drizzle.team) on the `pg` driver.
 
 - `src/lib/db/schema.ts` declares every table. It is the source the migrations are generated from.
-- `src/lib/db/database.ts` exports `getDatabase()`, which builds one connection pool for the
-  server process from `DB_CONNECTION_STRING`.
+- `src/lib/db/database.ts` exports `createDatabasePool()` and `createDatabase()`. The composition
+  root builds one pool for the server process from `DB_CONNECTION_STRING`.
 - `drizzle.config.ts` configures drizzle-kit. It reads `DB_CONNECTION_STRING` from the environment,
   or from `.env.local` when that file exists.
 
@@ -203,7 +204,7 @@ The backend reaches Postgres through [Drizzle ORM](https://orm.drizzle.team) on 
 `src/lib/db/unit-of-work.ts` carries the current transaction on the async call chain with
 `AsyncLocalStorage`, so no method signature mentions it. A write boundary (an adaptor method that
 creates, updates or starts something, a consumer's `handleEvent`, an outbox batch) wraps its call
-in `runInTransaction()`, and every repository method beneath it resolves
+in `UnitOfWork.runInTransaction()`, and every repository method beneath it resolves
 `currentTransaction() ?? database`, joining the open transaction or falling through to the pool. A
 read boundary (`get`, `list`) never opens one: it reads committed state, holds nothing, and the
 write that acts on it re-checks inside its own transaction. Work that leaves the async chain (an
@@ -240,13 +241,14 @@ yarn db:migrate
 
 The backend reaches Kafka through [`@platformatic/kafka`](https://github.com/platformatic/kafka),
 which documents support for Apache Kafka 3.5.0 to 4.2.0. `src/lib/kafka/clients.ts` owns the
-connection options: `getProducer()` returns the one producer of the server process, and
-`createConsumer(groupId)` builds a consumer that its caller owns and closes. Keys, values and
-headers are strings.
+connection options and the `createProducer()` and `createConsumer()` factories; the composition
+root builds the one producer of the server process, and a consumer is owned and closed by the
+loop that asked for it. Keys, values and headers are strings.
 
-Consumers run inside the Next.js server process. `src/instrumentation.ts` starts them from
-`register()`, which Next.js calls once when the process starts. Every replica of the application
-joins the same consumer group, and Kafka divides the topic's partitions among them.
+Consumers run inside the Next.js server process. `src/instrumentation.ts` calls
+`startBackend()` in `src/server/start.ts` from `register()`, which Next.js calls once when the
+process starts. Every replica of the application joins the same consumer group, and Kafka divides
+the topic's partitions among them.
 
 ## Caller authentication
 
@@ -294,14 +296,22 @@ the resource and acts on its current state, so a redelivered event is harmless.
   wants it in registration order, and commits the offset only after they all return. A handler
   that throws leaves the offset uncommitted, so the event is redelivered after a restart delay.
 
-`src/instrumentation.ts` starts the hub and the processor with the server process, and it is
-where consumers are registered. Next.js evaluates instrumentation and request code (server
-actions, route handlers) in separate module graphs, so each graph has its own instance of every
-module-level singleton: a consumer registered from a server action joins a hub that never
-consumes. Request code only publishes. Every long-lived component is built once per module graph
-by `lazySingleton()` in `src/lib/lazy-singleton.ts`, which drops a failed build so the next call
-retries. The Kafka client is listed in `serverExternalPackages` in `next.config.ts`, since it
-resolves its own files through `import.meta.url` and only works unbundled.
+`src/server/start.ts` starts the hub and the processor with the server process, and it is where
+consumers are registered. Next.js evaluates instrumentation and request code (server actions,
+route handlers) in separate module graphs, so each graph has its own backend: a consumer
+registered from a server action joins a hub that never consumes. Request code only publishes. The
+Kafka client is listed in `serverExternalPackages` in `next.config.ts`, since it resolves its own
+files through `import.meta.url` and only works unbundled.
+
+## Composition
+
+Everything under `src/lib` is inert: a class takes its dependencies as constructor arguments and
+nothing there builds anything. `createBackend()` in `src/server/backend.ts` builds the whole
+dependency graph in dependency order from the server configuration, and `getBackend()` memoises
+it once per module graph (`lazySingleton()` in `src/lib/lazy-singleton.ts` drops a failed build
+so the next call retries). Server actions live under `src/server/actions`: a `'use server'` file
+may export only async functions, so each action is one line that reaches its adaptor through
+`getBackend()`.
 
 ## ERC-20 vault deposit API
 
@@ -317,17 +327,17 @@ is exposed as server actions rather than HTTP routes. A deposit is named
 - `deposit-repository.ts` is the storage interface, `Repository<Deposit>`, and
   `deposit-repository-sql-impl.ts` its Postgres implementation over the
   `midnight_erc20_vault_deposits_v1` table (see Repositories under Database).
-- `deposit-service.ts` is the API's method set and `deposit-service-impl.ts` the implementation,
-  with `getDepositService()` building the one instance of the server process.
-- `deposit-actions-adaptor.ts` is the adaptor the UI calls. `startDeposit(callerSecret, args)` and
-  `getDeposit(callerSecret, args)` are server actions that only translate: the secret becomes a
-  `Caller`, the arguments are validated, the service is called, and its result becomes
-  `{ ok: true, deposit }` or `{ ok: false, error }`. Amounts cross as `bigint`.
+- `deposit-service.ts` is the API's method set and `deposit-service-impl.ts` the implementation.
+- `deposit-service-adaptor.ts` is `DepositServiceAdaptor`, which only translates: the secret
+  becomes a `Caller`, the arguments are validated, the service is called, and its result becomes
+  `{ ok: true, deposit }` or `{ ok: false, error }`. The server actions the UI calls,
+  `startDeposit(callerSecret, args)` and `getDeposit(callerSecret, args)` in
+  `src/server/actions/deposit-actions.ts`, each forward to it. Amounts cross as `bigint`.
 
 ```tsx
 'use client'
 
-import { startDeposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-actions-adaptor'
+import { startDeposit } from '@/server/actions/deposit-actions'
 
 const result = await startDeposit(callerSecret, {
   depositRequest: { erc20Address, amount: 1000000n },

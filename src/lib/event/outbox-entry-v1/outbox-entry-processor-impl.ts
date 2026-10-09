@@ -2,27 +2,31 @@ import 'server-only'
 
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { getDatabasePool } from '@/lib/db/database'
-import { runInTransaction } from '@/lib/db/unit-of-work'
+import type { Pool } from 'pg'
+
+import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { eventSchema } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
-import { getKafkaEventPublisher } from '@/lib/event/event-publisher-kafka-impl'
 import type { OutboxEntryProcessor } from '@/lib/event/outbox-entry-v1/outbox-entry-processor'
 import type { OutboxEntryRepository } from '@/lib/event/outbox-entry-v1/outbox-entry-repository'
-import { getOutboxEntryRepository } from '@/lib/event/outbox-entry-v1/outbox-entry-repository-sql-impl'
-import { lazySingleton } from '@/lib/lazy-singleton'
 
 const BATCH_SIZE = 100
 
 export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
   private readonly outboxEntryRepository: OutboxEntryRepository
   private readonly kafkaEventPublisher: EventPublisher
+  private readonly unitOfWork: UnitOfWork
   private running: Promise<void> | undefined
   private runAgain = false
 
-  constructor(outboxEntryRepository: OutboxEntryRepository, kafkaEventPublisher: EventPublisher) {
+  constructor(
+    outboxEntryRepository: OutboxEntryRepository,
+    kafkaEventPublisher: EventPublisher,
+    unitOfWork: UnitOfWork,
+  ) {
     this.outboxEntryRepository = outboxEntryRepository
     this.kafkaEventPublisher = kafkaEventPublisher
+    this.unitOfWork = unitOfWork
   }
 
   process(): Promise<void> {
@@ -49,7 +53,7 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
    * commit that fails afterwards relays the entry again rather than losing it.
    */
   private relayBatch(): Promise<number> {
-    return runInTransaction(async () => {
+    return this.unitOfWork.runInTransaction(async () => {
       const entries = await this.outboxEntryRepository.search({
         criteria: [{ type: 'bool', field: 'sent', bool: false }],
         order: { field: 'createdAt', direction: 'asc' },
@@ -67,19 +71,13 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
   }
 }
 
-/** One instance serves the whole server process. */
-export const getOutboxEntryProcessor: () => Promise<OutboxEntryProcessor> = lazySingleton(
-  async () =>
-    new OutboxEntryProcessorImpl(await getOutboxEntryRepository(), await getKafkaEventPublisher()),
-)
-
 /** The channel the outbox table's insert trigger notifies. */
 const NOTIFY_CHANNEL = 'event_outbox'
 const SWEEP_INTERVAL_MS = 30_000
 const RESTART_DELAY_MS = 5_000
 
-async function listenAndSweep(processor: OutboxEntryProcessor): Promise<never> {
-  const client = await (await getDatabasePool()).connect()
+async function listenAndSweep(processor: OutboxEntryProcessor, pool: Pool): Promise<never> {
+  const client = await pool.connect()
   try {
     const run = (): void => {
       processor.process().catch((error: unknown) => {
@@ -99,12 +97,15 @@ async function listenAndSweep(processor: OutboxEntryProcessor): Promise<never> {
   }
 }
 
-/** Relays the outbox for the life of the server process, restarting after a failure. */
-export function startOutboxEntryProcessor(): void {
+/**
+ * Relays the outbox for the life of the server process, restarting after a failure. The pool
+ * supplies the dedicated connection that listens for the table's notifications.
+ */
+export function startOutboxEntryProcessor(processor: OutboxEntryProcessor, pool: Pool): void {
   void (async (): Promise<never> => {
     for (;;) {
       try {
-        await listenAndSweep(await getOutboxEntryProcessor())
+        await listenAndSweep(processor, pool)
       } catch (error: unknown) {
         console.error('Outbox entry processor failed, restarting', error)
       }

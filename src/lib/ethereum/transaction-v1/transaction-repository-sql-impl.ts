@@ -1,13 +1,12 @@
 import 'server-only'
 
-import { type DatabaseExecutor, getDatabase } from '@/lib/db/database'
+import type { DatabaseExecutor } from '@/lib/db/database'
 import { ethereumTransactionsV1 } from '@/lib/db/schema'
 import {
   type EthereumTransaction,
   ethereumTransactionSchema,
 } from '@/lib/ethereum/transaction-v1/transaction'
 import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
-import { lazySingleton } from '@/lib/lazy-singleton'
 import { SQLRepository } from '@/lib/repository/repository-sql-impl'
 
 export class EthereumTransactionRepositorySQLImpl
@@ -24,10 +23,6 @@ export class EthereumTransactionRepositorySQLImpl
     )
   }
 }
-
-/** One instance serves the whole server process. */
-export const getEthereumTransactionRepository: () => Promise<EthereumTransactionRepository> =
-  lazySingleton(async () => new EthereumTransactionRepositorySQLImpl(await getDatabase()))
 
 type EthereumTransactionRow = typeof ethereumTransactionsV1.$inferSelect
 

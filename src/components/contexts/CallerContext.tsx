@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
 import { callerSecretSchema } from '@/lib/caller/caller'
-import { getCallerName } from '@/lib/caller/caller-actions'
+import { getCallerName } from '@/server/actions/caller-actions'
 
 export interface CallerContextValue {
   /** The secret every server action takes as its first argument. Null while logged out. */

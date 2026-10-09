@@ -66,6 +66,9 @@ export const midnightTransactionSchema = z.object({
 
 export type MidnightTransaction = z.infer<typeof midnightTransactionSchema>
 
+/** Published once a transaction is stored. `data` is `{ name }`. */
+export const MIDNIGHT_TRANSACTION_CREATED_EVENT = 'midnight.transaction-v1.created'
+
 export function midnightTransactionName(parent: string, id: string): string {
   return `${parent}/${MIDNIGHT_TRANSACTION_COLLECTION}/${id}`
 }

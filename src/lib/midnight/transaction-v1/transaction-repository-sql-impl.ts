@@ -1,8 +1,7 @@
 import 'server-only'
 
-import { type DatabaseExecutor, getDatabase } from '@/lib/db/database'
+import type { DatabaseExecutor } from '@/lib/db/database'
 import { midnightTransactionsV1 } from '@/lib/db/schema'
-import { lazySingleton } from '@/lib/lazy-singleton'
 import {
   type MidnightTransaction,
   midnightTransactionSchema,
@@ -24,10 +23,6 @@ export class MidnightTransactionRepositorySQLImpl
     )
   }
 }
-
-/** One instance serves the whole server process. */
-export const getMidnightTransactionRepository: () => Promise<MidnightTransactionRepository> =
-  lazySingleton(async () => new MidnightTransactionRepositorySQLImpl(await getDatabase()))
 
 type MidnightTransactionRow = typeof midnightTransactionsV1.$inferSelect
 
