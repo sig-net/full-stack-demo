@@ -165,6 +165,15 @@ Keep setup instructions and application reference material in README.md and docs
   behaviour. Confirm changed files are actually covered. Do not weaken checks to get a pass.
   Report failures and warning counts honestly. A dev server or production build is not a
   substitute for typechecking.
+- Unit tests are table driven with vitest (`yarn test`, files named `*.test.ts` beside the code):
+  an array of cases, each with a name, the doubles its collaborators are built from, the
+  arguments and a check, run through `test.each`. They cover the layers that hold logic: state
+  controllers, services, adaptors and consumers. A collaborator is replaced with
+  `mock<Interface>(name, methods)` from `src/lib/testing/mock.ts`, which answers with the
+  methods the case supplies and throws on any other call, so an unscripted dependency fails the
+  case; assertions on what a method received go inside that method. `MemoryRepository` is the
+  working in-memory repository for flow tests that would otherwise script every read and write.
+  Repositories are never mocked: they are tested against Postgres.
 - Test observable behaviour and costly boundaries. UI tests use roles and accessible names.
   Exercise lifecycle races and duplicate consumers when changing ownership. New automated guards
   require a non-empty input assertion and an observed failure on a planted violation before

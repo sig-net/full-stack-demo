@@ -11,7 +11,8 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "check": "yarn typecheck && yarn lint && yarn format:check",
+    "test": "vitest run",
+    "check": "yarn typecheck && yarn lint && yarn format:check && yarn test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
@@ -60,7 +61,9 @@
     "oxlint": "^1.83.0",
     "oxlint-tsgolint": "^7.0.2002",
     "tailwindcss": "^4.3.3",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3"
   },
   "resolutions": {
     "@midnightntwrk/ledger-v9": "1.0.0-rc.3"
