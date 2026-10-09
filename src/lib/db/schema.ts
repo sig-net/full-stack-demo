@@ -16,6 +16,7 @@ import {
 } from '@/lib/ethereum/transaction-v1/transaction'
 import { DEPOSIT_STATES } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import {
+  MIDNIGHT_TRANSACTION_FAILURES,
   MIDNIGHT_TRANSACTION_STATES,
   MIDNIGHT_TRANSACTION_TERMINAL_STATES,
 } from '@/lib/midnight/transaction-v1/transaction'
@@ -36,6 +37,7 @@ export const midnightTransactionsV1 = pgTable(
     finalizedTx: text('finalized_tx'),
     expireTime: timestamp('expire_time', { withTimezone: true }),
     txId: text('tx_id'),
+    failure: text('failure', { enum: MIDNIGHT_TRANSACTION_FAILURES }),
     error: text('error'),
     createTime: timestamp('create_time', { withTimezone: true }).notNull(),
     updateTime: timestamp('update_time', { withTimezone: true }).notNull(),

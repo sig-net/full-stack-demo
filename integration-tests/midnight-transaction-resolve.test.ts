@@ -49,6 +49,7 @@ describe('TransactionStateResolver over Postgres and the proof server', () => {
           finalizedTx: null,
           expireTime: new Date(now.getTime() + 3_600_000),
           txId: null,
+          failure: null,
           error: null,
           createTime: now,
           updateTime: now,

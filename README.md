@@ -343,7 +343,7 @@ files through `import.meta.url` and only works unbundled.
 
 `src/lib/midnight/transaction-v1` carries one circuit call from built to on chain. The states
 name what the row waits for (`AwaitingProof`, `AwaitingWallet`, `AwaitingSubmission`,
-`AwaitingInclusion`, then `Succeeded`, `Failed` or `Expired`), the legal transitions and the
+`AwaitingInclusion`, then `Succeeded` or `Failed` with a `failure` reason), the legal transitions and the
 fields each state holds are the table in `transaction-state-machine.ts`, and
 `TransactionStateController` is the only writer, one method per action, each publishing the
 lifecycle event of the state entered. `TransactionStateResolver` does what the current state

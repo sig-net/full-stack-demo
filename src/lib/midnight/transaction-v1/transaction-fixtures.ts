@@ -14,6 +14,7 @@ export function transactionFixture(
     finalizedTx: null,
     expireTime: new Date('2100-01-01T00:00:00Z'),
     txId: null,
+    failure: null,
     error: null,
     createTime: new Date('2026-01-01T00:00:00Z'),
     updateTime: new Date('2026-01-01T00:00:00Z'),
@@ -53,6 +54,10 @@ export const TRANSACTION_IN_STATE: Record<MidnightTransaction['state'], Midnight
     finalizedTx: 'finalized',
     txId: 'tx-1',
   }),
-  Failed: transactionFixture({ state: 'Failed', unprovenTx: null, error: 'boom' }),
-  Expired: transactionFixture({ state: 'Expired', unprovenTx: null }),
+  Failed: transactionFixture({
+    state: 'Failed',
+    unprovenTx: null,
+    failure: 'ProofFailed',
+    error: 'boom',
+  }),
 }

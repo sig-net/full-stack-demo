@@ -160,7 +160,7 @@ describe('TransactionStateControllerImpl transitions', () => {
       transition: (c) =>
         c.recordProofFailure({ name: TRANSACTION_NAME, error: 'proof server down' }),
       to: 'Failed',
-      patch: { error: 'proof server down', unprovenTx: null },
+      patch: { failure: 'ProofFailed', error: 'proof server down', unprovenTx: null },
     },
     {
       name: 'submitTransaction',
@@ -179,16 +179,18 @@ describe('TransactionStateControllerImpl transitions', () => {
     {
       name: 'recordRejection from AwaitingSubmission',
       from: TRANSACTION_IN_STATE.AwaitingSubmission,
-      transition: (c) => c.recordRejection({ name: TRANSACTION_NAME, error: 'invalid' }),
+      transition: (c) =>
+        c.recordRejection({ name: TRANSACTION_NAME, failure: 'Rejected', error: 'invalid' }),
       to: 'Failed',
-      patch: { error: 'invalid' },
+      patch: { failure: 'Rejected', error: 'invalid' },
     },
     {
       name: 'recordRejection from AwaitingInclusion',
       from: TRANSACTION_IN_STATE.AwaitingInclusion,
-      transition: (c) => c.recordRejection({ name: TRANSACTION_NAME, error: 'FailEntirely' }),
+      transition: (c) =>
+        c.recordRejection({ name: TRANSACTION_NAME, failure: 'FailEntirely', error: 'rejected' }),
       to: 'Failed',
-      patch: { error: 'FailEntirely' },
+      patch: { failure: 'FailEntirely', error: 'rejected' },
     },
     {
       name: 'recordSuccess',
@@ -201,15 +203,15 @@ describe('TransactionStateControllerImpl transitions', () => {
       name: 'expireTransaction from AwaitingProof',
       from: TRANSACTION_IN_STATE.AwaitingProof,
       transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
-      to: 'Expired',
-      patch: { unprovenTx: null },
+      to: 'Failed',
+      patch: { failure: 'Expired', unprovenTx: null },
     },
     {
       name: 'expireTransaction from AwaitingInclusion',
       from: TRANSACTION_IN_STATE.AwaitingInclusion,
       transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
-      to: 'Expired',
-      patch: {},
+      to: 'Failed',
+      patch: { failure: 'Expired' },
     },
   ]
 

@@ -22,7 +22,6 @@ export const MIDNIGHT_TRANSACTION_STATES = [
   'AwaitingInclusion',
   'Succeeded',
   'Failed',
-  'Expired',
 ] as const
 
 export const midnightTransactionStateSchema = z.enum(MIDNIGHT_TRANSACTION_STATES)
@@ -33,8 +32,23 @@ export type MidnightTransactionState = z.infer<typeof midnightTransactionStateSc
 export const MIDNIGHT_TRANSACTION_TERMINAL_STATES = [
   'Succeeded',
   'Failed',
-  'Expired',
 ] as const satisfies readonly MidnightTransactionState[]
+
+/**
+ * Why a transaction failed. `ProofFailed`, `Rejected`, `FailEntirely` and `Expired` left nothing
+ * on chain and paid no fee; `FailFallible` is on chain with its fee paid and its call not applied.
+ */
+export const MIDNIGHT_TRANSACTION_FAILURES = [
+  'ProofFailed',
+  'Rejected',
+  'FailEntirely',
+  'FailFallible',
+  'Expired',
+] as const
+
+export const midnightTransactionFailureSchema = z.enum(MIDNIGHT_TRANSACTION_FAILURES)
+
+export type MidnightTransactionFailure = z.infer<typeof midnightTransactionFailureSchema>
 
 /**
  * One attempt to put one circuit call on the Midnight chain through the caller's wallet. A
@@ -60,6 +74,8 @@ export const midnightTransactionSchema = z.object({
   /** The id the node returned on acceptance, what the indexer is watched by. */
   txId: z.string().nullable(),
   /** Set with `Failed`. */
+  failure: midnightTransactionFailureSchema.nullable(),
+  /** The external system's message behind a failure, where there was one. */
   error: z.string().nullable(),
   createTime: z.date(),
   updateTime: z.date(),

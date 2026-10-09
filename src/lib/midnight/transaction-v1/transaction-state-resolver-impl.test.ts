@@ -92,7 +92,10 @@ const cases: Case[] = [
       },
     },
     expectTransitions: [
-      { method: 'recordRejection', args: { name: TRANSACTION_NAME, error: 'invalid transaction' } },
+      {
+        method: 'recordRejection',
+        args: { name: TRANSACTION_NAME, failure: 'Rejected', error: 'invalid transaction' },
+      },
     ],
   },
   {
@@ -113,11 +116,15 @@ const cases: Case[] = [
     ledger: {
       status: async (): Promise<LedgerTransactionStatus> => ({
         outcome: 'failed',
-        error: 'FailEntirely',
+        failure: 'FailEntirely',
+        error: 'rejected',
       }),
     },
     expectTransitions: [
-      { method: 'recordRejection', args: { name: TRANSACTION_NAME, error: 'FailEntirely' } },
+      {
+        method: 'recordRejection',
+        args: { name: TRANSACTION_NAME, failure: 'FailEntirely', error: 'rejected' },
+      },
     ],
   },
   {

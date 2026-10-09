@@ -53,7 +53,6 @@ export class TransactionStateResolverImpl implements TransactionStateResolver {
       case 'AwaitingWallet':
       case 'Succeeded':
       case 'Failed':
-      case 'Expired':
         return
       default: {
         const unhandled: never = transaction.state
@@ -85,7 +84,11 @@ export class TransactionStateResolverImpl implements TransactionStateResolver {
       txId = await this.ledger.submit(finalizedTx)
     } catch (error: unknown) {
       return this.write(() =>
-        this.stateController.recordRejection({ name, error: messageOf(error) }),
+        this.stateController.recordRejection({
+          name,
+          failure: 'Rejected',
+          error: messageOf(error),
+        }),
       )
     }
     return this.write(() => this.stateController.recordSubmission({ name, txId }))
@@ -100,7 +103,13 @@ export class TransactionStateResolverImpl implements TransactionStateResolver {
       case 'succeeded':
         return this.write(() => this.stateController.recordSuccess({ name }))
       case 'failed':
-        return this.write(() => this.stateController.recordRejection({ name, error: status.error }))
+        return this.write(() =>
+          this.stateController.recordRejection({
+            name,
+            failure: status.failure,
+            error: status.error,
+          }),
+        )
       default: {
         const unhandled: never = status
         throw new Error(`Unhandled status ${JSON.stringify(unhandled)}`)

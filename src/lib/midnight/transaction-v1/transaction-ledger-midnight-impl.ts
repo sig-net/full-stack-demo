@@ -100,9 +100,17 @@ export class TransactionLedgerMidnightImpl implements TransactionLedger {
       case 'SUCCESS':
         return { outcome: 'succeeded' }
       case 'PARTIAL_SUCCESS':
-        return { outcome: 'failed', error: 'FailFallible: the fallible section did not apply' }
+        return {
+          outcome: 'failed',
+          failure: 'FailFallible',
+          error: 'The fallible section did not apply; the fee was paid',
+        }
       case 'FAILURE':
-        return { outcome: 'failed', error: 'FailEntirely: the ledger rejected the transaction' }
+        return {
+          outcome: 'failed',
+          failure: 'FailEntirely',
+          error: 'The ledger rejected the transaction',
+        }
       default: {
         const unhandled: never = result.status
         throw new Error(`Unhandled status ${JSON.stringify(unhandled)}`)

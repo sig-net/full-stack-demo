@@ -24,17 +24,16 @@ const TRANSITIONS: Record<
   MidnightTransactionState,
   Partial<Record<TransactionAction, MidnightTransactionState>>
 > = {
-  AwaitingProof: { recordProof: 'AwaitingWallet', recordProofFailure: 'Failed', expire: 'Expired' },
-  AwaitingWallet: { submit: 'AwaitingSubmission', expire: 'Expired' },
+  AwaitingProof: { recordProof: 'AwaitingWallet', recordProofFailure: 'Failed', expire: 'Failed' },
+  AwaitingWallet: { submit: 'AwaitingSubmission', expire: 'Failed' },
   AwaitingSubmission: {
     recordSubmission: 'AwaitingInclusion',
     recordRejection: 'Failed',
-    expire: 'Expired',
+    expire: 'Failed',
   },
-  AwaitingInclusion: { recordSuccess: 'Succeeded', recordRejection: 'Failed', expire: 'Expired' },
+  AwaitingInclusion: { recordSuccess: 'Succeeded', recordRejection: 'Failed', expire: 'Failed' },
   Succeeded: {},
   Failed: {},
-  Expired: {},
 }
 
 /** The states a transaction may be stored in before any action: built, or built and proven. */
@@ -66,7 +65,14 @@ export function assertConsistent(transaction: MidnightTransaction): void {
   }
 }
 
-type StepField = 'unprovenTx' | 'unboundTx' | 'finalizedTx' | 'expireTime' | 'txId' | 'error'
+type StepField =
+  | 'unprovenTx'
+  | 'unboundTx'
+  | 'finalizedTx'
+  | 'expireTime'
+  | 'txId'
+  | 'failure'
+  | 'error'
 
 /**
  * What each state holds. A field in neither list is free: a failure keeps whatever the step
@@ -79,21 +85,20 @@ const FIELDS_BY_STATE: Record<
 > = {
   AwaitingProof: {
     set: ['unprovenTx', 'expireTime'],
-    unset: ['unboundTx', 'finalizedTx', 'txId', 'error'],
+    unset: ['unboundTx', 'finalizedTx', 'txId', 'failure', 'error'],
   },
   AwaitingWallet: {
     set: ['unboundTx', 'expireTime'],
-    unset: ['unprovenTx', 'finalizedTx', 'txId', 'error'],
+    unset: ['unprovenTx', 'finalizedTx', 'txId', 'failure', 'error'],
   },
   AwaitingSubmission: {
     set: ['unboundTx', 'finalizedTx', 'expireTime'],
-    unset: ['unprovenTx', 'txId', 'error'],
+    unset: ['unprovenTx', 'txId', 'failure', 'error'],
   },
   AwaitingInclusion: {
     set: ['unboundTx', 'finalizedTx', 'expireTime', 'txId'],
-    unset: ['unprovenTx', 'error'],
+    unset: ['unprovenTx', 'failure', 'error'],
   },
-  Succeeded: { set: ['txId'], unset: ['unprovenTx', 'error'] },
-  Failed: { set: ['error'], unset: ['unprovenTx'] },
-  Expired: { set: ['expireTime'], unset: ['unprovenTx', 'error'] },
+  Succeeded: { set: ['txId'], unset: ['unprovenTx', 'failure', 'error'] },
+  Failed: { set: ['failure'], unset: ['unprovenTx'] },
 }

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { defineEvent, type EventDefinition } from '@/lib/event/event'
 import {
   type MidnightTransaction,
+  type MidnightTransactionFailure,
   midnightTransactionNameSchema,
   type MidnightTransactionState,
 } from '@/lib/midnight/transaction-v1/transaction'
@@ -18,17 +19,21 @@ export interface TransactionStateController {
   commitTransaction(args: CommitTransactionArgs): Promise<MidnightTransaction>
   /** `AwaitingProof` to `AwaitingWallet`. The unproven bytes are deleted. */
   recordProof(args: RecordProofArgs): Promise<MidnightTransaction>
-  /** `AwaitingProof` to `Failed`. */
+  /** `AwaitingProof` to `Failed` as `ProofFailed`. */
   recordProofFailure(args: RecordProofFailureArgs): Promise<MidnightTransaction>
   /** `AwaitingWallet` to `AwaitingSubmission`, with the bytes the wallet balanced and signed. */
   submitTransaction(args: SubmitTransactionArgs): Promise<MidnightTransaction>
   /** `AwaitingSubmission` to `AwaitingInclusion`, with the id the node returned. */
   recordSubmission(args: RecordSubmissionArgs): Promise<MidnightTransaction>
-  /** `AwaitingSubmission` or `AwaitingInclusion` to `Failed`: the node or the ledger refused it. */
+  /** `AwaitingSubmission` or `AwaitingInclusion` to `Failed` with the node's or the ledger's verdict. */
   recordRejection(args: RecordRejectionArgs): Promise<MidnightTransaction>
   /** `AwaitingInclusion` to `Succeeded`. */
   recordSuccess(args: RecordSuccessArgs): Promise<MidnightTransaction>
-  /** Any waiting state to `Expired`, once `expireTime` has passed. */
+  /**
+   * Any waiting state to `Failed` as `Expired`, once `expireTime` has passed. A rejection and an
+   * expiry racing on one row are serialised by the row lock, and the first to land is the reason
+   * recorded.
+   */
   expireTransaction(args: ExpireTransactionArgs): Promise<MidnightTransaction>
 }
 
@@ -58,6 +63,7 @@ export interface RecordSubmissionArgs {
 
 export interface RecordRejectionArgs {
   name: string
+  failure: Extract<MidnightTransactionFailure, 'Rejected' | 'FailEntirely' | 'FailFallible'>
   error: string
 }
 
@@ -102,7 +108,6 @@ export const TRANSACTION_EVENT_BY_STATE: Record<
   ),
   Succeeded: defineEvent('midnight.transaction-v1.succeeded', transactionEventDataSchema),
   Failed: defineEvent('midnight.transaction-v1.failed', transactionEventDataSchema),
-  Expired: defineEvent('midnight.transaction-v1.expired', transactionEventDataSchema),
 }
 
 export const TRANSACTION_EVENTS: readonly EventDefinition<TransactionEventData>[] = Object.values(

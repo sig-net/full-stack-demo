@@ -33,15 +33,15 @@ const ALLOWED: ReadonlyArray<
 > = [
   ['AwaitingProof', 'recordProof', 'AwaitingWallet'],
   ['AwaitingProof', 'recordProofFailure', 'Failed'],
-  ['AwaitingProof', 'expire', 'Expired'],
+  ['AwaitingProof', 'expire', 'Failed'],
   ['AwaitingWallet', 'submit', 'AwaitingSubmission'],
-  ['AwaitingWallet', 'expire', 'Expired'],
+  ['AwaitingWallet', 'expire', 'Failed'],
   ['AwaitingSubmission', 'recordSubmission', 'AwaitingInclusion'],
   ['AwaitingSubmission', 'recordRejection', 'Failed'],
-  ['AwaitingSubmission', 'expire', 'Expired'],
+  ['AwaitingSubmission', 'expire', 'Failed'],
   ['AwaitingInclusion', 'recordSuccess', 'Succeeded'],
   ['AwaitingInclusion', 'recordRejection', 'Failed'],
-  ['AwaitingInclusion', 'expire', 'Expired'],
+  ['AwaitingInclusion', 'expire', 'Failed'],
 ]
 
 describe('nextState', () => {
@@ -94,9 +94,9 @@ describe('assertConsistent', () => {
       'must have txId set',
     ],
     [
-      'Failed without an error',
-      { ...TRANSACTION_IN_STATE.Failed, error: null },
-      'must have error set',
+      'Failed without a reason',
+      { ...TRANSACTION_IN_STATE.Failed, failure: null },
+      'must have failure set',
     ],
     [
       'Succeeded still holding the unproven bytes',

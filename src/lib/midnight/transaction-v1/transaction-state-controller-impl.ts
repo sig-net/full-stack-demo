@@ -56,7 +56,11 @@ export class TransactionStateControllerImpl implements TransactionStateControlle
   }
 
   recordProofFailure({ name, error }: RecordProofFailureArgs): Promise<MidnightTransaction> {
-    return this.transition(name, 'recordProofFailure', { error, unprovenTx: null })
+    return this.transition(name, 'recordProofFailure', {
+      failure: 'ProofFailed',
+      error,
+      unprovenTx: null,
+    })
   }
 
   submitTransaction({ name, finalizedTx }: SubmitTransactionArgs): Promise<MidnightTransaction> {
@@ -67,8 +71,8 @@ export class TransactionStateControllerImpl implements TransactionStateControlle
     return this.transition(name, 'recordSubmission', { txId })
   }
 
-  recordRejection({ name, error }: RecordRejectionArgs): Promise<MidnightTransaction> {
-    return this.transition(name, 'recordRejection', { error })
+  recordRejection({ name, failure, error }: RecordRejectionArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'recordRejection', { failure, error })
   }
 
   recordSuccess({ name }: RecordSuccessArgs): Promise<MidnightTransaction> {
@@ -76,7 +80,7 @@ export class TransactionStateControllerImpl implements TransactionStateControlle
   }
 
   expireTransaction({ name }: ExpireTransactionArgs): Promise<MidnightTransaction> {
-    return this.transition(name, 'expire', { unprovenTx: null })
+    return this.transition(name, 'expire', { failure: 'Expired', unprovenTx: null })
   }
 
   /**

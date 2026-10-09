@@ -1,3 +1,5 @@
+import type { MidnightTransactionFailure } from '@/lib/midnight/transaction-v1/transaction'
+
 /**
  * The slow, external side of a transaction's life: the proof server, the node and the indexer.
  * Every call may take seconds or longer and is made outside any database transaction.
@@ -14,4 +16,8 @@ export interface TransactionLedger {
 export type LedgerTransactionStatus =
   | { readonly outcome: 'pending' }
   | { readonly outcome: 'succeeded' }
-  | { readonly outcome: 'failed'; readonly error: string }
+  | {
+      readonly outcome: 'failed'
+      readonly failure: Extract<MidnightTransactionFailure, 'FailEntirely' | 'FailFallible'>
+      readonly error: string
+    }

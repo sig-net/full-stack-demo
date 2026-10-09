@@ -66,12 +66,16 @@ describe('TransactionLedgerMidnightImpl.status', () => {
     [
       'FAILURE',
       { data: { transactions: [{ transactionResult: { status: 'FAILURE' } }] } },
-      { outcome: 'failed', error: 'FailEntirely: the ledger rejected the transaction' },
+      { outcome: 'failed', failure: 'FailEntirely', error: 'The ledger rejected the transaction' },
     ],
     [
       'PARTIAL_SUCCESS',
       { data: { transactions: [{ transactionResult: { status: 'PARTIAL_SUCCESS' } }] } },
-      { outcome: 'failed', error: 'FailFallible: the fallible section did not apply' },
+      {
+        outcome: 'failed',
+        failure: 'FailFallible',
+        error: 'The fallible section did not apply; the fee was paid',
+      },
     ],
     [
       'a system transaction beside the regular one',
