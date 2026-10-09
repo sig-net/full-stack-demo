@@ -10,17 +10,23 @@ import {
   midnightNetworkEnvSchema,
 } from '@/lib/config/midnight-network-config'
 import {
+  type MidnightProverConfig,
+  midnightProverConfigFromEnv,
+  midnightProverEnvSchema,
+} from '@/lib/config/midnight-prover-config'
+import {
   midnightSignetConfigFromEnv,
   midnightSignetEnvSchema,
 } from '@/lib/config/midnight-signet-config'
 import {
-  midnightVaultConfigFromEnv,
-  midnightVaultEnvSchema,
-} from '@/lib/config/midnight-vault-config'
+  midnightEthereumErc20VaultConfigFromEnv,
+  midnightEthereumErc20VaultEnvSchema,
+} from '@/lib/config/midnight-ethereum-erc20-vault-config'
 
 export interface ServerOnlyConfig {
   readonly dbConnectionString: string
   readonly kafka: KafkaConfig
+  readonly midnightProver: MidnightProverConfig
 }
 
 export interface ServerConfig {
@@ -31,9 +37,10 @@ export interface ServerConfig {
 const envSchema = z.object({
   DB_CONNECTION_STRING: z.string().min(1),
   ...kafkaEnvSchema.shape,
+  ...midnightProverEnvSchema.shape,
   ...midnightNetworkEnvSchema.shape,
   ...midnightSignetEnvSchema.shape,
-  ...midnightVaultEnvSchema.shape,
+  ...midnightEthereumErc20VaultEnvSchema.shape,
   ...ethereumEnvSchema.shape,
 })
 
@@ -48,11 +55,15 @@ async function loadServerConfig(): Promise<ServerConfig> {
     serverOnly: {
       dbConnectionString: env.DB_CONNECTION_STRING,
       kafka: kafkaConfigFromEnv(env),
+      midnightProver: midnightProverConfigFromEnv(env),
     },
     client: {
       midnightNetwork,
       midnightSignet: midnightSignetConfigFromEnv(midnightNetwork.networkId, env),
-      midnightVault: midnightVaultConfigFromEnv(midnightNetwork.networkId, env),
+      midnightEthereumErc20Vault: midnightEthereumErc20VaultConfigFromEnv(
+        midnightNetwork.networkId,
+        env,
+      ),
       ethereum: ethereumConfigFromEnv(env),
     },
   }

@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider'
+import { nodeZkConfigRegistry } from '@midnight-ntwrk/midnight-js-node-zk-config-provider'
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
 import type { Pool } from 'pg'
 
@@ -24,17 +26,22 @@ import {
   type StringConsumer,
 } from '@/lib/kafka/clients'
 import { lazySingleton } from '@/lib/lazy-singleton'
-import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-repository'
-import { DepositRepositorySQLImpl } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-repository-sql-impl'
-import type { DepositService } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-service'
-import { DepositServiceAdaptor } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-service-adaptor'
-import { DepositServiceImpl } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-service-impl'
-import type { DepositStateController } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-state-controller'
-import { DepositStateControllerImpl } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-state-controller-impl'
+import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
+import { DepositRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository-sql-impl'
+import type { DepositService } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
+import { DepositServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-adaptor'
+import { DepositServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-impl'
+import type { DepositStateController } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
+import { DepositStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller-impl'
+import { TransactionEventConsumer } from '@/lib/midnight/transaction-v1/transaction-event-consumer'
+import type { TransactionLedger } from '@/lib/midnight/transaction-v1/transaction-ledger'
+import { TransactionLedgerMidnightImpl } from '@/lib/midnight/transaction-v1/transaction-ledger-midnight-impl'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import { MidnightTransactionRepositorySQLImpl } from '@/lib/midnight/transaction-v1/transaction-repository-sql-impl'
 import type { TransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { TransactionStateControllerImpl } from '@/lib/midnight/transaction-v1/transaction-state-controller-impl'
+import type { TransactionStateResolver } from '@/lib/midnight/transaction-v1/transaction-state-resolver'
+import { TransactionStateResolverImpl } from '@/lib/midnight/transaction-v1/transaction-state-resolver-impl'
 
 /**
  * Every long-lived component of the server, grouped as the packages under `src/lib` are. A
@@ -42,6 +49,7 @@ import { TransactionStateControllerImpl } from '@/lib/midnight/transaction-v1/tr
  * dependency direction between packages is fixed here and cannot form a cycle.
  */
 export interface Backend {
+  readonly config: ServerConfig
   readonly db: DbBackend
   readonly kafka: KafkaBackend
   readonly event: EventBackend
@@ -80,8 +88,11 @@ export interface MidnightBackend {
   readonly transactionV1: {
     readonly repository: MidnightTransactionRepository
     readonly stateController: TransactionStateController
+    readonly ledger: TransactionLedger
+    readonly stateResolver: TransactionStateResolver
+    readonly eventConsumer: TransactionEventConsumer
   }
-  readonly erc20Vault: {
+  readonly ethereumErc20Vault: {
     readonly depositV1: {
       readonly repository: DepositRepository
       readonly stateController: DepositStateController
@@ -105,8 +116,8 @@ export function createBackend(config: ServerConfig): Backend {
   const kafka = createKafka(config)
   const event = createEvent(db, kafka)
   const ethereum = createEthereum(db)
-  const midnight = createMidnight(db, event)
-  return { db, kafka, event, ethereum, midnight }
+  const midnight = createMidnight(db, event, config)
+  return { config, db, kafka, event, ethereum, midnight }
 }
 
 function createDb(config: ServerConfig): DbBackend {
@@ -139,26 +150,58 @@ function createEthereum(db: DbBackend): EthereumBackend {
   return { transactionV1: { repository: new EthereumTransactionRepositorySQLImpl(db.database) } }
 }
 
-function createMidnight(db: DbBackend, event: EventBackend): MidnightBackend {
-  const transactionV1 = createMidnightTransactionV1(db, event)
-  return { transactionV1, erc20Vault: { depositV1: createMidnightErc20VaultDepositV1(db, event) } }
+function createMidnight(db: DbBackend, event: EventBackend, config: ServerConfig): MidnightBackend {
+  const transactionV1 = createMidnightTransactionV1(db, event, config)
+  return {
+    transactionV1,
+    ethereumErc20Vault: { depositV1: createMidnightEthereumErc20VaultDepositV1(db, event) },
+  }
 }
 
 function createMidnightTransactionV1(
   db: DbBackend,
   event: EventBackend,
+  config: ServerConfig,
 ): MidnightBackend['transactionV1'] {
+  const { midnightNetwork } = config.client
   const repository = new MidnightTransactionRepositorySQLImpl(db.database)
+  const stateController = new TransactionStateControllerImpl(repository, event.publisher)
+  // The registry discovers every contract's key bundle under the root and binds a call to its
+  // bundle by verifier key, so one ledger proves for every vault and for cross-contract calls.
+  const proofProvider = lazySingleton(async () =>
+    httpClientProofProvider({
+      url: midnightNetwork.proofServerURL,
+      zkConfigProvider: await nodeZkConfigRegistry(config.serverOnly.midnightProver.zkAssetsRoot),
+      timeout: PROOF_TIMEOUT_MS,
+    }),
+  )
+  const ledger = new TransactionLedgerMidnightImpl(
+    proofProvider,
+    midnightNetwork.indexerURL,
+    midnightNetwork.nodeURL,
+  )
+  const stateResolver = new TransactionStateResolverImpl(
+    repository,
+    stateController,
+    ledger,
+    db.unitOfWork,
+  )
   return {
     repository,
-    stateController: new TransactionStateControllerImpl(repository, event.publisher),
+    stateController,
+    ledger,
+    stateResolver,
+    eventConsumer: new TransactionEventConsumer(stateResolver),
   }
 }
 
-function createMidnightErc20VaultDepositV1(
+/** A vault circuit proves in minutes on a loaded host, well past the SDK's five-minute default. */
+const PROOF_TIMEOUT_MS = 15 * 60 * 1000
+
+function createMidnightEthereumErc20VaultDepositV1(
   db: DbBackend,
   event: EventBackend,
-): MidnightBackend['erc20Vault']['depositV1'] {
+): MidnightBackend['ethereumErc20Vault']['depositV1'] {
   const repository = new DepositRepositorySQLImpl(db.database)
   const stateController = new DepositStateControllerImpl(repository, event.publisher)
   const service = new DepositServiceImpl(repository, stateController)

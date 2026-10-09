@@ -11,9 +11,9 @@ import {
 } from '@/lib/value-schemas'
 
 /** The collection segment of a deposit's resource name. */
-export const DEPOSIT_COLLECTION = 'erc20-vault-deposits'
+export const DEPOSIT_COLLECTION = 'ethereum-erc20-vault-deposits'
 
-/** `callers/{caller}/erc20-vault-deposits/{deposit}`, where the deposit is a UUID. */
+/** `callers/{caller}/ethereum-erc20-vault-deposits/{deposit}`, where the deposit is a UUID. */
 export const depositNameSchema = z
   .string()
   .regex(
@@ -21,7 +21,13 @@ export const depositNameSchema = z
     `expected callers/{caller}/${DEPOSIT_COLLECTION}/{uuid}`,
   )
 
-export const DEPOSIT_STATES = ['Starting'] as const
+export const DEPOSIT_STATES = [
+  'Starting',
+  'AwaitingFlush',
+  'AwaitingSend',
+  'AwaitingEVM',
+  'Failed',
+] as const
 
 export const depositStateSchema = z.enum(DEPOSIT_STATES)
 

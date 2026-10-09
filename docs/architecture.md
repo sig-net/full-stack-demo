@@ -404,7 +404,7 @@ every attempt stays on record and nothing is mutated back into an earlier state.
 
 ```
 callers/{caller}
-callers/{caller}/erc20-vault-deposits/{deposit}
+callers/{caller}/ethereum-erc20-vault-deposits/{deposit}
 callers/{caller}/midnight-transactions/{transaction}
 callers/{caller}/ethereum-transactions/{transaction}
 ```
@@ -424,7 +424,7 @@ a user's deposits is a list under it.
 
 ```ts
 class Deposit {
-  name: string                 // OUTPUT_ONLY. callers/{caller}/erc20-vault-deposits/{deposit}
+  name: string                 // OUTPUT_ONLY. callers/{caller}/ethereum-erc20-vault-deposits/{deposit}
   erc20Address: Hex20          // REQUIRED, IMMUTABLE
   amount: bigint               // REQUIRED, IMMUTABLE. Base units, 1 to 2^64 - 1
   wallet: WalletKeys           // REQUIRED, IMMUTABLE. The wallet that signs both legs

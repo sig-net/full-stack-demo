@@ -1,21 +1,27 @@
 import 'server-only'
 
 import type { DatabaseExecutor } from '@/lib/db/database'
-import { midnightErc20VaultDepositsV1 } from '@/lib/db/schema'
-import { type Deposit, depositSchema } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
-import type { DepositRepository } from '@/lib/midnight/erc20-vault/deposit-v1/deposit-repository'
+import { midnightEthereumErc20VaultDepositsV1 } from '@/lib/db/schema'
+import { type Deposit, depositSchema } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
 import { SQLRepository } from '@/lib/repository/repository-sql-impl'
 
 export class DepositRepositorySQLImpl
-  extends SQLRepository<Deposit, typeof midnightErc20VaultDepositsV1>
+  extends SQLRepository<Deposit, typeof midnightEthereumErc20VaultDepositsV1>
   implements DepositRepository
 {
   constructor(database: DatabaseExecutor) {
-    super(database, midnightErc20VaultDepositsV1, depositSchema, toDepositRow, fromDepositRow)
+    super(
+      database,
+      midnightEthereumErc20VaultDepositsV1,
+      depositSchema,
+      toDepositRow,
+      fromDepositRow,
+    )
   }
 }
 
-type DepositRow = typeof midnightErc20VaultDepositsV1.$inferSelect
+type DepositRow = typeof midnightEthereumErc20VaultDepositsV1.$inferSelect
 
 function toDepositRow(deposit: Deposit): DepositRow {
   return {

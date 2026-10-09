@@ -22,7 +22,7 @@ export function transactionFixture(
 }
 
 export const CALLER_NAME = `callers/${'ab'.repeat(32)}`
-export const DEPOSIT_NAME = `${CALLER_NAME}/erc20-vault-deposits/1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b`
+export const DEPOSIT_NAME = `${CALLER_NAME}/ethereum-erc20-vault-deposits/1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b`
 export const TRANSACTION_NAME = `${CALLER_NAME}/midnight-transactions/0d8c7d10-6a3e-4d7e-9f1c-2b7a1c3d4e5f`
 
 /** The row each state leaves behind, consistent with the state machine's field table. */

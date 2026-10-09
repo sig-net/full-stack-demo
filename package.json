@@ -12,13 +12,18 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "test": "vitest run",
-    "check": "yarn typecheck && yarn lint && yarn format:check && yarn test",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "boundaries": "node scripts/check-boundaries.ts",
+    "check": "yarn typecheck && yarn lint && yarn format:check && yarn boundaries && yarn test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "zk-assets": "erc20-vault-zk-assets zk-assets/ethereum-erc20-vault --vault-only && erc20-vault-zk-assets zk-assets --signet-only"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@midnight-ntwrk/midnight-js": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-beta.6",
     "@midnightntwrk/ledger-v9": "1.0.0-rc.3",
     "@midnightntwrk/wallet-sdk-abstractions": "3.0.0-beta.0",
     "@midnightntwrk/wallet-sdk-address-format": "4.0.0-beta.2",

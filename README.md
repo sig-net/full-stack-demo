@@ -38,42 +38,45 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 
 ## Scripts
 
-| Script              | Purpose                                                          |
-| ------------------- | ---------------------------------------------------------------- |
-| `yarn dev`          | Start the development server.                                    |
-| `yarn build`        | Create a production build.                                       |
-| `yarn start`        | Serve the production build.                                      |
-| `yarn typecheck`    | Generate the Next.js route types, then type check with `tsc`.    |
-| `yarn lint`         | Lint with oxlint, including its type-aware rules.                |
-| `yarn format`       | Format with oxfmt.                                               |
-| `yarn format:check` | Report files that are not formatted.                             |
-| `yarn check`        | Run the type check, the linter and the format check in sequence. |
-| `yarn db:generate`  | Write a SQL migration for the changes made to the schema.        |
-| `yarn db:migrate`   | Apply the migrations that the database has not yet run.          |
+| Script                  | Purpose                                                                                              |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `yarn dev`              | Start the development server.                                                                        |
+| `yarn build`            | Create a production build.                                                                           |
+| `yarn start`            | Serve the production build.                                                                          |
+| `yarn typecheck`        | Generate the Next.js route types, then type check with `tsc`.                                        |
+| `yarn lint`             | Lint with oxlint, including its type-aware rules.                                                    |
+| `yarn format`           | Format with oxfmt.                                                                                   |
+| `yarn format:check`     | Report files that are not formatted.                                                                 |
+| `yarn test`             | Run the unit tests once.                                                                             |
+| `yarn test:integration` | Run the integration tests against the local services.                                                |
+| `yarn boundaries`       | Fail on a runtime import that crosses the backend boundary.                                          |
+| `yarn check`            | Run the type check, the linter, the format check, the boundary check and the unit tests in sequence. |
+| `yarn db:generate`      | Write a SQL migration for the changes made to the schema.                                            |
+| `yarn db:migrate`       | Apply the migrations that the database has not yet run.                                              |
 
 ## Layout
 
-| Path                              | Contents                                                                                                         |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `src/app`                         | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.                 |
-| `src/app/(configured)`            | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                              |
-| `src/components`                  | Application React components.                                                                                    |
-| `src/components/ui`               | Components written by the shadcn CLI.                                                                            |
-| `src/components/contexts`         | React contexts: each file holds a context, its provider and its `use<Name>` hook.                                |
-| `src/lib`                         | Non-React modules.                                                                                               |
-| `src/lib/config`                  | Server configuration loading and the client configuration type.                                                  |
-| `src/lib/db`                      | The Drizzle schema and the Postgres connection pool.                                                             |
-| `src/lib/kafka`                   | The Kafka producer and consumer factories and the connection options.                                            |
-| `src/lib/event`                   | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.                 |
-| `src/lib/repository`              | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.   |
-| `src/lib/testing`                 | Test helpers: the `mock()` double for any interface.                                                             |
-| `src/lib/ethereum/transaction-v1` | The Ethereum transaction resource and its repository.                                                            |
-| `src/lib/midnight/erc20-vault`    | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service.               |
-| `src/lib/midnight/transaction-v1` | The Midnight transaction resource, its repository, state machine, state controller, resolver and event consumer. |
-| `src/server`                      | The code that runs: the composition root, the server action files and the start-up.                              |
-| `src/instrumentation.ts`          | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                        |
-| `drizzle`                         | SQL migrations and their snapshots, written by `yarn db:generate`.                                               |
-| `public/icons`                    | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.                       |
+| Path                                    | Contents                                                                                                         |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `src/app`                               | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.                 |
+| `src/app/(configured)`                  | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                              |
+| `src/components`                        | Application React components.                                                                                    |
+| `src/components/ui`                     | Components written by the shadcn CLI.                                                                            |
+| `src/components/contexts`               | React contexts: each file holds a context, its provider and its `use<Name>` hook.                                |
+| `src/lib`                               | Non-React modules.                                                                                               |
+| `src/lib/config`                        | Server configuration loading and the client configuration type.                                                  |
+| `src/lib/db`                            | The Drizzle schema and the Postgres connection pool.                                                             |
+| `src/lib/kafka`                         | The Kafka producer and consumer factories and the connection options.                                            |
+| `src/lib/event`                         | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.                 |
+| `src/lib/repository`                    | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.   |
+| `src/lib/testing`                       | Test helpers: the `mock()` double for any interface.                                                             |
+| `src/lib/ethereum/transaction-v1`       | The Ethereum transaction resource and its repository.                                                            |
+| `src/lib/midnight/ethereum-erc20-vault` | The ERC-20 vault API modules, one folder per API version: resource schema, repository and service.               |
+| `src/lib/midnight/transaction-v1`       | The Midnight transaction resource, its repository, state machine, state controller, resolver and event consumer. |
+| `src/server`                            | The code that runs: the composition root, the server action files and the start-up.                              |
+| `src/instrumentation.ts`                | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                        |
+| `drizzle`                               | SQL migrations and their snapshots, written by `yarn db:generate`.                                               |
+| `public/icons`                          | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.                       |
 
 Pages and layouts are server components. A component opts into the browser with `'use client'`
 only when it needs state, effects or browser APIs, as `src/components/mode-toggle.tsx` does.
@@ -83,23 +86,24 @@ only when it needs state, effects or browser APIs, as `src/components/mode-toggl
 Configuration is read from environment variables on the server at request time. Nothing is baked
 in at build time, so one build serves every environment. `.env.example` lists the variables:
 
-| Variable                              | Secret | Purpose                                                                                                           |
-| ------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
-| `MIDNIGHT_NETWORK_ID`                 | No     | `undeployed` or `stagenet`. Selects the default Midnight endpoints and the published contract values.             |
-| `MIDNIGHT_INDEXER_URL`                | No     | Optional override of the indexer GraphQL endpoint.                                                                |
-| `MIDNIGHT_INDEXER_WS_URL`             | No     | Optional override of the indexer subscription endpoint.                                                           |
-| `MIDNIGHT_NODE_URL`                   | No     | Optional override of the node RPC endpoint.                                                                       |
-| `MIDNIGHT_PROOF_SERVER_URL`           | No     | Optional override of the proof server, `http://127.0.0.1:6300` by default.                                        |
-| `MIDNIGHT_SIGNET_CONTRACT_ADDRESS`    | No     | 32-byte hex. Overrides the SDK's published signet singleton address, required for `undeployed`.                   |
-| `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY` | No     | secp256k1 key in SEC1 hex or `secp256k1:base58`. Overrides the published MPC root key, required for `undeployed`. |
-| `MIDNIGHT_VAULT_CONTRACT_ADDRESS`     | No     | 32-byte hex. Overrides the published ERC20 vault address, required for `undeployed`.                              |
-| `EVM_CHAIN_ID`                        | No     | Ethereum chain ID. `1`, `11155111` and `31337` have a default RPC.                                                |
-| `EVM_RPC_URL`                         | No     | Optional override of the RPC endpoint, required for other chains.                                                 |
-| `DB_CONNECTION_STRING`                | Yes    | Postgres connection string. The value in `.env.example` points at the [local database](#local-services).          |
-| `KAFKA_BROKERS`                       | No     | Kafka bootstrap brokers as comma-separated `host:port`. Server-only: it is not part of the client configuration.  |
+| Variable                                         | Secret | Purpose                                                                                                                                                             |
+| ------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MIDNIGHT_NETWORK_ID`                            | No     | `undeployed` or `stagenet`. Selects the default Midnight endpoints and the published contract values.                                                               |
+| `MIDNIGHT_INDEXER_URL`                           | No     | Optional override of the indexer GraphQL endpoint.                                                                                                                  |
+| `MIDNIGHT_INDEXER_WS_URL`                        | No     | Optional override of the indexer subscription endpoint.                                                                                                             |
+| `MIDNIGHT_NODE_URL`                              | No     | Optional override of the node RPC endpoint.                                                                                                                         |
+| `MIDNIGHT_PROOF_SERVER_URL`                      | No     | Optional override of the proof server, `http://127.0.0.1:6300` by default.                                                                                          |
+| `MIDNIGHT_SIGNET_CONTRACT_ADDRESS`               | No     | 32-byte hex. Overrides the SDK's published signet singleton address, required for `undeployed`.                                                                     |
+| `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY`            | No     | secp256k1 key in SEC1 hex or `secp256k1:base58`. Overrides the published MPC root key, required for `undeployed`.                                                   |
+| `MIDNIGHT_ETHEREUM_ERC20_VAULT_CONTRACT_ADDRESS` | No     | 32-byte hex. Overrides the published ERC20 vault address, required for `undeployed`.                                                                                |
+| `EVM_CHAIN_ID`                                   | No     | Ethereum chain ID. `1`, `11155111` and `31337` have a default RPC.                                                                                                  |
+| `EVM_RPC_URL`                                    | No     | Optional override of the RPC endpoint, required for other chains.                                                                                                   |
+| `DB_CONNECTION_STRING`                           | Yes    | Postgres connection string. The value in `.env.example` points at the [local database](#local-services).                                                            |
+| `KAFKA_BROKERS`                                  | No     | Kafka bootstrap brokers as comma-separated `host:port`. Server-only: it is not part of the client configuration.                                                    |
+| `MIDNIGHT_ZK_ASSETS_ROOT`                        | No     | The root the backend's proof provider searches for every contract's prover keys and ZKIR, `zk-assets/` by default (see [Proving keys](#proving-keys)). Server-only. |
 
 Each section of the client configuration is owned by one module under `src/lib/config`
-(`midnight-network-config.ts`, `midnight-signet-config.ts`, `midnight-vault-config.ts`,
+(`midnight-network-config.ts`, `midnight-signet-config.ts`, `midnight-ethereum-erc20-vault-config.ts`,
 `ethereum-config.ts`): it declares the schema of its variables, holds its defaults and builds its
 section. The Midnight network set is the SDK's `MidnightNetwork` enum narrowed to the two networks
 the application supports, and contract addresses and public keys are validated and normalised with
@@ -254,7 +258,10 @@ the topic's partitions among them.
 ## Testing
 
 Unit tests run with [vitest](https://vitest.dev): `yarn test` runs every `src/**/*.test.ts`
-once, and `yarn check` includes it. Tests sit beside the code they cover and are table driven: an
+once, and `yarn check` includes it. Integration tests live under `integration-tests/` and run
+with `yarn test:integration` against the [local services](#local-services) and the Midnight
+stack from `.env.local`; they create rows under a caller name of their own and delete them
+afterwards. Only unit tests sit beside the code. Tests sit beside the code they cover and are table driven: an
 array of cases, each naming the doubles its collaborators are built from, the arguments and a
 check, run through `test.each`. `mock<Interface>(name, methods)` in `src/lib/testing/mock.ts`
 builds a double that answers with the methods a case supplies and throws on any other call, so a
@@ -265,6 +272,10 @@ the `react-server` condition, as Next.js's server graph does, so server modules 
 
 ```bash
 yarn test
+```
+
+```bash
+yarn test:integration
 ```
 
 ## Caller authentication
@@ -328,6 +339,47 @@ registered from a server action joins a hub that never consumes. Request code on
 Kafka client is listed in `serverExternalPackages` in `next.config.ts`, since it resolves its own
 files through `import.meta.url` and only works unbundled.
 
+## Midnight transactions
+
+`src/lib/midnight/transaction-v1` carries one circuit call from built to on chain. The states
+name what the row waits for (`AwaitingProof`, `AwaitingWallet`, `AwaitingSubmission`,
+`AwaitingInclusion`, then `Succeeded`, `Failed` or `Expired`), the legal transitions and the
+fields each state holds are the table in `transaction-state-machine.ts`, and
+`TransactionStateController` is the only writer, one method per action, each publishing the
+lifecycle event of the state entered. `TransactionStateResolver` does what the current state
+needs through the `TransactionLedger` port and applies one transition, and
+`TransactionEventConsumer` nudges it on every lifecycle event.
+
+`TransactionLedgerMidnightImpl` is the ledger behind the local or stagenet services: `prove`
+deserialises the unproven bytes and proves them through the proof server with the prover keys
+under `MIDNIGHT_ZK_ASSETS_ROOT`, `submit` sends the wallet's finalized bytes to the node
+over one WebSocket connection and returns one of the transaction's ledger identifiers, and
+`status` asks the indexer for that identifier and maps `SUCCESS`, `PARTIAL_SUCCESS` and
+`FAILURE` to the ledger outcome. A transaction the indexer has not recorded stays pending until
+its TTL expires it.
+
+### Proving keys
+
+Proving happens on the backend, through the proof server that runs beside it. The SDK's
+`ProvingProvider` has one implementation, an HTTP client for that server, and the server holds no
+contract keys: on every `/check` and `/prove` call the client reads the circuit's prover key and
+ZKIR from a local bundle and sends them with the request. The ledger is per chain and the keys
+are per contract, so the backend builds a `ZKConfigRegistry` over `MIDNIGHT_ZK_ASSETS_ROOT`: every
+subdirectory holding `keys/` and `zkir/` is a bundle, and a call is bound to its bundle by the
+verifier key it names, so one ledger proves for every vault and for cross-contract calls. The
+contract packages ship only verifier keys, so the prover keys are built once with the pinned
+compact compiler:
+
+```bash
+yarn zk-assets
+```
+
+It lays out the Ethereum ERC-20 vault's bundle under `zk-assets/ethereum-erc20-vault/` and the
+signet contract's under `zk-assets/signet/` (both gitignored), verifies them against the
+manifests the packages ship, and skips a bundle that already verifies. A further vault adds its
+own bundle beside them. It needs the compact launcher with the compiler version the package pins,
+and the first build takes minutes.
+
 ## Composition
 
 Everything under `src/lib` is inert: a class takes its dependencies as constructor arguments and
@@ -340,10 +392,10 @@ may export only async functions, so each action is one line that reaches its ada
 
 ## ERC-20 vault deposit API
 
-`src/lib/midnight/erc20-vault/deposit-v1` is the skeleton of a resource-oriented API for vault
+`src/lib/midnight/ethereum-erc20-vault/deposit-v1` is the skeleton of a resource-oriented API for vault
 deposits, designed in `docs/architecture.md` under Deposit API. This UI is its only client, so it
 is exposed as server actions rather than HTTP routes. A deposit is named
-`callers/{caller}/erc20-vault-deposits/{deposit}`, where the caller is the depositor's
+`callers/{caller}/ethereum-erc20-vault-deposits/{deposit}`, where the caller is the depositor's
 64-character hex identity commitment and the deposit id is a UUID the server assigns.
 
 - `deposit.ts` holds the resource schema and its type, with the resource-name format and builder,
@@ -351,7 +403,7 @@ is exposed as server actions rather than HTTP routes. A deposit is named
   schemas live in `src/lib/value-schemas.ts`.
 - `deposit-repository.ts` is the storage interface, `Repository<Deposit>`, and
   `deposit-repository-sql-impl.ts` its Postgres implementation over the
-  `midnight_erc20_vault_deposits_v1` table (see Repositories under Database).
+  `midnight_ethereum_erc20_vault_deposits_v1` table (see Repositories under Database).
 - `deposit-service.ts` is the API's method set and `deposit-service-impl.ts` the implementation.
 - `deposit-service-adaptor.ts` is `DepositServiceAdaptor`, which only translates: the secret
   becomes a `Caller`, the arguments are validated, the service is called, and its result becomes

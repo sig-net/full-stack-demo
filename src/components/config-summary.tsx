@@ -15,7 +15,7 @@ function Entry({ label, value }: { label: string; value: ReactNode }): ReactNode
 }
 
 export function ConfigSummary(): ReactNode {
-  const { midnightNetwork, midnightSignet, midnightVault, ethereum } = useConfig()
+  const { midnightNetwork, midnightSignet, midnightEthereumErc20Vault, ethereum } = useConfig()
   return (
     <div className="flex flex-col gap-6">
       <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2">
@@ -36,7 +36,7 @@ export function ConfigSummary(): ReactNode {
       </dl>
       <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2">
         <dt className="col-span-2 font-medium">Vault</dt>
-        <Entry label="Contract" value={midnightVault.contractAddress} />
+        <Entry label="Contract" value={midnightEthereumErc20Vault.contractAddress} />
       </dl>
       <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2">
         <dt className="col-span-2 font-medium">Ethereum</dt>

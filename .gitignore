@@ -10,6 +10,9 @@ node_modules
 !.yarn/versions
 .pnp.*
 
+# Built by `yarn zk-assets`: the vault's prover keys and ZKIR for the backend's proof provider
+zk-assets
+
 # Next.js
 .next
 out

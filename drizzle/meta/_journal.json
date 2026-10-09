@@ -50,6 +50,13 @@
       "when": 1791490004352,
       "tag": "0006_deposit_start_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791537559285,
+      "tag": "0007_rename_ethereum_erc20_vault_deposits",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,8 @@
 import type { Caller } from '@/lib/caller/caller'
-import type { Deposit, DepositRequest } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
+import type {
+  Deposit,
+  DepositRequest,
+} from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 
 /** Drives a deposit through its states. Callers hand it validated values, so it never parses. */
 export interface DepositStateController {

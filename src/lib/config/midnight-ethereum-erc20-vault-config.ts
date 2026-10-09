@@ -5,7 +5,7 @@ import { z } from 'zod'
 import type { MidnightNetworkId } from '@/lib/config/midnight-network-config'
 import { midnightContractAddressSchema } from '@/lib/config/midnight-value-schemas'
 
-export interface MidnightVaultConfig {
+export interface MidnightEthereumErc20VaultConfig {
   readonly contractAddress: string
 }
 
@@ -13,22 +13,22 @@ export interface MidnightVaultConfig {
  * A deployed network publishes the vault address through the contract package; the variable
  * overrides it. The local stack deploys its own vault, so the variable is required there.
  */
-export const midnightVaultEnvSchema = z.object({
-  MIDNIGHT_VAULT_CONTRACT_ADDRESS: midnightContractAddressSchema.optional(),
+export const midnightEthereumErc20VaultEnvSchema = z.object({
+  MIDNIGHT_ETHEREUM_ERC20_VAULT_CONTRACT_ADDRESS: midnightContractAddressSchema.optional(),
 })
 
-export type MidnightVaultEnv = z.infer<typeof midnightVaultEnvSchema>
+export type MidnightEthereumErc20VaultEnv = z.infer<typeof midnightEthereumErc20VaultEnvSchema>
 
-export function midnightVaultConfigFromEnv(
+export function midnightEthereumErc20VaultConfigFromEnv(
   networkId: MidnightNetworkId,
-  env: MidnightVaultEnv,
-): MidnightVaultConfig {
+  env: MidnightEthereumErc20VaultEnv,
+): MidnightEthereumErc20VaultConfig {
   const contractAddress =
-    env.MIDNIGHT_VAULT_CONTRACT_ADDRESS ??
+    env.MIDNIGHT_ETHEREUM_ERC20_VAULT_CONTRACT_ADDRESS ??
     (networkId === MidnightNetwork.Undeployed ? undefined : getVaultContractAddress(networkId))
   if (contractAddress === undefined) {
     throw new Error(
-      `MIDNIGHT_VAULT_CONTRACT_ADDRESS is required: the ${networkId} network has no published vault contract address`,
+      `MIDNIGHT_ETHEREUM_ERC20_VAULT_CONTRACT_ADDRESS is required: the ${networkId} network has no published vault contract address`,
     )
   }
   return { contractAddress }

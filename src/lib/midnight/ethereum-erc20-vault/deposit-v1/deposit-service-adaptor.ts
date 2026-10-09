@@ -4,12 +4,12 @@ import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
-import type { Deposit } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
+import type { Deposit } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import {
   type DepositService,
   getDepositArgsSchema,
   startDepositArgsSchema,
-} from '@/lib/midnight/erc20-vault/deposit-v1/deposit-service'
+} from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 
 /**
  * Adapts the deposit service to the wire: the caller secret stands in for the caller, the

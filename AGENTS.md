@@ -48,6 +48,19 @@ Keep setup instructions and application reference material in README.md and docs
   is one line that reaches its adaptor through `getBackend()`, and the adaptor (the class that
   turns a caller secret and untrusted arguments into a service call and a result) lives in
   `src/lib` beside its service.
+- The backend boundary is fixed now so that it can become its own package by a move, not a
+  redesign. The backend owns `src/lib/db`, `src/lib/event`, `src/lib/kafka`,
+  `src/lib/repository`, `src/lib/testing`, `resolve-caller.ts`, `lazy-singleton.ts`, and every
+  `*-impl.ts`, `*-repository.ts`, `*-state-controller.ts`, `*-state-machine.ts`,
+  `*-state-resolver.ts`, `*-event-consumer.ts`, `*-ledger.ts`, `*-adaptor.ts` and
+  `*-fixtures.ts`. A runtime import of any of them is allowed only from the backend itself,
+  `src/server`, `integration-tests` and unit tests. The app (`src/app`, `src/components`, the
+  isomorphic modules in `src/lib`) reaches the backend only through `src/server/actions`, and
+  `src/server/backend.ts` and `src/server/start.ts` are imported only by `src/server` and
+  `src/instrumentation.ts`. Integration tests import nothing from `src` at runtime but
+  `getBackend()`. Type-only imports may cross. `scripts/check-boundaries.ts` enforces all of
+  this and `yarn check` runs it: a failure is fixed by moving the import to the right side,
+  never by widening the script's lists.
 - Match names to actual responsibilities. Adding a variant reopens sibling and container names.
   Qualify both members when introducing a qualified twin. Moves, deletions and renames require a
   whole-repository search for invalidated names and updates to imports, configuration, manifests,
@@ -191,6 +204,10 @@ Keep setup instructions and application reference material in README.md and docs
   behaviour. Confirm changed files are actually covered. Do not weaken checks to get a pass.
   Report failures and warning counts honestly. A dev server or production build is not a
   substitute for typechecking.
+- Only unit tests live beside the code. A test that reaches Postgres, Kafka, the proof server,
+  the node, the indexer or a running server is an integration test and lives under the top-level
+  `integration-tests/` folder, run with `yarn test:integration` against the local services. A
+  `*.test.ts` under `src` that opens a socket is in the wrong folder.
 - Unit tests are table driven with vitest (`yarn test`, files named `*.test.ts` beside the code):
   an array of cases, each with a name, the doubles its collaborators are built from, the
   arguments and a check, run through `test.each`. They cover the layers that hold logic: state

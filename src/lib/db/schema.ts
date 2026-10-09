@@ -14,7 +14,7 @@ import {
   ETHEREUM_TRANSACTION_STATES,
   ETHEREUM_TRANSACTION_TERMINAL_STATES,
 } from '@/lib/ethereum/transaction-v1/transaction'
-import { DEPOSIT_STATES } from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
+import { DEPOSIT_STATES } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import {
   MIDNIGHT_TRANSACTION_STATES,
   MIDNIGHT_TRANSACTION_TERMINAL_STATES,
@@ -75,17 +75,20 @@ export const ethereumTransactionsV1 = pgTable(
  * One row per ERC-20 vault deposit resource, keyed by its resource name. Contract integers are
  * unsigned 64 and 128 bit, beyond Postgres's signed `bigint`, so they are stored as `numeric`.
  */
-export const midnightErc20VaultDepositsV1 = pgTable('midnight_erc20_vault_deposits_v1', {
-  name: text('name').primaryKey(),
-  erc20Address: text('erc20_address').notNull(),
-  amount: contractInteger('amount').notNull(),
-  state: text('state', { enum: DEPOSIT_STATES }).notNull(),
-  inIndex: contractInteger('in_index').notNull(),
-  evmNonce: contractInteger('evm_nonce').notNull(),
-  gasLimit: contractInteger('gas_limit').notNull(),
-  maxFeePerGas: contractInteger('max_fee_per_gas').notNull(),
-  maxPriorityFeePerGas: contractInteger('max_priority_fee_per_gas').notNull(),
-})
+export const midnightEthereumErc20VaultDepositsV1 = pgTable(
+  'midnight_ethereum_erc20_vault_deposits_v1',
+  {
+    name: text('name').primaryKey(),
+    erc20Address: text('erc20_address').notNull(),
+    amount: contractInteger('amount').notNull(),
+    state: text('state', { enum: DEPOSIT_STATES }).notNull(),
+    inIndex: contractInteger('in_index').notNull(),
+    evmNonce: contractInteger('evm_nonce').notNull(),
+    gasLimit: contractInteger('gas_limit').notNull(),
+    maxFeePerGas: contractInteger('max_fee_per_gas').notNull(),
+    maxPriorityFeePerGas: contractInteger('max_priority_fee_per_gas').notNull(),
+  },
+)
 
 /** Wide enough for a `Uint<128>`. */
 function contractInteger(name: string) {

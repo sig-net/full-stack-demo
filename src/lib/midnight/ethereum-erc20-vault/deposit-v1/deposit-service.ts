@@ -5,7 +5,7 @@ import {
   type Deposit,
   depositNameSchema,
   depositRequestSchema,
-} from '@/lib/midnight/erc20-vault/deposit-v1/deposit'
+} from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 
 /** The deposit API's methods, independent of the transport that exposes them. */
 export interface DepositService {
