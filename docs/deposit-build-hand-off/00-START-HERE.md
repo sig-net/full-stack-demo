@@ -60,7 +60,7 @@ prompt by generating in two steps when you both drop and add, or run it from the
 terminal pane. The Stage 3 agent drove it with a Python `pty` script.
 
 The user has uncommitted work of their own in the tree: diagram files under `docs/`
-(`diagramming.md`, `diagram-palette.*`, `backend-components.*`, `transaction-state-machine.*`,
+(`diagramming.md`, `diagram-palette.*`, `diagram-library.*`, `transaction-state-machine.*`,
 `diagram-assets/`), `drawio.config.json`, and a `## Diagrams` section at the end of
 `AGENTS.md`. Leave all of it exactly as it is. When you grep for a name you invalidated and the
 only hit is in one of those files, note it in your report and do not edit it.

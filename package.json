@@ -14,7 +14,9 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "boundaries": "node scripts/check-boundaries.ts",
-    "check": "yarn typecheck && yarn lint && yarn format:check && yarn boundaries && yarn test",
+    "diagram-library": "node scripts/diagram-library.ts",
+    "diagram-library:check": "node scripts/diagram-library.ts --check",
+    "check": "yarn typecheck && yarn lint && yarn format:check && yarn boundaries && yarn diagram-library:check && yarn test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "zk-assets": "erc20-vault-zk-assets zk-assets/ethereum-erc20-vault --vault-only && erc20-vault-zk-assets zk-assets --signet-only"

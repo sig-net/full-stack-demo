@@ -1,0 +1,36 @@
+{
+  "render": {
+    "scale": 3,
+    "border": 10
+  },
+  "lint": {
+    "labelFormat": "strict",
+    "verbs": [
+      "Stores",
+      "Deletes",
+      "Records",
+      "Publishes",
+      "Proves",
+      "Submits",
+      "Watches",
+      "Expires",
+      "Creates",
+      "Reads",
+      "Returns",
+      "Relays"
+    ],
+    "subjects": [
+      "commitTransaction",
+      "recordProof",
+      "recordProofFailure",
+      "submitTransaction",
+      "recordSubmission",
+      "recordRejection",
+      "recordSuccess",
+      "expireTransaction",
+      "startDeposit",
+      "resolveDepositState"
+    ],
+    "palette": "docs/diagram-palette.drawio"
+  }
+}

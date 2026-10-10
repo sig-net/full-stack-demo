@@ -54,7 +54,7 @@ live stack in about four minutes.
    repository (`src`, `integration-tests`, `scripts`, `README.md`, `docs/*.md`, `AGENTS.md`,
    `.env.example`) for each, in its most specific form, and fix every hit in a file you may
    edit. Do not edit any `.drawio` or `.png` file or anything under `docs/` the user is working
-   on (`diagramming.md`, `diagram-palette.*`, `backend-components.*`,
+   on (`diagramming.md`, `diagram-palette.*`, `diagram-library.*`,
    `transaction-state-machine.*`, `diagram-assets/`): list the hits there in your report for
    the user. `docs/architecture.md`, if it exists, is yours to update.
 4. `docs/deposit-build-plan.md`: tick Stage 9's boxes after each item above is done and
