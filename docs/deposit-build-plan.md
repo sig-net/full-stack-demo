@@ -1231,8 +1231,9 @@ Verification:
       events), the ledger-as-acknowledgement rule for chain steps, the rule that a vault-level
       batch (the flush) is a process and not an entity, and the relayer transaction rule
       (`signer`). Record the Stage 6 decision on where the unproven call is built.
-- [ ] `docs/architecture.drawio` and `docs/deposit-state-diagram.drawio`: update the deposit and
-      vault request state diagrams to the names in this plan.
+- [ ] `docs/deposit-state-machine.drawio` and `docs/vault-request-state-machine.drawio`: draw the
+      deposit and vault request state machines as committed pairs under the conventions in
+      `docs/diagramming.md`, with the names in this plan.
 - [ ] Grep the repository for every name this work invalidated (`Starting`, `AwaitingFlush` on
       the deposit, `AwaitingEVM`, `resolveDepositState`, `unsignedTx`, the old Ethereum states)
       and fix every hit.

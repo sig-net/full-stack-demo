@@ -292,3 +292,14 @@ Keep setup instructions and application reference material in README.md and docs
   supported agent side by side, or in that agent's own manifest inside the skill folder, such as
   `agents/openai.yaml`. Such a manifest holds only that agent's display and invocation defaults.
   It never carries procedure, and no other agent reads it.
+
+## Diagrams
+
+- The style guide in `docs/diagramming.md` is binding for every draw.io diagram in this
+  repository, and through it the drawio-cli style guide it links: the committed `.drawio` +
+  `.drawio.png` pair, the palette, the label rules, the routing rules, the shapes, the icon bank
+  and the curated-layout mandate. Copy styled cells from `docs/diagram-palette.drawio` rather
+  than authoring styles by hand, and run `drawio-cli lint` (which applies the vocabulary in
+  `drawio.config.json`) and `drawio-cli check-pair` before finishing. Providers and entities
+  come from `docs/diagram-library.drawio`, which `yarn diagram-library` generates from the code
+  and `yarn diagram-library:check` gates, so it is never edited by hand.
