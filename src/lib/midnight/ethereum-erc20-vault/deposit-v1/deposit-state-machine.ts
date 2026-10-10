@@ -22,7 +22,7 @@ const TRANSITIONS: Record<DepositState, Partial<Record<DepositStateAction, Depos
     recordStartFailure: 'Failed',
   },
   AwaitingVaultRequest: { recordAttested: 'AwaitingCompletion' },
-  AwaitingCompletion: { complete: 'AwaitingCompleteTransaction' },
+  AwaitingCompletion: { complete: 'AwaitingCompleteTransaction', recordCompleted: 'Completed' },
   AwaitingCompleteTransaction: {
     recordCompleted: 'Completed',
     recordCompleteFailure: 'AwaitingCompletion',

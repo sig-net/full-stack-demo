@@ -9,6 +9,7 @@ import {
   type EthereumTransactionStateController,
   type ExpireTransactionArgs,
   type RecordFailureArgs,
+  type RecordRejectionArgs,
   type RecordSubmissionArgs,
   type RecordSuccessArgs,
 } from '@/lib/ethereum/transaction-v1/transaction-state-controller'
@@ -56,15 +57,14 @@ export class EthereumTransactionStateControllerImpl implements EthereumTransacti
     return this.transition(name, 'recordSuccess', { blockNumber })
   }
 
-  recordFailure({
-    name,
-    failure,
-    error,
-    blockNumber,
-  }: RecordFailureArgs): Promise<EthereumTransaction> {
+  recordRejection({ name, error }: RecordRejectionArgs): Promise<EthereumTransaction> {
+    return this.transition(name, 'recordRejection', { failure: 'Rejected', error })
+  }
+
+  recordFailure({ name, failure, blockNumber }: RecordFailureArgs): Promise<EthereumTransaction> {
     return this.transition(name, 'recordFailure', {
       failure,
-      error: error ?? null,
+      error: null,
       ...(blockNumber === undefined ? {} : { blockNumber }),
     })
   }

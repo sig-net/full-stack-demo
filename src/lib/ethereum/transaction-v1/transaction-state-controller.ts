@@ -21,7 +21,12 @@ export interface EthereumTransactionStateController {
   recordSubmission(args: RecordSubmissionArgs): Promise<EthereumTransaction>
   /** `AwaitingInclusion` to `Succeeded`, with the block that included the transaction. */
   recordSuccess(args: RecordSuccessArgs): Promise<EthereumTransaction>
-  /** `AwaitingSubmission` or `AwaitingInclusion` to `Failed` with the node's or the chain's verdict. */
+  /**
+   * `AwaitingSubmission` to `Failed` as `Rejected`: the node refused the bytes. Refused from any
+   * later state, so a stale duplicate broadcast cannot overwrite a transaction the node holds.
+   */
+  recordRejection(args: RecordRejectionArgs): Promise<EthereumTransaction>
+  /** `AwaitingInclusion` to `Failed` with the chain's verdict. */
   recordFailure(args: RecordFailureArgs): Promise<EthereumTransaction>
   /**
    * Either waiting state to `Failed` as `Expired`, once `expireTime` has passed. A failure and an
@@ -45,11 +50,15 @@ export interface RecordSuccessArgs {
   blockNumber: bigint
 }
 
+export interface RecordRejectionArgs {
+  name: string
+  /** The node's message. */
+  error: string
+}
+
 export interface RecordFailureArgs {
   name: string
-  failure: Extract<EthereumTransactionFailure, 'Rejected' | 'Reverted' | 'NonceConsumed'>
-  /** The node's message, where the failure came with one. */
-  error?: string
+  failure: Extract<EthereumTransactionFailure, 'Reverted' | 'NonceConsumed'>
   /** The block that included the transaction, for a `Reverted` failure. */
   blockNumber?: bigint
 }

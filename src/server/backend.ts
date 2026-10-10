@@ -541,7 +541,7 @@ function createMidnightEthereumErc20Vault(
       config,
       transactionV1,
       vaultRequestV1,
-      circuits,
+      { circuits, ledger },
     ),
   }
 }
@@ -645,7 +645,7 @@ function createMidnightEthereumErc20VaultDepositV1(
   config: ServerConfig,
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
-  circuits: VaultCircuits,
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
 ): MidnightBackend['ethereumErc20Vault']['depositV1'] {
   const repository = new DepositRepositorySQLImpl(db.database)
   const stateController = new DepositStateControllerImpl(
@@ -659,13 +659,14 @@ function createMidnightEthereumErc20VaultDepositV1(
     stateController,
     transactionV1.repository,
     vaultRequestV1.repository,
+    vault.ledger,
     db.unitOfWork,
   )
   const service = new DepositServiceImpl(
     repository,
     stateController,
     vaultRequestV1.repository,
-    circuits,
+    vault.circuits,
     ethereum.provider,
     db.unitOfWork,
     config.client.midnightSignet,

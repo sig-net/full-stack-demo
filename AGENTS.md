@@ -50,10 +50,13 @@ Keep setup instructions and application reference material in README.md and docs
   `src/lib` beside its service.
 - The backend boundary is fixed now so that it can become its own package by a move, not a
   redesign. The backend owns `src/lib/db`, `src/lib/event`, `src/lib/kafka`,
-  `src/lib/repository`, `src/lib/testing`, `resolve-caller.ts`, `lazy-singleton.ts`, and every
-  `*-impl.ts`, `*-repository.ts`, `*-state-controller.ts`, `*-state-machine.ts`,
-  `*-state-resolver.ts`, `*-event-consumer.ts`, `*-ledger.ts`, `*-adaptor.ts` and
-  `*-fixtures.ts`. A runtime import of any of them is allowed only from the backend itself,
+  `src/lib/repository`, `src/lib/testing`, the files `src/lib/delay-unless-aborted.ts`,
+  `src/lib/lazy-singleton.ts`, `src/lib/sweep.ts`, `src/lib/caller/resolve-caller.ts`,
+  `src/lib/midnight/ethereum-erc20-vault/signet-readers.ts` and
+  `src/lib/midnight/ethereum-erc20-vault/flusher.ts`, and every file ending in `-impl.ts`,
+  `-repository.ts`, `-state-controller.ts`, `-state-machine.ts`, `-state-resolver.ts`,
+  `-event-consumer.ts`, `-ledger.ts`, `-circuits.ts`, `relayer-wallet.ts`, `-adaptor.ts` and
+  `-fixtures.ts`. A runtime import of any of them is allowed only from the backend itself,
   `src/server`, `integration-tests` and unit tests. The app (`src/app`, `src/components`, the
   isomorphic modules in `src/lib`) reaches the backend only through `src/server/actions`, and
   `src/server/backend.ts` and `src/server/start.ts` are imported only by `src/server` and
@@ -86,6 +89,10 @@ Keep setup instructions and application reference material in README.md and docs
   never a slow external call, and nothing inside one may detach work from the async chain, since
   detached work silently runs outside it. The outbox relay's Kafka send is the one documented
   exception.
+- A service method whose write must follow a slow build (a circuit call built from the
+  indexer's view, a chain read) does the build first, outside any transaction, then opens the
+  transaction itself around the controller call, and its adaptor wraps nothing for that method.
+  The adaptor opens the transaction only for a method whose work is the write alone.
 
 ## Lifecycle: state machines, controllers, resolvers and events
 
@@ -111,6 +118,34 @@ Keep setup instructions and application reference material in README.md and docs
 - An event consumer is a dumb adaptor: match the event definitions, `safeParse` the data, call
   the resolver. No logic lives in a consumer. Slow external systems sit behind one port
   interface (`MidnightTransactionLedger`) so the resolver is tested with a mocked ledger.
+- A child resource names the resource it serves in `parent`, its lifecycle events carry
+  `{ name, parent }`, and the parent's consumer matches a child's terminal event on the parent's
+  collection without a read. A resource with no parent carries `{ name }` alone.
+- A chain step is read back from the ledger (`requestStage()` over the vault ledger, the
+  singleton's posts through the readers) and never inferred from a child transaction's outcome.
+  A child that failed is replaced while the ledger shows its step undone, and a resolver reads
+  the ledger before it believes a child's failure, for every parent, the deposit included.
+- A ledger port's `submit` resolves with the id when the bytes reached the node, a lost
+  acknowledgement and the node already holding the bytes included, and throws only when the
+  node refused them with a reason or they never left the process. The submit-time refusal and
+  the ledger's verdict are two actions of the state machine: `recordRejection` applies only from
+  `AwaitingSubmission`, and `recordLedgerFailure` (Midnight) or `recordFailure` (Ethereum) only
+  from `AwaitingInclusion`. An outcome nobody observed ends `Expired` at the TTL, never
+  `Rejected`.
+- A vault-level batch (the flush) is a process with no row. `Flusher.flush()` coalesces nudges,
+  runs one flush at a time, and calls `resolveWaitingFlushes()` when a flush lands. A step that
+  touches shared contract state is never a step of one request's lifecycle.
+- A transaction row names its `signer` (`caller` or `relayer`), and `AwaitingWallet` is that
+  signer's to-do: the browser's `submitTransaction` for a caller, the resolver through the
+  `RelayerWallet` port for the relayer.
+- The sweep (`src/lib/sweep.ts`, every 30 seconds from `start()`) calls every resolver's
+  `resolvePending()` in dependency order (Midnight transactions, Ethereum transactions, vault
+  requests, deposits) and then fires `flush()` without awaiting it. Every resolver has a
+  `resolvePending()` that re-reads its non-terminal rows oldest first: three legs of a deposit
+  advance only on a sweep, so the sweep is load-bearing, never only a safety net.
+- A change to an event's data shape is a change to the events already on the topic. A consumer
+  that rejects a record stalls every consumer behind it, so a field is added as optional, or the
+  changed shape is published under a new event type.
 
 ## Repositories
 
@@ -138,6 +173,11 @@ Keep setup instructions and application reference material in README.md and docs
   and `SQLRepository` use `parse`, because malformed event data or a malformed row is a bug that
   must surface. A schema with a transform must accept its own output, so a value parsed twice
   stays the same.
+- A resource file that `src/lib/db/schema.ts` imports (for a state set, a failure set, an action
+  set) stays free of SDK runtime imports: drizzle-kit loads the schema through a CommonJS loader
+  that cannot load the Midnight packages. A closed set an SDK defines that the schema needs is
+  declared as a plain `as const` array in such a file (`vault-action.ts` is the model), named
+  as the SDK names its members.
 
 ## State and asynchronous work
 
@@ -208,6 +248,16 @@ Keep setup instructions and application reference material in README.md and docs
   the node, the indexer or a running server is an integration test and lives under the top-level
   `integration-tests/` folder, run with `yarn test:integration` against the local services. A
   `*.test.ts` under `src` that opens a socket is in the wrong folder.
+- `integration-tests/ethereum-erc20-vault-deposit.test.ts` is the end-to-end deposit. It runs
+  inside `yarn test:integration` (four and a half to five minutes for the suite, four to four and
+  a half of them the round trip), needs the whole local stack, and needs no dev server running
+  (`ps aux | grep "[n]ext dev"` finds nothing), since a dev server joins the same Kafka consumer
+  group. Run the suite whenever a change touches a state machine, a state controller, a
+  resolver, a ledger implementation, the flusher, the sweep or the composition root. One file
+  runs with `yarn vitest run --config vitest.integration.config.ts --reporter=verbose <file>`,
+  and the verbose reporter is the only one that shows a test's log lines. Every integration file
+  deletes its rows in `afterAll`, the outbox included (`convert_from(data, 'UTF8') like`, since
+  the column is `bytea`), then stops the backend and ends the pool, in that order.
 - Unit tests are table driven with vitest (`yarn test`, files named `*.test.ts` beside the code):
   an array of cases, each with a name, the doubles its collaborators are built from, the
   arguments and a check, run through `test.each`. They cover the layers that hold logic: state

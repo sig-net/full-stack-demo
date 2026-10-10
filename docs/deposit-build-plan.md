@@ -6,47 +6,38 @@ picking it up after a context clear needs nothing else beyond the repository's r
 the code itself. Work through the stages in order, tick each box as it is verified, and record
 anything learned in the findings log at the end so the next agent does not rediscover it.
 
-## Resume here (paused 2026-10-09)
+## Resume here (done 2026-10-10)
 
-Work stopped mid-way through a correction under Stage 8. Everything up to and including
-Stage 8 is built, reviewed and committed, and `yarn check` is green. Pick up exactly here:
+Every stage is done. Stages 0 to 9 and the correction 8b are built, verified and documented in
+the working tree, which is uncommitted and awaiting the user's review. `yarn check` and
+`yarn test:integration` are green (the Stage 9 findings entry has the figures). What is left is
+the user's own:
 
-- **Stages 0 to 8 are done.** Each stage was implemented by a fresh agent from a hand-off
-  pack, reviewed by the coordinating session (every check and both test suites re-run, the
-  code read, rule violations fixed), and its report kept. The packs and reports are tracked
-  under `docs/deposit-build-hand-off/` (`00-START-HERE.md`, `01-codebase-context.md`, one
-  `stage-N-report.md` per stage, and the two pending task files below).
-- **Stage 8b is pending and is the next piece of work:** `docs/deposit-build-hand-off/02-stage-8b-task.md`.
-  The end-to-end test passed three times for its agent, and the reviewer's own run under CPU
-  load exposed a defect: the Midnight node accepted and applied a `completeDeposit`
-  transaction while the SDK's submit reported "Transaction submission failed" (a websocket
-  closure after the bytes were sent), so the backend recorded it `Rejected`, moved the deposit
-  back to `AwaitingCompletion`, and a retry could never succeed since the request had settled
-  and minted on chain. The task file holds the evidence, the cause and the fix: the ledger
-  implementation reports a rejection only when the node refused, errors carry their cause
-  chain, and the deposit resolver reads the vault ledger before believing a failed start or
-  complete. An agent was launched on it and stopped before it changed any file.
-- **The live reproduction is still in the local database** and must be resolved by the fix,
-  not deleted first: deposit
-  `callers/70cfff4060e853cd177ba7f66d32beb10f2ecd9e075d7a6f55bc7b2840f840ef/ethereum-erc20-vault-deposits/704a3298-f32e-46c7-9c5b-1957a0595a70`
-  in `AwaitingCompletion`, its vault request `Attested`, its complete transaction `Failed`
-  as `Rejected`, and the ledger holding nothing for its `inIndex` (settled). After the fix a
-  sweep must move it to `Completed` with outcome `minted`. Then delete that caller's rows.
-- **Stage 9 follows 8b:** `docs/deposit-build-hand-off/02-stage-9-task.md` (documentation,
-  the rules file, the invalidated-name grep). It needs the reviewer's own end-to-end run to
-  pass first, run alone with nothing else loading the machine.
+- **The diagrams.** The user's diagramming work (the diagram files under `docs/`,
+  `drawio.config.json`, `scripts/diagram-library.ts`, the diagram scripts in `package.json` and
+  the `## Diagrams` section at the end of `AGENTS.md`) was left untouched by every agent. The
+  deposit and vault request state machines (`docs/deposit-state-machine.drawio`,
+  `docs/vault-request-state-machine.drawio`) are still to be drawn, and the labels the code has
+  moved past are listed in the Stage 9 findings entry: the `recordRejection` edge label and the
+  missing `recordLedgerFailure` edge in `docs/transaction-state-machine.drawio`,
+  `resolveDepositState` in `drawio.config.json`'s lint subjects, and the
+  `AwaitingCompletion -> Completed` arrow the deposit diagram needs.
+- **Review and commit.** The hand-off packs and reports under `docs/deposit-build-hand-off/`
+  (`00-START-HERE.md`, `01-codebase-context.md`, the task files, `stage-3-report.md` to
+  `stage-9-report.md` and `stage-8b-report.md`) record what each stage built, how it was
+  verified and what it found. Three README commands were not run in Stage 9 because they would
+  change this environment (`cp .env.example .env.local`, `docker compose down`,
+  `docker compose down --volumes`), and `yarn shadcn add <component>` is a placeholder.
 - **How each stage ran:** a fresh Fable 5.1 agent per stage, given the pack's three files, the
   previous stage's report and the plan's stage section, told never to commit or install
   globally, to verify with observed output, and to write its report. The coordinator then
   re-ran `yarn check` and `yarn test:integration`, read the code, scanned for the punctuation
   and comment rules, fixed small things, folded the report into the next pack, and launched the
-  next stage. Repeat that for 8b and 9.
-- **The user's own uncommitted diagramming work** (the diagram files under `docs/`,
-  `drawio.config.json`, the `## Diagrams` section at the end of `AGENTS.md`) is deliberately
-  left out of every commit and must stay untouched by agents.
+  next stage.
 - **Local stack facts that matter on resume:** no dev server may run during integration tests
-  (shared Kafka group), the full integration suite takes about five minutes, the end-to-end
-  deposit about four, and `.env.local` is synced to the prep repository's stack.
+  (shared Kafka group), the full integration suite takes four and a half to five minutes, the
+  end-to-end deposit four to four and a half (one sweep wait decides which), and `.env.local`
+  is synced to the prep repository's stack.
 
 ## How to use this document
 
@@ -137,7 +128,8 @@ ports behind which the slow systems sit.
 ```text
 Deposit (user-owned)
   AwaitingStartTransaction -> AwaitingVaultRequest -> AwaitingCompletion -> AwaitingCompleteTransaction -> Completed
-                           \-> Failed (StartFailed)                                        \-> back to AwaitingCompletion on a failed attempt
+                           \-> Failed (StartFailed)                    \-> Completed             \-> back to AwaitingCompletion on a failed attempt
+                                                                        (the ledger shows the complete settled)
   children: MidnightTransaction(circuit startDeposit), VaultRequest, MidnightTransaction(circuit completeDeposit)
 
 VaultRequest (the permissionless vault processing of one request, any action)
@@ -1224,20 +1216,39 @@ Verification:
 
 ## Stage 9: documentation and final checks
 
-- [ ] `README.md`: a "Deposit lifecycle" section describing the five entities, the flusher, the
-      sweep, the relayer wallet and the new environment variables, in human terms, self-contained.
-      Every command quoted was run verbatim.
-- [ ] `AGENTS.md`: extend the lifecycle section with the parent nudge (`{ name, parent }` in child
-      events), the ledger-as-acknowledgement rule for chain steps, the rule that a vault-level
-      batch (the flush) is a process and not an entity, and the relayer transaction rule
-      (`signer`). Record the Stage 6 decision on where the unproven call is built.
+- [x] `README.md`: a "Deposit lifecycle" section that tells the story once (the four resources
+      and the flush, the actor of each step, the ledger-as-acknowledgement rule, the parent nudge,
+      the sweep and why it is load-bearing, the two user actions and what the browser supplies,
+      the unreachable stale attestation), and every other section reconciled with Stages 1 to 8b:
+      the testing section with the three kinds of test, their commands and observed durations,
+      the scripts and layout tables completed, the rejection split in both transaction entities,
+      and the durations the local stack observed in place of "minutes". Every command quoted was
+      run verbatim in Stage 9, except the three that would change this environment
+      (`cp .env.example .env.local`, `docker compose down`, `docker compose down --volumes`) and
+      the placeholder `yarn shadcn add <component>`.
+- [x] `AGENTS.md`: the lifecycle section gained the parent nudge, the ledger-as-acknowledgement
+      rule, the ledger port's `submit` contract with the rejection split, the flush as a process
+      with no row, the `signer` rule, the sweep and the event-shape rule. The service method
+      section gained the rule for a write that follows a slow build (the Stage 6 decision), the
+      boundary list matches `scripts/check-boundaries.ts`, the validation section gained the
+      drizzle-kit rule, and the verification section the end-to-end test. The user's
+      `## Diagrams` section is byte for byte as it was.
 - [ ] `docs/deposit-state-machine.drawio` and `docs/vault-request-state-machine.drawio`: draw the
       deposit and vault request state machines as committed pairs under the conventions in
-      `docs/diagramming.md`, with the names in this plan.
-- [ ] Grep the repository for every name this work invalidated (`Starting`, `AwaitingFlush` on
-      the deposit, `AwaitingEVM`, `resolveDepositState`, `unsignedTx`, the old Ethereum states)
-      and fix every hit.
-- [ ] `yarn check` and `yarn test:integration` pass. Report warning counts honestly.
+      `docs/diagramming.md`, with the names in this plan. The user's diagramming work, left to the
+      user: the labels to draw and to update are in the Stage 9 findings entry.
+- [x] Grep the repository for every name this work invalidated (`Starting`, `AwaitingFlush` on
+      the deposit, `AwaitingEVM`, `resolveDepositState`, `unsignedTx`, the old Ethereum states,
+      the bare transaction names, `startEventConsumerHub`, `startOutboxEntryProcessor`,
+      `transaction-relayer-wallet`) and fix every hit in a file the stage may edit. No stale name
+      remained there. The one hit in the user's files (`resolveDepositState` in
+      `drawio.config.json`) is in the findings entry.
+- [x] `docs/architecture.md`: its opening says what was built from it and maps the design's names
+      to the code's, and its "Mapping onto this repository" table names the built locations.
+- [x] `.env.example`: every variable the backend and the tests read, with its comment, and nothing
+      else.
+- [x] `yarn check` and `yarn test:integration` pass, with the figures in the findings entry.
+      oxlint prints nothing when clean, so the warning count is zero by its silence and exit 0.
 
 ## Findings log
 
@@ -1321,6 +1332,13 @@ localhost:9092 --group full-stack-demo.events --topic full-stack-demo.events --r
   awaited it stalled every resolver's sweep for the length of a proving flush, minutes on this
   stack, and the two polling states of a vault request advance only on a sweep. The task fires
   the flush and returns, since the flusher coalesces and logs its own failures.
+- 2026-10-10, review of Stage 8b: the submit-time refusal and the ledger's verdict are two
+  actions now, in both transaction entities. `recordRejection` applies only from
+  `AwaitingSubmission` and `recordLedgerFailure` (Midnight) or `recordFailure` (Ethereum) only
+  from `AwaitingInclusion`. With one action for both, a stale duplicate submitter whose refusal
+  was not the "already imported" code could still have written `Failed` over a transaction the
+  node held, which is the race Stage 8b diagnosed. The state machine refuses it now and the
+  conflict is swallowed. Every `(state, action)` pair is in the tables' tests.
 - 2026-10-09, tooling: `yarn vitest run --config vitest.integration.config.ts <file>` runs one
   integration file, and `docker compose exec -T postgres psql -U demo -d demo -c '\dt'` reaches
   the database. Both were run before being quoted in this plan.
@@ -1618,3 +1636,176 @@ every 30000 ms`, with no error line, and the server was stopped afterwards. A bo
   verified the 23-event trail assertion in publication order (the first two runs asserted the
   deposit's five events only), so the trail box is ticked on it. The suite's duration rose from
   about 20 s to about five minutes with the round trip in it.
+- 2026-10-10, Stage 8b defect: the reviewer's end-to-end run under CPU load (a unit test run
+  beside it) left deposit `callers/70cfff40.../ethereum-erc20-vault-deposits/704a3298-...` in
+  `AwaitingCompletion` with its vault request `Attested` (`executed`, output `01`) and its
+  `completeDeposit` transaction `Failed` as `Rejected` with error `Transaction submission
+failed` at 16:19:58.748 UTC, while the node's log at the same second read `Validated
+transaction d214837b... for mempool` and two seconds later `Applying transaction d214837b...`,
+  and the ledger held nothing under the deposit's `inIndex` (`depositArgsMap.member` false, the
+  six maps empty): the complete had settled and minted. Cause, read in
+  `node_modules/@midnightntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js`
+  (`sendMidnightTransaction`): the rejection of polkadot's `send(callback)` is wrapped as
+  `SubmissionError({ message: 'Transaction submission failed', cause })` whatever `cause` is,
+  and `@polkadot/api`'s `decorateSubscribe` rejects that promise only when the subscription
+  errors before its first status, so the cause is the node's JSON-RPC answer (polkadot's
+  `RpcError`, a plain `Error` with a non-enumerable numeric `code`, built by `checkError` in
+  `@polkadot/rpc-provider/coder/index.js` as `${code}: ${message}${data}`), or a socket that
+  closed with the request pending (`#onSocketClose` in `@polkadot/rpc-provider/ws/index.js`
+  rejects every pending handler with `disconnected from <endpoint>: <code>:: <reason>`), or a
+  send on a closed socket (`WebSocket is not connected`, thrown before anything goes out). The
+  backend treated every thrown submit as `Rejected` and `messageOf` dropped the cause.
+- 2026-10-10, Stage 8b fix: `submitThrough` in `transaction-ledger-midnight-impl.ts` runs the
+  SDK's `sendMidnightTransactionAndWait` with `Effect.runPromiseExit` and classifies the typed
+  failure with `submissionFailureKind` over the SDK's seven error classes: `refused` (an
+  `RpcError` cause other than code 1013, or the invalid, dropped and usurped statuses) and
+  `unsent` (`ConnectionError`,
+  or the unconnected-send message) throw with the cause in the chain, and `acknowledgementLost`
+  (a closure, a timeout, a `TransactionProgressError`, a `ParseError`, or any cause of unknown
+  shape) logs a warning and resolves, so `submit` returns the id and the inclusion watch and the
+  TTL decide. A dropped transaction ends `Expired`, the honest record for an unknown outcome,
+  where `Rejected` would claim the node refused. `src/lib/message-of.ts` walks the `cause` chain
+  and replaced the two private copies in the Midnight and Ethereum resolvers, so a `Rejected`
+  row now reads `The Midnight node refused the transaction: Transaction submission failed:
+1010: Invalid Transaction: ...`. Unit tests (`transaction-ledger-midnight-impl.test.ts`, 27
+  tests in the file) construct the SDK's real error classes and drive `submitThrough` through a
+  mocked `NodeClient.Service` with `Stream.fail`, `Stream.make` and `Stream.die`. The deposit
+  resolver takes the `RequestLedger` from the composition root and reads it lazily, once per
+  resolve or per sweep (`lazySingleton`), before believing a failed child: a failed start whose
+  request the ledger holds (any stage but `settled`) records started, a failed complete whose
+  request is `settled` records completed with `depositOutcome(request)`, and `AwaitingCompletion`
+  with no live complete child runs the same check on every sweep, through a new
+  `recordCompleted` transition from `AwaitingCompletion` in `deposit-state-machine.ts` (the
+  state machine test now allows that one action from two states). 31 resolver cases cover the
+  branches with `requestLedgerAt(stage)`, hoisted from the vault request resolver test into
+  `vault-ledger-fixtures.ts` at its second consumer.
+- 2026-10-10, Stage 8b live reproduction: with no dev server running,
+  `NODE_OPTIONS=--conditions=react-server node_modules/.bin/tsx --env-file=.env.local .scratch-spike/spike-8b-reproduction.mts`
+  printed `before: AwaitingCompletion outcome null`, `ledger depositArgsMap holds inIndex:
+false`, `Backend started: 5 consumers registered, sweep every 30000 ms`, `Relayer wallet
+synced in 467 ms`, `Sweep ran its first pass in 497 ms and runs every 30000 ms`, `after 1010
+ms: Completed outcome minted updateTime 2026-10-10T09:50:36.648Z` and `outbox:
+midnight.ethereum-erc20-vault.deposit-v1.completed 2026-10-10T09:50:36.651Z`. psql then
+  showed the deposit `Completed | minted` and the four transaction rows untouched (the complete
+  still `Failed | Rejected | Transaction submission failed`, as the resolver never rewrites a
+  child), and the caller's rows were deleted from the four resource tables (4, 1, 1, 1 rows)
+  and the outbox (36 rows).
+- 2026-10-10, Stage 8b outbox cleanup: `event_outbox_entries_v1.data` is `bytea`, so the
+  `delete ... where data::text like '%<caller>%'` every integration test ran in `afterAll`
+  matched nothing (`data::text` renders hex: 0 rows against 36 for `convert_from(data,
+'UTF8') like`), and the outbox had grown to 336 rows. The five tests now delete with
+  `convert_from(data, 'UTF8') like $1`.
+- 2026-10-10, Stage 8b, the real cause, seen on the first whole-suite run: with the cause chain
+  carried into the row, the next failed complete read `Rejected: The Midnight node refused the
+transaction: Transaction submission failed: 1013: Transaction Already Imported: Any { .. }`,
+  and stderr held two `RPC-CORE: submitAndWatchExtrinsic(...): ExtrinsicStatus:: 1013:
+Transaction Already Imported` lines in the same second. The same bytes were submitted three
+  times at once (the event consumer on `awaiting-submission` and the sweep, in one backend:
+  `vitest.integration.config.ts` runs files one at a time), the node accepted the first and
+  answered the others 1013, and a 1013 write reached the row before the submission's. So the
+  acknowledgement was never lost: a duplicate submission's refusal was recorded over it, which is
+  what the Stage 8 reviewer's row (`Transaction submission failed` with the cause dropped) most
+  likely was as well. Fix: an `RpcError` with substrate's code 1013 is the kind `held` and
+  `submit` returns the id. The test then showed the second half of the harm: the test retried
+  `completeDeposit` within one poll, the service built a second complete while the first sat in
+  the pool, and the user wallet failed with `Wallet.InsufficientFunds: could not balance dust`
+  (the first complete had spent the dust), which ended the run at 251 s. The retry now waits
+  `RETRY_AFTER_MS` (40 s, past one sweep interval) after the failed attempt is first seen, so the
+  resolver's ledger check runs first. `yarn test:integration` before these two fixes: 1 failed,
+  19 passed, 273.30 s, exit 1.
+- 2026-10-10, Stage 9 closing counts, every figure from a run in this stage. `yarn format` then
+  `yarn check`: `✓ Types generated successfully`, oxlint silent with exit 0, `All matched files
+use the correct format` over 257 files, `Boundaries hold across 223 files (212 backend imports
+checked)`, `docs/diagram-library.drawio matches the code`, unit tests 29 files and 583 tests
+  passed in 1.92 s. `yarn test:integration --reporter=verbose` with no dev server (`pgrep -fl
+"next dev"` empty): `Test Files 9 passed (9)`, `Tests 20 passed (20)`, `Duration 265.23s`,
+  exit 0, the round trip `241232ms` with `AwaitingCompletion reached 200377 ms after the start`
+  and `Completed 241187 ms after the start`, the relayer wallet synced in 1557 ms and the user
+  wallet in 1497 ms, the only stderr the two `RPC-CORE: subscribeRuntimeVersion(): ... 1000::
+Normal Closure` lines, no warning and no backend error line. The legs matched Stage 8's run 1
+  within two seconds each (`AwaitingVaultRequest` +34 s, `AwaitingSend` +49 s,
+  `AwaitingSignature` +94 s, `AwaitingBroadcast` +124 s, `AwaitingAttestationQueue` +155 s,
+  `AwaitingAttestationFlush` +185 s, `Attested` +200 s, `Completed` +241 s). The README's
+  other quoted commands: `yarn install` (`Done in 0s 824ms`), `docker compose up -d --wait`
+  (both containers `Healthy`), `yarn db:migrate` (`migrations applied successfully`, nothing
+  pending), `yarn zk-assets` (`vault: up to date (88 files verify against the shipped
+manifest), skipped` and `signet: up to date (10 files verify against its manifest), skipped`,
+  3 s), `yarn db:generate --name describe_the_change` (`No schema changes, nothing to migrate`,
+  nothing written under `drizzle/`), `yarn test` and `yarn boundaries` inside `yarn check`, and
+  the single-file `yarn vitest run --config vitest.integration.config.ts --reporter=verbose
+integration-tests/ethereum-erc20-vault-deposit.test.ts` (`1 passed`, the test `251220ms`,
+  `Duration 254.87s`, exit 0, `AwaitingCompletion` +205 s and `Completed` +251 s, one sweep
+  wait longer than the suite's run). Not run, since each would change this environment:
+  `cp .env.example .env.local`,
+  `docker compose down` and `docker compose down --volumes`. `yarn shadcn add <component>` is
+  a placeholder.
+- 2026-10-10, Stage 9 invalidated-name grep: `grep -rn -E` for `\bStarting\b`, `AwaitingEVM`,
+  `resolveDepositState`, `\bunsignedTx\b`, `\bSigning\b`, `\bSubmitting\b`, `\bPending\b`,
+  `startEventConsumerHub`, `startOutboxEntryProcessor`, `transaction-relayer-wallet`,
+  `sweepForever`, the bare `TransactionStateController`, `TransactionLedger`,
+  `TransactionStateResolver`, `TransactionEventConsumer`, `TRANSACTION_EVENT_BY_STATE` and
+  `TRANSACTION_EVENTS` (each preceded by a non-identifier character), `deposit-state-diagram`
+  and `architecture.drawio`, over `src`, `integration-tests`, `scripts`, `README.md`, `docs`,
+  `AGENTS.md`, `.env.example`, the config files and `compose.yaml`, with the plan and the
+  hand-off pack excluded. Hits: `Pending` as a badge label in `src/app/(configured)/design/page.tsx`
+  and `src/components/activity-row.tsx`, `Starting` in the describe name of
+  `integration-tests/ethereum-erc20-vault-deposit-start.test.ts`, and `startBackend` in
+  `src/instrumentation.ts`, `src/server/start.ts` and `README.md`: English words and the live
+  export of `start.ts`, none a stale name. The one stale name in a file the stage may not edit
+  is `resolveDepositState` in `drawio.config.json` (`lint.subjects`), whose method is
+  `resolveDeposit`. `docs/diagramming.md` holds none of the bare transaction names any more.
+- 2026-10-10, Stage 9 diagram labels left for the user, read from the `.drawio` files without
+  editing them. (1) `docs/transaction-state-machine.drawio`: the edge label `recordRejection:
+Records the Rejected, FailEntirely or FailFallible failure` describes the one action from
+  before the Stage 8b review split. `recordRejection` now records only `Rejected` and leaves
+  only `AwaitingSubmission`, and `recordLedgerFailure: Records the FailEntirely or FailFallible
+failure` leaves `AwaitingInclusion`, so the `AwaitingInclusion` to `Failed` edge needs the new
+  subject and `drawio.config.json`'s `lint.subjects` needs `recordLedgerFailure` beside it (and
+  `resolveDepositState` removed). (2) The deposit state machine, to be drawn as
+  `docs/deposit-state-machine.drawio`: states `AwaitingStartTransaction`, `AwaitingVaultRequest`,
+  `AwaitingCompletion`, `AwaitingCompleteTransaction`, `Completed`, `Failed`. The caller edges
+  are `startDeposit` (creates the row and the start call) and `completeDeposit`
+  (`AwaitingCompletion` to `AwaitingCompleteTransaction`). The resolver edges are
+  `recordStarted`, `recordStartFailure` (records the `StartFailed` failure), `recordAttested`,
+  `recordCompleted` from both `AwaitingCompleteTransaction` and `AwaitingCompletion` to
+  `Completed` (the Stage 8b arrow), and `recordCompleteFailure` back to `AwaitingCompletion`.
+  There is no expiry edge. (3) The vault
+  request state machine, to be drawn as `docs/vault-request-state-machine.drawio`: eight states
+  `AwaitingFlush`, `AwaitingSend`, `AwaitingSignature`, `AwaitingBroadcast`,
+  `AwaitingAttestation`, `AwaitingAttestationQueue`, `AwaitingAttestationFlush`, `Attested`,
+  one resolver edge each (`recordFlushed` stores `outIndex`, `recordSent` stores `requestId`,
+  `recordSignature` stores `signedTx`, `recordBroadcast`, `recordAttestation` stores the five
+  `attestation*` fields, `recordAttestationQueued`, `recordAttested`), `queueRequest` as the
+  creating edge, no failure state and no expiry edge. (4) The Ethereum transaction state machine,
+  if drawn: `AwaitingSubmission`, `AwaitingInclusion`, `Succeeded`, `Failed`, with
+  `recordRejection` from `AwaitingSubmission` (the `Rejected` failure), `recordFailure` from
+  `AwaitingInclusion` (`Reverted` or `NonceConsumed`), `recordSuccess`, and `expireTransaction`
+  from both waiting states.
+- 2026-10-10, Stage 9 comment fixes, no behaviour change: a prose semicolon replaced in seven
+  code comments (`src/components/contexts/MidnightWalletContext.tsx`,
+  `src/lib/midnight/transaction-v1/transaction.ts`, `src/lib/config/midnight-network-config.ts`,
+  `src/lib/config/midnight-signet-config.ts`, `src/lib/config/ethereum-config.ts`,
+  `src/lib/config/midnight-ethereum-erc20-vault-config.ts`, `integration-tests/setup.ts`) and in
+  two comment lines of `.env.example`. The grep for em dashes, en dashes and sentences starting
+  with "Because" over `README.md`, `docs/*.md`, `.env.example`, `src`, `integration-tests` and
+  `scripts/check-boundaries.ts` found nothing before or after the edits.
+- 2026-10-10, Stage 9, `yarn dev` writes to `AGENTS.md`: Next.js 16.3.5 logs `✓ Generated
+AGENTS.md for AI agents. Set agentRules: false in next.config to disable.` on start and appends
+  a `<!-- BEGIN:nextjs-agent-rules -->` block (ten lines, written by
+  `node_modules/next/dist/server/lib/generate-agent-files.js`) to the end of the file, after the
+  user's `## Diagrams` section. Stage 9 removed the appended lines so the file ends as the user
+  left it. Every dev server start appends them again until `agentRules: false` is set in
+  `next.config.ts`, a change left to the user. The server otherwise started as the README says:
+  `Backend started: 5 consumers registered, sweep every 30000 ms`, `Relayer wallet synced in
+754 ms`, `GET / 200`.
+- 2026-10-10, coordinator review of Stage 9, every figure from the reviewer's own run after the
+  stage's last edit: `yarn check` green (`Boundaries hold across 223 files (212 backend imports
+checked)`, `docs/diagram-library.drawio matches the code`, 29 files and 583 unit tests), and
+  `yarn test:integration --reporter=verbose` with no dev server: `Test Files 9 passed (9)`,
+  `Tests 20 passed (20)`, `Duration 296.42s`, exit 0, the round trip `272965ms` with
+  `AwaitingCompletion reached 232160 ms after the start` and `Completed 272914 ms after the
+start` (one sweep wait longer than the stage's run), no retry, no lost-acknowledgement warning,
+  the two `Normal Closure` stderr lines only. The reviewer's only edits: twelve prose semicolons
+  replaced in this log's Stage 8b entry and in `stage-3-report.md`, `stage-6-report.md` and
+  `stage-7-report.md`, after which the semicolon, dash and "Because" scans over `README.md`,
+  `docs/*.md`, the hand-off pack and `.env.example` found nothing.

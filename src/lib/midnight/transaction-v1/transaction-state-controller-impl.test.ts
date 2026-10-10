@@ -185,16 +185,19 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
     {
       name: 'recordRejection from AwaitingSubmission',
       from: TRANSACTION_IN_STATE.AwaitingSubmission,
-      transition: (c) =>
-        c.recordRejection({ name: TRANSACTION_NAME, failure: 'Rejected', error: 'invalid' }),
+      transition: (c) => c.recordRejection({ name: TRANSACTION_NAME, error: 'invalid' }),
       to: 'Failed',
       patch: { failure: 'Rejected', error: 'invalid' },
     },
     {
-      name: 'recordRejection from AwaitingInclusion',
+      name: 'recordLedgerFailure from AwaitingInclusion',
       from: TRANSACTION_IN_STATE.AwaitingInclusion,
       transition: (c) =>
-        c.recordRejection({ name: TRANSACTION_NAME, failure: 'FailEntirely', error: 'rejected' }),
+        c.recordLedgerFailure({
+          name: TRANSACTION_NAME,
+          failure: 'FailEntirely',
+          error: 'rejected',
+        }),
       to: 'Failed',
       patch: { failure: 'FailEntirely', error: 'rejected' },
     },

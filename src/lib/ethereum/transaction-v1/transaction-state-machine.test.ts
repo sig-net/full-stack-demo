@@ -20,6 +20,7 @@ import {
 
 const ACTIONS: readonly TransactionAction[] = [
   'recordSubmission',
+  'recordRejection',
   'recordSuccess',
   'recordFailure',
   'expire',
@@ -30,7 +31,7 @@ const ALLOWED: ReadonlyArray<
   [EthereumTransactionState, TransactionAction, EthereumTransactionState]
 > = [
   ['AwaitingSubmission', 'recordSubmission', 'AwaitingInclusion'],
-  ['AwaitingSubmission', 'recordFailure', 'Failed'],
+  ['AwaitingSubmission', 'recordRejection', 'Failed'],
   ['AwaitingSubmission', 'expire', 'Failed'],
   ['AwaitingInclusion', 'recordSuccess', 'Succeeded'],
   ['AwaitingInclusion', 'recordFailure', 'Failed'],

@@ -32,6 +32,7 @@ const ALLOWED: ReadonlyArray<[DepositState, DepositStateAction, DepositState]> =
   ['AwaitingStartTransaction', 'recordStartFailure', 'Failed'],
   ['AwaitingVaultRequest', 'recordAttested', 'AwaitingCompletion'],
   ['AwaitingCompletion', 'complete', 'AwaitingCompleteTransaction'],
+  ['AwaitingCompletion', 'recordCompleted', 'Completed'],
   ['AwaitingCompleteTransaction', 'recordCompleted', 'Completed'],
   ['AwaitingCompleteTransaction', 'recordCompleteFailure', 'AwaitingCompletion'],
 ]
@@ -47,10 +48,17 @@ describe('nextState', () => {
     expect(nextState(state, action)).toBe(allowed?.[2])
   })
 
-  test('each action is legal from exactly one state', () => {
+  test('each action but recordCompleted is legal from exactly one state', () => {
     for (const action of ACTIONS) {
-      expect(ALLOWED.filter(([, by]) => by === action)).toHaveLength(1)
+      expect(ALLOWED.filter(([, by]) => by === action)).toHaveLength(
+        action === 'recordCompleted' ? 2 : 1,
+      )
     }
+  })
+
+  test('a complete the ledger shows settled is recorded from both states that wait on it', () => {
+    expect(nextState('AwaitingCompletion', 'recordCompleted')).toBe('Completed')
+    expect(nextState('AwaitingCompleteTransaction', 'recordCompleted')).toBe('Completed')
   })
 
   test('terminal states allow nothing', () => {

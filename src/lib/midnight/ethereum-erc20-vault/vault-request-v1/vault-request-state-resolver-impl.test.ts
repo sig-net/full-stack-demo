@@ -1,10 +1,4 @@
 import type { SignetRequestResponseReader } from '@sig-net/midnight'
-import {
-  Action,
-  type AttestationRecord,
-  type OutputRequestEntry,
-  type RequestBufferEntry,
-} from '@sig-net/midnight-examples-erc20-vault-contract'
 import { describe, expect, test } from 'vitest'
 
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
@@ -21,10 +15,7 @@ import type {
   RequestLedger,
   RequestLedgerState,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
-import {
-  ledgerMap,
-  requestLedgerState,
-} from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
+import { requestLedgerAt } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
 import {
   type VaultRequest,
   type VaultRequestState,
@@ -36,8 +27,6 @@ import {
   ATTESTATION_FIELDS,
   ATTESTATION_OUTPUT,
   DEPOSIT_ACCOUNT,
-  IN_INDEX,
-  LAST_SEEN,
   MPC_RESPONSE_KEY,
   OUT_INDEX,
   OUT_INDEX_HEX,
@@ -61,8 +50,6 @@ import { mock } from '@/lib/testing/mock'
 /** Which controller method a resolve ended in, with its args. */
 type Transition = { method: string; args: object }
 
-type Stage = 'queued' | 'flushed' | 'sent' | 'attestationQueued' | 'attestationFlushed' | 'settled'
-
 interface Case {
   name: string
   stored: VaultRequest | undefined
@@ -78,69 +65,6 @@ interface Case {
   expectTransitions: Transition[]
   expectWrites?: number
   expectError?: string
-}
-
-const entry: RequestBufferEntry = {
-  action: Action.deposit,
-  useNextVaultAccountNonce: false,
-  evmNonce: 7n,
-  inIndex: IN_INDEX,
-  commitment: new Uint8Array(32),
-  argsHash: new Uint8Array(32),
-}
-const record: AttestationRecord = {
-  blockHeight: ATTESTATION_BLOCK_HEIGHT,
-  outputKind: 0,
-  digest: new Uint8Array(32),
-}
-const depositArgs = {
-  request: { erc20Address: new Uint8Array(20), amount: 1n },
-  path: new Uint8Array(32),
-  gas: { gasLimit: 1n, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n },
-}
-
-/** The ledger with the fixture request at `stage`. */
-function ledgerAt(stage: Stage, lastSeen = LAST_SEEN): RequestLedgerState {
-  const flushed: OutputRequestEntry = { entry, lastSeen }
-  const base: Partial<RequestLedgerState> = {
-    depositArgsMap: ledgerMap([[IN_INDEX, depositArgs]]),
-    mpcResponseKey: MPC_RESPONSE_KEY,
-  }
-  switch (stage) {
-    case 'queued':
-      return requestLedgerState({ ...base, inputRequestBuffer: ledgerMap([[IN_INDEX, entry]]) })
-    case 'flushed':
-      return requestLedgerState({
-        ...base,
-        outputRequestBuffer: ledgerMap([[OUT_INDEX, flushed]]),
-      })
-    case 'sent':
-      return requestLedgerState({
-        ...base,
-        outputRequestBuffer: ledgerMap([[OUT_INDEX, flushed]]),
-        evictionMap: ledgerMap([[REQUEST_ID, OUT_INDEX]]),
-      })
-    case 'attestationQueued':
-      return requestLedgerState({
-        ...base,
-        outputRequestBuffer: ledgerMap([[OUT_INDEX, flushed]]),
-        evictionMap: ledgerMap([[REQUEST_ID, OUT_INDEX]]),
-        inputAttestationBuffer: ledgerMap([[REQUEST_ID, record]]),
-      })
-    case 'attestationFlushed':
-      return requestLedgerState({
-        ...base,
-        outputRequestBuffer: ledgerMap([[OUT_INDEX, flushed]]),
-        evictionMap: ledgerMap([[REQUEST_ID, OUT_INDEX]]),
-        outputAttestationBuffer: ledgerMap([[REQUEST_ID, record]]),
-      })
-    case 'settled':
-      return requestLedgerState({ mpcResponseKey: MPC_RESPONSE_KEY })
-    default: {
-      const unhandled: never = stage
-      throw new Error(`Unhandled stage ${JSON.stringify(unhandled)}`)
-    }
-  }
 }
 
 const liveSend = midnightTransactionFixture({
@@ -176,13 +100,13 @@ const cases: Case[] = [
   {
     name: 'AwaitingFlush - still queued, so the flusher owns it',
     stored: VAULT_REQUEST_IN_STATE.AwaitingFlush,
-    ledger: ledgerAt('queued'),
+    ledger: requestLedgerAt('queued'),
     expectTransitions: [],
   },
   {
     name: 'AwaitingFlush - flushed, so the request index is recorded',
     stored: VAULT_REQUEST_IN_STATE.AwaitingFlush,
-    ledger: ledgerAt('flushed'),
+    ledger: requestLedgerAt('flushed'),
     expectTransitions: [
       { method: 'recordFlushed', args: { name: VAULT_REQUEST_NAME, outIndex: OUT_INDEX_HEX } },
     ],
@@ -190,7 +114,7 @@ const cases: Case[] = [
   {
     name: 'AwaitingFlush - another actor sent and queued it already, one step is recorded',
     stored: VAULT_REQUEST_IN_STATE.AwaitingFlush,
-    ledger: ledgerAt('attestationQueued'),
+    ledger: requestLedgerAt('attestationQueued'),
     expectTransitions: [
       { method: 'recordFlushed', args: { name: VAULT_REQUEST_NAME, outIndex: OUT_INDEX_HEX } },
     ],
@@ -198,13 +122,13 @@ const cases: Case[] = [
   {
     name: 'AwaitingFlush - settled on the ledger is an error that leaves the row alone',
     stored: VAULT_REQUEST_IN_STATE.AwaitingFlush,
-    ledger: ledgerAt('settled'),
+    ledger: requestLedgerAt('settled'),
     expectTransitions: [],
   },
   {
     name: 'AwaitingSend - no child, so the send call is built outside and started inside a transaction',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSend,
-    ledger: ledgerAt('flushed'),
+    ledger: requestLedgerAt('flushed'),
     circuits: { sendDeposit: sendDepositFor(OUT_INDEX) },
     midnightChild: { circuit: 'sendDeposit', rows: [] },
     expectTransitions: [
@@ -214,14 +138,14 @@ const cases: Case[] = [
   {
     name: 'AwaitingSend - a live send child does the step, nothing started',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSend,
-    ledger: ledgerAt('flushed'),
+    ledger: requestLedgerAt('flushed'),
     midnightChild: { circuit: 'sendDeposit', rows: [liveSend] },
     expectTransitions: [],
   },
   {
     name: 'AwaitingSend - the last send child failed and the ledger shows no send, so it is replaced',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSend,
-    ledger: ledgerAt('flushed'),
+    ledger: requestLedgerAt('flushed'),
     circuits: { sendDeposit: sendDepositFor(OUT_INDEX) },
     midnightChild: { circuit: 'sendDeposit', rows: [failedSend] },
     expectTransitions: [
@@ -231,7 +155,7 @@ const cases: Case[] = [
   {
     name: 'AwaitingSend - another resolver started the send first, so the conflict is swallowed',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSend,
-    ledger: ledgerAt('flushed'),
+    ledger: requestLedgerAt('flushed'),
     circuits: { sendDeposit: sendDepositFor(OUT_INDEX) },
     midnightChild: { circuit: 'sendDeposit', rows: [] },
     controller: {
@@ -245,7 +169,7 @@ const cases: Case[] = [
   {
     name: 'AwaitingSend - sent on the ledger, so the request id is recorded',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSend,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     expectTransitions: [
       { method: 'recordSent', args: { name: VAULT_REQUEST_NAME, requestId: REQUEST_ID_HEX } },
     ],
@@ -253,7 +177,7 @@ const cases: Case[] = [
   {
     name: 'AwaitingSend - attestation already flushed by another actor, one step is recorded',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSend,
-    ledger: ledgerAt('attestationFlushed'),
+    ledger: requestLedgerAt('attestationFlushed'),
     expectTransitions: [
       { method: 'recordSent', args: { name: VAULT_REQUEST_NAME, requestId: REQUEST_ID_HEX } },
     ],
@@ -261,13 +185,13 @@ const cases: Case[] = [
   {
     name: 'AwaitingSend - settled on the ledger leaves the row alone',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSend,
-    ledger: ledgerAt('settled'),
+    ledger: requestLedgerAt('settled'),
     expectTransitions: [],
   },
   {
     name: 'AwaitingSignature - the reader has a verified post, so its transaction is recorded',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSignature,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     reader: { getSignedEvmTransaction: signatureAnswering(SIGNED_TRANSACTION) },
     expectTransitions: [
       { method: 'recordSignature', args: { name: VAULT_REQUEST_NAME, signedTx: SIGNED_TX } },
@@ -276,14 +200,14 @@ const cases: Case[] = [
   {
     name: 'AwaitingSignature - no verified post yet',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSignature,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     reader: { getSignedEvmTransaction: signatureAnswering(undefined) },
     expectTransitions: [],
   },
   {
     name: 'AwaitingSignature - the indexer is unreachable, so nothing is recorded and the error surfaces',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSignature,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     reader: {
       getSignedEvmTransaction: async () => {
         throw new Error('fetch failed')
@@ -295,34 +219,34 @@ const cases: Case[] = [
   {
     name: 'AwaitingSignature - settled on the ledger skips the poll',
     stored: VAULT_REQUEST_IN_STATE.AwaitingSignature,
-    ledger: ledgerAt('settled'),
+    ledger: requestLedgerAt('settled'),
     expectTransitions: [],
   },
   {
     name: 'AwaitingBroadcast - no child, so the signed transaction is started',
     stored: VAULT_REQUEST_IN_STATE.AwaitingBroadcast,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     ethereumChildren: [],
     expectTransitions: [{ method: 'startBroadcast', args: { name: VAULT_REQUEST_NAME } }],
   },
   {
     name: 'AwaitingBroadcast - a live child, so nothing is done',
     stored: VAULT_REQUEST_IN_STATE.AwaitingBroadcast,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     ethereumChildren: [ETHEREUM_TRANSACTION_IN_STATE.AwaitingInclusion],
     expectTransitions: [],
   },
   {
     name: 'AwaitingBroadcast - the child succeeded, so the broadcast is recorded',
     stored: VAULT_REQUEST_IN_STATE.AwaitingBroadcast,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     ethereumChildren: [ETHEREUM_TRANSACTION_IN_STATE.Succeeded],
     expectTransitions: [{ method: 'recordBroadcast', args: { name: VAULT_REQUEST_NAME } }],
   },
   {
     name: 'AwaitingBroadcast - the child reverted on chain, which the MPC attests',
     stored: VAULT_REQUEST_IN_STATE.AwaitingBroadcast,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     ethereumChildren: [
       {
         ...ETHEREUM_TRANSACTION_IN_STATE.Failed,
@@ -336,7 +260,7 @@ const cases: Case[] = [
   {
     name: 'AwaitingBroadcast - the nonce went elsewhere, which the MPC attests unviable',
     stored: VAULT_REQUEST_IN_STATE.AwaitingBroadcast,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     ethereumChildren: [
       { ...ETHEREUM_TRANSACTION_IN_STATE.Failed, failure: 'NonceConsumed', error: null },
     ],
@@ -345,20 +269,20 @@ const cases: Case[] = [
   {
     name: 'AwaitingBroadcast - the node refused the child, so the same bytes are broadcast again',
     stored: VAULT_REQUEST_IN_STATE.AwaitingBroadcast,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     ethereumChildren: [ETHEREUM_TRANSACTION_IN_STATE.Failed],
     expectTransitions: [{ method: 'startBroadcast', args: { name: VAULT_REQUEST_NAME } }],
   },
   {
     name: 'AwaitingBroadcast - settled on the ledger leaves the row alone',
     stored: VAULT_REQUEST_IN_STATE.AwaitingBroadcast,
-    ledger: ledgerAt('settled'),
+    ledger: requestLedgerAt('settled'),
     expectTransitions: [],
   },
   {
     name: 'AwaitingAttestation - a post verified, so the attestation is recorded',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestation,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     outcomeSource: {
       attestedOutcome: async ({ requestId, mpcResponseKey }) => {
         expect(requestId).toEqual(REQUEST_ID)
@@ -373,20 +297,20 @@ const cases: Case[] = [
   {
     name: 'AwaitingAttestation - no post verifies yet',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestation,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     outcomeSource: { attestedOutcome: async () => undefined },
     expectTransitions: [],
   },
   {
     name: 'AwaitingAttestation - settled on the ledger skips the poll',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestation,
-    ledger: ledgerAt('settled'),
+    ledger: requestLedgerAt('settled'),
     expectTransitions: [],
   },
   {
     name: 'AwaitingAttestationQueue - no child, so the queue call is built for the row and started',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     circuits: {
       queueAttestation: async ({ attestation, serializedOutput }) => {
         expect(attestation).toEqual(ATTESTATION.event)
@@ -405,50 +329,50 @@ const cases: Case[] = [
   {
     name: 'AwaitingAttestationQueue - a live queue child does the step',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue,
-    ledger: ledgerAt('sent'),
+    ledger: requestLedgerAt('sent'),
     midnightChild: { circuit: 'queueAttestation1', rows: [liveQueue] },
     expectTransitions: [],
   },
   {
     name: 'AwaitingAttestationQueue - attested at or below lastSeen is a logged invariant violation',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue,
-    ledger: ledgerAt('sent', ATTESTATION_BLOCK_HEIGHT),
+    ledger: requestLedgerAt('sent', ATTESTATION_BLOCK_HEIGHT),
     expectTransitions: [],
   },
   {
     name: 'AwaitingAttestationQueue - queued on the ledger, so it is recorded',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue,
-    ledger: ledgerAt('attestationQueued'),
+    ledger: requestLedgerAt('attestationQueued'),
     expectTransitions: [{ method: 'recordAttestationQueued', args: { name: VAULT_REQUEST_NAME } }],
   },
   {
     name: 'AwaitingAttestationQueue - flushed already, one step is recorded',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue,
-    ledger: ledgerAt('attestationFlushed'),
+    ledger: requestLedgerAt('attestationFlushed'),
     expectTransitions: [{ method: 'recordAttestationQueued', args: { name: VAULT_REQUEST_NAME } }],
   },
   {
     name: 'AwaitingAttestationQueue - settled on the ledger leaves the row alone',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue,
-    ledger: ledgerAt('settled'),
+    ledger: requestLedgerAt('settled'),
     expectTransitions: [],
   },
   {
     name: 'AwaitingAttestationFlush - still queued, so the flusher owns it',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationFlush,
-    ledger: ledgerAt('attestationQueued'),
+    ledger: requestLedgerAt('attestationQueued'),
     expectTransitions: [],
   },
   {
     name: 'AwaitingAttestationFlush - flushed, so the request is attested',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationFlush,
-    ledger: ledgerAt('attestationFlushed'),
+    ledger: requestLedgerAt('attestationFlushed'),
     expectTransitions: [{ method: 'recordAttested', args: { name: VAULT_REQUEST_NAME } }],
   },
   {
     name: 'AwaitingAttestationFlush - completed by the caller already, so the request is attested',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationFlush,
-    ledger: ledgerAt('settled'),
+    ledger: requestLedgerAt('settled'),
     expectTransitions: [{ method: 'recordAttested', args: { name: VAULT_REQUEST_NAME } }],
   },
   {
@@ -517,7 +441,7 @@ function resolverOver(doubles: Doubles): VaultRequestStateResolverImpl {
         : {
             state: async () => {
               doubles.counts.ledgerReads += 1
-              return doubles.ledger ?? ledgerAt('settled')
+              return doubles.ledger ?? requestLedgerAt('settled')
             },
           },
     ),
@@ -598,7 +522,7 @@ describe('VaultRequestStateResolverImpl sweeps', () => {
     })
     const doubles: Doubles = {
       stored: undefined,
-      ledger: ledgerAt('flushed'),
+      ledger: requestLedgerAt('flushed'),
       repository,
       transitions: [],
       counts: { writes: 0, ledgerReads: 0 },
@@ -626,7 +550,7 @@ describe('VaultRequestStateResolverImpl sweeps', () => {
     })
     const doubles: Doubles = {
       stored: undefined,
-      ledger: ledgerAt('attestationFlushed'),
+      ledger: requestLedgerAt('attestationFlushed'),
       repository,
       transitions: [],
       counts: { writes: 0, ledgerReads: 0 },
@@ -660,7 +584,7 @@ describe('VaultRequestStateResolverImpl sweeps', () => {
     let builds = 0
     const doubles: Doubles = {
       stored: undefined,
-      ledger: ledgerAt('flushed'),
+      ledger: requestLedgerAt('flushed'),
       repository,
       circuits: {
         sendDeposit: async () => {

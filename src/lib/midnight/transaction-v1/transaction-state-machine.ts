@@ -17,6 +17,7 @@ export type TransactionAction =
   | 'submit'
   | 'recordSubmission'
   | 'recordRejection'
+  | 'recordLedgerFailure'
   | 'recordSuccess'
   | 'expire'
 
@@ -31,7 +32,11 @@ const TRANSITIONS: Record<
     recordRejection: 'Failed',
     expire: 'Failed',
   },
-  AwaitingInclusion: { recordSuccess: 'Succeeded', recordRejection: 'Failed', expire: 'Failed' },
+  AwaitingInclusion: {
+    recordSuccess: 'Succeeded',
+    recordLedgerFailure: 'Failed',
+    expire: 'Failed',
+  },
   Succeeded: {},
   Failed: {},
 }

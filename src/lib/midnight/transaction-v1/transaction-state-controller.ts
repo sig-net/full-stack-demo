@@ -25,8 +25,13 @@ export interface MidnightTransactionStateController {
   submitTransaction(args: SubmitTransactionArgs): Promise<MidnightTransaction>
   /** `AwaitingSubmission` to `AwaitingInclusion`, with the id the node returned. */
   recordSubmission(args: RecordSubmissionArgs): Promise<MidnightTransaction>
-  /** `AwaitingSubmission` or `AwaitingInclusion` to `Failed` with the node's or the ledger's verdict. */
+  /**
+   * `AwaitingSubmission` to `Failed` as `Rejected`: the node refused the bytes. Refused from any
+   * later state, so a stale duplicate submission cannot overwrite a transaction the node holds.
+   */
   recordRejection(args: RecordRejectionArgs): Promise<MidnightTransaction>
+  /** `AwaitingInclusion` to `Failed` with the ledger's verdict. */
+  recordLedgerFailure(args: RecordLedgerFailureArgs): Promise<MidnightTransaction>
   /** `AwaitingInclusion` to `Succeeded`. */
   recordSuccess(args: RecordSuccessArgs): Promise<MidnightTransaction>
   /**
@@ -63,7 +68,12 @@ export interface RecordSubmissionArgs {
 
 export interface RecordRejectionArgs {
   name: string
-  failure: Extract<MidnightTransactionFailure, 'Rejected' | 'FailEntirely' | 'FailFallible'>
+  error: string
+}
+
+export interface RecordLedgerFailureArgs {
+  name: string
+  failure: Extract<MidnightTransactionFailure, 'FailEntirely' | 'FailFallible'>
   error: string
 }
 

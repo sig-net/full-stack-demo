@@ -13,7 +13,7 @@ export interface MidnightSignetConfig {
 }
 
 /**
- * A deployed network publishes both values through the SDK; each variable overrides one of them.
+ * A deployed network publishes both values through the SDK, and each variable overrides one of them.
  * The local stack deploys its own singleton and generates its own key, so both are required there.
  */
 export const midnightSignetEnvSchema = z.object({

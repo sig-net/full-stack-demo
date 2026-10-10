@@ -23,6 +23,7 @@ const ACTIONS: readonly TransactionAction[] = [
   'submit',
   'recordSubmission',
   'recordRejection',
+  'recordLedgerFailure',
   'recordSuccess',
   'expire',
 ]
@@ -40,7 +41,7 @@ const ALLOWED: ReadonlyArray<
   ['AwaitingSubmission', 'recordRejection', 'Failed'],
   ['AwaitingSubmission', 'expire', 'Failed'],
   ['AwaitingInclusion', 'recordSuccess', 'Succeeded'],
-  ['AwaitingInclusion', 'recordRejection', 'Failed'],
+  ['AwaitingInclusion', 'recordLedgerFailure', 'Failed'],
   ['AwaitingInclusion', 'expire', 'Failed'],
 ]
 

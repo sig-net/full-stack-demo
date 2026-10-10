@@ -11,7 +11,12 @@ export function nextState(
   return TRANSITIONS[state][action]
 }
 
-export type TransactionAction = 'recordSubmission' | 'recordSuccess' | 'recordFailure' | 'expire'
+export type TransactionAction =
+  | 'recordSubmission'
+  | 'recordRejection'
+  | 'recordSuccess'
+  | 'recordFailure'
+  | 'expire'
 
 const TRANSITIONS: Record<
   EthereumTransactionState,
@@ -19,7 +24,7 @@ const TRANSITIONS: Record<
 > = {
   AwaitingSubmission: {
     recordSubmission: 'AwaitingInclusion',
-    recordFailure: 'Failed',
+    recordRejection: 'Failed',
     expire: 'Failed',
   },
   AwaitingInclusion: { recordSuccess: 'Succeeded', recordFailure: 'Failed', expire: 'Failed' },

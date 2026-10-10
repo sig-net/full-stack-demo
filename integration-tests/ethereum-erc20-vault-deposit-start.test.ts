@@ -34,9 +34,10 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
         'delete from midnight_ethereum_erc20_vault_deposits_v1 where name like $1',
         [`${caller}/%`],
       )
-      await backend.db.pool.query('delete from event_outbox_entries_v1 where data::text like $1', [
-        `%${caller}%`,
-      ])
+      await backend.db.pool.query(
+        "delete from event_outbox_entries_v1 where convert_from(data, 'UTF8') like $1",
+        [`%${caller}%`],
+      )
     }
     await backend.db.pool.end()
   })

@@ -78,12 +78,8 @@ const cases: Case[] = [
     },
     expectTransitions: [
       {
-        method: 'recordFailure',
-        args: {
-          name: TRANSACTION_NAME,
-          failure: 'Rejected',
-          error: 'insufficient funds for gas * price + value',
-        },
+        method: 'recordRejection',
+        args: { name: TRANSACTION_NAME, error: 'insufficient funds for gas * price + value' },
       },
     ],
   },
@@ -188,6 +184,7 @@ describe('EthereumTransactionStateResolverImpl.resolveTransaction', () => {
           recordSubmission: recording('recordSubmission'),
           recordSuccess: recording('recordSuccess'),
           recordFailure: recording('recordFailure'),
+          recordRejection: recording('recordRejection'),
           expireTransaction: recording('expireTransaction'),
           ...controller?.(transitions),
         }),

@@ -252,6 +252,13 @@ describe('DepositStateControllerImpl transitions', () => {
       patch: { outcome: 'closed' },
     },
     {
+      name: 'recordCompleted while awaiting the user, the ledger having settled the complete',
+      from: DEPOSIT_IN_STATE.AwaitingCompletion,
+      transition: (c) => c.recordCompleted({ name: DEPOSIT_NAME, outcome: 'minted' }),
+      to: 'Completed',
+      patch: { outcome: 'minted' },
+    },
+    {
       name: 'recordCompleteFailure',
       from: DEPOSIT_IN_STATE.AwaitingCompleteTransaction,
       transition: (c) => c.recordCompleteFailure({ name: DEPOSIT_NAME }),

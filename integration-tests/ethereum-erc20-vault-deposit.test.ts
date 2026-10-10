@@ -16,6 +16,10 @@ import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 40 * 60_000
 const POLL_EVERY_MS = 5_000
+/** How many times `completeDeposit` is called again after an attempt ended failed. */
+const COMPLETE_RETRIES = 3
+/** Past one sweep interval, so the resolver's ledger check runs before a retry builds a second complete. */
+const RETRY_AFTER_MS = 40_000
 
 /**
  * One deposit from `startDeposit` to `Completed` over the whole local stack: the backend proves,
@@ -51,9 +55,10 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
       ]) {
         await pool.query(`delete from ${table} where name like $1`, [`${caller}/%`])
       }
-      await pool.query('delete from event_outbox_entries_v1 where data::text like $1', [
-        `%${caller}%`,
-      ])
+      await pool.query(
+        "delete from event_outbox_entries_v1 where convert_from(data, 'UTF8') like $1",
+        [`%${caller}%`],
+      )
     }
     await user.stop()
     await backend.stop()
@@ -126,9 +131,37 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
       const completing = await adaptor.completeDeposit(callerSecret, { name: deposit.name, wallet })
       expect(completing.ok).toBe(true)
       if (!completing.ok) return
+      // A failed attempt returns the deposit to AwaitingCompletion. The deposit resolver reads the
+      // vault ledger before it believes the failure, so a complete that landed under a lost
+      // acknowledgement is recorded by the next sweep and a retry only runs when the request is
+      // still open.
+      const failedAttempts = new Map<string, number>()
+      let retries = 0
       await waitFor(async () => {
         await playWallet()
-        return (await depositState()) === 'Completed'
+        const state = await depositState()
+        if (state === 'Completed') return true
+        if (state !== 'AwaitingCompletion') return false
+        const attempt = await latestFailedComplete(backend, deposit.name)
+        if (attempt === undefined) return false
+        const seenAt = failedAttempts.get(attempt.name)
+        if (seenAt === undefined) {
+          failedAttempts.set(attempt.name, Date.now())
+          log(`complete attempt ${shortName(attempt.name)} ended ${stateOf(attempt)}`)
+          return false
+        }
+        if (seenAt === 0 || Date.now() - seenAt < RETRY_AFTER_MS) return false
+        failedAttempts.set(attempt.name, 0)
+        if (retries >= COMPLETE_RETRIES) {
+          log(`no retry: ${String(COMPLETE_RETRIES)} retries were used, waiting on the sweep`)
+          return false
+        }
+        retries += 1
+        const retried = await adaptor.completeDeposit(callerSecret, { name: deposit.name, wallet })
+        log(
+          `completeDeposit retry ${String(retries)} ${retried.ok ? 'accepted' : `refused: ${retried.error}`}`,
+        )
+        return false
       })
       log(`Completed ${String(Date.now() - startedAt)} ms after the start`)
 
@@ -151,7 +184,8 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
       })
       expect(sweep?.state).toBe('Succeeded')
 
-      expect(await eventTrail(backend, deposit.name)).toEqual([
+      const events = await eventTrail(backend, deposit.name)
+      const expectedTrail: [Actor, string][] = [
         ['deposit', 'awaiting-start-transaction'],
         ['start', 'awaiting-proof'],
         ['start', 'awaiting-wallet'],
@@ -175,11 +209,41 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
         ['complete', 'awaiting-inclusion'],
         ['complete', 'succeeded'],
         ['deposit', 'completed'],
-      ])
+      ]
+      if (failedAttempts.size === 0) {
+        expect(events).toEqual(expectedTrail)
+      } else {
+        log(
+          `trail with ${String(failedAttempts.size)} failed complete attempt(s): ${JSON.stringify(events)}`,
+        )
+        const firstCompletion = expectedTrail.findIndex(
+          ([actor, state]) => actor === 'deposit' && state === 'awaiting-completion',
+        )
+        expect(events.slice(0, firstCompletion + 1)).toEqual(
+          expectedTrail.slice(0, firstCompletion + 1),
+        )
+        expect(events.at(-1)).toEqual(['deposit', 'completed'])
+      }
     },
     ROUND_TRIP_TIMEOUT_MS,
   )
 })
+
+/** The newest `completeDeposit` transaction under the deposit when it ended failed. */
+async function latestFailedComplete(
+  backend: Backend,
+  depositName: string,
+): Promise<MidnightTransaction | undefined> {
+  const [latest] = await backend.midnight.transactionV1.repository.search({
+    criteria: [
+      { type: 'exact-text', field: 'parent', text: depositName },
+      { type: 'exact-text', field: 'circuit', text: 'completeDeposit' },
+    ],
+    order: { field: 'createTime', direction: 'desc' },
+    limit: 1,
+  })
+  return latest?.state === 'Failed' ? latest : undefined
+}
 
 /** Logs every change of the deposit, its request and the newest child under each, so a stall shows where it stalled. */
 class Trail {

@@ -7,7 +7,11 @@ import type { MidnightTransactionFailure } from '@/lib/midnight/transaction-v1/t
 export interface MidnightTransactionLedger {
   /** Proves the unproven transaction and resolves with the unbound (proven, unbalanced) bytes. */
   prove(unprovenTx: string): Promise<string>
-  /** Sends the finalized bytes to the node and resolves with the id it accepted them under. */
+  /**
+   * Sends the finalized bytes to the node and resolves with their ledger id once they reached
+   * it, an acknowledgement lost after the send included: the inclusion watch and the TTL then
+   * decide. It throws only when the node refused the bytes with a reason or they never left.
+   */
   submit(finalizedTx: string): Promise<string>
   /** Reads what the ledger has recorded for the id so far. */
   status(txId: string): Promise<MidnightLedgerTransactionStatus>

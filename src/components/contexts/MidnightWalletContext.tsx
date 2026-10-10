@@ -26,7 +26,7 @@ export interface MidnightWalletContextValue {
   readonly wallet: Wallet | null
   readonly addresses: WalletAddressSnapshot | null
   readonly connecting: boolean
-  /** True until the stored seed has been checked on first load; no connection may start before. */
+  /** True until the stored seed has been checked on first load, and no connection may start before. */
   readonly restoring: boolean
   readonly syncStatus: string
   readonly error: string | null

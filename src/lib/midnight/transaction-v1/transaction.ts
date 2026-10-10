@@ -36,7 +36,7 @@ export const MIDNIGHT_TRANSACTION_TERMINAL_STATES = [
 
 /**
  * Why a transaction failed. `ProofFailed`, `Rejected`, `FailEntirely` and `Expired` left nothing
- * on chain and paid no fee; `FailFallible` is on chain with its fee paid and its call not applied.
+ * on chain and paid no fee. `FailFallible` is on chain with its fee paid and its call not applied.
  */
 export const MIDNIGHT_TRANSACTION_FAILURES = [
   'ProofFailed',

@@ -129,7 +129,7 @@ const cases: Case[] = [
     expectTransitions: [
       {
         method: 'recordRejection',
-        args: { name: TRANSACTION_NAME, failure: 'Rejected', error: 'invalid transaction' },
+        args: { name: TRANSACTION_NAME, error: 'invalid transaction' },
       },
     ],
   },
@@ -161,7 +161,7 @@ const cases: Case[] = [
     },
     expectTransitions: [
       {
-        method: 'recordRejection',
+        method: 'recordLedgerFailure',
         args: { name: TRANSACTION_NAME, failure: 'FailEntirely', error: 'rejected' },
       },
     ],
@@ -216,6 +216,7 @@ describe('MidnightTransactionStateResolverImpl.resolveTransaction', () => {
           recordProofFailure: recording('recordProofFailure'),
           recordSubmission: recording('recordSubmission'),
           recordRejection: recording('recordRejection'),
+          recordLedgerFailure: recording('recordLedgerFailure'),
           recordSuccess: recording('recordSuccess'),
           submitTransaction: recording('submitTransaction'),
           expireTransaction: recording('expireTransaction'),

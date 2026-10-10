@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
+import { messageOf } from '@/lib/message-of'
 import {
   type MidnightTransaction,
   MIDNIGHT_TRANSACTION_STATES,
@@ -127,11 +128,7 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
       txId = await this.ledger.submit(finalizedTx)
     } catch (error: unknown) {
       return this.write(() =>
-        this.stateController.recordRejection({
-          name,
-          failure: 'Rejected',
-          error: messageOf(error),
-        }),
+        this.stateController.recordRejection({ name, error: messageOf(error) }),
       )
     }
     return this.write(() => this.stateController.recordSubmission({ name, txId }))
@@ -147,7 +144,7 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
         return this.write(() => this.stateController.recordSuccess({ name }))
       case 'failed':
         return this.write(() =>
-          this.stateController.recordRejection({
+          this.stateController.recordLedgerFailure({
             name,
             failure: status.failure,
             error: status.error,
@@ -173,7 +170,3 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
 const PENDING_STATES: readonly MidnightTransactionState[] = MIDNIGHT_TRANSACTION_STATES.filter(
   (state) => !MIDNIGHT_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === state),
 )
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}

@@ -76,7 +76,7 @@ Changed files:
   with `ps aux | grep "[n]ext dev"` finding nothing: stdout `Backend started: 5 consumers
 registered, sweep every 30000 ms`, `relayer wallet synced 432 ms after start`, `Relayer wallet
 synced in 433 ms`, `Sweep ran its first pass in 479 ms and runs every 30000 ms`, `backend stopped
-in 2474 ms`; test 3161 ms, file 5.35 s, exit 0, no stderr block and no close timeout, so no
+in 2474 ms`, the test 3161 ms, file 5.35 s, exit 0, no stderr block and no close timeout, so no
   open handle survived `stop()` plus `pool.end()`. The relayer wallet was left running by
   `stop()` (no stop exists on `RelayerWallet`) and did not keep the process alive.
 - `yarn test:integration` with no dev server running: 8 files, 19 tests, 19.37 s, exit 0.

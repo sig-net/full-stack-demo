@@ -27,7 +27,7 @@ export interface DepositStateController {
   recordAttested(args: RecordAttestedArgs): Promise<Deposit>
   /** `AwaitingCompletion` to `AwaitingCompleteTransaction`, committing the caller's complete call under the deposit. */
   completeDeposit(args: CompleteDepositArgs): Promise<Deposit>
-  /** `AwaitingCompleteTransaction` to `Completed`, with what the complete call did. */
+  /** `AwaitingCompleteTransaction` or `AwaitingCompletion` to `Completed`, with what the complete call did. */
   recordCompleted(args: RecordCompletedArgs): Promise<Deposit>
   /** `AwaitingCompleteTransaction` back to `AwaitingCompletion`: the caller may complete again. */
   recordCompleteFailure(args: RecordCompleteFailureArgs): Promise<Deposit>

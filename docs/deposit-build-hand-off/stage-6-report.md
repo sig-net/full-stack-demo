@@ -107,21 +107,21 @@ unprovenTx })`) and the task file (`startDeposit({ deposit, unprovenTx })`) disa
   tested in the resolver (four cases) and the output rule in the service (three cases).
 - The task says the wallet keys are "validated by a hex schema" without a length. The spike
   established 64 lower-case hex characters for both, so the schema pins 32 bytes.
-- The task names `yarn lint` output as evidence; oxlint prints nothing on success here, so the
+- The task names `yarn lint` output as evidence, but oxlint prints nothing on success here, so the
   evidence is the exit code.
 - `isUniqueViolation` was to go to `src/lib/db/unique-violation.ts`: done. `callerOf` was not
   mentioned but had the same second consumer, so it was hoisted to `src/lib/caller/caller.ts`.
 - The README's previous text called the caller id "the depositor's 64-character hex identity
-  commitment"; it is the application's SHA-256 caller id, independent of the contract's
+  commitment". It is the application's SHA-256 caller id, independent of the contract's
   commitment (as `docs/architecture.md` says), and the rewrite says so.
-- Nothing in the pack says what message a disallowed token produces; it is
+- Nothing in the pack says what message a disallowed token produces. It is
   `failed assert: ERC20 not allowed`, now in the findings.
 
 ## Decisions that deviate from the plan, and why
 
 - Write boundary (recorded in the findings): the service opens its own transaction after the
   build, and the adaptor takes no `UnitOfWork`. The plan offered two alternatives (build inside
-  the adaptor's transaction with an `AGENTS.md` exception, or build in the adaptor); the task file
+  the adaptor's transaction with an `AGENTS.md` exception, or build in the adaptor), and the task file
   had settled on the service owning it, which keeps the adaptor a pure translator and lets the
   service unit test pin the order.
 - Nonce search (recorded): `exact-text` on `depositAccount` plus a code filter on terminal
@@ -136,7 +136,7 @@ unprovenTx })`) and the task file (`startDeposit({ deposit, unprovenTx })`) disa
   committed, so the parent's event precedes the child's in the outbox. Either order is correct
   for the consumers (the deposit resolver finds a live child and does nothing).
 - The adaptor maps `failed assert: ...` build errors to `{ ok: false }`. The task did not ask for
-  it; the Stage 5 report flagged that the service can turn an assert into a validation outcome,
+  it. The Stage 5 report flagged that the service can turn an assert into a validation outcome,
   and the integration test shows it is the vault refusing the token.
 - `resolvePending()` exists on the deposit resolver even though the task only named
   `resolveDeposit`, since Stage 7's sweep calls it on every resolver.
@@ -151,11 +151,11 @@ unprovenTx })`) and the task file (`startDeposit({ deposit, unprovenTx })`) disa
   `midnight.ethereumErc20Vault.vaultRequestV1.eventConsumer`,
   `midnight.ethereumErc20Vault.flushEventConsumer` and
   `midnight.ethereumErc20Vault.depositV1.eventConsumer`. `src/server/start.ts` already registers
-  all five; Stage 7 moves that into `backend.start()`.
+  all five, and Stage 7 moves that into `backend.start()`.
 - `resolvePending()` exists on `VaultRequestStateResolver` and `DepositStateResolver` only. The
   Midnight and Ethereum transaction resolvers have `resolveTransaction({ name })` alone, so the
   sweep's expiry coverage for them is still to be built (`EXPIRABLE_STATES` and `expireTime` are
-  there; what is missing is a search over waiting rows and a loop, as the vault request resolver's
+  there. What is missing is a search over waiting rows and a loop, as the vault request resolver's
   `resolveEach` does). Also `resolveWaitingFlushes()` on the vault request resolver is called by
   the flusher's `onFlushed`.
 - The flush consumer `await`s `flush()` on purpose (Stage 5 findings): the hub commits the Kafka
@@ -164,10 +164,10 @@ unprovenTx })`) and the task file (`startDeposit({ deposit, unprovenTx })`) disa
   `FlusherImpl` coalesces (`runAgain`) and the sweep calls `flush()` every 30 s anyway, a
   `void flusher.flush().catch(log)` in the consumer would lose nothing a sweep does not recover
   and would stop one flush from stalling the deposit and transaction consumers behind it. The
-  Stage 5 finding chose the await for the demo; Stage 7 should decide with the sweep in hand.
+  Stage 5 finding chose the await for the demo, and Stage 7 should decide with the sweep in hand.
 - `DepositServiceImpl` takes `ethereum.provider` (the ethers `Provider` with `cacheTimeout: -1`)
   for `getTransactionCount(account, 'pending')`. The plan's Stage 7 `Backend` sketch drops
-  `ethereum.provider` in favour of `ethereum.ledger`; keep the provider reachable or add a nonce
+  `ethereum.provider` in favour of `ethereum.ledger`. Keep the provider reachable or add a nonce
   read to `EthereumTransactionLedger`.
 - `createMidnightEthereumErc20VaultDepositV1` needs `circuits`, `vaultRequestV1`,
   `transactionV1`, `ethereum` and `config`, so it is built last inside
@@ -176,7 +176,7 @@ unprovenTx })`) and the task file (`startDeposit({ deposit, unprovenTx })`) disa
   took 291 ms warm, and a contract assert arrives as a plain `Error` with the message
   `failed assert: ERC20 not allowed`, exactly as Stage 5 found for the flush asserts. Nothing in
   `createUnprovenCallTx` needs the deposit account funded, so the start leg of the integration
-  test needs no anvil cheatcodes; Stage 8's end-to-end run does.
+  test needs no anvil cheatcodes, but Stage 8's end-to-end run does.
 - Two `startDeposit` calls by the same caller racing can draw the same `evmNonce`, since the
   nonce search runs outside the transaction. The vault request resolver's
   `AwaitingAttestationQueue` guard logs that case. If Stage 8's test starts deposits concurrently

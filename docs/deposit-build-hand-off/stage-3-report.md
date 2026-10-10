@@ -172,11 +172,11 @@ violation was needed. `yarn boundaries` reports 171 files and 98 backend imports
   ```ts
   {
     name: `${caller}/ethereum-transactions/${uuid}`,   // ethereumTransactionName(callerName, uuid)
-    parent: vaultRequestName,                           // any non-empty string; the live index is per parent
+    parent: vaultRequestName,                           // any non-empty string, the live index is per parent
     state: 'AwaitingSubmission',
     signedTx: transaction.serialized,                   // ethers Transaction from the MPC signature, 0x lower-case hex
     txHash: null, blockNumber: null,
-    expireTime: null | Date,                            // optional; null means never expire
+    expireTime: null | Date,                            // optional, null means never expire
     failure: null, error: null,
     createTime: now, updateTime: now,                   // overwritten by the controller
   }

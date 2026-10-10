@@ -10,7 +10,7 @@ export interface MidnightEthereumErc20VaultConfig {
 }
 
 /**
- * A deployed network publishes the vault address through the contract package; the variable
+ * A deployed network publishes the vault address through the contract package, and the variable
  * overrides it. The local stack deploys its own vault, so the variable is required there.
  */
 export const midnightEthereumErc20VaultEnvSchema = z.object({

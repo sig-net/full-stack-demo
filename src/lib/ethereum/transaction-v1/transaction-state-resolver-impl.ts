@@ -3,6 +3,7 @@ import 'server-only'
 import { Transaction } from 'ethers'
 
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
+import { messageOf } from '@/lib/message-of'
 import {
   type EthereumTransaction,
   ETHEREUM_TRANSACTION_STATES,
@@ -93,11 +94,7 @@ export class EthereumTransactionStateResolverImpl implements EthereumTransaction
       txHash = await this.ledger.broadcast(signedTx)
     } catch (error: unknown) {
       return this.write(() =>
-        this.stateController.recordFailure({
-          name,
-          failure: 'Rejected',
-          error: messageOf(error),
-        }),
+        this.stateController.recordRejection({ name, error: messageOf(error) }),
       )
     }
     return this.write(() => this.stateController.recordSubmission({ name, txHash }))
@@ -154,7 +151,3 @@ export class EthereumTransactionStateResolverImpl implements EthereumTransaction
 const PENDING_STATES: readonly EthereumTransactionState[] = ETHEREUM_TRANSACTION_STATES.filter(
   (state) => !ETHEREUM_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === state),
 )
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}

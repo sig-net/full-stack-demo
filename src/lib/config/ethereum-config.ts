@@ -12,7 +12,7 @@ export const ETHEREUM_RPC_DEFAULTS: Readonly<Record<number, string>> = {
   31337: 'http://127.0.0.1:8545',
 }
 
-/** The chain selects the default RPC; EVM_RPC_URL overrides it and is required for other chains. */
+/** The chain selects the default RPC. EVM_RPC_URL overrides it and is required for other chains. */
 export const ethereumEnvSchema = z.object({
   EVM_CHAIN_ID: z
     .string()

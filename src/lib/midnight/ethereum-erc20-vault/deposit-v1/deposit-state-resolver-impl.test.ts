@@ -17,6 +17,11 @@ import {
   type DepositStateController,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
 import { DepositStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-resolver-impl'
+import type {
+  RequestLedger,
+  RequestLedgerState,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
+import { requestLedgerAt } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import { VAULT_REQUEST_IN_STATE } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
@@ -35,6 +40,8 @@ interface Case {
   transaction?: { circuit: string; rows: MidnightTransaction[] }
   /** The newest vault request the repository finds under the deposit. */
   requests?: VaultRequest[]
+  /** Where the ledger holds the request, or undefined when the ledger must not be read. */
+  ledger?: RequestLedgerState
   controller?: Partial<DepositStateController>
   expectTransitions: Transition[]
   expectWrites?: number
@@ -47,7 +54,7 @@ interface Doubles extends Omit<
 > {
   repository?: Partial<DepositRepository>
   transitions: Transition[]
-  counts: { writes: number }
+  counts: { writes: number; ledgerReads: number }
 }
 
 const attested = VAULT_REQUEST_IN_STATE.Attested
@@ -68,6 +75,11 @@ const failed: Partial<MidnightTransaction> = {
   failure: 'Expired',
   error: null,
 }
+const rejected: Partial<MidnightTransaction> = {
+  ...failed,
+  failure: 'Rejected',
+  error: 'The Midnight node refused the transaction: 1010: Invalid Transaction',
+}
 
 const cases: Case[] = [
   {
@@ -83,29 +95,45 @@ const cases: Case[] = [
     expectTransitions: [],
   },
   {
-    name: 'AwaitingStartTransaction - the start transaction succeeded, so the start is recorded',
+    name: 'AwaitingStartTransaction - the start transaction succeeded, so the start is recorded without a ledger read',
     stored: DEPOSIT_IN_STATE.AwaitingStartTransaction,
     transaction: { circuit: 'startDeposit', rows: [start(succeeded)] },
     expectTransitions: [{ method: 'recordStarted', args: { name: DEPOSIT_NAME } }],
   },
   {
-    name: "AwaitingStartTransaction - the start transaction failed with the node's message",
+    name: "AwaitingStartTransaction - the start transaction failed and the ledger holds no request, so the node's message is recorded",
     stored: DEPOSIT_IN_STATE.AwaitingStartTransaction,
-    transaction: {
-      circuit: 'startDeposit',
-      rows: [start({ ...failed, failure: 'Rejected', error: 'refused' })],
-    },
+    transaction: { circuit: 'startDeposit', rows: [start(rejected)] },
+    ledger: requestLedgerAt('settled'),
     expectTransitions: [
-      { method: 'recordStartFailure', args: { name: DEPOSIT_NAME, error: 'refused' } },
+      {
+        method: 'recordStartFailure',
+        args: { name: DEPOSIT_NAME, error: rejected.error },
+      },
     ],
   },
   {
-    name: 'AwaitingStartTransaction - the start transaction expired without a message, so the reason is recorded',
+    name: 'AwaitingStartTransaction - the start transaction expired without a message and the ledger holds no request, so the reason is recorded',
     stored: DEPOSIT_IN_STATE.AwaitingStartTransaction,
     transaction: { circuit: 'startDeposit', rows: [start(failed)] },
+    ledger: requestLedgerAt('settled'),
     expectTransitions: [
       { method: 'recordStartFailure', args: { name: DEPOSIT_NAME, error: 'Expired' } },
     ],
+  },
+  {
+    name: 'AwaitingStartTransaction - the start transaction failed but the ledger queued the request, so the start is recorded',
+    stored: DEPOSIT_IN_STATE.AwaitingStartTransaction,
+    transaction: { circuit: 'startDeposit', rows: [start(rejected)] },
+    ledger: requestLedgerAt('queued'),
+    expectTransitions: [{ method: 'recordStarted', args: { name: DEPOSIT_NAME } }],
+  },
+  {
+    name: 'AwaitingStartTransaction - the start transaction failed but the ledger flushed the request already, so the start is recorded',
+    stored: DEPOSIT_IN_STATE.AwaitingStartTransaction,
+    transaction: { circuit: 'startDeposit', rows: [start(failed)] },
+    ledger: requestLedgerAt('flushed'),
+    expectTransitions: [{ method: 'recordStarted', args: { name: DEPOSIT_NAME } }],
   },
   {
     name: 'AwaitingStartTransaction - another resolver recorded the start first, so the conflict is swallowed',
@@ -138,9 +166,46 @@ const cases: Case[] = [
     expectTransitions: [{ method: 'recordAttested', args: { name: DEPOSIT_NAME } }],
   },
   {
-    name: "AwaitingCompletion - the caller's to-do, nothing is read or written",
+    name: "AwaitingCompletion - no complete attempt and the request still on the ledger: the caller's to-do",
     stored: DEPOSIT_IN_STATE.AwaitingCompletion,
+    transaction: { circuit: 'completeDeposit', rows: [] },
+    requests: [attested],
+    ledger: requestLedgerAt('attestationFlushed'),
     expectTransitions: [],
+  },
+  {
+    name: 'AwaitingCompletion - a live complete attempt, so nothing is read or written',
+    stored: DEPOSIT_IN_STATE.AwaitingCompletion,
+    transaction: { circuit: 'completeDeposit', rows: [complete({ state: 'AwaitingWallet' })] },
+    expectTransitions: [],
+  },
+  {
+    name: 'AwaitingCompletion - a complete recorded as rejected whose request the ledger settled: minted',
+    stored: DEPOSIT_IN_STATE.AwaitingCompletion,
+    transaction: { circuit: 'completeDeposit', rows: [complete(rejected)] },
+    requests: [attested],
+    ledger: requestLedgerAt('settled'),
+    expectTransitions: [
+      { method: 'recordCompleted', args: { name: DEPOSIT_NAME, outcome: 'minted' } },
+    ],
+  },
+  {
+    name: 'AwaitingCompletion - no complete attempt here yet the ledger settled the request: completed by another client',
+    stored: DEPOSIT_IN_STATE.AwaitingCompletion,
+    transaction: { circuit: 'completeDeposit', rows: [] },
+    requests: [{ ...attested, attestationOutput: '00' }],
+    ledger: requestLedgerAt('settled'),
+    expectTransitions: [
+      { method: 'recordCompleted', args: { name: DEPOSIT_NAME, outcome: 'closed' } },
+    ],
+  },
+  {
+    name: 'AwaitingCompletion - the ledger settled the request but no request row exists, which is an error',
+    stored: DEPOSIT_IN_STATE.AwaitingCompletion,
+    transaction: { circuit: 'completeDeposit', rows: [] },
+    requests: [],
+    expectTransitions: [],
+    expectError: 'has no vault request to complete',
   },
   {
     name: 'AwaitingCompleteTransaction - no complete transaction found',
@@ -196,13 +261,33 @@ const cases: Case[] = [
     transaction: { circuit: 'completeDeposit', rows: [complete(succeeded)] },
     requests: [],
     expectTransitions: [],
-    expectError: 'completed without a vault request',
+    expectError: 'has no vault request to complete',
   },
   {
-    name: 'AwaitingCompleteTransaction - the complete transaction failed, so the caller may try again',
+    name: 'AwaitingCompleteTransaction - the complete transaction failed and the ledger still holds the request, so the caller may try again',
     stored: DEPOSIT_IN_STATE.AwaitingCompleteTransaction,
     transaction: { circuit: 'completeDeposit', rows: [complete(failed)] },
+    requests: [attested],
+    ledger: requestLedgerAt('attestationFlushed'),
     expectTransitions: [{ method: 'recordCompleteFailure', args: { name: DEPOSIT_NAME } }],
+  },
+  {
+    name: 'AwaitingCompleteTransaction - the complete transaction was recorded as rejected but the ledger settled the request: minted',
+    stored: DEPOSIT_IN_STATE.AwaitingCompleteTransaction,
+    transaction: { circuit: 'completeDeposit', rows: [complete(rejected)] },
+    requests: [attested],
+    ledger: requestLedgerAt('settled'),
+    expectTransitions: [
+      { method: 'recordCompleted', args: { name: DEPOSIT_NAME, outcome: 'minted' } },
+    ],
+  },
+  {
+    name: 'AwaitingCompleteTransaction - the complete transaction failed and no request row exists, which is an error',
+    stored: DEPOSIT_IN_STATE.AwaitingCompleteTransaction,
+    transaction: { circuit: 'completeDeposit', rows: [complete(failed)] },
+    requests: [],
+    expectTransitions: [],
+    expectError: 'has no vault request to complete',
   },
   {
     name: 'Completed - nothing is read or written',
@@ -273,6 +358,17 @@ function resolverOver(doubles: Doubles): DepositStateResolverImpl {
             },
           }),
     }),
+    mock<RequestLedger>(
+      'RequestLedger',
+      doubles.ledger === undefined
+        ? {}
+        : {
+            state: async () => {
+              doubles.counts.ledgerReads += 1
+              return doubles.ledger ?? requestLedgerAt('settled')
+            },
+          },
+    ),
     mock<UnitOfWork>('UnitOfWork', {
       runInTransaction: (work) => {
         doubles.counts.writes += 1
@@ -284,12 +380,13 @@ function resolverOver(doubles: Doubles): DepositStateResolverImpl {
 
 describe('DepositStateResolverImpl.resolveDeposit', () => {
   test.each(cases)('$name', async ({ expectTransitions, expectWrites, expectError, ...rest }) => {
-    const doubles: Doubles = { ...rest, transitions: [], counts: { writes: 0 } }
+    const doubles: Doubles = { ...rest, transitions: [], counts: { writes: 0, ledgerReads: 0 } }
     const resolving = resolverOver(doubles).resolveDeposit({ name: DEPOSIT_NAME })
     if (expectError === undefined) await resolving
     else await expect(resolving).rejects.toThrow(expectError)
     expect(doubles.transitions).toEqual(expectTransitions)
     expect(doubles.counts.writes).toBe(expectWrites ?? expectTransitions.length)
+    expect(doubles.counts.ledgerReads).toBe(rest.ledger === undefined ? 0 : 1)
   })
 })
 
@@ -315,21 +412,16 @@ describe('DepositStateResolverImpl.resolvePending', () => {
     return { searched, repository }
   }
 
-  test('sweeps every waiting state in order and resolves each row', async () => {
+  test('sweeps every waiting state in order and resolves each row, reading no ledger when none needs it', async () => {
     const { searched, repository } = searching({
       AwaitingVaultRequest: [DEPOSIT_IN_STATE.AwaitingVaultRequest, second],
     })
-    const doubles: Doubles = {
-      stored: undefined,
-      repository,
-      transitions: [],
-      counts: { writes: 0 },
-    }
+    const transitions: Transition[] = []
     const resolver = new DepositStateResolverImpl(
       mock<DepositRepository>('DepositRepository', repository),
       mock<DepositStateController>('DepositStateController', {
         recordAttested: async (args) => {
-          doubles.transitions.push({ method: 'recordAttested', args })
+          transitions.push({ method: 'recordAttested', args })
           return second
         },
       }),
@@ -341,6 +433,7 @@ describe('DepositStateResolverImpl.resolvePending', () => {
           return criterion.text === second.name ? [attested] : []
         },
       }),
+      mock<RequestLedger>('RequestLedger'),
       mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
     )
     await resolver.resolvePending()
@@ -350,7 +443,50 @@ describe('DepositStateResolverImpl.resolvePending', () => {
       'AwaitingCompletion',
       'AwaitingCompleteTransaction',
     ])
-    expect(doubles.transitions).toEqual([{ method: 'recordAttested', args: { name: second.name } }])
+    expect(transitions).toEqual([{ method: 'recordAttested', args: { name: second.name } }])
+  })
+
+  test('one ledger read serves every deposit of the sweep that needs one', async () => {
+    const { repository } = searching({
+      AwaitingCompletion: [
+        DEPOSIT_IN_STATE.AwaitingCompletion,
+        { ...second, state: 'AwaitingCompletion' },
+      ],
+    })
+    const transitions: Transition[] = []
+    let ledgerReads = 0
+    const resolver = new DepositStateResolverImpl(
+      mock<DepositRepository>('DepositRepository', repository),
+      mock<DepositStateController>('DepositStateController', {
+        recordCompleted: async (args) => {
+          transitions.push({ method: 'recordCompleted', args })
+          return second
+        },
+      }),
+      mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
+        search: async () => [],
+      }),
+      mock<VaultRequestRepository>('VaultRequestRepository', {
+        search: async (args) => {
+          const [criterion] = args.criteria
+          if (criterion?.type !== 'exact-text') throw new Error('unexpected search')
+          return [{ ...attested, parent: criterion.text }]
+        },
+      }),
+      mock<RequestLedger>('RequestLedger', {
+        state: async () => {
+          ledgerReads += 1
+          return requestLedgerAt('settled')
+        },
+      }),
+      mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
+    )
+    await resolver.resolvePending()
+    expect(ledgerReads).toBe(1)
+    expect(transitions).toEqual([
+      { method: 'recordCompleted', args: { name: DEPOSIT_NAME, outcome: 'minted' } },
+      { method: 'recordCompleted', args: { name: second.name, outcome: 'minted' } },
+    ])
   })
 
   test("one row's failure is logged and the next row still resolves", async () => {
@@ -378,6 +514,7 @@ describe('DepositStateResolverImpl.resolvePending', () => {
         },
       }),
       mock<VaultRequestRepository>('VaultRequestRepository'),
+      mock<RequestLedger>('RequestLedger'),
       mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
     )
     await resolver.resolvePending()

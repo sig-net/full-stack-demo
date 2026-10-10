@@ -45,7 +45,7 @@ const httpURL = z.url({ protocol: /^https?$/ })
 const wsURL = z.url({ protocol: /^wss?$/ })
 const nodeURL = z.url({ protocol: /^(https?|wss?)$/ })
 
-/** The network selects the defaults; each URL variable overrides one endpoint when set. */
+/** The network selects the defaults, and each URL variable overrides one endpoint when set. */
 export const midnightNetworkEnvSchema = z.object({
   MIDNIGHT_NETWORK_ID: midnightNetworkIdSchema,
   MIDNIGHT_INDEXER_URL: httpURL.optional(),

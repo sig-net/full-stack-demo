@@ -8,6 +8,7 @@ import {
   type ExpireTransactionArgs,
   type RecordProofArgs,
   type RecordProofFailureArgs,
+  type RecordLedgerFailureArgs,
   type RecordRejectionArgs,
   type RecordSubmissionArgs,
   type RecordSuccessArgs,
@@ -71,8 +72,16 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
     return this.transition(name, 'recordSubmission', { txId })
   }
 
-  recordRejection({ name, failure, error }: RecordRejectionArgs): Promise<MidnightTransaction> {
-    return this.transition(name, 'recordRejection', { failure, error })
+  recordRejection({ name, error }: RecordRejectionArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'recordRejection', { failure: 'Rejected', error })
+  }
+
+  recordLedgerFailure({
+    name,
+    failure,
+    error,
+  }: RecordLedgerFailureArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'recordLedgerFailure', { failure, error })
   }
 
   recordSuccess({ name }: RecordSuccessArgs): Promise<MidnightTransaction> {

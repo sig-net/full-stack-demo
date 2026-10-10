@@ -169,10 +169,9 @@ describe('EthereumTransactionStateControllerImpl transitions', () => {
       patch: { blockNumber: 42n },
     },
     {
-      name: 'recordFailure as Rejected from AwaitingSubmission',
+      name: 'recordRejection from AwaitingSubmission',
       from: TRANSACTION_IN_STATE.AwaitingSubmission,
-      transition: (c) =>
-        c.recordFailure({ name: TRANSACTION_NAME, failure: 'Rejected', error: 'invalid sender' }),
+      transition: (c) => c.recordRejection({ name: TRANSACTION_NAME, error: 'invalid sender' }),
       to: 'Failed',
       patch: { failure: 'Rejected', error: 'invalid sender' },
     },
