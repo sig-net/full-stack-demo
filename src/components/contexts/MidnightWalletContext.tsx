@@ -30,6 +30,11 @@ export interface MidnightWalletContextValue {
   readonly restoring: boolean
   readonly syncStatus: string
   readonly error: string | null
+  /**
+   * Advances on every disconnect, and a connection is refused until the active wallet disconnects,
+   * so a query or resource keyed on it never outlives the wallet it was built for.
+   */
+  readonly generation: number
   readonly connectSeedWallet: (seed: string) => Promise<Wallet>
   readonly disconnect: () => void
 }
@@ -51,6 +56,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
   const [connecting, setConnecting] = useState(false)
   const [syncStatus, setSyncStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [publishedGeneration, setPublishedGeneration] = useState(0)
   // Undefined only while server rendering and hydrating, before the store has been read.
   const storedSeed = useSyncExternalStore(subscribeToStoredSeed, readStoredSeed, () => undefined)
   const restoring =
@@ -63,6 +69,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
 
   const disconnect = (): void => {
     generation.current += 1
+    setPublishedGeneration(generation.current)
     clearStoredSeed()
     installedSeed.current = null
     inFlight.current = null
@@ -179,6 +186,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
         restoring,
         syncStatus,
         error,
+        generation: publishedGeneration,
         connectSeedWallet,
         disconnect,
       }}

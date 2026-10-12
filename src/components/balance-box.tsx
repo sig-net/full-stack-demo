@@ -15,9 +15,9 @@ export function BalanceBox({ balance }: BalanceBoxProps): ReactNode {
   const token = `${assetSymbol} on ${networkName}`
   return (
     <div className="flex flex-wrap items-start gap-x-8.25 gap-y-4 border-t border-balance-rule pt-4.75 pb-5 md:gap-x-11.25">
-      <div className="flex w-44 shrink-0 items-start gap-2.5">
-        <div className="flex w-25 shrink-0 flex-col gap-1.75">
-          <span className="font-mono text-[32px] leading-[23px] font-light text-balance-foreground">
+      <div className="flex min-w-44 shrink-0 items-start gap-2.5">
+        <div className="flex min-w-25 flex-col gap-1.75">
+          <span className="font-mono text-[32px] leading-[23px] font-light break-all text-balance-foreground">
             {amount}
           </span>
           <span className="font-mono text-sm leading-[21px] font-medium tracking-[-0.01em] text-fiat-foreground">
