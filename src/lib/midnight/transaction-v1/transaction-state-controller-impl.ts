@@ -19,7 +19,7 @@ import {
 } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import {
   assertConsistent,
-  COMMITTABLE_STATES,
+  INITIAL_STATE,
   nextState,
   type TransactionAction,
 } from '@/lib/midnight/transaction-v1/transaction-state-machine'
@@ -38,17 +38,24 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
 
   async commitTransaction(args: CommitTransactionArgs): Promise<MidnightTransaction> {
     const now = new Date()
-    const transaction: MidnightTransaction = {
-      ...args.transaction,
+    const stored = await this.transactionRepository.create({
+      ...args,
+      state: INITIAL_STATE,
+      unboundTx: null,
+      finalizedTx: null,
+      txId: null,
+      expireTime: new Date(now.getTime() + TRANSACTION_TTL_MS),
+      failure: null,
+      error: null,
       createTime: now,
       updateTime: now,
-    }
-    if (!COMMITTABLE_STATES.includes(transaction.state)) {
-      throw new Error(`${transaction.name} cannot be committed in state ${transaction.state}`)
-    }
-    assertConsistent(transaction)
-    const stored = await this.transactionRepository.create(transaction)
-    await this.publishEntered(stored)
+    })
+    await this.eventPublisher.publishEvent(
+      MIDNIGHT_TRANSACTION_EVENT_BY_STATE[stored.state].create(stored.name, {
+        name: stored.name,
+        parent: stored.parent,
+      }),
+    )
     return stored
   }
 
@@ -112,16 +119,15 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
     const next: MidnightTransaction = { ...current, ...patch, state, updateTime: new Date() }
     assertConsistent(next)
     const stored = await this.transactionRepository.update(next)
-    await this.publishEntered(stored)
-    return stored
-  }
-
-  private publishEntered(transaction: MidnightTransaction): Promise<void> {
-    return this.eventPublisher.publishEvent(
-      MIDNIGHT_TRANSACTION_EVENT_BY_STATE[transaction.state].create(transaction.name, {
-        name: transaction.name,
-        parent: transaction.parent,
+    await this.eventPublisher.publishEvent(
+      MIDNIGHT_TRANSACTION_EVENT_BY_STATE[stored.state].create(stored.name, {
+        name: stored.name,
+        parent: stored.parent,
       }),
     )
+    return stored
   }
 }
+
+/** How long a committed call stays submittable before the node refuses it. */
+const TRANSACTION_TTL_MS = 60 * 60 * 1000

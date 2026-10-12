@@ -17,7 +17,6 @@ import {
   flushPending,
   VAULT_PRIVATE_STATE_ID,
   type VaultCircuitId,
-  type VaultPrivateState,
   type VaultProviders,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { resolve } from 'node:path'
@@ -558,9 +557,11 @@ function createVaultProviders(
   relayerWallet: RelayerWallet,
 ): () => Promise<VaultProviders> {
   return lazySingleton(async (): Promise<VaultProviders> => {
-    const privateStateProvider = new PrivateStateProviderMemoryImpl<VaultPrivateState>()
-    privateStateProvider.setContractAddress(vaultAddress)
-    await privateStateProvider.set(VAULT_PRIVATE_STATE_ID, permissionlessVaultPrivateState())
+    const privateStateProvider = await PrivateStateProviderMemoryImpl.holding(
+      vaultAddress,
+      VAULT_PRIVATE_STATE_ID,
+      permissionlessVaultPrivateState(),
+    )
     const wallet = await relayerWallet.provider()
     return {
       privateStateProvider,
@@ -616,7 +617,9 @@ function createMidnightEthereumErc20VaultRequestV1(
   const stateController = new VaultRequestStateControllerImpl(
     repository,
     event.publisher,
+    transactionV1.repository,
     transactionV1.stateController,
+    ethereum.transactionV1.repository,
     ethereum.transactionV1.stateController,
   )
   const stateResolver = new VaultRequestStateResolverImpl(

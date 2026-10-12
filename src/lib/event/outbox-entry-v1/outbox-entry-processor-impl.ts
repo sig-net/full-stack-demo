@@ -2,12 +2,14 @@ import 'server-only'
 
 import type { Pool } from 'pg'
 
+import { CoalescingRunner } from '@/lib/coalescing-runner'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { delayUnlessAborted } from '@/lib/delay-unless-aborted'
 import { eventSchema } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
 import type { OutboxEntryProcessor } from '@/lib/event/outbox-entry-v1/outbox-entry-processor'
 import type { OutboxEntryRepository } from '@/lib/event/outbox-entry-v1/outbox-entry-repository'
+import { runUntilAborted } from '@/lib/run-until-aborted'
 
 const BATCH_SIZE = 100
 
@@ -15,9 +17,9 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
   private readonly outboxEntryRepository: OutboxEntryRepository
   private readonly kafkaEventPublisher: EventPublisher
   private readonly unitOfWork: UnitOfWork
-  private running: Promise<void> | undefined
-  private runAgain = false
+  private readonly runner: CoalescingRunner
 
+  /** A full batch means more may wait, so the relay goes again at once. */
   constructor(
     outboxEntryRepository: OutboxEntryRepository,
     kafkaEventPublisher: EventPublisher,
@@ -26,24 +28,11 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
     this.outboxEntryRepository = outboxEntryRepository
     this.kafkaEventPublisher = kafkaEventPublisher
     this.unitOfWork = unitOfWork
+    this.runner = new CoalescingRunner(async () => (await this.relayBatch()) === BATCH_SIZE)
   }
 
   process(): Promise<void> {
-    if (this.running) {
-      this.runAgain = true
-      return this.running
-    }
-    this.running = this.runUntilDrained().finally(() => {
-      this.running = undefined
-    })
-    return this.running
-  }
-
-  private async runUntilDrained(): Promise<void> {
-    do {
-      this.runAgain = false
-      while ((await this.relayBatch()) === BATCH_SIZE);
-    } while (this.runAgain)
+    return this.runner.run()
   }
 
   /**
@@ -73,26 +62,22 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
 /** The channel the outbox table's insert trigger notifies. */
 const NOTIFY_CHANNEL = 'event_outbox'
 const SWEEP_INTERVAL_MS = 30_000
-const RESTART_DELAY_MS = 5_000
 
 /**
  * Relays the outbox until the signal aborts, restarting after a failure. The pool supplies the
  * dedicated connection that listens for the table's notifications. Resolves once that connection
  * is released and the relay that was in flight at the abort has ended.
  */
-export async function runOutboxEntryProcessor(
+export function runOutboxEntryProcessor(
   processor: OutboxEntryProcessor,
   pool: Pool,
   signal: AbortSignal,
 ): Promise<void> {
-  while (!signal.aborted) {
-    try {
-      await listenAndSweep(processor, pool, signal)
-    } catch (error: unknown) {
-      if (!signal.aborted) console.error('Outbox entry processor failed, restarting', error)
-    }
-    await delayUnlessAborted(RESTART_DELAY_MS, signal)
-  }
+  return runUntilAborted(
+    'Outbox entry processor',
+    () => listenAndSweep(processor, pool, signal),
+    signal,
+  )
 }
 
 async function listenAndSweep(

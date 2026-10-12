@@ -81,7 +81,7 @@ describe('Vault requests over Postgres, the indexer and the vault ledger', () =>
     ).rejects.toThrow()
   })
 
-  test('a starter maps the child live index refusing a retry to a state conflict', async () => {
+  test('a starter refuses a second child while the first still lives', async () => {
     const { repository, stateController } = backend.midnight.ethereumErc20Vault.vaultRequestV1
     const { unitOfWork } = backend.db
     const row = await repository.create(

@@ -149,9 +149,11 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     wallet: WalletPublicKeys,
     options: CallTxOptions<VaultContract, Circuit>,
   ): Promise<string> {
-    const privateStateProvider = new PrivateStateProviderMemoryImpl<VaultPrivateState>()
-    privateStateProvider.setContractAddress(this.vaultAddress)
-    await privateStateProvider.set(VAULT_PRIVATE_STATE_ID, privateState)
+    const privateStateProvider = await PrivateStateProviderMemoryImpl.holding(
+      this.vaultAddress,
+      VAULT_PRIVATE_STATE_ID,
+      privateState,
+    )
     const call = await createUnprovenCallTx(
       {
         publicDataProvider: this.publicDataProvider,

@@ -19,6 +19,7 @@ import {
 } from '@midnightntwrk/wallet-sdk-node-client/effect'
 import { ApiPromise, WsProvider } from '@polkadot/api'
 import { Cause, Effect, Exit, Option } from 'effect'
+import { bytesToHex, hexToBytes } from '@sig-net/midnight'
 import { z } from 'zod'
 
 import { messageOf } from '@/lib/message-of'
@@ -53,10 +54,10 @@ export class MidnightTransactionLedgerImpl implements MidnightTransactionLedger 
       'signature',
       'pre-proof',
       'pre-binding',
-      bytesFromHex(unprovenTx),
+      hexToBytes(unprovenTx),
     )
     const unbound = await (await this.proofProvider()).proveTx(unproven)
-    return hexFromBytes(unbound.serialize())
+    return bytesToHex(unbound.serialize())
   }
 
   async submit(finalizedTx: string): Promise<string> {
@@ -64,7 +65,7 @@ export class MidnightTransactionLedgerImpl implements MidnightTransactionLedger 
       'signature',
       'proof',
       'binding',
-      bytesFromHex(finalizedTx),
+      hexToBytes(finalizedTx),
     )
     const [txId] = finalized.identifiers()
     if (txId === undefined) {
@@ -89,7 +90,7 @@ export class MidnightTransactionLedgerImpl implements MidnightTransactionLedger 
     }
     if (parsed.data.errors !== undefined) {
       throw new Error(
-        `The indexer refused the query: ${parsed.data.errors.map((error) => error.message).join('; ')}`,
+        `The indexer refused the query: ${parsed.data.errors.map((error) => error.message).join(', ')}`,
       )
     }
     const result = parsed.data.data.transactions.find(
@@ -105,7 +106,7 @@ export class MidnightTransactionLedgerImpl implements MidnightTransactionLedger 
         return {
           outcome: 'failed',
           failure: 'FailFallible',
-          error: 'The fallible section did not apply; the fee was paid',
+          error: 'The fallible section did not apply, and the fee was paid',
         }
       case 'FAILURE':
         return {
@@ -285,15 +286,4 @@ const UNCONNECTED_SEND_MESSAGE = 'WebSocket is not connected'
 /** Polkadot's `RpcError`: the node's JSON-RPC error, carrying its numeric code. */
 function isRpcError(error: unknown): error is Error & { readonly code: number } {
   return error instanceof Error && 'code' in error && typeof error.code === 'number'
-}
-
-function bytesFromHex(hex: string): Uint8Array {
-  if (!/^(?:[0-9a-fA-F]{2})+$/.test(hex)) {
-    throw new Error('Transaction bytes must be hex')
-  }
-  return Uint8Array.from(Buffer.from(hex, 'hex'))
-}
-
-function hexFromBytes(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString('hex')
 }

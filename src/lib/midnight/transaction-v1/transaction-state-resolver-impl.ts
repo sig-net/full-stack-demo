@@ -4,9 +4,7 @@ import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { messageOf } from '@/lib/message-of'
 import {
   type MidnightTransaction,
-  MIDNIGHT_TRANSACTION_STATES,
-  MIDNIGHT_TRANSACTION_TERMINAL_STATES,
-  type MidnightTransactionState,
+  MIDNIGHT_TRANSACTION_PENDING_STATES,
 } from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionLedger } from '@/lib/midnight/transaction-v1/transaction-ledger'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
@@ -51,7 +49,7 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
 
   /** One transaction's failure does not stop the rest. */
   async resolvePending(): Promise<void> {
-    for (const state of PENDING_STATES) {
+    for (const state of MIDNIGHT_TRANSACTION_PENDING_STATES) {
       const transactions = await this.transactionRepository.search({
         criteria: [{ type: 'exact-text', field: 'state', text: state }],
         order: { field: 'createTime', direction: 'asc' },
@@ -94,8 +92,12 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
     }
   }
 
-  private async resolveAwaitingProof({ name, unprovenTx }: MidnightTransaction): Promise<void> {
-    if (unprovenTx === null) return
+  private async resolveAwaitingProof({
+    name,
+    state,
+    unprovenTx,
+  }: MidnightTransaction): Promise<void> {
+    if (unprovenTx === null) throw new Error(`${name} in ${state} holds no unprovenTx`)
     let unboundTx: string
     try {
       unboundTx = await this.ledger.prove(unprovenTx)
@@ -110,19 +112,22 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
   /** A caller transaction is the browser wallet's to-do, and a relayer transaction is finalised here. */
   private async resolveAwaitingWallet({
     name,
+    state,
     signer,
     unboundTx,
   }: MidnightTransaction): Promise<void> {
-    if (signer === 'caller' || unboundTx === null) return
+    if (signer === 'caller') return
+    if (unboundTx === null) throw new Error(`${name} in ${state} holds no unboundTx`)
     const finalizedTx = await this.relayerWallet.finalize(unboundTx)
     return this.write(() => this.stateController.submitTransaction({ name, finalizedTx }))
   }
 
   private async resolveAwaitingSubmission({
     name,
+    state,
     finalizedTx,
   }: MidnightTransaction): Promise<void> {
-    if (finalizedTx === null) return
+    if (finalizedTx === null) throw new Error(`${name} in ${state} holds no finalizedTx`)
     let txId: string
     try {
       txId = await this.ledger.submit(finalizedTx)
@@ -134,8 +139,12 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
     return this.write(() => this.stateController.recordSubmission({ name, txId }))
   }
 
-  private async resolveAwaitingInclusion({ name, txId }: MidnightTransaction): Promise<void> {
-    if (txId === null) return
+  private async resolveAwaitingInclusion({
+    name,
+    state,
+    txId,
+  }: MidnightTransaction): Promise<void> {
+    if (txId === null) throw new Error(`${name} in ${state} holds no txId`)
     const status = await this.ledger.status(txId)
     switch (status.outcome) {
       case 'pending':
@@ -166,7 +175,3 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
     }
   }
 }
-
-const PENDING_STATES: readonly MidnightTransactionState[] = MIDNIGHT_TRANSACTION_STATES.filter(
-  (state) => !MIDNIGHT_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === state),
-)

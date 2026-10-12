@@ -12,6 +12,7 @@ import {
   startDepositArgsSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 import { DepositStateConflict } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
+import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 
 /**
  * Adapts the deposit service to the wire: the caller secret stands in for the caller, the
@@ -79,14 +80,9 @@ async function outcomeOf(action: () => Promise<Deposit>): Promise<DepositResult>
   try {
     return { ok: true, deposit: await action() }
   } catch (error: unknown) {
-    if (error instanceof DepositStateConflict || isCircuitRefusal(error)) {
-      return { ok: false, error: error.message }
-    }
+    if (error instanceof DepositStateConflict) return { ok: false, error: error.message }
+    const refusal = circuitAssertMessage(error)
+    if (refusal !== undefined) return { ok: false, error: refusal }
     throw error
   }
-}
-
-/** The compact runtime prefixes the contract's assert message, and the build rethrows it as a plain `Error`. */
-function isCircuitRefusal(error: unknown): error is Error {
-  return error instanceof Error && error.message.startsWith('failed assert: ')
 }

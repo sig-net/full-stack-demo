@@ -8,7 +8,7 @@ import {
   DEPOSIT_ACCOUNT,
   DEPOSIT_IN_STATE,
   DEPOSIT_NAME,
-  depositFixture,
+  ERC20_ADDRESS,
   IN_INDEX,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-fixtures'
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
@@ -16,12 +16,19 @@ import {
   DEPOSIT_EVENT_BY_STATE,
   DepositStateConflict,
   type DepositStateController,
+  type StartDepositArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
 import { DepositStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller-impl'
-import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
-import type { VaultRequestStateController } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-controller'
-import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
-import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import { vaultRequestFixture } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
+import type {
+  QueueRequestArgs,
+  VaultRequestStateController,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-controller'
+import { transactionFixture } from '@/lib/midnight/transaction-v1/transaction-fixtures'
+import type {
+  CommitTransactionArgs,
+  MidnightTransactionStateController,
+} from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { mock } from '@/lib/testing/mock'
 import { UUID } from '@/lib/value-schemas'
 
@@ -29,8 +36,9 @@ interface Calls {
   created: Deposit[]
   updated: Deposit[]
   published: Event[]
-  transactions: MidnightTransaction[]
-  requests: VaultRequest[]
+  /** What the deposit asked each child controller to commit. */
+  transactions: CommitTransactionArgs[]
+  requests: QueueRequestArgs[]
 }
 
 function emptyCalls(): Calls {
@@ -43,7 +51,6 @@ function controllerOver(
   calls: Calls,
   options: {
     locks?: string[]
-    childError?: Error
     repository?: Partial<DepositRepository>
   } = {},
 ): DepositStateController {
@@ -70,17 +77,15 @@ function controllerOver(
       },
     }),
     mock<MidnightTransactionStateController>('MidnightTransactionStateController', {
-      commitTransaction: async ({ transaction }) => {
-        if (options.childError !== undefined) throw options.childError
-        calls.transactions.push(transaction)
-        return transaction
+      commitTransaction: async (args) => {
+        calls.transactions.push(args)
+        return transactionFixture(args)
       },
     }),
     mock<VaultRequestStateController>('VaultRequestStateController', {
-      queueRequest: async ({ request }) => {
-        if (options.childError !== undefined) throw options.childError
-        calls.requests.push(request)
-        return request
+      queueRequest: async (args) => {
+        calls.requests.push(args)
+        return vaultRequestFixture(args)
       },
     }),
   )
@@ -90,37 +95,50 @@ const TRANSACTION_NAME = new RegExp(`^${CALLER_NAME}/midnight-transactions/${UUI
 const VAULT_REQUEST_NAME = new RegExp(`^${CALLER_NAME}/ethereum-erc20-vault-requests/${UUID}$`)
 
 describe('DepositStateControllerImpl.startDeposit', () => {
+  const args: StartDepositArgs = {
+    name: DEPOSIT_NAME,
+    erc20Address: ERC20_ADDRESS,
+    amount: 1_000_000n,
+    inIndex: IN_INDEX,
+    evmNonce: 7n,
+    gasLimit: 100_000n,
+    maxFeePerGas: 30_000_000_000n,
+    maxPriorityFeePerGas: 1_000_000_000n,
+    depositAccount: DEPOSIT_ACCOUNT,
+    unprovenTx: 'start-call',
+  }
+
   const cases: ReadonlyArray<{
     name: string
-    deposit: Deposit
     repository?: Partial<DepositRepository>
     check: (result: Promise<Deposit>, calls: Calls) => Promise<void>
   }> = [
     {
-      name: 'success - the row, the caller start call under it and the event',
-      deposit: depositFixture({ createTime: new Date(0), updateTime: new Date(0) }),
+      name: 'success - the row in AwaitingStartTransaction, the caller start call under it and the event',
       check: async (result, calls) => {
         const before = Date.now()
         const stored = await result
-        expect(stored.createTime.getTime()).toBeGreaterThan(0)
-        expect(stored.updateTime).toEqual(stored.createTime)
-        expect(calls.created).toEqual([stored])
-        expect(calls.transactions).toHaveLength(1)
-        const [transaction] = calls.transactions
-        expect(transaction).toMatchObject({
-          parent: DEPOSIT_NAME,
-          state: 'AwaitingProof',
-          circuit: 'startDeposit',
-          signer: 'caller',
-          unprovenTx: 'start-call',
-          unboundTx: null,
-          finalizedTx: null,
-          txId: null,
+        const { unprovenTx, ...deposit } = args
+        expect(stored).toEqual({
+          ...deposit,
+          state: 'AwaitingStartTransaction',
+          outcome: null,
           failure: null,
           error: null,
+          createTime: stored.createTime,
+          updateTime: stored.createTime,
         })
-        expect(transaction?.name).toMatch(TRANSACTION_NAME)
-        expect(transaction?.expireTime?.getTime()).toBeGreaterThanOrEqual(before + 3_600_000)
+        expect(stored.createTime.getTime()).toBeGreaterThanOrEqual(before)
+        expect(calls.created).toEqual([stored])
+        expect(calls.transactions).toEqual([
+          {
+            name: expect.stringMatching(TRANSACTION_NAME),
+            parent: DEPOSIT_NAME,
+            circuit: 'startDeposit',
+            signer: 'caller',
+            unprovenTx,
+          },
+        ])
         expect(calls.published).toHaveLength(1)
         expect(calls.published[0]).toMatchObject({
           type: DEPOSIT_EVENT_BY_STATE.AwaitingStartTransaction.type,
@@ -130,26 +148,7 @@ describe('DepositStateControllerImpl.startDeposit', () => {
       },
     },
     {
-      name: 'failure - a state a deposit cannot be started in',
-      deposit: DEPOSIT_IN_STATE.AwaitingCompletion,
-      check: async (result, calls) => {
-        await expect(result).rejects.toThrow(
-          `${DEPOSIT_NAME} cannot be started in state AwaitingCompletion`,
-        )
-        expect(calls.created).toHaveLength(0)
-        expect(calls.transactions).toHaveLength(0)
-      },
-    },
-    {
-      name: 'failure - a field a later step produces',
-      deposit: depositFixture({ outcome: 'minted' }),
-      check: async (result) => {
-        await expect(result).rejects.toThrow('must have outcome unset')
-      },
-    },
-    {
       name: 'failure - the repository refuses the row, so no child is committed and nothing is published',
-      deposit: depositFixture(),
       repository: {
         create: async () => {
           throw new Error(`${DEPOSIT_NAME} already exists`)
@@ -163,15 +162,9 @@ describe('DepositStateControllerImpl.startDeposit', () => {
     },
   ]
 
-  test.each(cases)('$name', async ({ deposit, repository, check }) => {
+  test.each(cases)('$name', async ({ repository, check }) => {
     const calls = emptyCalls()
-    await check(
-      controllerOver(undefined, calls, { repository }).startDeposit({
-        deposit,
-        unprovenTx: 'start-call',
-      }),
-      calls,
-    )
+    await check(controllerOver(undefined, calls, { repository }).startDeposit(args), calls)
   })
 })
 
@@ -193,23 +186,15 @@ describe('DepositStateControllerImpl transitions', () => {
       to: 'AwaitingVaultRequest',
       patch: {},
       check: (calls) => {
-        expect(calls.requests).toHaveLength(1)
-        expect(calls.requests[0]).toMatchObject({
-          parent: DEPOSIT_NAME,
-          action: 'deposit',
-          state: 'AwaitingFlush',
-          inIndex: IN_INDEX,
-          depositAccount: DEPOSIT_ACCOUNT,
-          outIndex: null,
-          requestId: null,
-          signedTx: null,
-          attestationBlockHeight: null,
-          attestationOutputKind: null,
-          attestationDigest: null,
-          attestationSignature: null,
-          attestationOutput: null,
-        })
-        expect(calls.requests[0]?.name).toMatch(VAULT_REQUEST_NAME)
+        expect(calls.requests).toEqual([
+          {
+            name: expect.stringMatching(VAULT_REQUEST_NAME),
+            parent: DEPOSIT_NAME,
+            action: 'deposit',
+            inIndex: IN_INDEX,
+            depositAccount: DEPOSIT_ACCOUNT,
+          },
+        ])
       },
     },
     {
@@ -233,15 +218,15 @@ describe('DepositStateControllerImpl transitions', () => {
       to: 'AwaitingCompleteTransaction',
       patch: {},
       check: (calls) => {
-        expect(calls.transactions).toHaveLength(1)
-        expect(calls.transactions[0]).toMatchObject({
-          parent: DEPOSIT_NAME,
-          state: 'AwaitingProof',
-          circuit: 'completeDeposit',
-          signer: 'caller',
-          unprovenTx: 'complete-call',
-        })
-        expect(calls.transactions[0]?.name).toMatch(TRANSACTION_NAME)
+        expect(calls.transactions).toEqual([
+          {
+            name: expect.stringMatching(TRANSACTION_NAME),
+            parent: DEPOSIT_NAME,
+            circuit: 'completeDeposit',
+            signer: 'caller',
+            unprovenTx: 'complete-call',
+          },
+        ])
       },
     },
     {
@@ -325,35 +310,4 @@ describe('DepositStateControllerImpl transitions', () => {
       controllerOver(undefined, calls).recordAttested({ name: DEPOSIT_NAME }),
     ).rejects.toThrow(`${DEPOSIT_NAME} does not exist`)
   })
-
-  const uniqueViolation = Object.assign(new Error('duplicate key value'), { code: '23505' })
-
-  const childErrors: ReadonlyArray<[string, Error, 'conflict' | 'rethrown']> = [
-    ['a unique violation from pg', uniqueViolation, 'conflict'],
-    [
-      'a unique violation wrapped as the cause of a query error',
-      new Error('Failed query', { cause: uniqueViolation }),
-      'conflict',
-    ],
-    ['any other error', new Error('connection lost'), 'rethrown'],
-  ]
-
-  test.each(childErrors)(
-    "the child's live index refusing the row is a state conflict: %s",
-    async (_name, childError, outcome) => {
-      const queueing = controllerOver(DEPOSIT_IN_STATE.AwaitingStartTransaction, emptyCalls(), {
-        childError,
-      }).recordStarted({ name: DEPOSIT_NAME })
-      const committing = controllerOver(DEPOSIT_IN_STATE.AwaitingCompletion, emptyCalls(), {
-        childError,
-      }).completeDeposit({ name: DEPOSIT_NAME, unprovenTx: 'x' })
-      for (const starting of [queueing, committing]) {
-        if (outcome === 'conflict') {
-          await expect(starting).rejects.toBeInstanceOf(DepositStateConflict)
-        } else {
-          await expect(starting).rejects.toBe(childError)
-        }
-      }
-    },
-  )
 })

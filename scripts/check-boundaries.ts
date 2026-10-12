@@ -15,8 +15,10 @@ const BACKEND_DIRECTORIES = [
   'src/lib/testing/',
 ]
 const BACKEND_FILES = [
+  'src/lib/coalescing-runner.ts',
   'src/lib/delay-unless-aborted.ts',
   'src/lib/lazy-singleton.ts',
+  'src/lib/run-until-aborted.ts',
   'src/lib/sweep.ts',
   'src/lib/caller/resolve-caller.ts',
   'src/lib/midnight/ethereum-erc20-vault/signet-readers.ts',

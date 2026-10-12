@@ -32,6 +32,22 @@ export const ETHEREUM_TRANSACTION_TERMINAL_STATES = [
   'Failed',
 ] as const satisfies readonly EthereumTransactionState[]
 
+export function isTerminalEthereumTransactionState(state: EthereumTransactionState): boolean {
+  return ETHEREUM_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === state)
+}
+
+/** The states a resolver still has work for. */
+export const ETHEREUM_TRANSACTION_PENDING_STATES: readonly EthereumTransactionState[] =
+  ETHEREUM_TRANSACTION_STATES.filter((state) => !isTerminalEthereumTransactionState(state))
+
+/** A failure that put nothing on chain, so the same bytes may be broadcast again. */
+export function leftNothingOnChain(transaction: EthereumTransaction): boolean {
+  return (
+    transaction.state === 'Failed' &&
+    (transaction.failure === 'Rejected' || transaction.failure === 'Expired')
+  )
+}
+
 /**
  * Why a transaction failed. `Rejected` and `NonceConsumed` can never be on chain, `Reverted` is
  * on chain with its gas paid and its call not applied, and `Expired` is the backend giving up on

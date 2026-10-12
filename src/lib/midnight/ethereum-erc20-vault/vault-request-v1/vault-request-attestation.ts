@@ -27,8 +27,13 @@ export function attestationFields(outcome: RespondOutcome): AttestationFields {
   }
 }
 
-/** The attestation as the singleton posted it, rebuilt from a row that holds one. */
-export function attestationToEvent(request: VaultRequest): RespondBidirectionalEvent {
+/** The id and the attestation fields of a row that holds an attestation, non-null. */
+export interface AttestedRequestFields extends AttestationFields {
+  readonly requestId: string
+}
+
+/** Throws unless the request holds its id and its five attestation fields. */
+export function attestedRequestFields(request: VaultRequest): AttestedRequestFields {
   if (
     request.requestId === null ||
     request.attestationBlockHeight === null ||
@@ -40,12 +45,25 @@ export function attestationToEvent(request: VaultRequest): RespondBidirectionalE
     throw new Error(`${request.name} holds no attestation`)
   }
   return {
-    requestId: hexToBytes(request.requestId),
-    blockHeight: request.attestationBlockHeight,
-    outputKind: OutputKind[request.attestationOutputKind],
-    serializedOutputLength: BigInt(request.attestationOutput.length / 2),
-    digest: hexToBytes(request.attestationDigest),
-    signature: decodeMpcSignature(request.attestationSignature),
+    requestId: request.requestId,
+    attestationBlockHeight: request.attestationBlockHeight,
+    attestationOutputKind: request.attestationOutputKind,
+    attestationDigest: request.attestationDigest,
+    attestationSignature: request.attestationSignature,
+    attestationOutput: request.attestationOutput,
+  }
+}
+
+/** The attestation as the singleton posted it, rebuilt from a row that holds one. */
+export function attestationToEvent(request: VaultRequest): RespondBidirectionalEvent {
+  const attested = attestedRequestFields(request)
+  return {
+    requestId: hexToBytes(attested.requestId),
+    blockHeight: attested.attestationBlockHeight,
+    outputKind: OutputKind[attested.attestationOutputKind],
+    serializedOutputLength: BigInt(attested.attestationOutput.length / 2),
+    digest: hexToBytes(attested.attestationDigest),
+    signature: decodeMpcSignature(attested.attestationSignature),
   }
 }
 

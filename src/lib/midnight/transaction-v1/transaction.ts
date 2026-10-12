@@ -34,6 +34,14 @@ export const MIDNIGHT_TRANSACTION_TERMINAL_STATES = [
   'Failed',
 ] as const satisfies readonly MidnightTransactionState[]
 
+export function isTerminalMidnightTransactionState(state: MidnightTransactionState): boolean {
+  return MIDNIGHT_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === state)
+}
+
+/** The states a resolver still has work for. */
+export const MIDNIGHT_TRANSACTION_PENDING_STATES: readonly MidnightTransactionState[] =
+  MIDNIGHT_TRANSACTION_STATES.filter((state) => !isTerminalMidnightTransactionState(state))
+
 /**
  * Why a transaction failed. `ProofFailed`, `Rejected`, `FailEntirely` and `Expired` left nothing
  * on chain and paid no fee. `FailFallible` is on chain with its fee paid and its call not applied.

@@ -11,7 +11,7 @@ import {
 } from '@/lib/midnight/transaction-v1/transaction-fixtures'
 import {
   assertConsistent,
-  COMMITTABLE_STATES,
+  INITIAL_STATE,
   EXPIRABLE_STATES,
   nextState,
   type TransactionAction,
@@ -70,8 +70,8 @@ describe('nextState', () => {
     )
   })
 
-  test('a transaction can only be stored before or after proving', () => {
-    expect(COMMITTABLE_STATES).toEqual(['AwaitingProof', 'AwaitingWallet'])
+  test('a transaction is committed before proving', () => {
+    expect(INITIAL_STATE).toBe('AwaitingProof')
   })
 })
 

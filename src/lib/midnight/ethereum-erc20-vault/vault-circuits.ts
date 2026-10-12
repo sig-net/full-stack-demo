@@ -83,3 +83,14 @@ export function queueAttestationCircuit(outputLength: number): QueueAttestationC
       throw new Error(`No queue circuit takes a ${outputLength.toString()}-byte output`)
   }
 }
+
+/**
+ * The contract's assert message when the error is the compact runtime refusing a call at build
+ * time, which it reports as a plain `Error` whose message it prefixes, or undefined otherwise.
+ */
+export function circuitAssertMessage(error: unknown): string | undefined {
+  if (!(error instanceof Error) || !error.message.startsWith(ASSERT_PREFIX)) return undefined
+  return error.message.slice(ASSERT_PREFIX.length)
+}
+
+const ASSERT_PREFIX = 'failed assert: '

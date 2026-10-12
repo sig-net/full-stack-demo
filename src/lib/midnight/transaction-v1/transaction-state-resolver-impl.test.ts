@@ -42,6 +42,13 @@ const EXPIRED = new Date('2000-01-01T00:00:00Z')
 
 const cases: Case[] = [
   {
+    name: 'AwaitingProof - a row without its unproven bytes is a bug that surfaces',
+    stored: transactionFixture({ unprovenTx: null }),
+    ledger: {},
+    expectTransitions: [],
+    expectError: 'holds no unprovenTx',
+  },
+  {
     name: 'AwaitingProof - proves outside the transaction and records the proof inside one',
     stored: TRANSACTION_IN_STATE.AwaitingProof,
     ledger: { prove: async (unprovenTx) => `proven(${unprovenTx})` },

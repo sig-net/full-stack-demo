@@ -7,10 +7,10 @@ import {
   DEPOSIT_NAME,
   TRANSACTION_IN_STATE,
   TRANSACTION_NAME,
-  transactionFixture,
 } from '@/lib/midnight/transaction-v1/transaction-fixtures'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import {
+  type CommitTransactionArgs,
   MIDNIGHT_TRANSACTION_EVENT_BY_STATE,
   type MidnightTransactionStateController,
   MidnightTransactionStateConflict,
@@ -66,18 +66,37 @@ function emptyCalls(): Calls {
 }
 
 describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
+  const args: CommitTransactionArgs = {
+    name: TRANSACTION_NAME,
+    parent: DEPOSIT_NAME,
+    circuit: 'completeDeposit',
+    signer: 'caller',
+    unprovenTx: 'unproven',
+  }
+
   const cases: ReadonlyArray<{
     name: string
-    args: MidnightTransaction
+    create?: MidnightTransactionRepository['create']
     check: (result: Promise<MidnightTransaction>, calls: Calls) => Promise<void>
   }> = [
     {
-      name: 'success - AwaitingProof with the unproven bytes and the TTL',
-      args: transactionFixture({ createTime: new Date(0), updateTime: new Date(0) }),
+      name: 'success - stored in AwaitingProof with an hour to live and the fields later steps fill unset',
       check: async (result, calls) => {
+        const before = Date.now()
         const stored = await result
-        expect(stored.createTime.getTime()).toBeGreaterThan(0)
-        expect(stored.updateTime).toEqual(stored.createTime)
+        expect(stored).toEqual({
+          ...args,
+          state: 'AwaitingProof',
+          unboundTx: null,
+          finalizedTx: null,
+          txId: null,
+          expireTime: new Date(stored.createTime.getTime() + 3_600_000),
+          failure: null,
+          error: null,
+          createTime: stored.createTime,
+          updateTime: stored.createTime,
+        })
+        expect(stored.createTime.getTime()).toBeGreaterThanOrEqual(before)
         expect(calls.created).toEqual([stored])
         expect(calls.published).toHaveLength(1)
         expect(calls.published[0]).toMatchObject({
@@ -88,35 +107,10 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
       },
     },
     {
-      name: 'success - AwaitingWallet with the proven bytes and the TTL',
-      args: TRANSACTION_IN_STATE.AwaitingWallet,
-      check: async (result, calls) => {
-        await result
-        expect(calls.published[0]?.type).toBe(
-          MIDNIGHT_TRANSACTION_EVENT_BY_STATE.AwaitingWallet.type,
-        )
-      },
-    },
-    {
-      name: 'failure - a state a transaction cannot be committed in',
-      args: TRANSACTION_IN_STATE.AwaitingInclusion,
-      check: async (result, calls) => {
-        await expect(result).rejects.toThrow(
-          `${TRANSACTION_NAME} cannot be committed in state AwaitingInclusion`,
-        )
-        expect(calls.created).toHaveLength(0)
-      },
-    },
-    {
-      name: 'failure - AwaitingProof with a field a later step produces',
-      args: transactionFixture({ unboundTx: 'unbound' }),
-      check: async (result) => {
-        await expect(result).rejects.toThrow('must have unboundTx unset')
-      },
-    },
-    {
       name: 'failure - the repository refuses the row, so nothing is published',
-      args: transactionFixture(),
+      create: async () => {
+        throw new Error(`${TRANSACTION_NAME} already exists`)
+      },
       check: async (result, calls) => {
         await expect(result).rejects.toThrow('already exists')
         expect(calls.published).toHaveLength(0)
@@ -124,22 +118,16 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
     },
   ]
 
-  test.each(cases)('$name', async ({ name, args, check }) => {
+  test.each(cases)('$name', async ({ create, check }) => {
     const calls = emptyCalls()
-    const refusing = name.includes('repository refuses')
-    const { eventPublisher } = fields(undefined, calls)
-    const transactionRepository = refusing
-      ? mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
-          create: async () => {
-            throw new Error(`${TRANSACTION_NAME} already exists`)
-          },
-        })
-      : fields(undefined, calls).transactionRepository
+    const { transactionRepository, eventPublisher } = fields(undefined, calls)
     const controller = new MidnightTransactionStateControllerImpl(
-      transactionRepository,
+      create === undefined
+        ? transactionRepository
+        : mock<MidnightTransactionRepository>('MidnightTransactionRepository', { create }),
       eventPublisher,
     )
-    await check(controller.commitTransaction({ transaction: args }), calls)
+    await check(controller.commitTransaction(args), calls)
   })
 })
 

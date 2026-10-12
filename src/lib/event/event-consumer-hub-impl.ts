@@ -2,11 +2,11 @@ import 'server-only'
 
 import { MessagesStreamFallbackModes, MessagesStreamModes } from '@platformatic/kafka'
 
-import { delayUnlessAborted } from '@/lib/delay-unless-aborted'
 import { type Event, eventSchema, EVENTS_TOPIC } from '@/lib/event/event'
 import type { EventConsumer } from '@/lib/event/event-consumer'
 import type { EventConsumerHub } from '@/lib/event/event-consumer-hub'
 import type { StringConsumer } from '@/lib/kafka/clients'
+import { runUntilAborted } from '@/lib/run-until-aborted'
 
 export class EventConsumerHubImpl implements EventConsumerHub {
   private readonly consumers: EventConsumer[] = []
@@ -25,26 +25,22 @@ export class EventConsumerHubImpl implements EventConsumerHub {
 
 /** The consumer group every replica of the application joins. */
 export const EVENTS_GROUP_ID = 'full-stack-demo.events'
-const RESTART_DELAY_MS = 5_000
 
 /**
  * Consumes the events topic until the signal aborts, restarting after a failure with a consumer
  * from `createConsumer`. Resolves once the last consumer is closed and the handler that was
  * mid-dispatch at the abort has returned.
  */
-export async function runEventConsumerHub(
+export function runEventConsumerHub(
   hub: EventConsumerHub,
   createConsumer: () => StringConsumer,
   signal: AbortSignal,
 ): Promise<void> {
-  while (!signal.aborted) {
-    try {
-      await consumeEvents(hub, createConsumer(), signal)
-    } catch (error: unknown) {
-      if (!signal.aborted) console.error('Event consumer hub failed, restarting', error)
-    }
-    await delayUnlessAborted(RESTART_DELAY_MS, signal)
-  }
+  return runUntilAborted(
+    'Event consumer hub',
+    () => consumeEvents(hub, createConsumer(), signal),
+    signal,
+  )
 }
 
 /** Closing the consumer ends the stream, which ends the loop once the record in hand is handled. */

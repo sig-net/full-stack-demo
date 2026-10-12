@@ -36,9 +36,11 @@ export interface EthereumTransactionStateController {
   expireTransaction(args: ExpireTransactionArgs): Promise<EthereumTransaction>
 }
 
-export interface CommitTransactionArgs {
-  transaction: EthereumTransaction
-}
+/** What the committer decides. The controller sets the entry state, the fields the chain fills, and the timestamps. */
+export interface CommitTransactionArgs extends Omit<
+  EthereumTransaction,
+  'state' | 'txHash' | 'blockNumber' | 'failure' | 'error' | 'createTime' | 'updateTime'
+> {}
 
 export interface RecordSubmissionArgs {
   name: string

@@ -55,22 +55,12 @@ describe('EthereumTransactionStateResolver over Postgres and the anvil fork', ()
   async function commit(signedTx: string): Promise<string> {
     const { stateController } = backend.ethereum.transactionV1
     const name = `${caller}/ethereum-transactions/${randomUUID()}`
-    const now = new Date()
     await backend.db.unitOfWork.runInTransaction(() =>
       stateController.commitTransaction({
-        transaction: {
-          name,
-          parent: `${caller}/ethereum-erc20-vault-requests/${randomUUID()}`,
-          state: 'AwaitingSubmission',
-          signedTx,
-          txHash: null,
-          blockNumber: null,
-          expireTime: new Date(now.getTime() + 3_600_000),
-          failure: null,
-          error: null,
-          createTime: now,
-          updateTime: now,
-        },
+        name,
+        parent: `${caller}/ethereum-erc20-vault-requests/${randomUUID()}`,
+        signedTx,
+        expireTime: new Date(Date.now() + 3_600_000),
       }),
     )
     return name

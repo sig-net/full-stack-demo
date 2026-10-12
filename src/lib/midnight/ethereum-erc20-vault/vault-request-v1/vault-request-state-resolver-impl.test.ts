@@ -98,6 +98,13 @@ const signatureAnswering =
 
 const cases: Case[] = [
   {
+    name: 'AwaitingSignature - a row without its request id is a bug that surfaces',
+    stored: { ...VAULT_REQUEST_IN_STATE.AwaitingSignature, requestId: null },
+    ledger: requestLedgerAt('sent'),
+    expectTransitions: [],
+    expectError: 'holds no requestId',
+  },
+  {
     name: 'AwaitingFlush - still queued, so the flusher owns it',
     stored: VAULT_REQUEST_IN_STATE.AwaitingFlush,
     ledger: requestLedgerAt('queued'),

@@ -45,6 +45,14 @@ export const VAULT_REQUEST_TERMINAL_STATES = [
   'Attested',
 ] as const satisfies readonly VaultRequestState[]
 
+export function isTerminalVaultRequestState(state: VaultRequestState): boolean {
+  return VAULT_REQUEST_TERMINAL_STATES.some((terminal) => terminal === state)
+}
+
+/** The states a resolver still has work for. */
+export const VAULT_REQUEST_PENDING_STATES: readonly VaultRequestState[] =
+  VAULT_REQUEST_STATES.filter((state) => !isTerminalVaultRequestState(state))
+
 /** The MPC's verdicts, named as the singleton's `OutputKind` enum names them. */
 export const ATTESTATION_OUTPUT_KINDS = [
   'executed',

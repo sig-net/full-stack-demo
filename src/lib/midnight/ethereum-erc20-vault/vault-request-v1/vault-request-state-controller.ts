@@ -44,9 +44,21 @@ export interface VaultRequestStateController {
   startAttestationQueue(args: StartAttestationQueueArgs): Promise<MidnightTransaction>
 }
 
-export interface QueueRequestArgs {
-  request: VaultRequest
-}
+/** What the queuer decides. The controller sets the entry state, the step fields, and the timestamps. */
+export interface QueueRequestArgs extends Omit<
+  VaultRequest,
+  | 'state'
+  | 'outIndex'
+  | 'requestId'
+  | 'signedTx'
+  | 'attestationBlockHeight'
+  | 'attestationOutputKind'
+  | 'attestationDigest'
+  | 'attestationSignature'
+  | 'attestationOutput'
+  | 'createTime'
+  | 'updateTime'
+> {}
 
 export interface RecordFlushedArgs {
   name: string

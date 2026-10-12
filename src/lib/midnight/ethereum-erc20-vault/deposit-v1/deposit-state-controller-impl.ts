@@ -3,7 +3,6 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 
 import { callerOf } from '@/lib/caller/caller'
-import { isUniqueViolation } from '@/lib/db/unique-violation'
 import type { EventPublisher } from '@/lib/event/event-publisher'
 import type { Deposit } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
@@ -21,8 +20,8 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
 import {
   assertConsistent,
-  COMMITTABLE_STATES,
   type DepositStateAction,
+  INITIAL_STATE,
   nextState,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-machine'
 import { vaultRequestName } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
@@ -48,44 +47,39 @@ export class DepositStateControllerImpl implements DepositStateController {
     this.vaultRequestStateController = vaultRequestStateController
   }
 
-  async startDeposit({ deposit, unprovenTx }: StartDepositArgs): Promise<Deposit> {
+  async startDeposit({ unprovenTx, ...deposit }: StartDepositArgs): Promise<Deposit> {
     const now = new Date()
-    const starting: Deposit = { ...deposit, createTime: now, updateTime: now }
-    if (!COMMITTABLE_STATES.includes(starting.state)) {
-      throw new Error(`${starting.name} cannot be started in state ${starting.state}`)
-    }
-    assertConsistent(starting)
-    const stored = await this.depositRepository.create(starting)
-    await this.publishEntered(stored)
-    await this.commitCallerTransaction(stored, 'startDeposit', unprovenTx)
+    const stored = await this.depositRepository.create({
+      ...deposit,
+      state: INITIAL_STATE,
+      outcome: null,
+      failure: null,
+      error: null,
+      createTime: now,
+      updateTime: now,
+    })
+    await this.eventPublisher.publishEvent(
+      DEPOSIT_EVENT_BY_STATE[stored.state].create(stored.name, { name: stored.name }),
+    )
+    await this.midnightTransactionStateController.commitTransaction({
+      name: midnightTransactionName(callerOf(stored.name), randomUUID()),
+      parent: stored.name,
+      circuit: 'startDeposit',
+      signer: 'caller',
+      unprovenTx,
+    })
     return stored
   }
 
   async recordStarted({ name }: RecordStartedArgs): Promise<Deposit> {
     const started = await this.transition(name, 'recordStarted', {})
-    const now = new Date()
-    await this.commitChild(started, 'recordStarted', () =>
-      this.vaultRequestStateController.queueRequest({
-        request: {
-          name: vaultRequestName(callerOf(name), randomUUID()),
-          parent: name,
-          action: 'deposit',
-          state: 'AwaitingFlush',
-          inIndex: started.inIndex,
-          depositAccount: started.depositAccount,
-          outIndex: null,
-          requestId: null,
-          signedTx: null,
-          attestationBlockHeight: null,
-          attestationOutputKind: null,
-          attestationDigest: null,
-          attestationSignature: null,
-          attestationOutput: null,
-          createTime: now,
-          updateTime: now,
-        },
-      }),
-    )
+    await this.vaultRequestStateController.queueRequest({
+      name: vaultRequestName(callerOf(name), randomUUID()),
+      parent: name,
+      action: 'deposit',
+      inIndex: started.inIndex,
+      depositAccount: started.depositAccount,
+    })
     return started
   }
 
@@ -99,7 +93,13 @@ export class DepositStateControllerImpl implements DepositStateController {
 
   async completeDeposit({ name, unprovenTx }: CompleteDepositArgs): Promise<Deposit> {
     const completing = await this.transition(name, 'complete', {})
-    await this.commitCallerTransaction(completing, 'completeDeposit', unprovenTx)
+    await this.midnightTransactionStateController.commitTransaction({
+      name: midnightTransactionName(callerOf(completing.name), randomUUID()),
+      parent: completing.name,
+      circuit: 'completeDeposit',
+      signer: 'caller',
+      unprovenTx,
+    })
     return completing
   }
 
@@ -131,61 +131,9 @@ export class DepositStateControllerImpl implements DepositStateController {
     const next: Deposit = { ...current, ...patch, state, updateTime: new Date() }
     assertConsistent(next)
     const stored = await this.depositRepository.update(next)
-    await this.publishEntered(stored)
+    await this.eventPublisher.publishEvent(
+      DEPOSIT_EVENT_BY_STATE[stored.state].create(stored.name, { name: stored.name }),
+    )
     return stored
   }
-
-  /** The caller's wallet finalises the call, so the browser must act before the intent's TTL. */
-  private commitCallerTransaction(
-    deposit: Deposit,
-    circuit: 'startDeposit' | 'completeDeposit',
-    unprovenTx: string,
-  ): Promise<void> {
-    const now = new Date()
-    return this.commitChild(deposit, circuit, () =>
-      this.midnightTransactionStateController.commitTransaction({
-        transaction: {
-          name: midnightTransactionName(callerOf(deposit.name), randomUUID()),
-          parent: deposit.name,
-          state: 'AwaitingProof',
-          circuit,
-          signer: 'caller',
-          unprovenTx,
-          unboundTx: null,
-          finalizedTx: null,
-          expireTime: new Date(now.getTime() + CALLER_TRANSACTION_TTL_MS),
-          txId: null,
-          failure: null,
-          error: null,
-          createTime: now,
-          updateTime: now,
-        },
-      }),
-    )
-  }
-
-  /** The child's live index refusing the row means another actor committed a child first. */
-  private async commitChild(
-    deposit: Deposit,
-    action: string,
-    commit: () => Promise<unknown>,
-  ): Promise<void> {
-    try {
-      await commit()
-    } catch (error: unknown) {
-      if (isUniqueViolation(error)) {
-        throw new DepositStateConflict(deposit.name, deposit.state, action)
-      }
-      throw error
-    }
-  }
-
-  private publishEntered(deposit: Deposit): Promise<void> {
-    return this.eventPublisher.publishEvent(
-      DEPOSIT_EVENT_BY_STATE[deposit.state].create(deposit.name, { name: deposit.name }),
-    )
-  }
 }
-
-/** How long a caller's call stays submittable before the node refuses it. */
-const CALLER_TRANSACTION_TTL_MS = 60 * 60 * 1000

@@ -15,7 +15,7 @@ import {
  * entered. Methods open no transaction: the caller is the write boundary.
  */
 export interface MidnightTransactionStateController {
-  /** Stores a transaction the caller built: `AwaitingProof` with its unproven bytes, or `AwaitingWallet` with its proven bytes. */
+  /** Stores a transaction the caller built, in `AwaitingProof` with its unproven bytes. */
   commitTransaction(args: CommitTransactionArgs): Promise<MidnightTransaction>
   /** `AwaitingProof` to `AwaitingWallet`. The unproven bytes are deleted. */
   recordProof(args: RecordProofArgs): Promise<MidnightTransaction>
@@ -42,8 +42,21 @@ export interface MidnightTransactionStateController {
   expireTransaction(args: ExpireTransactionArgs): Promise<MidnightTransaction>
 }
 
-export interface CommitTransactionArgs {
-  transaction: MidnightTransaction
+/** What the committer decides. The controller sets the entry state, the TTL, the fields later steps fill, and the timestamps. */
+export interface CommitTransactionArgs extends Omit<
+  MidnightTransaction,
+  | 'state'
+  | 'unprovenTx'
+  | 'unboundTx'
+  | 'finalizedTx'
+  | 'txId'
+  | 'expireTime'
+  | 'failure'
+  | 'error'
+  | 'createTime'
+  | 'updateTime'
+> {
+  unprovenTx: string
 }
 
 export interface RecordProofArgs {

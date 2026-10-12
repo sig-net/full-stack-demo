@@ -6,10 +6,9 @@ import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { lazySingleton } from '@/lib/lazy-singleton'
 import {
   type Deposit,
-  DEPOSIT_STATES,
-  DEPOSIT_TERMINAL_STATES,
+  DEPOSIT_PENDING_STATES,
   type DepositOutcome,
-  type DepositState,
+  isTerminalDepositState,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
 import {
@@ -28,9 +27,8 @@ import {
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 import {
-  MIDNIGHT_TRANSACTION_TERMINAL_STATES,
+  isTerminalMidnightTransactionState,
   type MidnightTransaction,
-  type MidnightTransactionState,
 } from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 
@@ -66,14 +64,17 @@ export class DepositStateResolverImpl implements DepositStateResolver {
   /** Reads outside any transaction: the controller re-reads under lock before it writes. */
   async resolveDeposit({ name }: ResolveDepositArgs): Promise<void> {
     const deposit = await this.depositRepository.get(name)
-    if (deposit === undefined || isTerminal(deposit.state)) return
-    await this.resolve(deposit, this.ledgerOnce())
+    if (deposit === undefined || isTerminalDepositState(deposit.state)) return
+    await this.resolve(
+      deposit,
+      lazySingleton(() => this.requestLedger.state()),
+    )
   }
 
   /** One deposit's failure does not stop the rest. */
   async resolvePending(): Promise<void> {
-    const ledger = this.ledgerOnce()
-    for (const state of PENDING_STATES) {
+    const ledger = lazySingleton(() => this.requestLedger.state())
+    for (const state of DEPOSIT_PENDING_STATES) {
       const deposits = await this.depositRepository.search({
         criteria: [{ type: 'exact-text', field: 'state', text: state }],
         order: { field: 'createTime', direction: 'asc' },
@@ -86,11 +87,6 @@ export class DepositStateResolverImpl implements DepositStateResolver {
         }
       }
     }
-  }
-
-  /** One ledger read serves every deposit of a pass that needs one, and none is made when none does. */
-  private ledgerOnce(): LedgerRead {
-    return lazySingleton(() => this.requestLedger.state())
   }
 
   private resolve(deposit: Deposit, ledger: LedgerRead): Promise<void> {
@@ -149,7 +145,7 @@ export class DepositStateResolverImpl implements DepositStateResolver {
   /** The caller's to-do, unless the ledger shows the complete settled: a lost acknowledgement or another client landed it. */
   private async resolveAwaitingCompletion(deposit: Deposit, ledger: LedgerRead): Promise<void> {
     const transaction = await this.latestTransaction(deposit.name, 'completeDeposit')
-    if (transaction !== undefined && !isMidnightTerminal(transaction.state)) return
+    if (transaction !== undefined && !isTerminalMidnightTransactionState(transaction.state)) return
     return this.recordIfSettled(deposit, ledger, () => Promise.resolve())
   }
 
@@ -230,18 +226,8 @@ export class DepositStateResolverImpl implements DepositStateResolver {
   }
 }
 
-/** A ledger read deferred until a branch needs it, shared across one resolve or one sweep. */
+/** One ledger read, deferred until a branch needs it and shared across one resolve or one sweep. */
 type LedgerRead = () => Promise<RequestLedgerState>
-
-const PENDING_STATES: readonly DepositState[] = DEPOSIT_STATES.filter((state) => !isTerminal(state))
-
-function isTerminal(state: DepositState): boolean {
-  return DEPOSIT_TERMINAL_STATES.some((terminal) => terminal === state)
-}
-
-function isMidnightTerminal(state: MidnightTransactionState): boolean {
-  return MIDNIGHT_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === state)
-}
 
 /** The sweep's attested output is the Borsh `bool` of the transfer's success: `01` for a mint. */
 function depositOutcome(request: VaultRequest): DepositOutcome {

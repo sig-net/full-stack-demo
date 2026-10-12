@@ -17,6 +17,7 @@ import { DepositServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-
 import {
   DepositStateConflict,
   type DepositStateController,
+  type StartDepositArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
 import type {
   CompleteDepositCircuitArgs,
@@ -60,7 +61,7 @@ interface Recorded {
   steps: string[]
   startBuilds: StartDepositCircuitArgs[]
   completeBuilds: CompleteDepositCircuitArgs[]
-  started: { deposit: Deposit; unprovenTx: string }[]
+  started: StartDepositArgs[]
   completed: { name: string; unprovenTx: string }[]
 }
 
@@ -87,7 +88,8 @@ function serviceOver(options: {
     mock<DepositStateController>('DepositStateController', {
       startDeposit: async (args) => {
         recorded.started.push(args)
-        return args.deposit
+        const { unprovenTx: _unprovenTx, ...deposit } = args
+        return depositFixture(deposit)
       },
       completeDeposit: async (args) => {
         recorded.completed.push(args)
@@ -212,7 +214,18 @@ describe('DepositServiceImpl.startDeposit', () => {
     })
     expect(deposit.inIndex).toBeGreaterThanOrEqual(0n)
     expect(deposit.inIndex).toBeLessThanOrEqual(UINT64_MAX)
-    expect(recorded.started).toEqual([{ deposit, unprovenTx: 'start-call' }])
+    expect(recorded.started).toEqual([
+      {
+        name: deposit.name,
+        erc20Address: ERC20_ADDRESS,
+        amount: 1_000_000n,
+        inIndex: deposit.inIndex,
+        evmNonce: expectNonce,
+        ...GAS,
+        depositAccount: CALLER_ACCOUNT,
+        unprovenTx: 'start-call',
+      },
+    ])
     expect(recorded.startBuilds).toEqual([
       {
         secretKey: caller.secretKey,
@@ -326,18 +339,27 @@ describe('DepositServiceImpl.completeDeposit', () => {
       expectError: DepositStateConflict,
     },
     {
-      name: 'a deposit whose request is not attested',
+      name: 'a deposit whose request holds no attestation',
       by: caller,
       deposits: [awaiting],
-      requests: [attestedUnder(awaiting.name, VAULT_REQUEST_IN_STATE.AwaitingAttestationFlush)],
-      expectError: 'has no attested vault request',
+      requests: [
+        attestedUnder(awaiting.name, {
+          state: 'AwaitingBroadcast',
+          attestationBlockHeight: null,
+          attestationOutputKind: null,
+          attestationDigest: null,
+          attestationSignature: null,
+          attestationOutput: null,
+        }),
+      ],
+      expectError: 'holds no attestation',
     },
     {
       name: 'a deposit without a request row',
       by: caller,
       deposits: [awaiting],
       requests: [],
-      expectError: 'has no attested vault request',
+      expectError: 'has no vault request',
     },
   ]
 

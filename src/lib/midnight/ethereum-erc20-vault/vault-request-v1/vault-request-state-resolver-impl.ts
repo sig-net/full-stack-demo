@@ -6,7 +6,8 @@ import type { VaultCircuitId } from '@sig-net/midnight-examples-erc20-vault-cont
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import {
   type EthereumTransaction,
-  ETHEREUM_TRANSACTION_TERMINAL_STATES,
+  isTerminalEthereumTransactionState,
+  leftNothingOnChain,
 } from '@/lib/ethereum/transaction-v1/transaction'
 import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
 import type { RespondOutcomeSource } from '@/lib/midnight/ethereum-erc20-vault/respond-outcome-source'
@@ -24,9 +25,9 @@ import {
   requestStage,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import {
+  isTerminalVaultRequestState,
   type VaultRequest,
-  VAULT_REQUEST_STATES,
-  VAULT_REQUEST_TERMINAL_STATES,
+  VAULT_REQUEST_PENDING_STATES,
   type VaultRequestState,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import {
@@ -42,7 +43,7 @@ import type {
   ResolveVaultRequestArgs,
   VaultRequestStateResolver,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-resolver'
-import { MIDNIGHT_TRANSACTION_TERMINAL_STATES } from '@/lib/midnight/transaction-v1/transaction'
+import { isTerminalMidnightTransactionState } from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 
 /** One outcome source per vault action, over that action's reader. */
@@ -84,7 +85,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
   /** Reads outside any transaction: the controller re-reads under lock before it writes. */
   async resolveVaultRequest({ name }: ResolveVaultRequestArgs): Promise<void> {
     const request = await this.requestRepository.get(name)
-    if (request === undefined || isTerminal(request.state)) return
+    if (request === undefined || isTerminalVaultRequestState(request.state)) return
     await this.resolve(request, await this.requestLedger.state())
   }
 
@@ -93,7 +94,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
   }
 
   resolvePending(): Promise<void> {
-    return this.resolveEach(PENDING_STATES)
+    return this.resolveEach(VAULT_REQUEST_PENDING_STATES)
   }
 
   /** One ledger read serves the whole sweep, and one request's failure does not stop the rest. */
@@ -196,7 +197,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     stage: RequestStage,
   ): Promise<void> {
     if (stage.stage === 'settled') return settledEarly(name, state)
-    if (requestId === null) return
+    if (requestId === null) throw new Error(`${name} in ${state} holds no requestId`)
     const signed = await this.signetReaders[action].getSignedEvmTransaction(
       parseRequestIdHex(requestId),
       depositAccount,
@@ -218,10 +219,10 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
   ): Promise<void> {
     if (stage.stage === 'settled') return settledEarly(name, state)
     const child = await this.latestEthereumChild(name)
-    if (child === undefined || isReplaceable(child)) {
+    if (child === undefined || leftNothingOnChain(child)) {
       return this.write(() => this.stateController.startBroadcast({ name }))
     }
-    if (isEthereumTerminal(child.state)) {
+    if (isTerminalEthereumTransactionState(child.state)) {
       return this.write(() => this.stateController.recordBroadcast({ name }))
     }
   }
@@ -232,7 +233,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     ledger: RequestLedgerState,
   ): Promise<void> {
     if (stage.stage === 'settled') return settledEarly(name, state)
-    if (requestId === null) return
+    if (requestId === null) throw new Error(`${name} in ${state} holds no requestId`)
     const outcome = await this.respondOutcomeSources[action].attestedOutcome({
       requestId: hexToBytes(requestId),
       mpcResponseKey: ledger.mpcResponseKey,
@@ -258,7 +259,9 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
       case 'attestationFlushed':
         return this.write(() => this.stateController.recordAttestationQueued({ name }))
       case 'sent': {
-        if (attestationBlockHeight === null || attestationOutput === null) return
+        if (attestationBlockHeight === null || attestationOutput === null) {
+          throw new Error(`${name} in ${state} holds no attestation`)
+        }
         if (attestationBlockHeight <= stage.lastSeen) {
           // Only a nonce consumed before the start reaches here, which the deposit service's
           // nonce assignment prevents, so the row is left for the sweep to re-check.
@@ -315,10 +318,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
       order: { field: 'createTime', direction: 'desc' },
       limit: 1,
     })
-    return (
-      latest !== undefined &&
-      !MIDNIGHT_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === latest.state)
-    )
+    return latest !== undefined && !isTerminalMidnightTransactionState(latest.state)
   }
 
   private async latestEthereumChild(name: string): Promise<EthereumTransaction | undefined> {
@@ -338,23 +338,6 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
       if (!(error instanceof VaultRequestStateConflict)) throw error
     }
   }
-}
-
-const PENDING_STATES: readonly VaultRequestState[] = VAULT_REQUEST_STATES.filter(
-  (state) => !isTerminal(state),
-)
-
-function isTerminal(state: VaultRequestState): boolean {
-  return VAULT_REQUEST_TERMINAL_STATES.some((terminal) => terminal === state)
-}
-
-function isEthereumTerminal(state: EthereumTransaction['state']): boolean {
-  return ETHEREUM_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === state)
-}
-
-/** A failed child that put nothing on chain, so the same bytes are broadcast again. */
-function isReplaceable(child: EthereumTransaction): boolean {
-  return child.state === 'Failed' && (child.failure === 'Rejected' || child.failure === 'Expired')
 }
 
 /** Only the complete circuit removes a request's arguments, and it needs the request attested first. */

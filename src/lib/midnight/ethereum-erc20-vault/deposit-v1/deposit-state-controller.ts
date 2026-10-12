@@ -33,8 +33,11 @@ export interface DepositStateController {
   recordCompleteFailure(args: RecordCompleteFailureArgs): Promise<Deposit>
 }
 
-export interface StartDepositArgs {
-  deposit: Deposit
+/** What the starter decides. The controller sets the entry state, the outcome fields, and the timestamps. */
+export interface StartDepositArgs extends Omit<
+  Deposit,
+  'state' | 'outcome' | 'failure' | 'error' | 'createTime' | 'updateTime'
+> {
   /** The start circuit call, built with the deposit's assigned fields. */
   unprovenTx: string
 }

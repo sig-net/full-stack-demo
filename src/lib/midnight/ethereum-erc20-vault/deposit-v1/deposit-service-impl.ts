@@ -12,10 +12,10 @@ import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import {
   type Deposit,
-  DEPOSIT_TERMINAL_STATES,
   depositName,
-  type DepositState,
+  isTerminalDepositState,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import { nextState } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-machine'
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
 import type {
   CompleteDepositArgs,
@@ -29,7 +29,10 @@ import {
   type DepositStateController,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
 import type { GasEnvelope, VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
-import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
+import {
+  type AttestedRequestFields,
+  attestedRequestFields,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 
 export class DepositServiceImpl implements DepositService {
@@ -78,33 +81,25 @@ export class DepositServiceImpl implements DepositService {
       erc20Address: depositRequest.erc20Address,
       amount: depositRequest.amount,
     })
-    const now = new Date()
     return this.unitOfWork.runInTransaction(() =>
       this.depositStateController.startDeposit({
-        deposit: {
-          name: depositName(caller.name, randomUUID()),
-          erc20Address: depositRequest.erc20Address,
-          amount: depositRequest.amount,
-          state: 'AwaitingStartTransaction',
-          inIndex,
-          evmNonce,
-          ...SWEEP_GAS,
-          depositAccount,
-          outcome: null,
-          failure: null,
-          error: null,
-          createTime: now,
-          updateTime: now,
-        },
+        name: depositName(caller.name, randomUUID()),
+        erc20Address: depositRequest.erc20Address,
+        amount: depositRequest.amount,
+        inIndex,
+        evmNonce,
+        ...SWEEP_GAS,
+        depositAccount,
         unprovenTx,
       }),
     )
   }
 
+  /** The state table is asked before the slow build, and the controller asks it again under the lock. */
   async completeDeposit(caller: Caller, { name, wallet }: CompleteDepositArgs): Promise<Deposit> {
     const deposit = await this.ownDeposit(caller, name)
-    if (deposit.state !== 'AwaitingCompletion') {
-      throw new DepositStateConflict(name, deposit.state, 'completeDeposit')
+    if (nextState(deposit.state, 'complete') === undefined) {
+      throw new DepositStateConflict(name, deposit.state, 'complete')
     }
     const request = await this.attestedRequestOf(name)
     const unprovenTx = await this.circuits.completeDeposit({
@@ -154,7 +149,7 @@ export class DepositServiceImpl implements DepositService {
       criteria: [{ type: 'exact-text', field: 'depositAccount', text: depositAccount }],
     })
     return deposits
-      .filter((deposit) => !isTerminal(deposit.state))
+      .filter((deposit) => !isTerminalDepositState(deposit.state))
       .reduce((highest, deposit) => bigger(highest, deposit.evmNonce + 1n), pending)
   }
 
@@ -168,35 +163,18 @@ export class DepositServiceImpl implements DepositService {
     return deposit
   }
 
-  private async attestedRequestOf(name: string): Promise<AttestedVaultRequest> {
+  /** A deposit that may be completed has an attested request under it, so its fields are read without a state check. */
+  private async attestedRequestOf(name: string): Promise<AttestedRequestFields> {
     const [request] = await this.vaultRequestRepository.search({
       criteria: [{ type: 'exact-text', field: 'parent', text: name }],
       order: { field: 'createTime', direction: 'desc' },
       limit: 1,
     })
-    if (
-      request === undefined ||
-      request.state !== 'Attested' ||
-      request.requestId === null ||
-      request.attestationOutputKind === null ||
-      request.attestationOutput === null
-    ) {
-      throw new Error(`${name} has no attested vault request`)
+    if (request === undefined) {
+      throw new Error(`${name} has no vault request`)
     }
-    return {
-      ...request,
-      requestId: request.requestId,
-      attestationOutputKind: request.attestationOutputKind,
-      attestationOutput: request.attestationOutput,
-    }
+    return attestedRequestFields(request)
   }
-}
-
-/** An attested request's fields the complete circuit needs, non-null. */
-type AttestedVaultRequest = VaultRequest & {
-  readonly requestId: string
-  readonly attestationOutputKind: NonNullable<VaultRequest['attestationOutputKind']>
-  readonly attestationOutput: string
 }
 
 /**
@@ -211,14 +189,10 @@ const SWEEP_GAS: GasEnvelope = {
 }
 
 /** The circuit verifies the attested output only for an executed sweep, and ignores the byte otherwise. */
-function completionOutput(request: AttestedVaultRequest): Uint8Array {
+function completionOutput(request: AttestedRequestFields): Uint8Array {
   return request.attestationOutputKind === 'executed'
     ? hexToBytes(request.attestationOutput)
     : new Uint8Array([0])
-}
-
-function isTerminal(state: DepositState): boolean {
-  return DEPOSIT_TERMINAL_STATES.some((terminal) => terminal === state)
 }
 
 function bigger(a: bigint, b: bigint): bigint {

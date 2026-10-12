@@ -4,11 +4,12 @@ import type { VaultCircuitId } from '@sig-net/midnight-examples-erc20-vault-cont
 import { randomUUID } from 'node:crypto'
 
 import { callerOf } from '@/lib/caller/caller'
-import { isUniqueViolation } from '@/lib/db/unique-violation'
 import {
   type EthereumTransaction,
   ethereumTransactionName,
+  isTerminalEthereumTransactionState,
 } from '@/lib/ethereum/transaction-v1/transaction'
+import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
 import type { EthereumTransactionStateController } from '@/lib/ethereum/transaction-v1/transaction-state-controller'
 import type { EventPublisher } from '@/lib/event/event-publisher'
 import {
@@ -40,38 +41,59 @@ import {
   type VaultRequestStateAction,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-machine'
 import {
+  isTerminalMidnightTransactionState,
   type MidnightTransaction,
   midnightTransactionName,
 } from '@/lib/midnight/transaction-v1/transaction'
+import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 
 export class VaultRequestStateControllerImpl implements VaultRequestStateController {
   private readonly requestRepository: VaultRequestRepository
   private readonly eventPublisher: EventPublisher
+  private readonly midnightTransactionRepository: MidnightTransactionRepository
   private readonly midnightTransactionStateController: MidnightTransactionStateController
+  private readonly ethereumTransactionRepository: EthereumTransactionRepository
   private readonly ethereumTransactionStateController: EthereumTransactionStateController
 
   constructor(
     requestRepository: VaultRequestRepository,
     eventPublisher: EventPublisher,
+    midnightTransactionRepository: MidnightTransactionRepository,
     midnightTransactionStateController: MidnightTransactionStateController,
+    ethereumTransactionRepository: EthereumTransactionRepository,
     ethereumTransactionStateController: EthereumTransactionStateController,
   ) {
     this.requestRepository = requestRepository
     this.eventPublisher = eventPublisher
+    this.midnightTransactionRepository = midnightTransactionRepository
     this.midnightTransactionStateController = midnightTransactionStateController
+    this.ethereumTransactionRepository = ethereumTransactionRepository
     this.ethereumTransactionStateController = ethereumTransactionStateController
   }
 
   async queueRequest(args: QueueRequestArgs): Promise<VaultRequest> {
     const now = new Date()
-    const request: VaultRequest = { ...args.request, createTime: now, updateTime: now }
-    if (request.state !== INITIAL_STATE) {
-      throw new Error(`${request.name} cannot be queued in state ${request.state}`)
-    }
-    assertConsistent(request)
-    const stored = await this.requestRepository.create(request)
-    await this.publishEntered(stored)
+    const stored = await this.requestRepository.create({
+      ...args,
+      state: INITIAL_STATE,
+      outIndex: null,
+      requestId: null,
+      signedTx: null,
+      attestationBlockHeight: null,
+      attestationOutputKind: null,
+      attestationDigest: null,
+      attestationSignature: null,
+      attestationOutput: null,
+      createTime: now,
+      updateTime: now,
+    })
+    await this.eventPublisher.publishEvent(
+      VAULT_REQUEST_EVENT_BY_STATE[stored.state].create(stored.name, {
+        name: stored.name,
+        parent: stored.parent,
+      }),
+    )
     return stored
   }
 
@@ -119,24 +141,18 @@ export class VaultRequestStateControllerImpl implements VaultRequestStateControl
     if (signedTx === null) {
       throw new Error(`${name} holds no signed transaction`)
     }
-    const now = new Date()
-    return this.commitChild(request, 'startBroadcast', () =>
-      this.ethereumTransactionStateController.commitTransaction({
-        transaction: {
-          name: ethereumTransactionName(callerOf(request.name), randomUUID()),
-          parent: request.name,
-          state: 'AwaitingSubmission',
-          signedTx,
-          txHash: null,
-          blockNumber: null,
-          expireTime: null,
-          failure: null,
-          error: null,
-          createTime: now,
-          updateTime: now,
-        },
-      }),
-    )
+    const children = await this.ethereumTransactionRepository.search({
+      criteria: [{ type: 'exact-text', field: 'parent', text: request.name }],
+    })
+    if (children.some((child) => !isTerminalEthereumTransactionState(child.state))) {
+      throw new VaultRequestStateConflict(request.name, request.state, 'startBroadcast')
+    }
+    return this.ethereumTransactionStateController.commitTransaction({
+      name: ethereumTransactionName(callerOf(request.name), randomUUID()),
+      parent: request.name,
+      signedTx,
+      expireTime: null,
+    })
   }
 
   async startAttestationQueue({
@@ -169,7 +185,12 @@ export class VaultRequestStateControllerImpl implements VaultRequestStateControl
     const next: VaultRequest = { ...current, ...patch, state, updateTime: new Date() }
     assertConsistent(next)
     const stored = await this.requestRepository.update(next)
-    await this.publishEntered(stored)
+    await this.eventPublisher.publishEvent(
+      VAULT_REQUEST_EVENT_BY_STATE[stored.state].create(stored.name, {
+        name: stored.name,
+        parent: stored.parent,
+      }),
+    )
     return stored
   }
 
@@ -197,60 +218,28 @@ export class VaultRequestStateControllerImpl implements VaultRequestStateControl
     return current
   }
 
-  private commitMidnightChild(
+  /** The row lock alone cannot refuse a second starter, since a starter leaves the state alone: the live child does. */
+  private async commitMidnightChild(
     request: VaultRequest,
     action: string,
     circuit: VaultCircuitId,
     unprovenTx: string,
   ): Promise<MidnightTransaction> {
-    const now = new Date()
-    return this.commitChild(request, action, () =>
-      this.midnightTransactionStateController.commitTransaction({
-        transaction: {
-          name: midnightTransactionName(callerOf(request.name), randomUUID()),
-          parent: request.name,
-          state: 'AwaitingProof',
-          circuit,
-          signer: 'relayer',
-          unprovenTx,
-          unboundTx: null,
-          finalizedTx: null,
-          expireTime: new Date(now.getTime() + RELAYER_TRANSACTION_TTL_MS),
-          txId: null,
-          failure: null,
-          error: null,
-          createTime: now,
-          updateTime: now,
-        },
-      }),
-    )
-  }
-
-  /** The child's live index refusing the row means another resolver committed a child first. */
-  private async commitChild<Child>(
-    request: VaultRequest,
-    action: string,
-    commit: () => Promise<Child>,
-  ): Promise<Child> {
-    try {
-      return await commit()
-    } catch (error: unknown) {
-      if (isUniqueViolation(error)) {
-        throw new VaultRequestStateConflict(request.name, request.state, action)
-      }
-      throw error
+    const children = await this.midnightTransactionRepository.search({
+      criteria: [
+        { type: 'exact-text', field: 'parent', text: request.name },
+        { type: 'exact-text', field: 'circuit', text: circuit },
+      ],
+    })
+    if (children.some((child) => !isTerminalMidnightTransactionState(child.state))) {
+      throw new VaultRequestStateConflict(request.name, request.state, action)
     }
-  }
-
-  private publishEntered(request: VaultRequest): Promise<void> {
-    return this.eventPublisher.publishEvent(
-      VAULT_REQUEST_EVENT_BY_STATE[request.state].create(request.name, {
-        name: request.name,
-        parent: request.parent,
-      }),
-    )
+    return this.midnightTransactionStateController.commitTransaction({
+      name: midnightTransactionName(callerOf(request.name), randomUUID()),
+      parent: request.name,
+      circuit,
+      signer: 'relayer',
+      unprovenTx,
+    })
   }
 }
-
-/** How long a relayer call stays submittable before the node refuses it. */
-const RELAYER_TRANSACTION_TTL_MS = 60 * 60 * 1000

@@ -47,7 +47,7 @@ describe('MidnightTransactionLedgerImpl.prove', () => {
   })
 
   test('refuses bytes that are not hex before reaching the proof server', async () => {
-    await expect(ledgerWith().prove('not hex')).rejects.toThrow('must be hex')
+    await expect(ledgerWith().prove('not hex')).rejects.toThrow('not a hex byte string')
   })
 
   test('refuses hex that is not a transaction', async () => {
@@ -87,7 +87,7 @@ describe('MidnightTransactionLedgerImpl.status', () => {
       {
         outcome: 'failed',
         failure: 'FailFallible',
-        error: 'The fallible section did not apply; the fee was paid',
+        error: 'The fallible section did not apply, and the fee was paid',
       },
     ],
     [

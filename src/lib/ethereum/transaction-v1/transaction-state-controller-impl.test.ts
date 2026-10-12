@@ -2,14 +2,15 @@ import { describe, expect, test } from 'vitest'
 
 import type { EthereumTransaction } from '@/lib/ethereum/transaction-v1/transaction'
 import {
+  SIGNED_TX,
   TRANSACTION_IN_STATE,
   TRANSACTION_NAME,
-  transactionFixture,
   TX_HASH,
   VAULT_REQUEST_NAME,
 } from '@/lib/ethereum/transaction-v1/transaction-fixtures'
 import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
 import {
+  type CommitTransactionArgs,
   ETHEREUM_TRANSACTION_EVENT_BY_STATE,
   EthereumTransactionStateConflict,
   type EthereumTransactionStateController,
@@ -67,18 +68,36 @@ function emptyCalls(): Calls {
 }
 
 describe('EthereumTransactionStateControllerImpl.commitTransaction', () => {
+  const args: CommitTransactionArgs = {
+    name: TRANSACTION_NAME,
+    parent: VAULT_REQUEST_NAME,
+    signedTx: SIGNED_TX,
+    expireTime: new Date('2100-01-01T00:00:00Z'),
+  }
+
   const cases: ReadonlyArray<{
     name: string
-    args: EthereumTransaction
+    args: CommitTransactionArgs
+    create?: EthereumTransactionRepository['create']
     check: (result: Promise<EthereumTransaction>, calls: Calls) => Promise<void>
   }> = [
     {
-      name: 'success - AwaitingSubmission with the signed bytes',
-      args: transactionFixture({ createTime: new Date(0), updateTime: new Date(0) }),
+      name: 'success - stored in AwaitingSubmission with the fields the chain fills unset',
+      args,
       check: async (result, calls) => {
+        const before = Date.now()
         const stored = await result
-        expect(stored.createTime.getTime()).toBeGreaterThan(0)
-        expect(stored.updateTime).toEqual(stored.createTime)
+        expect(stored).toEqual({
+          ...args,
+          state: 'AwaitingSubmission',
+          txHash: null,
+          blockNumber: null,
+          failure: null,
+          error: null,
+          createTime: stored.createTime,
+          updateTime: stored.createTime,
+        })
+        expect(stored.createTime.getTime()).toBeGreaterThanOrEqual(before)
         expect(calls.created).toEqual([stored])
         expect(calls.published).toHaveLength(1)
         expect(calls.published[0]).toMatchObject({
@@ -90,7 +109,7 @@ describe('EthereumTransactionStateControllerImpl.commitTransaction', () => {
     },
     {
       name: 'success - without an expiry',
-      args: transactionFixture({ expireTime: null }),
+      args: { ...args, expireTime: null },
       check: async (result, calls) => {
         expect((await result).expireTime).toBeNull()
         expect(calls.published[0]?.type).toBe(
@@ -99,25 +118,11 @@ describe('EthereumTransactionStateControllerImpl.commitTransaction', () => {
       },
     },
     {
-      name: 'failure - a state a transaction cannot be committed in',
-      args: TRANSACTION_IN_STATE.AwaitingInclusion,
-      check: async (result, calls) => {
-        await expect(result).rejects.toThrow(
-          `${TRANSACTION_NAME} cannot be committed in state AwaitingInclusion`,
-        )
-        expect(calls.created).toHaveLength(0)
-      },
-    },
-    {
-      name: 'failure - AwaitingSubmission with a field the chain produces',
-      args: transactionFixture({ txHash: TX_HASH }),
-      check: async (result) => {
-        await expect(result).rejects.toThrow('must have txHash unset')
-      },
-    },
-    {
       name: 'failure - the repository refuses the row, so nothing is published',
-      args: transactionFixture(),
+      args,
+      create: async () => {
+        throw new Error(`${TRANSACTION_NAME} already exists`)
+      },
       check: async (result, calls) => {
         await expect(result).rejects.toThrow('already exists')
         expect(calls.published).toHaveLength(0)
@@ -125,22 +130,16 @@ describe('EthereumTransactionStateControllerImpl.commitTransaction', () => {
     },
   ]
 
-  test.each(cases)('$name', async ({ name, args, check }) => {
+  test.each(cases)('$name', async ({ args: commitArgs, create, check }) => {
     const calls = emptyCalls()
-    const refusing = name.includes('repository refuses')
-    const { eventPublisher } = fields(undefined, calls)
-    const transactionRepository = refusing
-      ? mock<EthereumTransactionRepository>('EthereumTransactionRepository', {
-          create: async () => {
-            throw new Error(`${TRANSACTION_NAME} already exists`)
-          },
-        })
-      : fields(undefined, calls).transactionRepository
+    const { transactionRepository, eventPublisher } = fields(undefined, calls)
     const controller = new EthereumTransactionStateControllerImpl(
-      transactionRepository,
+      create === undefined
+        ? transactionRepository
+        : mock<EthereumTransactionRepository>('EthereumTransactionRepository', { create }),
       eventPublisher,
     )
-    await check(controller.commitTransaction({ transaction: args }), calls)
+    await check(controller.commitTransaction(commitArgs), calls)
   })
 })
 

@@ -1,62 +1,74 @@
 import { describe, expect, test } from 'vitest'
 
 import type { EthereumTransaction } from '@/lib/ethereum/transaction-v1/transaction'
-import type { EthereumTransactionStateController } from '@/lib/ethereum/transaction-v1/transaction-state-controller'
+import {
+  transactionFixture as ethereumTransactionFixture,
+  SIGNED_TX,
+} from '@/lib/ethereum/transaction-v1/transaction-fixtures'
+import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
+import type {
+  CommitTransactionArgs as EthereumCommitTransactionArgs,
+  EthereumTransactionStateController,
+} from '@/lib/ethereum/transaction-v1/transaction-state-controller'
 import type { Event } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import {
   ATTESTATION_FIELDS,
   CALLER_NAME,
+  DEPOSIT_ACCOUNT,
   DEPOSIT_NAME,
+  IN_INDEX,
   OUT_INDEX_HEX,
   REQUEST_ID_HEX,
   VAULT_REQUEST_IN_STATE,
   VAULT_REQUEST_NAME,
-  vaultRequestFixture,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 import {
+  type QueueRequestArgs,
   VAULT_REQUEST_EVENT_BY_STATE,
   VaultRequestStateConflict,
   type VaultRequestStateController,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-controller'
 import { VaultRequestStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-controller-impl'
 import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
-import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import { transactionFixture as midnightTransactionFixture } from '@/lib/midnight/transaction-v1/transaction-fixtures'
+import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
+import type {
+  CommitTransactionArgs as MidnightCommitTransactionArgs,
+  MidnightTransactionStateController,
+} from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { mock } from '@/lib/testing/mock'
-import { SIGNED_TX } from '@/lib/ethereum/transaction-v1/transaction-fixtures'
 import { UUID } from '@/lib/value-schemas'
 
 interface Calls {
   created: VaultRequest[]
   updated: VaultRequest[]
   published: Event[]
-  midnightChildren: MidnightTransaction[]
-  ethereumChildren: EthereumTransaction[]
+  /** What the request asked each child controller to commit. */
+  midnightChildren: MidnightCommitTransactionArgs[]
+  ethereumChildren: EthereumCommitTransactionArgs[]
 }
 
 function emptyCalls(): Calls {
   return { created: [], updated: [], published: [], midnightChildren: [], ethereumChildren: [] }
 }
 
-/** A repository holding one row, a recording publisher, and child controllers that store what they are given. */
+/**
+ * A repository holding one row, a recording publisher, child repositories holding the children a
+ * case plants under the request, and child controllers that record what they are asked to commit.
+ */
 function controllerOver(
   stored: VaultRequest | undefined,
   calls: Calls,
   options: {
     locks?: string[]
-    childError?: Error
     repository?: Partial<VaultRequestRepository>
+    midnightChildren?: MidnightTransaction[]
+    ethereumChildren?: EthereumTransaction[]
   } = {},
 ): VaultRequestStateController {
-  const commitChild =
-    <Child>(into: Child[]) =>
-    async ({ transaction }: { transaction: Child }): Promise<Child> => {
-      if (options.childError !== undefined) throw options.childError
-      into.push(transaction)
-      return transaction
-    }
   return new VaultRequestStateControllerImpl(
     mock<VaultRequestRepository>('VaultRequestRepository', {
       create: async (request) => {
@@ -81,29 +93,75 @@ function controllerOver(
         calls.published.push(event)
       },
     }),
+    mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
+      search: async (args) => {
+        expect(args.criteria).toEqual([
+          { type: 'exact-text', field: 'parent', text: VAULT_REQUEST_NAME },
+          expect.objectContaining({ type: 'exact-text', field: 'circuit' }),
+        ])
+        const [, circuit] = args.criteria
+        return (options.midnightChildren ?? []).filter(
+          (child) => circuit?.type === 'exact-text' && child.circuit === circuit.text,
+        )
+      },
+    }),
     mock<MidnightTransactionStateController>('MidnightTransactionStateController', {
-      commitTransaction: commitChild(calls.midnightChildren),
+      commitTransaction: async (args) => {
+        calls.midnightChildren.push(args)
+        return midnightTransactionFixture(args)
+      },
+    }),
+    mock<EthereumTransactionRepository>('EthereumTransactionRepository', {
+      search: async (args) => {
+        expect(args.criteria).toEqual([
+          { type: 'exact-text', field: 'parent', text: VAULT_REQUEST_NAME },
+        ])
+        return options.ethereumChildren ?? []
+      },
     }),
     mock<EthereumTransactionStateController>('EthereumTransactionStateController', {
-      commitTransaction: commitChild(calls.ethereumChildren),
+      commitTransaction: async (args) => {
+        calls.ethereumChildren.push(args)
+        return ethereumTransactionFixture(args)
+      },
     }),
   )
 }
 
 describe('VaultRequestStateControllerImpl.queueRequest', () => {
+  const args: QueueRequestArgs = {
+    name: VAULT_REQUEST_NAME,
+    parent: DEPOSIT_NAME,
+    action: 'deposit',
+    inIndex: IN_INDEX,
+    depositAccount: DEPOSIT_ACCOUNT,
+  }
+
   const cases: ReadonlyArray<{
     name: string
-    args: VaultRequest
     repository?: Partial<VaultRequestRepository>
     check: (result: Promise<VaultRequest>, calls: Calls) => Promise<void>
   }> = [
     {
-      name: 'success - AwaitingFlush with the queue-time fields',
-      args: vaultRequestFixture({ createTime: new Date(0), updateTime: new Date(0) }),
+      name: 'success - stored in AwaitingFlush with every step field unset',
       check: async (result, calls) => {
+        const before = Date.now()
         const stored = await result
-        expect(stored.createTime.getTime()).toBeGreaterThan(0)
-        expect(stored.updateTime).toEqual(stored.createTime)
+        expect(stored).toEqual({
+          ...args,
+          state: 'AwaitingFlush',
+          outIndex: null,
+          requestId: null,
+          signedTx: null,
+          attestationBlockHeight: null,
+          attestationOutputKind: null,
+          attestationDigest: null,
+          attestationSignature: null,
+          attestationOutput: null,
+          createTime: stored.createTime,
+          updateTime: stored.createTime,
+        })
+        expect(stored.createTime.getTime()).toBeGreaterThanOrEqual(before)
         expect(calls.created).toEqual([stored])
         expect(calls.published).toHaveLength(1)
         expect(calls.published[0]).toMatchObject({
@@ -114,25 +172,7 @@ describe('VaultRequestStateControllerImpl.queueRequest', () => {
       },
     },
     {
-      name: 'failure - a state a request cannot be queued in',
-      args: VAULT_REQUEST_IN_STATE.AwaitingSend,
-      check: async (result, calls) => {
-        await expect(result).rejects.toThrow(
-          `${VAULT_REQUEST_NAME} cannot be queued in state AwaitingSend`,
-        )
-        expect(calls.created).toHaveLength(0)
-      },
-    },
-    {
-      name: 'failure - AwaitingFlush with a field a later step produces',
-      args: vaultRequestFixture({ requestId: REQUEST_ID_HEX }),
-      check: async (result) => {
-        await expect(result).rejects.toThrow('must have requestId unset')
-      },
-    },
-    {
       name: 'failure - the repository refuses the row, so nothing is published',
-      args: vaultRequestFixture(),
       repository: {
         create: async () => {
           throw new Error(`${VAULT_REQUEST_NAME} already exists`)
@@ -145,12 +185,9 @@ describe('VaultRequestStateControllerImpl.queueRequest', () => {
     },
   ]
 
-  test.each(cases)('$name', async ({ args, repository, check }) => {
+  test.each(cases)('$name', async ({ repository, check }) => {
     const calls = emptyCalls()
-    await check(
-      controllerOver(undefined, calls, { repository }).queueRequest({ request: args }),
-      calls,
-    )
+    await check(controllerOver(undefined, calls, { repository }).queueRequest(args), calls)
   })
 })
 
@@ -279,26 +316,20 @@ describe('VaultRequestStateControllerImpl child starters', () => {
   test('startSend commits the relayer send call under the request, leaving the row alone', async () => {
     const calls = emptyCalls()
     const locks: string[] = []
-    const before = Date.now()
     const child = await controllerOver(VAULT_REQUEST_IN_STATE.AwaitingSend, calls, {
       locks,
     }).startSend({ name: VAULT_REQUEST_NAME, unprovenTx: 'send-call' })
     expect(locks).toEqual(['update'])
-    expect(child).toMatchObject({
-      parent: VAULT_REQUEST_NAME,
-      state: 'AwaitingProof',
-      circuit: 'sendDeposit',
-      signer: 'relayer',
-      unprovenTx: 'send-call',
-      unboundTx: null,
-      finalizedTx: null,
-      txId: null,
-      failure: null,
-      error: null,
-    })
-    expect(child.name).toMatch(MIDNIGHT_CHILD_NAME)
-    expect(child.expireTime?.getTime()).toBeGreaterThanOrEqual(before + 3_600_000)
-    expect(calls.midnightChildren).toEqual([child])
+    expect(calls.midnightChildren).toEqual([
+      {
+        name: expect.stringMatching(MIDNIGHT_CHILD_NAME),
+        parent: VAULT_REQUEST_NAME,
+        circuit: 'sendDeposit',
+        signer: 'relayer',
+        unprovenTx: 'send-call',
+      },
+    ])
+    expect(child.name).toBe(calls.midnightChildren[0]?.name)
     expect(calls.updated).toHaveLength(0)
     expect(calls.published).toHaveLength(0)
   })
@@ -309,18 +340,15 @@ describe('VaultRequestStateControllerImpl child starters', () => {
       VAULT_REQUEST_IN_STATE.AwaitingBroadcast,
       calls,
     ).startBroadcast({ name: VAULT_REQUEST_NAME })
-    expect(child).toMatchObject({
-      parent: VAULT_REQUEST_NAME,
-      state: 'AwaitingSubmission',
-      signedTx: SIGNED_TX,
-      txHash: null,
-      blockNumber: null,
-      expireTime: null,
-      failure: null,
-      error: null,
-    })
-    expect(child.name).toMatch(ETHEREUM_CHILD_NAME)
-    expect(calls.ethereumChildren).toEqual([child])
+    expect(calls.ethereumChildren).toEqual([
+      {
+        name: expect.stringMatching(ETHEREUM_CHILD_NAME),
+        parent: VAULT_REQUEST_NAME,
+        signedTx: SIGNED_TX,
+        expireTime: null,
+      },
+    ])
+    expect(child.name).toBe(calls.ethereumChildren[0]?.name)
     expect(calls.updated).toHaveLength(0)
   })
 
@@ -338,14 +366,14 @@ describe('VaultRequestStateControllerImpl child starters', () => {
         { ...VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue, attestationOutput },
         calls,
       ).startAttestationQueue({ name: VAULT_REQUEST_NAME, unprovenTx: 'queue-call' })
-      expect(child).toMatchObject({
+      expect(calls.midnightChildren).toHaveLength(1)
+      expect(calls.midnightChildren[0]).toMatchObject({
         parent: VAULT_REQUEST_NAME,
-        state: 'AwaitingProof',
         circuit,
         signer: 'relayer',
         unprovenTx: 'queue-call',
       })
-      expect(calls.midnightChildren).toEqual([child])
+      expect(child.name).toBe(calls.midnightChildren[0]?.name)
     },
   )
 
@@ -383,30 +411,63 @@ describe('VaultRequestStateControllerImpl child starters', () => {
     },
   )
 
-  const uniqueViolation = Object.assign(new Error('duplicate key value'), { code: '23505' })
+  const liveChild = midnightTransactionFixture({
+    parent: VAULT_REQUEST_NAME,
+    circuit: 'sendDeposit',
+    signer: 'relayer',
+  })
 
-  const childErrors: ReadonlyArray<[string, Error, 'conflict' | 'rethrown']> = [
-    ['a unique violation from pg', uniqueViolation, 'conflict'],
-    [
-      'a unique violation wrapped as the cause of a query error',
-      new Error('Failed query', { cause: uniqueViolation }),
-      'conflict',
-    ],
-    ['any other error', new Error('connection lost'), 'rethrown'],
+  const guarded: ReadonlyArray<{
+    name: string
+    from: VaultRequest
+    midnightChildren?: MidnightTransaction[]
+    ethereumChildren?: EthereumTransaction[]
+    start: (controller: VaultRequestStateController) => Promise<unknown>
+    expectCommitted: boolean
+  }> = [
+    {
+      name: 'startSend with a live send call is a state conflict',
+      from: VAULT_REQUEST_IN_STATE.AwaitingSend,
+      midnightChildren: [liveChild],
+      start: (c) => c.startSend({ name: VAULT_REQUEST_NAME, unprovenTx: 'x' }),
+      expectCommitted: false,
+    },
+    {
+      name: 'startSend after a send call that ended commits a new one',
+      from: VAULT_REQUEST_IN_STATE.AwaitingSend,
+      midnightChildren: [{ ...liveChild, state: 'Failed', failure: 'Rejected', error: 'invalid' }],
+      start: (c) => c.startSend({ name: VAULT_REQUEST_NAME, unprovenTx: 'x' }),
+      expectCommitted: true,
+    },
+    {
+      name: 'startAttestationQueue is not blocked by a live call of another circuit',
+      from: VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue,
+      midnightChildren: [liveChild],
+      start: (c) => c.startAttestationQueue({ name: VAULT_REQUEST_NAME, unprovenTx: 'x' }),
+      expectCommitted: true,
+    },
+    {
+      name: 'startBroadcast with a live broadcast is a state conflict',
+      from: VAULT_REQUEST_IN_STATE.AwaitingBroadcast,
+      ethereumChildren: [ethereumTransactionFixture({ parent: VAULT_REQUEST_NAME })],
+      start: (c) => c.startBroadcast({ name: VAULT_REQUEST_NAME }),
+      expectCommitted: false,
+    },
   ]
 
-  test.each(childErrors)(
-    "the child's live index refusing the row is a state conflict: %s",
-    async (_name, childError, outcome) => {
+  test.each(guarded)(
+    '$name',
+    async ({ from, midnightChildren, ethereumChildren, start, expectCommitted }) => {
       const calls = emptyCalls()
-      const starting = controllerOver(VAULT_REQUEST_IN_STATE.AwaitingSend, calls, {
-        childError,
-      }).startSend({ name: VAULT_REQUEST_NAME, unprovenTx: 'x' })
-      if (outcome === 'conflict') {
-        await expect(starting).rejects.toBeInstanceOf(VaultRequestStateConflict)
+      const starting = start(controllerOver(from, calls, { midnightChildren, ethereumChildren }))
+      if (expectCommitted) {
+        await starting
       } else {
-        await expect(starting).rejects.toBe(childError)
+        await expect(starting).rejects.toBeInstanceOf(VaultRequestStateConflict)
       }
+      expect(calls.midnightChildren.length + calls.ethereumChildren.length).toBe(
+        expectCommitted ? 1 : 0,
+      )
     },
   )
 })

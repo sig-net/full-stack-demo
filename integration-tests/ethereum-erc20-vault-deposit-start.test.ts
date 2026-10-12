@@ -128,7 +128,7 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
       }),
     ).toEqual({
       ok: false,
-      error: `${deposit.name} is AwaitingStartTransaction, which does not allow completeDeposit`,
+      error: `${deposit.name} is AwaitingStartTransaction, which does not allow complete`,
     })
   })
 
@@ -138,7 +138,7 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
       depositRequest: { erc20Address: `0x${'ab'.repeat(20)}`, amount: 1n },
       wallet: userWalletPublicKeys(userWalletSeed()),
     })
-    expect(refused).toMatchObject({ ok: false, error: expect.stringMatching(/^failed assert: /) })
+    expect(refused).toMatchObject({ ok: false, error: 'ERC20 not allowed' })
     if (deposit !== undefined) {
       expect(
         await repository.search({

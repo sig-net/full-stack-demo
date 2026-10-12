@@ -56,6 +56,13 @@ function statusAnswering(status: EthereumLedgerTransactionStatus) {
 
 const cases: Case[] = [
   {
+    name: 'AwaitingInclusion - a row without its hash is a bug that surfaces',
+    stored: { ...TRANSACTION_IN_STATE.AwaitingInclusion, txHash: null },
+    ledger: {},
+    expectTransitions: [],
+    expectError: 'holds no txHash',
+  },
+  {
     name: 'AwaitingSubmission - broadcasts outside the transaction and records the hash inside one',
     stored: TRANSACTION_IN_STATE.AwaitingSubmission,
     ledger: {

@@ -136,7 +136,7 @@ describe('DepositServiceAdaptor outcomes', () => {
     [
       'the contract refusing the call at build time',
       new Error('failed assert: Token not allowed'),
-      'failed assert: Token not allowed',
+      'Token not allowed',
     ],
     ['any other error', new Error('indexer down'), undefined],
   ]

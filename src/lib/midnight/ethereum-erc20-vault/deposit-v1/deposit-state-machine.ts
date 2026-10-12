@@ -31,8 +31,8 @@ const TRANSITIONS: Record<DepositState, Partial<Record<DepositStateAction, Depos
   Failed: {},
 }
 
-/** The states a deposit may be stored in before any action. */
-export const COMMITTABLE_STATES: readonly DepositState[] = ['AwaitingStartTransaction']
+/** The state a deposit is started in. */
+export const INITIAL_STATE: DepositState = 'AwaitingStartTransaction'
 
 /** Throws unless the deposit holds exactly the outcome fields its state requires. */
 export function assertConsistent(deposit: Deposit): void {

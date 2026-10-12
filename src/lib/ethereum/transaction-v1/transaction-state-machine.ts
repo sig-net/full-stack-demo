@@ -32,8 +32,8 @@ const TRANSITIONS: Record<
   Failed: {},
 }
 
-/** The one state a transaction may be stored in before any action: signed and not yet sent. */
-export const COMMITTABLE_STATES: readonly EthereumTransactionState[] = ['AwaitingSubmission']
+/** The state a transaction is committed in: signed and not yet sent. */
+export const INITIAL_STATE: EthereumTransactionState = 'AwaitingSubmission'
 
 /** The states in which `expireTime` passing ends the transaction. */
 export const EXPIRABLE_STATES: readonly EthereumTransactionState[] = [

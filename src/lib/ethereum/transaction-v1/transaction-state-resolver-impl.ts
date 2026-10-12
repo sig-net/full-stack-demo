@@ -6,9 +6,7 @@ import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { messageOf } from '@/lib/message-of'
 import {
   type EthereumTransaction,
-  ETHEREUM_TRANSACTION_STATES,
-  ETHEREUM_TRANSACTION_TERMINAL_STATES,
-  type EthereumTransactionState,
+  ETHEREUM_TRANSACTION_PENDING_STATES,
 } from '@/lib/ethereum/transaction-v1/transaction'
 import type { EthereumTransactionLedger } from '@/lib/ethereum/transaction-v1/transaction-ledger'
 import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
@@ -49,7 +47,7 @@ export class EthereumTransactionStateResolverImpl implements EthereumTransaction
 
   /** One transaction's failure does not stop the rest. */
   async resolvePending(): Promise<void> {
-    for (const state of PENDING_STATES) {
+    for (const state of ETHEREUM_TRANSACTION_PENDING_STATES) {
       const transactions = await this.transactionRepository.search({
         criteria: [{ type: 'exact-text', field: 'state', text: state }],
         order: { field: 'createTime', direction: 'asc' },
@@ -103,10 +101,11 @@ export class EthereumTransactionStateResolverImpl implements EthereumTransaction
   /** The sender and nonce are read from the signed bytes, so the row carries only what the chain returned. */
   private async resolveAwaitingInclusion({
     name,
+    state,
     signedTx,
     txHash,
   }: EthereumTransaction): Promise<void> {
-    if (txHash === null) return
+    if (txHash === null) throw new Error(`${name} in ${state} holds no txHash`)
     const { from, nonce } = Transaction.from(signedTx)
     if (from === null) {
       throw new Error(`${name} holds bytes without a signature`)
@@ -147,7 +146,3 @@ export class EthereumTransactionStateResolverImpl implements EthereumTransaction
     }
   }
 }
-
-const PENDING_STATES: readonly EthereumTransactionState[] = ETHEREUM_TRANSACTION_STATES.filter(
-  (state) => !ETHEREUM_TRANSACTION_TERMINAL_STATES.some((terminal) => terminal === state),
-)

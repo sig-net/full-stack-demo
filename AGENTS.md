@@ -50,8 +50,9 @@ Keep setup instructions and application reference material in README.md and docs
   `src/lib` beside its service.
 - The backend boundary is fixed now so that it can become its own package by a move, not a
   redesign. The backend owns `src/lib/db`, `src/lib/event`, `src/lib/kafka`,
-  `src/lib/repository`, `src/lib/testing`, the files `src/lib/delay-unless-aborted.ts`,
-  `src/lib/lazy-singleton.ts`, `src/lib/sweep.ts`, `src/lib/caller/resolve-caller.ts`,
+  `src/lib/repository`, `src/lib/testing`, the files `src/lib/coalescing-runner.ts`,
+  `src/lib/delay-unless-aborted.ts`, `src/lib/lazy-singleton.ts`, `src/lib/run-until-aborted.ts`,
+  `src/lib/sweep.ts`, `src/lib/caller/resolve-caller.ts`,
   `src/lib/midnight/ethereum-erc20-vault/signet-readers.ts` and
   `src/lib/midnight/ethereum-erc20-vault/flusher.ts`, and every file ending in `-impl.ts`,
   `-repository.ts`, `-state-controller.ts`, `-state-machine.ts`, `-state-resolver.ts`,
@@ -68,6 +69,15 @@ Keep setup instructions and application reference material in README.md and docs
   Qualify both members when introducing a qualified twin. Moves, deletions and renames require a
   whole-repository search for invalidated names and updates to imports, configuration, manifests,
   tests and documentation in the same change.
+- A private method or local helper earns its name only when it hides a decision, not a line.
+  Before extracting one, ask what a reader gains by jumping to it: if the body is one expression
+  whose parts are already named (`DEPOSIT_EVENT_BY_STATE[state].create(...)`), the jump costs
+  more than the repetition, and the expression stays inline at each call site. Extract when the
+  body holds a fact a caller must not re-derive (a TTL, a signer, an ordering), when two callers
+  would otherwise drift, or when the name says something the code cannot (`lockedIn`). A helper
+  whose name restates its one call (`publishEntered`, `commitChild`) is the signature of the
+  defect: it exists to shorten a line, and it makes the reader open a second place to learn what
+  the first one does.
 
 ## Service methods
 
@@ -80,6 +90,12 @@ Keep setup instructions and application reference material in README.md and docs
   in the service module after the interface. Adaptors validate wire input with that schema, so the
   service is typed against exactly what reaches it. Nothing but the caller is positional, so adding
   an input never changes a signature.
+- A service method is the use case: it resolves the caller, assigns the inputs the resource
+  needs (a slot, a nonce, an account), does the slow work outside any transaction, then makes
+  one controller call inside one. It never names a state literal. A pre-check before slow work
+  asks the state machine (`nextState(state, action)`) and the controller asks it again under the
+  lock. It reads another resource's fields through that resource's own narrowing helper
+  (`attestedRequestFields()`), never by comparing that resource's state.
 - Write boundaries open the transaction, reads never do. An adaptor method that creates, updates
   or starts something, a resolver's write of one transition, and an outbox batch each run inside
   one `UnitOfWork.runInTransaction()` (`src/lib/db/unit-of-work.ts`), which every repository
@@ -109,6 +125,13 @@ Keep setup instructions and application reference material in README.md and docs
   It opens no transaction. Its interface file also defines its lifecycle events: one
   `defineEvent()` per state entered, data `{ name }`, keyed by the resource name. Never a
   generic created or updated event.
+- A resource has exactly one entry state, the `INITIAL_STATE` constant of its state machine,
+  never a set the caller picks from. The controller's create method (`commitTransaction`,
+  `queueRequest`, `startDeposit`) takes the fields its caller decides and nothing the controller
+  decides: no `state`, no timestamps, no field a later step fills. Its args type is derived from
+  the resource with `Omit`, so a field added to the resource reaches the args unless it is named
+  as the controller's. A full row is built in exactly one place, that create method, so a row's
+  initial shape has one definition.
 - The state resolver does what the current state needs: the slow external calls (proving,
   submitting, watching) outside any transaction, then one controller transition inside
   `UnitOfWork.runInTransaction()`, swallowing the `StateConflict` that means another resolver
@@ -160,6 +183,11 @@ Keep setup instructions and application reference material in README.md and docs
   resolves to a column by name. The row mappers convert values (bytea, numeric, enum text) and
   never rename, derive or default a field. Application logic, authorisation and naming live in the
   service and state controller, never in a repository.
+- Nothing above a repository inspects a database error. A concurrency guard is a read under the
+  row lock: a transition's state check, or a starter's search for a live child when the step
+  leaves the state alone. A unique index is an invariant whose violation is a bug, and it
+  surfaces as the error it is, never as a signal a controller catches and maps. Postgres error
+  codes stay inside `src/lib/db` and the repository implementations.
 
 ## Validation boundaries
 
@@ -280,6 +308,8 @@ Keep setup instructions and application reference material in README.md and docs
   or non-obvious failure modes at their definition, without narrating mechanics or duplicating
   callee documentation. Keep human instructions self-contained, update stale references and verify
   durable factual claims by execution. Run documented commands verbatim before publishing them.
+- Before finishing, read every private method once as a stranger: if its body fits on the call
+  site line and its name adds nothing the body does not say, inline it.
 
 ## UI components
 

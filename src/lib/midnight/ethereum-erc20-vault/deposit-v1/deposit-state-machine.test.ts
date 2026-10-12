@@ -12,7 +12,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-fixtures'
 import {
   assertConsistent,
-  COMMITTABLE_STATES,
+  INITIAL_STATE,
   type DepositStateAction,
   nextState,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-machine'
@@ -68,7 +68,7 @@ describe('nextState', () => {
   })
 
   test('a deposit is started waiting for its start transaction', () => {
-    expect(COMMITTABLE_STATES).toEqual(['AwaitingStartTransaction'])
+    expect(INITIAL_STATE).toBe('AwaitingStartTransaction')
   })
 })
 

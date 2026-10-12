@@ -41,6 +41,15 @@ export const DEPOSIT_TERMINAL_STATES = [
   'Failed',
 ] as const satisfies readonly DepositState[]
 
+export function isTerminalDepositState(state: DepositState): boolean {
+  return DEPOSIT_TERMINAL_STATES.some((terminal) => terminal === state)
+}
+
+/** The states a resolver still has work for. */
+export const DEPOSIT_PENDING_STATES: readonly DepositState[] = DEPOSIT_STATES.filter(
+  (state) => !isTerminalDepositState(state),
+)
+
 /** Why a deposit failed: the start transaction ended without queueing the request. */
 export const DEPOSIT_FAILURES = ['StartFailed'] as const
 

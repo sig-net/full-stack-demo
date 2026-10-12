@@ -24,6 +24,18 @@ export class PrivateStateProviderMemoryImpl<PrivateState> implements PrivateStat
   private readonly signingKeys = new Map<ContractAddress, SigningKey>()
   private contractAddress: ContractAddress | undefined
 
+  /** A provider holding one state for one contract, as a circuit call needs it. */
+  static async holding<PrivateState>(
+    contractAddress: ContractAddress,
+    privateStateId: PrivateStateId,
+    state: PrivateState,
+  ): Promise<PrivateStateProviderMemoryImpl<PrivateState>> {
+    const provider = new PrivateStateProviderMemoryImpl<PrivateState>()
+    provider.setContractAddress(contractAddress)
+    await provider.set(privateStateId, state)
+    return provider
+  }
+
   setContractAddress(address: ContractAddress): void {
     this.contractAddress = address
   }

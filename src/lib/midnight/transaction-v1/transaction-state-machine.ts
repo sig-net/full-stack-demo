@@ -41,11 +41,8 @@ const TRANSITIONS: Record<
   Failed: {},
 }
 
-/** The states a transaction may be stored in before any action: built, or built and proven. */
-export const COMMITTABLE_STATES: readonly MidnightTransactionState[] = [
-  'AwaitingProof',
-  'AwaitingWallet',
-]
+/** The state a transaction is committed in: built, with its unproven bytes. */
+export const INITIAL_STATE: MidnightTransactionState = 'AwaitingProof'
 
 /** The states in which `expireTime` passing ends the transaction. */
 export const EXPIRABLE_STATES: readonly MidnightTransactionState[] = [

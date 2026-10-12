@@ -36,26 +36,14 @@ describe('MidnightTransactionStateResolver over Postgres and the proof server', 
     const { networkId } = backend.config.client.midnightNetwork
     const name = `${caller}/midnight-transactions/${randomUUID()}`
     const parent = `${caller}/ethereum-erc20-vault-deposits/${randomUUID()}`
-    const now = new Date()
 
     await unitOfWork.runInTransaction(() =>
       stateController.commitTransaction({
-        transaction: {
-          name,
-          parent,
-          state: 'AwaitingProof',
-          circuit: 'startDeposit',
-          signer: 'caller',
-          unprovenTx: Buffer.from(Transaction.fromParts(networkId).serialize()).toString('hex'),
-          unboundTx: null,
-          finalizedTx: null,
-          expireTime: new Date(now.getTime() + 3_600_000),
-          txId: null,
-          failure: null,
-          error: null,
-          createTime: now,
-          updateTime: now,
-        },
+        name,
+        parent,
+        circuit: 'startDeposit',
+        signer: 'caller',
+        unprovenTx: Buffer.from(Transaction.fromParts(networkId).serialize()).toString('hex'),
       }),
     )
 

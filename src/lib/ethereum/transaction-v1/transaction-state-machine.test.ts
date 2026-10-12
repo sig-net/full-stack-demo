@@ -12,7 +12,7 @@ import {
 } from '@/lib/ethereum/transaction-v1/transaction-fixtures'
 import {
   assertConsistent,
-  COMMITTABLE_STATES,
+  INITIAL_STATE,
   EXPIRABLE_STATES,
   nextState,
   type TransactionAction,
@@ -63,8 +63,8 @@ describe('nextState', () => {
     )
   })
 
-  test('a transaction can only be stored before it is sent', () => {
-    expect(COMMITTABLE_STATES).toEqual(['AwaitingSubmission'])
+  test('a transaction is committed before it is sent', () => {
+    expect(INITIAL_STATE).toBe('AwaitingSubmission')
   })
 })
 
