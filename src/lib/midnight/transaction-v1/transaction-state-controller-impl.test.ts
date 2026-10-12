@@ -77,12 +77,11 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
   const cases: ReadonlyArray<{
     name: string
     create?: MidnightTransactionRepository['create']
-    check: (result: Promise<MidnightTransaction>, calls: Calls) => Promise<void>
+    check: (result: Promise<MidnightTransaction>, calls: Calls, before: number) => Promise<void>
   }> = [
     {
       name: 'success - stored in AwaitingProof with an hour to live and the fields later steps fill unset',
-      check: async (result, calls) => {
-        const before = Date.now()
+      check: async (result, calls, before) => {
         const stored = await result
         expect(stored).toEqual({
           ...args,
@@ -127,7 +126,8 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
         : mock<MidnightTransactionRepository>('MidnightTransactionRepository', { create }),
       eventPublisher,
     )
-    await check(controller.commitTransaction(args), calls)
+    const before = Date.now()
+    await check(controller.commitTransaction(args), calls, before)
   })
 })
 

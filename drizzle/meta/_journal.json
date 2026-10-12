@@ -92,6 +92,13 @@
       "when": 1791559281490,
       "tag": "0012_deposit_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791814572795,
+      "tag": "0013_activity_view",
+      "breakpoints": true
     }
   ]
 }

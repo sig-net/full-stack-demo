@@ -54,7 +54,7 @@ interface Provider {
 
 interface ProviderMethod {
   readonly name: string
-  /** Each parameter as the interface spells it, type parameters of an aliased generic substituted. */
+  /** Each parameter as the interface spells it, type parameters of an instantiated generic substituted. */
   readonly parameters: readonly string[]
   /** The declared return type without its `Promise<...>` wrapper. */
   readonly returnType: string
@@ -222,13 +222,18 @@ function implementation(
   if (target === undefined || !(isInterfaceDeclaration(target) || isTypeAliasDeclaration(target))) {
     throw new Error(`${className} implements something that is neither an interface nor an alias`)
   }
-  const { members, substitutions } = interfaceMembers(project, target)
   return {
     className,
     interfaceName: target.name.text,
     packagePath: packagePathOf(target.getSourceFile().fileName),
-    methods: members.map((member) => providerMethod(project, member, substitutions)),
+    methods: interfaceMembers(project, target).map((member) => providerMethod(project, member)),
   }
+}
+
+/** A method declaration with the type parameter substitutions that hold where it is declared. */
+interface InterfaceMethod {
+  readonly declaration: MethodSignatureDeclaration
+  readonly substitutions: ReadonlyMap<number, string>
 }
 
 /**
@@ -238,72 +243,93 @@ function implementation(
 function interfaceMembers(
   project: Project,
   target: InterfaceDeclaration | TypeAliasDeclaration,
-): { members: MethodSignatureDeclaration[]; substitutions: Map<number, string> } {
-  const substitutions = new Map<number, string>()
-  let declaration: InterfaceDeclaration
-  if (isTypeAliasDeclaration(target)) {
-    const aliased = target.type
-    const resolved = isTypeReferenceNode(aliased)
-      ? declarationOf(project.checker, aliased.typeName)
-      : undefined
-    if (
-      resolved === undefined ||
-      !isInterfaceDeclaration(resolved) ||
-      !isTypeReferenceNode(aliased)
-    ) {
-      throw new Error(`${target.name.text} aliases something other than an interface`)
-    }
-    declaration = resolved
-    const parameters = resolved.typeParameters ?? []
-    const argumentsGiven = aliased.typeArguments ?? []
-    parameters.forEach((parameter, index) => {
-      const argument = argumentsGiven[index]
-      const symbol = project.checker.getSymbolAtLocation(parameter.name)
-      if (argument !== undefined && symbol !== undefined) {
-        substitutions.set(symbol.id, argument.getText())
-      }
-    })
-  } else {
-    declaration = target
+): InterfaceMethod[] {
+  if (!isTypeAliasDeclaration(target)) return ownAndInheritedMethods(project, target, new Map())
+  const aliased = target.type
+  const resolved = isTypeReferenceNode(aliased)
+    ? declarationOf(project.checker, aliased.typeName)
+    : undefined
+  if (
+    resolved === undefined ||
+    !isInterfaceDeclaration(resolved) ||
+    !isTypeReferenceNode(aliased)
+  ) {
+    throw new Error(`${target.name.text} aliases something other than an interface`)
   }
-  return { members: ownAndInheritedMethods(project, declaration), substitutions }
+  const substitutions = typeArgumentSubstitutions(
+    project,
+    target.name.text,
+    resolved,
+    aliased.typeArguments ?? [],
+    new Map(),
+  )
+  return ownAndInheritedMethods(project, resolved, substitutions)
 }
 
 /** The interface's own methods in source order, then each inherited method it does not redeclare. */
 function ownAndInheritedMethods(
   project: Project,
   declaration: InterfaceDeclaration,
-): MethodSignatureDeclaration[] {
+  substitutions: ReadonlyMap<number, string>,
+): InterfaceMethod[] {
   const own = declaration.members.map((member) => {
-    if (isMethodSignatureDeclaration(member)) return member
+    if (isMethodSignatureDeclaration(member)) return { declaration: member, substitutions }
     throw new Error(
       `${declaration.name.text} has a member that is not a method: ${member.getText()}`,
     )
   })
-  const names = new Set(own.map((member) => member.name.getText()))
+  const names = new Set(own.map((member) => member.declaration.name.getText()))
   const inherited = (declaration.heritageClauses ?? [])
     .flatMap((clause) => [...clause.types])
     .flatMap((type) => {
-      if ((type.typeArguments ?? []).length > 0) {
-        throw new Error(
-          `${declaration.name.text} extends a generic interface, which the library does not instantiate`,
-        )
-      }
       const base = declarationOf(project.checker, type.expression)
       if (base === undefined || !isInterfaceDeclaration(base)) {
         throw new Error(`${declaration.name.text} extends something other than an interface`)
       }
-      return ownAndInheritedMethods(project, base)
+      const baseSubstitutions = typeArgumentSubstitutions(
+        project,
+        declaration.name.text,
+        base,
+        type.typeArguments ?? [],
+        substitutions,
+      )
+      return ownAndInheritedMethods(project, base, baseSubstitutions)
     })
-    .filter((member) => !names.has(member.name.getText()))
+    .filter((member) => !names.has(member.declaration.name.getText()))
   return [...own, ...inherited]
 }
 
-function providerMethod(
+/**
+ * Each type parameter of `base` mapped to the argument `referrer` instantiates it with, the
+ * argument spelled under the substitutions that hold in `referrer`.
+ */
+function typeArgumentSubstitutions(
   project: Project,
-  member: MethodSignatureDeclaration,
-  substitutions: Map<number, string>,
-): ProviderMethod {
+  referrer: string,
+  base: InterfaceDeclaration,
+  typeArguments: readonly TypeNode[],
+  outer: ReadonlyMap<number, string>,
+): Map<number, string> {
+  const parameters = base.typeParameters ?? []
+  if (parameters.length !== typeArguments.length) {
+    throw new Error(
+      `${referrer} gives ${base.name.text} ${typeArguments.length.toString()} type arguments for ${parameters.length.toString()} type parameters`,
+    )
+  }
+  const substitutions = new Map<number, string>()
+  parameters.forEach((parameter, index) => {
+    const argument = typeArguments[index]
+    const symbol = project.checker.getSymbolAtLocation(parameter.name)
+    if (argument === undefined || symbol === undefined) {
+      throw new Error(`${base.name.text} type parameter ${parameter.name.text} has no symbol`)
+    }
+    substitutions.set(symbol.id, spellTypeNode(project.checker, argument, outer))
+  })
+  return substitutions
+}
+
+function providerMethod(project: Project, method: InterfaceMethod): ProviderMethod {
+  const { declaration: member, substitutions } = method
   const name = member.name.getText()
   const spell = (type: TypeNode): string => spellTypeNode(project.checker, type, substitutions)
   const parameters = member.parameters.map((parameter) => {
@@ -331,7 +357,7 @@ function unwrapPromise(project: Project, type: TypeNode): TypeNode {
 function spellTypeNode(
   checker: Checker,
   type: TypeNode,
-  substitutions: Map<number, string>,
+  substitutions: ReadonlyMap<number, string>,
 ): string {
   const sourceText = type.getSourceFile().text
   const replacements: { start: number; end: number; text: string }[] = []

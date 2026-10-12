@@ -167,6 +167,20 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
 
       const final = await backend.midnight.ethereumErc20Vault.depositV1.repository.get(deposit.name)
       expect(final?.outcome).toBe('minted')
+      const activity = await backend.midnight.ethereumErc20Vault.activityV1.repository.get(
+        deposit.name,
+      )
+      expect(activity).toMatchObject({
+        type: 'Deposit',
+        state: 'Complete',
+        outcome: 'minted',
+        startTransaction: { hash: expect.stringMatching(/^[0-9a-f]+$/), state: 'Succeeded' },
+        foreignChainTransaction: {
+          hash: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+          state: 'Succeeded',
+        },
+        completeTransaction: { hash: expect.stringMatching(/^[0-9a-f]+$/), state: 'Succeeded' },
+      })
 
       const [request] = await backend.midnight.ethereumErc20Vault.vaultRequestV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: deposit.name }],

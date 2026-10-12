@@ -2,14 +2,15 @@ import 'server-only'
 
 import { randomUUID } from 'node:crypto'
 
-import { bytesToHex, deriveEvmAddress, hexToBytes } from '@sig-net/midnight'
-import { newInputIndex, pureCircuits } from '@sig-net/midnight-examples-erc20-vault-contract'
+import { hexToBytes } from '@sig-net/midnight'
+import { newInputIndex } from '@sig-net/midnight-examples-erc20-vault-contract'
 import type { Provider } from 'ethers'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
 import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
+import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
 import {
   type Deposit,
   depositName,
@@ -69,7 +70,7 @@ export class DepositServiceImpl implements DepositService {
     caller: Caller,
     { depositRequest, wallet }: StartDepositArgs,
   ): Promise<Deposit> {
-    const depositAccount = this.depositAccountOf(caller)
+    const depositAccount = depositAccountOf(caller, this.signet, this.vault)
     const inIndex = newInputIndex()
     const evmNonce = await this.nextEvmNonce(depositAccount)
     const unprovenTx = await this.circuits.startDeposit({
@@ -123,19 +124,14 @@ export class DepositServiceImpl implements DepositService {
   async listDeposits(caller: Caller, _args: ListDepositsArgs): Promise<Deposit[]> {
     return this.depositRepository.search({
       criteria: [
-        { type: 'exact-text', field: 'depositAccount', text: this.depositAccountOf(caller) },
+        {
+          type: 'exact-text',
+          field: 'depositAccount',
+          text: depositAccountOf(caller, this.signet, this.vault),
+        },
       ],
       order: { field: 'createTime', direction: 'desc' },
     })
-  }
-
-  /** The MPC signs the sweep from the account derived over the caller's commitment, which the start circuit records as the request's path. */
-  private depositAccountOf(caller: Caller): string {
-    return deriveEvmAddress(
-      this.signet.mpcRootPublicKey,
-      this.vault.contractAddress,
-      bytesToHex(pureCircuits.userCommitment(caller.secretKey)),
-    ).toLowerCase()
   }
 
   /**

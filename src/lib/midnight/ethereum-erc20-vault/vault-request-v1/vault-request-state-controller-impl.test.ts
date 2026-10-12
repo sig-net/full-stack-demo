@@ -140,12 +140,11 @@ describe('VaultRequestStateControllerImpl.queueRequest', () => {
   const cases: ReadonlyArray<{
     name: string
     repository?: Partial<VaultRequestRepository>
-    check: (result: Promise<VaultRequest>, calls: Calls) => Promise<void>
+    check: (result: Promise<VaultRequest>, calls: Calls, before: number) => Promise<void>
   }> = [
     {
       name: 'success - stored in AwaitingFlush with every step field unset',
-      check: async (result, calls) => {
-        const before = Date.now()
+      check: async (result, calls, before) => {
         const stored = await result
         expect(stored).toEqual({
           ...args,
@@ -187,7 +186,8 @@ describe('VaultRequestStateControllerImpl.queueRequest', () => {
 
   test.each(cases)('$name', async ({ repository, check }) => {
     const calls = emptyCalls()
-    await check(controllerOver(undefined, calls, { repository }).queueRequest(args), calls)
+    const before = Date.now()
+    await check(controllerOver(undefined, calls, { repository }).queueRequest(args), calls, before)
   })
 })
 

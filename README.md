@@ -77,6 +77,7 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/ethereum/transaction-v1`                        | The Ethereum transaction resource, its repository, state machine, state controller, ledger, resolver and event consumer.                                                                                      |
 | `src/lib/midnight/ethereum-erc20-vault`                  | The ERC-20 vault: its action set, circuit and ledger ports, signet readers, respond outcome sources, the flusher, and one folder per resource version.                                                        |
 | `src/lib/midnight/ethereum-erc20-vault/vault-request-v1` | The vault request resource, its repository, state machine, state controller, resolver and event consumer.                                                                                                     |
+| `src/lib/midnight/ethereum-erc20-vault/activity-v1`      | The activity view: the resource the view projects, its read-only repository, service and adaptor.                                                                                                             |
 | `src/lib/midnight/ethereum-erc20-vault/deposit-v1`       | The deposit resource, its repository, state machine, state controller, resolver, event consumer, service and adaptor.                                                                                         |
 | `src/lib/midnight/transaction-v1`                        | The Midnight transaction resource, its repository, state machine, state controller, ledger, resolver, event consumer, service and adaptor.                                                                    |
 | `src/lib/midnight/wallet`                                | The wallet layer: the `Wallet` interface, the seed wallet and its facade, the stored seed, and the backend's relayer wallet.                                                                                  |
@@ -147,8 +148,10 @@ so the next request retries.
 `src/app/(configured)/layout.tsx` waits for the request with `connection()`, starts
 `getClientConfig()` without awaiting it, and passes the promise to `ConfigProvider`, a client
 component that unwraps it with React's `use()`. The provider and the `useConfig()` hook
-live together in `src/components/contexts/ConfigContext.tsx`. Client components under the group
-read the configuration with the hook:
+live together in `src/components/contexts/ConfigContext.tsx`. `ReactQueryProvider`
+(`src/components/contexts/ReactQueryContext.tsx`) wraps it with the one React Query client that
+every remote read under the group shares. Client components under the group read the
+configuration with the hook:
 
 ```tsx
 'use client'
@@ -325,6 +328,7 @@ relay would compete with the test's.
 | `ethereum-erc20-vault-request.test.ts`       | Postgres, the indexer                             | Vault request storage, the one-live-request index, a starter's conflict mapping, the readers and the resolver's reads.          |
 | `ethereum-erc20-vault-flush.test.ts`         | the Midnight stack (the relayer wallet syncs)     | The first flush starts the relayer wallet and submits nothing when nothing is queued.                                           |
 | `ethereum-erc20-vault-deposit-start.test.ts` | Postgres, the indexer, the proof server, the fork | `startDeposit` stores the deposit and its start call, the call proves, listing and the early complete refusal, a refused token. |
+| `ethereum-erc20-vault-activity.test.ts`      | Postgres                                          | The activity view's projection of the newest children and its aggregated states.                                                |
 | `ethereum-erc20-vault-deposit.test.ts`       | the whole stack                                   | The end-to-end deposit below.                                                                                                   |
 
 The whole suite takes four and a half to five minutes, of which the end-to-end deposit is four
@@ -864,6 +868,35 @@ const completed = await completeDeposit(callerSecret, {
 })
 ```
 
+## Activity view
+
+`midnight_ethereum_erc20_vault_activity_v1` is a Postgres view over the lifecycle tables, one row
+per vault activity, defined in `src/lib/db/schema.ts` and created by migration 0013. Each deposit
+is projected with the newest child of each kind under it: its `startDeposit` and `completeDeposit`
+Midnight transactions, its vault request and that request's Ethereum transaction, each found by
+parent (and circuit) and ordered by create time, so a retried step shows its latest attempt. The
+database aggregates the states: `state` is `Complete` for a completed deposit, `Failed` for a
+failed one and `Pending` otherwise, and each transaction's `state` is `Succeeded`, `Failed` or
+`Pending` from its row's state. The `CASE` arms are built from the constants in
+`src/lib/midnight/ethereum-erc20-vault/activity-v1/activity.ts`, so each set has one definition,
+and nothing above the repository derives a status. A second activity type joins the view with
+`UNION ALL`.
+
+A row carries the projected resource's own `name`, `type`, `state`, `depositAccount` (the caller
+filter), `erc20Address`, `amount`, `outcome`, `error`, three nullable `{ hash, state }` objects
+(`startTransaction`, `foreignChainTransaction`, `completeTransaction`, stored as `jsonb` and
+parsed by the resource schema), `createTime` and `updateTime` (the newest update across the
+joined rows). `latestTransactionOf()` picks the furthest step's transaction for a listing.
+
+The repository is the reading half of the repository contract: `ReadRepository` (`get` and
+`search` without a lock) over `SQLReadRepository`, which selects from a table or a view and which
+`SQLRepository` extends with `create`, `update` and locking. `ActivityService` lists a caller's
+activities newest first by their deposit account and gets one by name, its adaptor and the server
+actions in `src/server/actions/activity-actions.ts` expose both, and nothing writes to the view.
+`integration-tests/ethereum-erc20-vault-activity.test.ts` reads the projection and the
+aggregation back from Postgres, and the end-to-end deposit asserts its row is `Complete` with all
+three hashes.
+
 ## Midnight wallet
 
 `src/lib/midnight/wallet` holds the wallet layer. `MidnightWalletProvider` drives it, and the
@@ -881,9 +914,11 @@ wallet components read its types and the connection status label.
   construction and the transaction provider it builds on.
 - `MidnightWalletProvider` (`src/components/contexts/MidnightWalletContext.tsx`) owns one wallet
   at a time. It reads the Midnight network from `useConfig()`, so it renders inside
-  `ConfigProvider`, which is why `AppBar` sits in the `(configured)` layout. Each connection
-  advances a generation: a superseded connection's results are dropped and its wallet is
-  disconnected exactly once. The SDK loads on the first connection through a dynamic import.
+  `ConfigProvider`, which is why `AppBar` sits in the `(configured)` layout. Each disconnect
+  advances a generation, published on the context as `generation`: a superseded connection's
+  results are dropped, its wallet is disconnected exactly once, and a query keyed on the
+  generation never outlives the wallet it read. The SDK loads on the first connection through a
+  dynamic import.
   The connected seed is written to local storage (`src/lib/midnight/wallet/seed-storage.ts`) and
   restored on the next load, so a refresh reconnects the same wallet. While a seed is stored, no
   other seed can connect: disconnecting clears the store, and so does a failed connection. This
@@ -901,15 +936,23 @@ contract packages share one ledger runtime.
 
 ## Home page
 
-The home page shows three sections on dummy data, each owned by one file that reads the data
-and passes typed props down, so a real data source replaces the dummy module without touching
-the presentation. The balance list and the activity table render every entry at full height and
-leave scrolling to `HomeLayout`, described under Styling and theme.
+The home page shows three sections, each owned by one file that reads the data and passes typed
+props down, so the presentation never changes when a data source does. The balance list and the
+activity table render every entry at full height and leave scrolling to `HomeLayout`, described
+under Styling and theme.
 
-- `BalancesSection` (`src/components/balances-section.tsx`) reads `src/lib/balances/dummy-balances.ts`
-  and renders a `BalanceBox` per asset: the amount, its US dollar value, the `TokenIcon`
-  (`src/components/token-icon.tsx`, the asset icon with the network badge over its bottom right
-  corner) and the Swap and Send buttons. The Deposit, Swap and Send buttons do nothing yet.
+- `BalancesSection` (`src/components/balances-section.tsx`) reads the connected Midnight wallet's
+  balances through a React Query query, refetched every ten seconds and keyed on the network and
+  the wallet connection generation, so a reconnected wallet never shows a replaced wallet's
+  numbers. The query function is `readMidnightBalanceAmounts()`
+  (`src/lib/balances/midnight-balances.ts`): the shielded balances first, then the unshielded,
+  each ordered by token type. The decimals, symbol and price of a Midnight token are not known
+  yet, so the amount is the base-unit integer written in full, the value is always `$0.00` and the
+  symbol is the first four characters of the token type hex (NIGHT reads `0000`). Without a wallet
+  the section says so, and a failed read shows the error instead of a zero. Each entry renders a
+  `BalanceBox`: the amount, its US dollar value, the `TokenIcon` (`src/components/token-icon.tsx`,
+  the asset icon with the network badge over its bottom right corner) and the Swap and Send
+  buttons. The Deposit, Swap and Send buttons do nothing yet.
 - `ActivitySection` (`src/components/activity-section.tsx`) reads `src/lib/activity/dummy-activity.ts`
   and renders `ActivityTable`. Each entry is a collapsible table body: from the `md` breakpoint up
   every column shows, below it a chevron expands the timestamp and block explorer details. The

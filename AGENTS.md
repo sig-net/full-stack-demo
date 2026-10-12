@@ -179,6 +179,11 @@ Keep setup instructions and application reference material in README.md and docs
   passing only the table and the two row mappers. The method set is `create`, `get`, `update` and
   `search`; a query a resource needs is expressed as `search` criteria, order, limit and lock, and
   a need no `SearchArgs` can express extends `SearchArgs` for every resource, never one repository.
+- A read model is a Postgres view defined in `src/lib/db/schema.ts` next to the tables it reads,
+  its `CASE` arms built from the resource's own constants so each set has one definition, and its
+  repository is the reading half of the contract: `type ActivityRepository =
+  ReadRepository<Activity>` over `SQLReadRepository`, with no `create` or `update`. The database
+  derives every aggregated field, and nothing above the repository derives one again.
 - The table's column properties are named exactly as the resource's fields, so a criterion's field
   resolves to a column by name. The row mappers convert values (bytea, numeric, enum text) and
   never rename, derive or default a field. Application logic, authorisation and naming live in the

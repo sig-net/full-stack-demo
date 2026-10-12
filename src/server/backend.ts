@@ -62,6 +62,11 @@ import {
   type StringProducer,
 } from '@/lib/kafka/clients'
 import { lazySingleton } from '@/lib/lazy-singleton'
+import type { ActivityRepository } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-repository'
+import { ActivityRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-repository-sql-impl'
+import type { ActivityService } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service'
+import { ActivityServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-adaptor'
+import { ActivityServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-impl'
 import { DepositEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-event-consumer'
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
 import { DepositRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository-sql-impl'
@@ -219,6 +224,12 @@ export interface MidnightBackend {
       readonly eventConsumer: DepositEventConsumer
       readonly service: DepositService
       readonly adaptor: DepositServiceAdaptor
+    }
+    /** The read model over the lifecycle tables: the database derives its rows, so it has no writer. */
+    readonly activityV1: {
+      readonly repository: ActivityRepository
+      readonly service: ActivityService
+      readonly adaptor: ActivityServiceAdaptor
     }
   }
 }
@@ -542,7 +553,21 @@ function createMidnightEthereumErc20Vault(
       vaultRequestV1,
       { circuits, ledger },
     ),
+    activityV1: createMidnightEthereumErc20VaultActivityV1(db, config),
   }
+}
+
+function createMidnightEthereumErc20VaultActivityV1(
+  db: DbBackend,
+  config: ServerConfig,
+): MidnightBackend['ethereumErc20Vault']['activityV1'] {
+  const repository = new ActivityRepositorySQLImpl(db.database)
+  const service = new ActivityServiceImpl(
+    repository,
+    config.client.midnightSignet,
+    config.client.midnightEthereumErc20Vault,
+  )
+  return { repository, service, adaptor: new ActivityServiceAdaptor(service) }
 }
 
 /**

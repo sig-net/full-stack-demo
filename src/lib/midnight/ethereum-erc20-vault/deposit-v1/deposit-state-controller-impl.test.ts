@@ -111,12 +111,11 @@ describe('DepositStateControllerImpl.startDeposit', () => {
   const cases: ReadonlyArray<{
     name: string
     repository?: Partial<DepositRepository>
-    check: (result: Promise<Deposit>, calls: Calls) => Promise<void>
+    check: (result: Promise<Deposit>, calls: Calls, before: number) => Promise<void>
   }> = [
     {
       name: 'success - the row in AwaitingStartTransaction, the caller start call under it and the event',
-      check: async (result, calls) => {
-        const before = Date.now()
+      check: async (result, calls, before) => {
         const stored = await result
         const { unprovenTx, ...deposit } = args
         expect(stored).toEqual({
@@ -164,7 +163,8 @@ describe('DepositStateControllerImpl.startDeposit', () => {
 
   test.each(cases)('$name', async ({ repository, check }) => {
     const calls = emptyCalls()
-    await check(controllerOver(undefined, calls, { repository }).startDeposit(args), calls)
+    const before = Date.now()
+    await check(controllerOver(undefined, calls, { repository }).startDeposit(args), calls, before)
   })
 })
 

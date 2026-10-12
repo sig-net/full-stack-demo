@@ -1,11 +1,15 @@
-import { notInArray } from 'drizzle-orm'
+import { getTableName, notInArray, type SQL, sql } from 'drizzle-orm'
 import {
   bigint,
   boolean,
   customType,
   index,
+  jsonb,
   numeric,
+  type PgColumn,
+  type PgTable,
   pgTable,
+  pgView,
   text,
   timestamp,
   uniqueIndex,
@@ -16,6 +20,13 @@ import {
   ETHEREUM_TRANSACTION_STATES,
   ETHEREUM_TRANSACTION_TERMINAL_STATES,
 } from '@/lib/ethereum/transaction-v1/transaction'
+import {
+  ACTIVITY_STATE_BY_DEPOSIT_STATE,
+  ACTIVITY_STATES,
+  ACTIVITY_TRANSACTION_STATE_BY_STATE,
+  ACTIVITY_TYPES,
+  type ActivityTransaction,
+} from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import {
   DEPOSIT_FAILURES,
   DEPOSIT_OUTCOMES,
@@ -151,6 +162,77 @@ export const midnightEthereumErc20VaultRequestsV1 = pgTable(
       .where(notInArray(table.state, [...VAULT_REQUEST_TERMINAL_STATES]).inlineParams()),
   ],
 )
+
+/**
+ * One row per vault activity, derived from the lifecycle tables: each deposit with its newest
+ * start and complete calls, its newest vault request and that request's newest foreign chain
+ * transaction. The states are aggregated here, so nothing above a repository derives them.
+ */
+export const midnightEthereumErc20VaultActivityV1 = pgView(
+  'midnight_ethereum_erc20_vault_activity_v1',
+  {
+    name: text('name').notNull(),
+    type: text('type', { enum: ACTIVITY_TYPES }).notNull(),
+    state: text('state', { enum: ACTIVITY_STATES }).notNull(),
+    depositAccount: text('deposit_account').notNull(),
+    erc20Address: text('erc20_address').notNull(),
+    amount: contractInteger('amount').notNull(),
+    outcome: text('outcome', { enum: DEPOSIT_OUTCOMES }),
+    error: text('error'),
+    // The repository parses every row with the resource schema, which checks the shape claimed here.
+    startTransaction: jsonb('start_transaction').$type<ActivityTransaction | null>(),
+    foreignChainTransaction: jsonb('foreign_chain_transaction').$type<ActivityTransaction | null>(),
+    completeTransaction: jsonb('complete_transaction').$type<ActivityTransaction | null>(),
+    createTime: timestamp('create_time', { withTimezone: true }).notNull(),
+    updateTime: timestamp('update_time', { withTimezone: true }).notNull(),
+  },
+).as(activityViewQuery())
+
+/** The deposit branch of the view. A second activity type joins it with `UNION ALL`. */
+function activityViewQuery(): SQL {
+  const d = midnightEthereumErc20VaultDepositsV1
+  const t = midnightTransactionsV1
+  const r = midnightEthereumErc20VaultRequestsV1
+  const e = ethereumTransactionsV1
+  const newest = (table: PgTable, alias: string, where: string): string =>
+    `LEFT JOIN LATERAL (SELECT * FROM "${getTableName(table)}" x WHERE ${where} ORDER BY x.create_time DESC, x.name LIMIT 1) ${alias} ON TRUE`
+  const transaction = (alias: string, hash: PgColumn): string =>
+    `CASE WHEN ${alias}.name IS NULL THEN NULL ELSE jsonb_build_object('hash', ${alias}.${hash.name}, 'state', ${caseOver(`${alias}.state`, ACTIVITY_TRANSACTION_STATE_BY_STATE, 'Pending')}) END`
+  return sql.raw(`
+    SELECT
+      d.${d.name.name} AS name,
+      '${ACTIVITY_TYPES[0]}' AS type,
+      ${caseOver(`d.${d.state.name}`, ACTIVITY_STATE_BY_DEPOSIT_STATE, 'Pending')} AS state,
+      d.${d.depositAccount.name} AS deposit_account,
+      d.${d.erc20Address.name} AS erc20_address,
+      d.${d.amount.name} AS amount,
+      d.${d.outcome.name} AS outcome,
+      d.${d.error.name} AS error,
+      ${transaction('s', t.txId)} AS start_transaction,
+      ${transaction('e', e.txHash)} AS foreign_chain_transaction,
+      ${transaction('c', t.txId)} AS complete_transaction,
+      d.${d.createTime.name} AS create_time,
+      GREATEST(d.update_time, s.update_time, r.update_time, e.update_time, c.update_time) AS update_time
+    FROM "${getTableName(d)}" d
+    ${newest(t, 's', `x.${t.parent.name} = d.name AND x.${t.circuit.name} = 'startDeposit'`)}
+    ${newest(r, 'r', `x.${r.parent.name} = d.name`)}
+    ${newest(e, 'e', `x.${e.parent.name} = r.name`)}
+    ${newest(t, 'c', `x.${t.parent.name} = d.name AND x.${t.circuit.name} = 'completeDeposit'`)}
+  `)
+}
+
+/** A `CASE` over the column, mapping each listed value and falling back for the rest. */
+function caseOver(
+  column: string,
+  mapping: Partial<Record<string, string>>,
+  fallback: string,
+): string {
+  const arms = Object.entries(mapping)
+    .filter((entry): entry is [string, string] => entry[1] !== undefined)
+    .map(([from, to]) => `WHEN '${from}' THEN '${to}'`)
+    .join(' ')
+  return `CASE ${column} ${arms} ELSE '${fallback}' END`
+}
 
 /** Wide enough for a `Uint<128>`. */
 function contractInteger(name: string) {

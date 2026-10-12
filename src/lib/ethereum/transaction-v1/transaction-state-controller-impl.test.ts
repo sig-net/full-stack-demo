@@ -79,13 +79,12 @@ describe('EthereumTransactionStateControllerImpl.commitTransaction', () => {
     name: string
     args: CommitTransactionArgs
     create?: EthereumTransactionRepository['create']
-    check: (result: Promise<EthereumTransaction>, calls: Calls) => Promise<void>
+    check: (result: Promise<EthereumTransaction>, calls: Calls, before: number) => Promise<void>
   }> = [
     {
       name: 'success - stored in AwaitingSubmission with the fields the chain fills unset',
       args,
-      check: async (result, calls) => {
-        const before = Date.now()
+      check: async (result, calls, before) => {
         const stored = await result
         expect(stored).toEqual({
           ...args,
@@ -139,7 +138,8 @@ describe('EthereumTransactionStateControllerImpl.commitTransaction', () => {
         : mock<EthereumTransactionRepository>('EthereumTransactionRepository', { create }),
       eventPublisher,
     )
-    await check(controller.commitTransaction(commitArgs), calls)
+    const before = Date.now()
+    await check(controller.commitTransaction(commitArgs), calls, before)
   })
 })
 

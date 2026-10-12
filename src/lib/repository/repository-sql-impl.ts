@@ -1,27 +1,23 @@
 import 'server-only'
 
-import { and, asc, desc, eq, getTableColumns, type SQL } from 'drizzle-orm'
+import { eq, getTableColumns } from 'drizzle-orm'
 import type { PgColumn, PgTable, TableConfig } from 'drizzle-orm/pg-core'
 import type { z } from 'zod'
 
 import type { DatabaseExecutor } from '@/lib/db/database'
-import { currentTransaction } from '@/lib/db/unit-of-work'
-import type { Criterion, Repository, SearchArgs } from '@/lib/repository/repository'
+import type { Repository, SearchArgs } from '@/lib/repository/repository'
+import { SQLReadRepository } from '@/lib/repository/repository-sql-read-impl'
 
 /**
  * A repository over one Drizzle table whose column properties are named exactly as the resource's
  * fields, so a criterion's field resolves to a column by name and the mappers convert values only.
- * Every row read is parsed with the resource schema, since stored rows are a trust boundary.
  */
-export class SQLRepository<
-  Resource extends { name: string },
-  Table extends ResourceTable<Resource>,
-> implements Repository<Resource> {
-  private readonly database: DatabaseExecutor
+export class SQLRepository<Resource extends { name: string }, Table extends ResourceTable<Resource>>
+  extends SQLReadRepository<Resource, Table['$inferSelect']>
+  implements Repository<Resource>
+{
   private readonly table: Table
-  private readonly schema: z.ZodType<Resource>
   private readonly toRow: (resource: Resource) => Table['$inferInsert']
-  private readonly fromRow: (row: Table['$inferSelect']) => Resource
 
   constructor(
     database: DatabaseExecutor,
@@ -30,11 +26,9 @@ export class SQLRepository<
     toRow: (resource: Resource) => Table['$inferInsert'],
     fromRow: (row: Table['$inferSelect']) => Resource,
   ) {
-    this.database = database
+    super(database, table, getTableColumns(table), schema, fromRow)
     this.table = table
-    this.schema = schema
     this.toRow = toRow
-    this.fromRow = fromRow
   }
 
   async create(resource: Resource): Promise<Resource> {
@@ -46,15 +40,6 @@ export class SQLRepository<
       throw new Error('The insert returned no row')
     }
     return this.resource(stored)
-  }
-
-  async get(name: string): Promise<Resource | undefined> {
-    const [row] = await this.executor()
-      .select()
-      .from(this.anyTable())
-      .where(eq(this.column('name'), name))
-      .limit(1)
-    return row === undefined ? undefined : this.resource(row)
   }
 
   async update(resource: Resource): Promise<Resource> {
@@ -69,61 +54,16 @@ export class SQLRepository<
     return this.resource(stored)
   }
 
-  async search(args: SearchArgs<Resource>): Promise<Resource[]> {
-    let query = this.executor()
-      .select()
-      .from(this.anyTable())
-      .where(and(...args.criteria.map((criterion) => this.condition(criterion))))
-      .$dynamic()
-    if (args.order !== undefined) {
-      const direction = args.order.direction === 'asc' ? asc : desc
-      query = query.orderBy(direction(this.column(args.order.field)), asc(this.column('name')))
-    }
-    if (args.limit !== undefined) query = query.limit(args.limit)
+  override async search(args: SearchArgs<Resource>): Promise<Resource[]> {
+    let query = this.select(args)
     if (args.lock === 'update') query = query.for('update')
     if (args.lock === 'update-skip-locked') query = query.for('update', { skipLocked: true })
-    const rows = await query
-    return rows.map((row) => this.resource(row))
-  }
-
-  private executor(): DatabaseExecutor {
-    return currentTransaction() ?? this.database
-  }
-
-  private resource(row: PgTable['$inferSelect']): Resource {
-    return this.schema.parse(this.fromRow(this.typedRow(row)))
+    return this.resources(await query)
   }
 
   /** Drizzle's query types resolve only against a concrete table type, so queries run on this. */
   private anyTable(): PgTable {
     return this.table
-  }
-
-  /**
-   * Every row selected from the table has the table's select shape, which the query type dropped:
-   * Drizzle's select, insert and returning types branch on conditionals over the table parameter,
-   * which TypeScript cannot resolve while the parameter is generic.
-   */
-  private typedRow(row: PgTable['$inferSelect']): Table['$inferSelect'] {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    return row as Table['$inferSelect']
-  }
-
-  private column(field: keyof Resource & string): PgColumn {
-    return getTableColumns(this.table)[field]
-  }
-
-  private condition(criterion: Criterion<Resource>): SQL {
-    switch (criterion.type) {
-      case 'exact-text':
-        return eq(this.column(criterion.field), criterion.text)
-      case 'bool':
-        return eq(this.column(criterion.field), criterion.bool)
-      default: {
-        const unhandled: never = criterion
-        throw new Error(`Unhandled criterion ${JSON.stringify(unhandled)}`)
-      }
-    }
   }
 }
 
