@@ -5407,6 +5407,7 @@ __metadata:
     oxlint: "npm:^1.83.0"
     oxlint-tsgolint: "npm:^7.0.2002"
     pg: "npm:^8.23.1"
+    qrcode-generator: "npm:^2.0.4"
     react: "npm:19.3.0"
     react-dom: "npm:19.3.0"
     server-only: "npm:^0.0.1"
@@ -7425,6 +7426,13 @@ __metadata:
   version: 6.1.0
   resolution: "pure-rand@npm:6.1.0"
   checksum: 10c0/1abe217897bf74dcb3a0c9aba3555fe975023147b48db540aa2faf507aee91c03bf54f6aef0eb2bf59cc259a16d06b28eca37f0dc426d94f4692aeff02fb0e65
+  languageName: node
+  linkType: hard
+
+"qrcode-generator@npm:^2.0.4":
+  version: 2.0.4
+  resolution: "qrcode-generator@npm:2.0.4"
+  checksum: 10c0/52dc3894bda6afecf09cb36aba9c181f3c4641fcbeac40c2af05d68da1383e3a1c7354bd3dc8c5e2a199d2e62314bbdec8cb4fbbd00bcfda40de56bb36bfdb17
   languageName: node
   linkType: hard
 

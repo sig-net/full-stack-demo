@@ -6,21 +6,16 @@ import { CallerLoginDialog } from '@/components/caller-login-dialog'
 import { useCaller } from '@/components/contexts/CallerContext'
 import { CopyButton } from '@/components/copy-button'
 import { Button } from '@/components/ui/button'
-
-/** The hex caller id shortened to its first six and last four characters. */
-function abbreviateCaller(callerName: string): string {
-  const callerId = callerName.slice(callerName.indexOf('/') + 1)
-  return `${callerId.slice(0, 6)}…${callerId.slice(-4)}`
-}
+import { abbreviateHex } from '@/lib/abbreviate-hex'
 
 /** The identity secret's state: the caller it names and a copy of the secret once set, otherwise the way in. */
 export function CallerPanel(): ReactNode {
-  const { callerSecret, callerName, loggingIn, error, login, logout } = useCaller()
+  const { callerSecret, callerName, depositAccount, loggingIn, error, login, logout } = useCaller()
   const [open, setOpen] = useState(false)
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm font-medium">Identity secret</p>
-      {callerSecret === null || callerName === null ? (
+      {callerSecret === null || callerName === null || depositAccount === null ? (
         <>
           <p className="text-sm text-muted-foreground">{loggingIn ? 'Setting…' : 'Not set.'}</p>
           <Button type="button" size="sm" disabled={loggingIn} onClick={() => setOpen(true)}>
@@ -32,9 +27,18 @@ export function CallerPanel(): ReactNode {
           <span className="flex items-center gap-1">
             <CopyButton label="identity secret" value={callerSecret} />
             <span className="font-mono text-sm" title={callerName}>
-              {abbreviateCaller(callerName)}
+              {abbreviateHex(callerName.slice(callerName.indexOf('/') + 1))}
             </span>
           </span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm text-muted-foreground">Deposit account</span>
+            <span className="flex items-center gap-1">
+              <CopyButton label="deposit account" value={depositAccount} />
+              <span className="font-mono text-sm" title={depositAccount}>
+                {abbreviateHex(depositAccount)}
+              </span>
+            </span>
+          </div>
           <Button type="button" size="sm" variant="secondary" onClick={logout}>
             Clear secret
           </Button>

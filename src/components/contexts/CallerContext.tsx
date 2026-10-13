@@ -1,8 +1,11 @@
 'use client'
 
+import { hexToBytes } from '@sig-net/midnight'
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
+import { useConfig } from '@/components/contexts/ConfigContext'
 import { callerSecretSchema } from '@/lib/caller/caller'
+import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
 import { getCallerName } from '@/server/actions/caller-actions'
 
 export interface CallerContextValue {
@@ -10,6 +13,8 @@ export interface CallerContextValue {
   readonly callerSecret: string | null
   /** `callers/{caller}` once logged in. */
   readonly callerName: string | null
+  /** The EVM account the caller's deposits are swept from, derived here from the secret and the public configuration. Null while logged out. */
+  readonly depositAccount: string | null
   readonly loggingIn: boolean
   readonly error: string | null
   readonly login: (secret: string) => Promise<void>
@@ -20,14 +25,17 @@ const CallerContext = createContext<CallerContextValue | null>(null)
 
 /** Holds the caller secret in page memory only: a reload logs out. */
 export function CallerProvider({ children }: { children: ReactNode }): ReactNode {
+  const { midnightSignet, midnightEthereumErc20Vault } = useConfig()
   const [callerSecret, setCallerSecret] = useState<string | null>(null)
   const [callerName, setCallerName] = useState<string | null>(null)
+  const [depositAccount, setDepositAccount] = useState<string | null>(null)
   const [loggingIn, setLoggingIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const logout = (): void => {
     setCallerSecret(null)
     setCallerName(null)
+    setDepositAccount(null)
     setLoggingIn(false)
     setError(null)
   }
@@ -40,10 +48,16 @@ export function CallerProvider({ children }: { children: ReactNode }): ReactNode
     }
     setLoggingIn(true)
     setError(null)
+    const account = depositAccountOf(
+      { secretKey: hexToBytes(parsed.data) },
+      midnightSignet,
+      midnightEthereumErc20Vault,
+    )
     try {
       const name = await getCallerName(parsed.data)
       setCallerSecret(parsed.data)
       setCallerName(name)
+      setDepositAccount(account)
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Login failed.')
     } finally {
@@ -52,7 +66,9 @@ export function CallerProvider({ children }: { children: ReactNode }): ReactNode
   }
 
   return (
-    <CallerContext.Provider value={{ callerSecret, callerName, loggingIn, error, login, logout }}>
+    <CallerContext.Provider
+      value={{ callerSecret, callerName, depositAccount, loggingIn, error, login, logout }}
+    >
       {children}
     </CallerContext.Provider>
   )

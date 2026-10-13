@@ -2,13 +2,14 @@
 
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { Download, EyeOff, type LucideIcon, Wallet } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 
 import { BalanceBox } from '@/components/balance-box'
 import { useCaller } from '@/components/contexts/CallerContext'
 import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
+import { DepositDialog } from '@/components/deposit-dialog'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { readMidnightBalanceAmounts } from '@/lib/balances/midnight-balances'
@@ -21,7 +22,8 @@ export function BalancesSection(): ReactNode {
   const { midnightNetwork } = useConfig()
   const connection = useMidnightWallet()
   const registry = useTokenInfoRegistry()
-  const { callerSecret } = useCaller()
+  const { callerSecret, depositAccount } = useCaller()
+  const [depositOpen, setDepositOpen] = useState(false)
   const { wallet, generation } = connection
   const status = walletConnectionStatus(connection)
   const missing = missingDepositPrerequisites({
@@ -29,7 +31,13 @@ export function BalancesSection(): ReactNode {
     identitySecretSet: callerSecret !== null,
   })
   const depositButton = (
-    <Button size="lg" disabled={missing.length > 0}>
+    <Button
+      size="lg"
+      disabled={missing.length > 0}
+      onClick={() => {
+        setDepositOpen(true)
+      }}
+    >
       <Download aria-hidden />
       <span className="px-0.5">Deposit</span>
     </Button>
@@ -68,6 +76,9 @@ export function BalancesSection(): ReactNode {
           </Popover>
         )}
       </div>
+      {depositAccount !== null && (
+        <DepositDialog open={depositOpen} onOpenChange={setDepositOpen} address={depositAccount} />
+      )}
       {wallet === null ? (
         <p role="status" className="text-muted-foreground">
           {status === 'not connected'

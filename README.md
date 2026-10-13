@@ -373,10 +373,13 @@ at a fork, and the application's resource names must survive that.
 - The UI calls the caller secret the identity secret. A user sets it through the identity secret
   popover (`src/components/caller-popover.tsx`, the crossed-out eye beside the wallet button in
   the app bar, dotted green once set) or the Identity secret item of the mobile menu, by pasting
-  a secret or generating a fresh one, and the panel then offers a copy button for the secret and
-  a Clear secret button. `CallerProvider` (`src/components/contexts/CallerContext.tsx`) holds the secret in page
-  memory only, so a reload logs out, and `useCaller()` exposes it with the caller name and the
-  login state.
+  a secret or generating a fresh one, and the panel then offers a copy button for the secret, the
+  caller's deposit account and a Clear secret button. `CallerProvider` (`src/components/contexts/CallerContext.tsx`) holds the secret in page
+  memory only, so a reload logs out, and `useCaller()` exposes it with the caller name, the
+  deposit account and the login state. The deposit account is derived in the browser by
+  `depositAccountOf()` (`src/lib/midnight/ethereum-erc20-vault/deposit-account.ts`, the same
+  function the deposit service uses) from the secret and the public signet and vault
+  configuration, so the UI knows the account before any deposit exists.
 - Every server action takes the caller secret as its first argument. `resolveCaller()`
   (`src/lib/caller/resolve-caller.ts`) validates it and derives the caller id and its
   `callers/{caller}` name, and the action compares every resource name it receives against that
@@ -957,8 +960,13 @@ under Styling and theme.
   value, the `TokenIcon` and the Swap and Send buttons. The Deposit button is disabled until a
   Midnight wallet is connected and the identity secret is set, and while disabled a popover on
   hover, tap or focus names what is missing with the icon of its app bar control
-  (`missingDepositPrerequisites()` in `src/lib/deposit-prerequisites.ts`). The Deposit, Swap and
-  Send buttons do nothing yet when enabled.
+  (`missingDepositPrerequisites()` in `src/lib/deposit-prerequisites.ts`). Once enabled, Deposit
+  opens `DepositDialog` (`src/components/deposit-dialog.tsx`) on the caller's deposit account: the
+  checksummed address as a QR code (`QrCode`, `src/components/qr-code.tsx`, round modules over the
+  grid `src/lib/qr-modules.ts` encodes at error correction level H, with the Ethereum glyph over
+  the centre) and as a copyable abbreviated address. The QR panel keeps the design's light
+  palette and gradient in both themes, since a code scans dark on light. The Swap and Send buttons
+  do nothing yet.
 - `ActivitySection` (`src/components/activity-section.tsx`) reads `src/lib/activity/dummy-activity.ts`
   and renders `ActivityTable`. Each entry is a collapsible table body: from the `md` breakpoint up
   every column shows, below it a chevron expands the timestamp and block explorer details. The
