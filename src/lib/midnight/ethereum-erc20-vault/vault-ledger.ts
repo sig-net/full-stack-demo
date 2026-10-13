@@ -2,13 +2,15 @@ import { bytesToHex } from '@sig-net/midnight'
 import {
   Action,
   type AttestationRecord,
+  type VaultGasEnvelope,
+  type VaultGasKind,
   type VaultLedgerState,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 
 /** The vault contract's public state, read from the indexer. One read is one network round trip. */
-export interface VaultLedger extends RequestLedger, AllowedTokenLedger {
+export interface VaultLedger extends RequestLedger, AllowedTokenLedger, VaultGasLedger {
   state(): Promise<VaultLedgerState>
 }
 
@@ -24,6 +26,38 @@ export interface AllowedTokenLedger {
 
 /** The deployer-grown set of ERC20 addresses the vault admits, as 20-byte values. */
 export type AllowedTokenLedgerState = Pick<VaultLedgerState, 'allowedTokens'>
+
+/** The part of the ledger the readiness service reads, so a unit test builds that and nothing else. */
+export interface VaultGasLedger {
+  state(): Promise<VaultGasLedgerState>
+}
+
+/** The gas envelope fields the deployer sets, which every vault-signed start circuit copies. */
+export type VaultGasLedgerState = Pick<
+  VaultLedgerState,
+  'vaultGasLimits' | 'vaultMaxFeePerGas' | 'vaultMaxPriorityFeePerGas'
+>
+
+/** Every kind the vault account signs, as the SDK's `VaultGasKind` lists them. */
+export const VAULT_GAS_KINDS = [
+  'withdraw',
+  'approve',
+  'swap',
+  'supply',
+  'redeem',
+] as const satisfies readonly VaultGasKind[]
+
+/**
+ * The SDK's `vaultGasEnvelope` over the narrowed view. Delete this copy once the SDK's
+ * signature accepts the narrowed view.
+ */
+export function vaultGasEnvelope(state: VaultGasLedgerState, kind: VaultGasKind): VaultGasEnvelope {
+  return {
+    gasLimit: state.vaultGasLimits[kind],
+    maxFeePerGas: state.vaultMaxFeePerGas,
+    maxPriorityFeePerGas: state.vaultMaxPriorityFeePerGas,
+  }
+}
 
 /** The request maps and the response key the attestation posts are verified against. */
 export type RequestLedgerState = RequestLedgerView & Pick<VaultLedgerState, 'mpcResponseKey'>

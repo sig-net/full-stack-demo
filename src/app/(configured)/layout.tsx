@@ -8,6 +8,7 @@ import { MidnightWalletProvider } from '@/components/contexts/MidnightWalletCont
 import { ReactQueryProvider } from '@/components/contexts/ReactQueryContext'
 import { SplashScreen } from '@/components/splash-screen'
 import { TokenInfoRegistryProvider } from '@/components/contexts/TokenInfoRegistryContext'
+import { VaultReadinessProvider } from '@/components/contexts/VaultReadinessContext'
 import { getClientConfig } from '@/lib/config/server-config'
 
 export default async function ConfiguredLayout({ children }: LayoutProps<'/'>): Promise<ReactNode> {
@@ -23,11 +24,13 @@ export default async function ConfiguredLayout({ children }: LayoutProps<'/'>): 
           <TokenInfoRegistryProvider>
             <CallerProvider>
               <MidnightWalletProvider>
-                {/* Below md the app bar stays at the top while the page scrolls under it. */}
-                <div className="sticky top-0 z-10 md:static">
-                  <AppBar />
-                </div>
-                {children}
+                <VaultReadinessProvider>
+                  {/* Below md the app bar stays at the top while the page scrolls under it. */}
+                  <div className="sticky top-0 z-10 md:static">
+                    <AppBar />
+                  </div>
+                  {children}
+                </VaultReadinessProvider>
               </MidnightWalletProvider>
             </CallerProvider>
           </TokenInfoRegistryProvider>

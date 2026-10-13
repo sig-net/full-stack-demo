@@ -1040,6 +1040,58 @@ answers `get()` by token identity, `byErc20Address()` for the fund scan, and `su
 Valuation is the planned next source: a price port behind a React Query hook in the same context
 file, which is why `usdValue` is a string the UI already renders.
 
+### Vault readiness
+
+An action costs its payers fees before it can start, and four payers are involved. The caller's
+Midnight wallet pays the DUST of the transactions it signs (`startDeposit`, `completeDeposit`).
+The relayer wallet pays the DUST of every queue flush, send and attestation. The caller's deposit
+account pays the Ethereum gas of its sweep, since the MPC signs the sweep from that account. The
+vault account (`vaultAccountOf()` in `src/lib/midnight/ethereum-erc20-vault/vault-account.ts`,
+the SDK's `deriveVaultEvmAddress`) pays the gas of withdrawals, approvals, swaps, supplies and
+redemptions, which the MPC signs from the vault's own account.
+
+`src/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness.ts` defines one
+`ReadinessCheck` per payer: `ok` or `insufficient` with the balance and the requirement, or
+`unavailable` with the reason a read failed, never a zero. `missingReadiness(action, checks)` is
+the pure rule a gate asks: the checks a deposit or a vault-signed kind needs that do not pass, in
+display order. The requirements are the sweep's gas budget (`gasBudget(SWEEP_GAS)` in
+`sweep-gas.ts`, gas limit times fee ceiling, 0.003 ETH), the costliest vault-signed envelope
+read from the ledger (`vaultGasEnvelope()` over every kind, so one check serves them all), and
+two pinned DUST minimums, `CALLER_DUST_MINIMUM` (1 DUST) and `RELAYER_DUST_MINIMUM` (5 DUST).
+The prep repository prices each transaction with the wallet facade as it is built, so no
+estimate exists before a transaction does; the minimums leave several times the local chain's
+per-transaction overhead and are the values to recalibrate once a fee log says otherwise.
+
+`ReadinessService.getVaultReadiness(caller, {})` (`readiness-service.ts`, implemented in
+`readiness-service-impl.ts`) reads the three checks the backend can see: the relayer's DUST
+through `RelayerWallet.dustBalance()`, and both ETH balances through the `EthereumAccountReader`
+port (`src/lib/ethereum/account-reader.ts`, ethers in `account-reader-ethers-impl.ts`). The
+`getVaultReadiness` action in `src/server/actions/readiness-actions.ts` hands them to the
+browser. The caller's own DUST is read in the browser from the connected wallet, the only place
+it exists.
+
+`VaultReadinessProvider` (`src/components/contexts/VaultReadinessContext.tsx`) owns both reads
+through React Query and exposes `checks`, `checking` and `recheck()`. Each read runs once its
+input exists (a connected wallet, a set identity secret) and again only on `recheck()`, since
+every read is a chain or wallet round trip; a check whose read cannot run yet is unavailable with
+the reason. `ReadinessChecklist` and `ReadinessRecheckButton` (`src/components/`) render the
+lines and the control. The deposit dialog rechecks as it opens, reports "Ready to deposit" or
+"Not ready to deposit" with the failing lines under it, and keeps each fund's deposit control
+disabled while a check fails. The Settings popover shows every check as the vault's health.
+`integration-tests/ethereum-erc20-vault-readiness.test.ts` reads the checks over the local stack
+and funds a deposit account to flip its check.
+
+A failing check is red, listed as a bullet under the heading, and on the local stack an ETH line
+carries a wand that funds the account with one ETH and rechecks. The wand is the local faucet:
+`LocalFaucetService.fundAccount({ account })` (`src/lib/ethereum/local-faucet-v1`, over anvil's
+`anvil_setBalance` in `local-faucet-service-anvil-impl.ts`) behind the `fundAccount` action in
+`src/server/actions/local-faucet-actions.ts`. The backend builds the service only where
+`isLocalEnvironment()` (`src/lib/config/local-environment.ts`) holds, an undeployed Midnight
+network with the EVM RPC on a loopback host, since the fork reports Sepolia's chain id; anywhere
+else the adaptor is built without a service and refuses every call, and the browser, reading the
+same public configuration, renders no wand. `integration-tests/ethereum-local-faucet.test.ts`
+funds a fresh account through it.
+
 ## Styling and theme
 
 `src/app/globals.css` is the single source of the theme. It defines the sig.network palette as

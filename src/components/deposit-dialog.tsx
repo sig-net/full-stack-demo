@@ -1,15 +1,27 @@
 'use client'
 
 import { skipToken, useQuery } from '@tanstack/react-query'
+import { cn } from 'cn'
 import { getAddress } from 'ethers'
-import { CircleAlert, Download, LoaderCircle, RefreshCw, X } from 'lucide-react'
+import {
+  CircleAlert,
+  CircleCheck,
+  Download,
+  LoaderCircle,
+  RefreshCw,
+  TriangleAlert,
+  X,
+} from 'lucide-react'
 import Image from 'next/image'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useEffectEvent } from 'react'
 
 import { useCaller } from '@/components/contexts/CallerContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
+import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { CopyButton } from '@/components/copy-button'
 import { QrCode } from '@/components/qr-code'
+import { ReadinessChecklist } from '@/components/readiness-checklist'
+import { ReadinessRecheckButton } from '@/components/readiness-recheck-button'
 import { TokenIcon } from '@/components/token-icon'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -22,6 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
+import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { fundLabel } from '@/lib/tokens/fund-label'
 import { ORIGIN_NETWORKS } from '@/lib/tokens/token-info'
@@ -84,6 +97,7 @@ export function DepositDialog({ open, onOpenChange, address }: DepositDialogProp
           Use this address to deposit on Ethereum
         </DialogDescription>
         <DepositAccountFunds address={checksummed} />
+        <DepositReadiness />
       </DialogContent>
     </Dialog>
   )
@@ -96,6 +110,8 @@ const LOGO_FRACTION = 0.22
 function DepositAccountFunds({ address }: { address: string }): ReactNode {
   const { callerSecret, callerName } = useCaller()
   const registry = useTokenInfoRegistry()
+  const { checks } = useVaultReadiness()
+  const ready = missingReadiness('deposit', checks).length === 0
   const funds = useQuery({
     queryKey: ['deposit-account-funds', callerName, address],
     queryFn:
@@ -180,13 +196,15 @@ function DepositAccountFunds({ address }: { address: string }): ReactNode {
                       <Button
                         variant="ghost"
                         size="icon-xs"
-                        disabled
+                        disabled={!ready || !DEPOSIT_WIRED}
                         aria-label={`Deposit ${label}`}
                       >
                         <Download />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Deposit these funds</TooltipContent>
+                    <TooltipContent>
+                      {ready ? 'Deposit these funds' : 'Not ready to deposit'}
+                    </TooltipContent>
                   </Tooltip>
                 </li>
               )
@@ -195,5 +213,41 @@ function DepositAccountFunds({ address }: { address: string }): ReactNode {
         )}
       </div>
     </TooltipProvider>
+  )
+}
+
+/** The deposit control has no action behind it yet, so it stays disabled even when every check passes. */
+const DEPOSIT_WIRED = false
+
+/** Whether every payer of a deposit holds what it costs, read afresh as the dialog opens and again on demand. */
+function DepositReadiness(): ReactNode {
+  const { checks, recheck } = useVaultReadiness()
+  const missing = missingReadiness('deposit', checks)
+  const recheckOnOpen = useEffectEvent(() => {
+    void recheck()
+  })
+  useEffect(() => {
+    recheckOnOpen()
+  }, [])
+  return (
+    <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+      <div
+        className={cn(
+          'flex items-center justify-center gap-2',
+          missing.length > 0 && 'text-destructive',
+        )}
+      >
+        {missing.length === 0 ? (
+          <CircleCheck className="size-4 shrink-0 text-success" aria-hidden />
+        ) : (
+          <TriangleAlert className="size-4 shrink-0" aria-hidden />
+        )}
+        <span role="status">
+          {missing.length === 0 ? 'Ready to deposit' : 'Not ready to deposit'}
+        </span>
+        <ReadinessRecheckButton />
+      </div>
+      {missing.length > 0 && <ReadinessChecklist checkIds={missing} />}
+    </div>
   )
 }

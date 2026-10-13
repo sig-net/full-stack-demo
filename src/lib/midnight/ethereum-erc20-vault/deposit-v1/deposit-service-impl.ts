@@ -29,7 +29,8 @@ import {
   DepositStateConflict,
   type DepositStateController,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
-import type { GasEnvelope, VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import { SWEEP_GAS } from '@/lib/midnight/ethereum-erc20-vault/sweep-gas'
+import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import {
   type AttestedRequestFields,
   attestedRequestFields,
@@ -171,17 +172,6 @@ export class DepositServiceImpl implements DepositService {
     }
     return attestedRequestFields(request)
   }
-}
-
-/**
- * The EIP-1559 envelope of every sweep, as the prep repository's deposit flow sets it: a
- * transfer needs under 100 000 gas, and the fork's base fee is a few wei, so 30 gwei with a
- * 1 gwei tip is never below the market.
- */
-const SWEEP_GAS: GasEnvelope = {
-  gasLimit: 100_000n,
-  maxFeePerGas: 30_000_000_000n,
-  maxPriorityFeePerGas: 1_000_000_000n,
 }
 
 /** The circuit verifies the attested output only for an executed sweep, and ignores the byte otherwise. */

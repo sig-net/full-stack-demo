@@ -39,7 +39,7 @@ export function SeedWalletDialog({
           <DialogTitle>Midnight seed wallet</DialogTitle>
           <DialogDescription>
             A hexadecimal seed of 16 to 64 bytes (optional 0x) creates a wallet that signs in this
-            page. Keys stay in tab memory and a refresh requires re-entry.
+            page. This browser keeps the seed until the wallet disconnects.
           </DialogDescription>
         </DialogHeader>
         <form

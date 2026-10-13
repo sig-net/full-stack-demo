@@ -1,9 +1,15 @@
+'use client'
+
 import { Settings } from 'lucide-react'
 import type { ReactNode } from 'react'
 
+import { ReadinessChecklist } from '@/components/readiness-checklist'
+import { ReadinessRecheckButton } from '@/components/readiness-recheck-button'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { READINESS_CHECK_IDS } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 
+/** The vault's health: every payer's readiness check, with a control to read them again. */
 export function SettingsPopover(): ReactNode {
   return (
     <Popover>
@@ -18,8 +24,14 @@ export function SettingsPopover(): ReactNode {
         <Settings className="size-5" />
         Settings
       </PopoverTrigger>
-      <PopoverContent align="end">
-        <p className="text-sm text-muted-foreground">Nothing to configure yet.</p>
+      <PopoverContent align="end" className="w-auto max-w-sm">
+        <div className="flex flex-col gap-2 text-sm">
+          <div className="flex items-center gap-2">
+            <p className="font-medium">Vault health</p>
+            <ReadinessRecheckButton />
+          </div>
+          <ReadinessChecklist checkIds={READINESS_CHECK_IDS} />
+        </div>
       </PopoverContent>
     </Popover>
   )

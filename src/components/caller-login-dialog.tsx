@@ -39,8 +39,8 @@ export function CallerLoginDialog({
         <DialogHeader>
           <DialogTitle>Set the identity secret</DialogTitle>
           <DialogDescription>
-            A random 32-byte identity secret in hex identifies you to the vault. It stays in tab
-            memory and a refresh requires re-entry, so keep a copy to return to the same identity.
+            A random 32-byte identity secret in hex identifies you to the vault. This browser keeps
+            it until you clear it, so keep a copy to return to the same identity elsewhere.
           </DialogDescription>
         </DialogHeader>
         <form

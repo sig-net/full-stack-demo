@@ -25,8 +25,14 @@ import { JsonRpcProvider } from 'ethers'
 import type { Pool } from 'pg'
 
 import { getServerConfig, type ServerConfig } from '@/lib/config/server-config'
+import { isLocalEnvironment } from '@/lib/config/local-environment'
 import { createDatabase, createDatabasePool } from '@/lib/db/database'
 import { UnitOfWork } from '@/lib/db/unit-of-work'
+import type { EthereumAccountReader } from '@/lib/ethereum/account-reader'
+import { EthereumAccountReaderEthersImpl } from '@/lib/ethereum/account-reader-ethers-impl'
+import type { LocalFaucetService } from '@/lib/ethereum/local-faucet-v1/local-faucet-service'
+import { LocalFaucetServiceAdaptor } from '@/lib/ethereum/local-faucet-v1/local-faucet-service-adaptor'
+import { LocalFaucetServiceAnvilImpl } from '@/lib/ethereum/local-faucet-v1/local-faucet-service-anvil-impl'
 import { EthereumTransactionEventConsumer } from '@/lib/ethereum/transaction-v1/transaction-event-consumer'
 import type { EthereumTransactionLedger } from '@/lib/ethereum/transaction-v1/transaction-ledger'
 import { EthereumTransactionLedgerEthersImpl } from '@/lib/ethereum/transaction-v1/transaction-ledger-ethers-impl'
@@ -82,6 +88,9 @@ import { Erc20ReaderEthersImpl } from '@/lib/midnight/ethereum-erc20-vault/erc20
 import { FlushEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/flush-event-consumer'
 import type { Flusher } from '@/lib/midnight/ethereum-erc20-vault/flusher'
 import { FlusherImpl } from '@/lib/midnight/ethereum-erc20-vault/flusher-impl'
+import type { ReadinessService } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/readiness-service'
+import { ReadinessServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/readiness-service-adaptor'
+import { ReadinessServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/readiness-service-impl'
 import type { RespondOutcomeSource } from '@/lib/midnight/ethereum-erc20-vault/respond-outcome-source'
 import { RespondOutcomeSourceEvmNodeImpl } from '@/lib/midnight/ethereum-erc20-vault/respond-outcome-source-evm-node-impl'
 import { RespondOutcomeSourceMpcCacheImpl } from '@/lib/midnight/ethereum-erc20-vault/respond-outcome-source-mpc-cache-impl'
@@ -185,6 +194,11 @@ export interface EventBackend {
 export interface EthereumBackend {
   /** The RPC node on `EVM_RPC_URL`, with ethers' request cache off so every read is fresh. */
   readonly provider: JsonRpcProvider
+  /** Free ETH for test accounts. The service exists on the local stack only, and the adaptor refuses everywhere else. */
+  readonly localFaucetV1: {
+    readonly service: LocalFaucetService | null
+    readonly adaptor: LocalFaucetServiceAdaptor
+  }
   readonly transactionV1: {
     readonly repository: EthereumTransactionRepository
     readonly stateController: EthereumTransactionStateController
@@ -241,6 +255,12 @@ export interface MidnightBackend {
       readonly erc20Reader: Erc20Reader
       readonly service: SupportedTokenService
       readonly adaptor: SupportedTokenServiceAdaptor
+    }
+    /** Reads of whether the payers the backend can see hold what an action costs them. */
+    readonly readinessV1: {
+      readonly accountReader: EthereumAccountReader
+      readonly service: ReadinessService
+      readonly adaptor: ReadinessServiceAdaptor
     }
   }
 }
@@ -402,8 +422,15 @@ function createEthereum(db: DbBackend, event: EventBackend, config: ServerConfig
     ledger,
     db.unitOfWork,
   )
+  const localFaucetService = isLocalEnvironment(config.client)
+    ? new LocalFaucetServiceAnvilImpl(provider)
+    : null
   return {
     provider,
+    localFaucetV1: {
+      service: localFaucetService,
+      adaptor: new LocalFaucetServiceAdaptor(localFaucetService),
+    },
     transactionV1: {
       repository,
       stateController,
@@ -566,7 +593,30 @@ function createMidnightEthereumErc20Vault(
     ),
     activityV1: createMidnightEthereumErc20VaultActivityV1(db, config),
     supportedTokenV1: createMidnightEthereumErc20VaultSupportedTokenV1(ethereum, config, ledger),
+    readinessV1: createMidnightEthereumErc20VaultReadinessV1(
+      ethereum,
+      config,
+      ledger,
+      relayerWallet,
+    ),
   }
+}
+
+function createMidnightEthereumErc20VaultReadinessV1(
+  ethereum: EthereumBackend,
+  config: ServerConfig,
+  ledger: VaultLedger,
+  relayerWallet: RelayerWallet,
+): MidnightBackend['ethereumErc20Vault']['readinessV1'] {
+  const accountReader = new EthereumAccountReaderEthersImpl(ethereum.provider)
+  const service = new ReadinessServiceImpl(
+    ledger,
+    accountReader,
+    relayerWallet,
+    config.client.midnightSignet,
+    config.client.midnightEthereumErc20Vault,
+  )
+  return { accountReader, service, adaptor: new ReadinessServiceAdaptor(service) }
 }
 
 function createMidnightEthereumErc20VaultSupportedTokenV1(

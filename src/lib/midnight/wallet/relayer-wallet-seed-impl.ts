@@ -16,6 +16,7 @@ import {
   createWalletAndMidnightProvider,
   deriveAccountKeys,
   initialiseWalletFacade,
+  type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 
@@ -23,7 +24,7 @@ import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 export class RelayerWalletSeedImpl implements RelayerWallet {
   private readonly config: MidnightNetworkConfig
   private readonly keys: AccountKeys
-  private starting: Promise<WalletProvider & MidnightProvider> | undefined
+  private starting: Promise<StartedWallet> | undefined
 
   constructor(config: MidnightNetworkConfig, seed: string) {
     this.config = config
@@ -31,7 +32,7 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
   }
 
   async start(): Promise<void> {
-    await this.provider()
+    await this.started()
   }
 
   publicKeys(): WalletPublicKeys {
@@ -39,6 +40,16 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
       coinPublicKey: this.keys.shieldedSecretKeys.coinPublicKey,
       encryptionPublicKey: this.keys.shieldedSecretKeys.encryptionPublicKey,
     }
+  }
+
+  unshieldedAddress(): string {
+    return this.keys.unshieldedKeystore.getBech32Address().toString()
+  }
+
+  async dustBalance(): Promise<bigint> {
+    const { facade } = await this.started()
+    const state = await facade.waitForSyncedState()
+    return state.dust.balance(new Date())
   }
 
   async finalize(unboundTx: string): Promise<string> {
@@ -51,11 +62,15 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
       'pre-binding',
       hexToBytes(unboundTx),
     )
-    const finalized = await (await this.starting).balanceTx(unbound)
+    const finalized = await (await this.starting).provider.balanceTx(unbound)
     return bytesToHex(finalized.serialize())
   }
 
-  provider(): Promise<WalletProvider & MidnightProvider> {
+  async provider(): Promise<WalletProvider & MidnightProvider> {
+    return (await this.started()).provider
+  }
+
+  private started(): Promise<StartedWallet> {
     this.starting ??= this.sync().catch((error: unknown) => {
       this.starting = undefined
       throw error
@@ -63,10 +78,15 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
     return this.starting
   }
 
-  private async sync(): Promise<WalletProvider & MidnightProvider> {
+  private async sync(): Promise<StartedWallet> {
     const facade = await initialiseWalletFacade(this.keys, this.config)
     await facade.start(this.keys.shieldedSecretKeys, this.keys.dustSecretKey)
     await facade.waitForSyncedState()
-    return createWalletAndMidnightProvider(facade, this.keys)
+    return { facade, provider: createWalletAndMidnightProvider(facade, this.keys) }
   }
+}
+
+interface StartedWallet {
+  readonly facade: WalletFacade
+  readonly provider: WalletProvider & MidnightProvider
 }

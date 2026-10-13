@@ -14,6 +14,10 @@ export interface RelayerWallet {
   start(): Promise<void>
   /** Known without a start, so a call can be built for the wallet to balance later. */
   publicKeys(): WalletPublicKeys
+  /** The bech32m address NIGHT is sent to, which generates the wallet's DUST once registered. Known without a start. */
+  unshieldedAddress(): string
+  /** Spendable DUST in SPECK, read from the synced state. Starts the wallet when nothing has. */
+  dustBalance(): Promise<bigint>
   /**
    * Balances, signs and finalises the unbound bytes, resolving with the finalized bytes. Waits
    * for a start in progress and rejects when the wallet was never started.
