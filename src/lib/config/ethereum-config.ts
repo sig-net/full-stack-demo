@@ -5,11 +5,14 @@ export interface EthereumConfig {
   readonly rpcURL: string
 }
 
-/** Public RPC endpoints of the chains with a known default. 31337 is the local development chain. */
+/** The local development chain, a Sepolia fork. */
+export const LOCAL_CHAIN_ID = 31337
+
+/** Public RPC endpoints of the chains with a known default. */
 export const ETHEREUM_RPC_DEFAULTS: Readonly<Record<number, string>> = {
   1: 'https://ethereum-rpc.publicnode.com',
   11155111: 'https://ethereum-sepolia-rpc.publicnode.com',
-  31337: 'http://127.0.0.1:8545',
+  [LOCAL_CHAIN_ID]: 'http://127.0.0.1:8545',
 }
 
 /** The chain selects the default RPC. EVM_RPC_URL overrides it and is required for other chains. */

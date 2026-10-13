@@ -35,7 +35,7 @@ export function CallerProvider({ children }: { children: ReactNode }): ReactNode
   const login = async (value: string): Promise<void> => {
     const parsed = callerSecretSchema.safeParse(value)
     if (!parsed.success) {
-      setError('The caller secret must be 32 bytes in hex.')
+      setError('The identity secret must be 32 bytes in hex.')
       return
     }
     setLoggingIn(true)

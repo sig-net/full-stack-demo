@@ -11,7 +11,7 @@ interface BalanceBoxProps {
 
 /** One balance: amount, USD value and token, then the Swap and Send actions. */
 export function BalanceBox({ balance }: BalanceBoxProps): ReactNode {
-  const { assetSymbol, networkName, amount, usdValue } = balance
+  const { assetSymbol, networkName, amount, usdValue, icon, networkIcon } = balance
   const token = `${assetSymbol} on ${networkName}`
   return (
     <div className="flex flex-wrap items-start gap-x-8.25 gap-y-4 border-t border-balance-rule pt-4.75 pb-5 md:gap-x-11.25">
@@ -25,7 +25,12 @@ export function BalanceBox({ balance }: BalanceBoxProps): ReactNode {
           </span>
         </div>
         <div className="flex h-7 shrink-0 items-center gap-1.5">
-          <TokenIcon assetSymbol={assetSymbol} networkName={networkName} />
+          <TokenIcon
+            assetSymbol={assetSymbol}
+            networkName={networkName}
+            icon={icon}
+            networkIcon={networkIcon}
+          />
           <span className="text-base/6 font-bold tracking-[-0.01em] text-balance-foreground">
             {assetSymbol}
           </span>

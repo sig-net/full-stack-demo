@@ -1,5 +1,9 @@
 import type { AssetAmount } from '@/lib/asset-amount'
+import { NO_ICON } from '@/lib/icon-source'
 import type { Wallet } from '@/lib/midnight/wallet/wallet'
+import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
+import { ORIGIN_NETWORKS } from '@/lib/tokens/token-info'
+import type { TokenInfoRegistry } from '@/lib/tokens/token-info-registry'
 
 /** A balance with the token type that identifies it, since several token types share a symbol. */
 export interface MidnightBalanceAmount extends AssetAmount {
@@ -7,35 +11,44 @@ export interface MidnightBalanceAmount extends AssetAmount {
 }
 
 /**
- * Reads the shielded and the unshielded balances of the connected wallet, shielded first, each
- * ledger ordered by token type. Amounts are base units written in full and every value is $0.00,
- * since the decimals, the symbol and the price of a Midnight token are not known yet: the symbol
- * is the first four characters of the token type hex.
+ * Reads the connected wallet's shielded balances, ordered by token type. A registered token shows
+ * its symbol, its amount in whole tokens and the chain it came from. An unregistered one shows the
+ * first four characters of its token type, its amount in base units and Midnight as its network.
+ * Every value is $0.00 until a price source exists.
  */
-export async function readMidnightBalanceAmounts(wallet: Wallet): Promise<MidnightBalanceAmount[]> {
-  const [shielded, unshielded] = await Promise.all([
-    wallet.getShieldedBalances(),
-    wallet.getUnshieldedBalances(),
-  ])
-  return [
-    ...amountsOf(MIDNIGHT_SHIELDED_NETWORK_NAME, shielded),
-    ...amountsOf(MIDNIGHT_UNSHIELDED_NETWORK_NAME, unshielded),
-  ]
-}
-
-export const MIDNIGHT_SHIELDED_NETWORK_NAME = 'Midnight shielded'
-export const MIDNIGHT_UNSHIELDED_NETWORK_NAME = 'Midnight unshielded'
-
-const TOKEN_CODE_LENGTH = 4
-
-function amountsOf(networkName: string, balances: Record<string, bigint>): MidnightBalanceAmount[] {
+export async function readMidnightBalanceAmounts(
+  wallet: Wallet,
+  registry: TokenInfoRegistry,
+): Promise<MidnightBalanceAmount[]> {
+  const balances = await wallet.getShieldedBalances()
   return Object.entries(balances)
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([tokenType, amount]) => ({
-      tokenType,
-      assetSymbol: tokenType.slice(0, TOKEN_CODE_LENGTH),
-      networkName,
-      amount: amount.toString(),
-      usdValue: '0.00',
-    }))
+    .map(([tokenType, amount]) => {
+      const info = registry.get({ ledger: 'shielded', tokenType })
+      if (info === undefined) {
+        return {
+          tokenType,
+          assetSymbol: tokenType.slice(0, UNREGISTERED_TOKEN_CODE_LENGTH),
+          networkName: MIDNIGHT_NETWORK_NAME,
+          amount: amount.toString(),
+          usdValue: '0.00',
+          icon: NO_ICON,
+          networkIcon: NO_ICON,
+        }
+      }
+      const network = ORIGIN_NETWORKS[info.origin.kind]
+      return {
+        tokenType,
+        assetSymbol: info.symbol,
+        networkName: network.name,
+        amount: formatTokenAmount(amount, info.decimals),
+        usdValue: '0.00',
+        icon: info.icon,
+        networkIcon: network.icon,
+      }
+    })
 }
+
+export const MIDNIGHT_NETWORK_NAME = 'Midnight'
+
+const UNREGISTERED_TOKEN_CODE_LENGTH = 4

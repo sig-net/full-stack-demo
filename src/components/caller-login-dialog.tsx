@@ -37,10 +37,10 @@ export function CallerLoginDialog({
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Log in</DialogTitle>
+          <DialogTitle>Set the identity secret</DialogTitle>
           <DialogDescription>
-            A random 32-byte secret in hex identifies you to the vault. It stays in tab memory and a
-            refresh requires re-entry, so keep a copy to return to the same caller.
+            A random 32-byte identity secret in hex identifies you to the vault. It stays in tab
+            memory and a refresh requires re-entry, so keep a copy to return to the same identity.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -54,7 +54,7 @@ export function CallerLoginDialog({
             onLogin(value)
           }}
         >
-          <Label htmlFor={id}>Caller secret</Label>
+          <Label htmlFor={id}>Identity secret</Label>
           <Input
             id={id}
             type="password"
@@ -87,7 +87,7 @@ export function CallerLoginDialog({
             Cancel
           </Button>
           <Button type="submit" form={`${id}-form`} disabled={!secret.trim()}>
-            Log in
+            Set secret
           </Button>
         </DialogFooter>
       </DialogContent>

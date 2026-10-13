@@ -1,14 +1,18 @@
 'use client'
 
 import { skipToken, useQuery } from '@tanstack/react-query'
-import { Download } from 'lucide-react'
+import { Download, EyeOff, type LucideIcon, Wallet } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { BalanceBox } from '@/components/balance-box'
+import { useCaller } from '@/components/contexts/CallerContext'
 import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
+import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { readMidnightBalanceAmounts } from '@/lib/balances/midnight-balances'
+import { type DepositPrerequisite, missingDepositPrerequisites } from '@/lib/deposit-prerequisites'
 import { walletConnectionStatus } from '@/lib/midnight/wallet/connection-status'
 
 const BALANCES_REFETCH_INTERVAL_MS = 10_000
@@ -16,11 +20,23 @@ const BALANCES_REFETCH_INTERVAL_MS = 10_000
 export function BalancesSection(): ReactNode {
   const { midnightNetwork } = useConfig()
   const connection = useMidnightWallet()
+  const registry = useTokenInfoRegistry()
+  const { callerSecret } = useCaller()
   const { wallet, generation } = connection
   const status = walletConnectionStatus(connection)
+  const missing = missingDepositPrerequisites({
+    walletConnected: wallet !== null,
+    identitySecretSet: callerSecret !== null,
+  })
+  const depositButton = (
+    <Button size="lg" disabled={missing.length > 0}>
+      <Download aria-hidden />
+      <span className="px-0.5">Deposit</span>
+    </Button>
+  )
   const balances = useQuery({
     queryKey: ['midnight-balances', midnightNetwork.networkId, generation],
-    queryFn: wallet === null ? skipToken : () => readMidnightBalanceAmounts(wallet),
+    queryFn: wallet === null ? skipToken : () => readMidnightBalanceAmounts(wallet, registry),
     refetchInterval: BALANCES_REFETCH_INTERVAL_MS,
   })
   return (
@@ -32,10 +48,25 @@ export function BalancesSection(): ReactNode {
         >
           Balances
         </h2>
-        <Button size="lg">
-          <Download aria-hidden />
-          <span className="px-0.5">Deposit</span>
-        </Button>
+        {missing.length === 0 ? (
+          depositButton
+        ) : (
+          // A disabled button takes no pointer events, so the wrapper is the hover, tap and focus
+          // target, and a popover rather than a tooltip opens on the tap a disabled button invites.
+          <Popover>
+            <PopoverTrigger
+              openOnHover
+              delay={0}
+              nativeButton={false}
+              render={<span tabIndex={0} className="inline-flex rounded-xs" />}
+            >
+              {depositButton}
+            </PopoverTrigger>
+            <PopoverContent side="top" className="w-auto max-w-xs">
+              <DepositPrerequisitesMessage missing={missing} />
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
       {wallet === null ? (
         <p role="status" className="text-muted-foreground">
@@ -68,3 +99,29 @@ export function BalancesSection(): ReactNode {
     </section>
   )
 }
+
+/** A checklist of what a deposit still needs, each item with the icon of its app bar control. */
+function DepositPrerequisitesMessage({ missing }: { missing: DepositPrerequisite[] }): ReactNode {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="font-medium">To Deposit:</p>
+      <ul className="flex flex-col gap-1">
+        {missing.map((prerequisite) => {
+          const { Icon, label } = DEPOSIT_PREREQUISITE_ITEMS[prerequisite]
+          return (
+            <li key={prerequisite} className="flex items-center gap-1.5">
+              <Icon aria-hidden className="size-4 shrink-0" />
+              {label}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+const DEPOSIT_PREREQUISITE_ITEMS: Record<DepositPrerequisite, { Icon: LucideIcon; label: string }> =
+  {
+    wallet: { Icon: Wallet, label: 'connect wallet' },
+    identitySecret: { Icon: EyeOff, label: 'set identity secret' },
+  }

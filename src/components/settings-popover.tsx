@@ -1,7 +1,6 @@
 import { Settings } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { CallerPanel } from '@/components/caller-panel'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
@@ -20,7 +19,7 @@ export function SettingsPopover(): ReactNode {
         Settings
       </PopoverTrigger>
       <PopoverContent align="end">
-        <CallerPanel />
+        <p className="text-sm text-muted-foreground">Nothing to configure yet.</p>
       </PopoverContent>
     </Popover>
   )

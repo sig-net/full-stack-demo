@@ -370,8 +370,11 @@ application domain tag, in hex, computed on the server. It is kept independent o
 contract's own `userCommitment` of the same secret on purpose: the contract may change its hashing
 at a fork, and the application's resource names must survive that.
 
-- A user logs in through the Settings popover by pasting a caller secret or generating a fresh
-  one. `CallerProvider` (`src/components/contexts/CallerContext.tsx`) holds the secret in page
+- The UI calls the caller secret the identity secret. A user sets it through the identity secret
+  popover (`src/components/caller-popover.tsx`, the crossed-out eye beside the wallet button in
+  the app bar, dotted green once set) or the Identity secret item of the mobile menu, by pasting
+  a secret or generating a fresh one, and the panel then offers a copy button for the secret and
+  a Clear secret button. `CallerProvider` (`src/components/contexts/CallerContext.tsx`) holds the secret in page
   memory only, so a reload logs out, and `useCaller()` exposes it with the caller name and the
   login state.
 - Every server action takes the caller secret as its first argument. `resolveCaller()`
@@ -942,17 +945,20 @@ activity table render every entry at full height and leave scrolling to `HomeLay
 under Styling and theme.
 
 - `BalancesSection` (`src/components/balances-section.tsx`) reads the connected Midnight wallet's
-  balances through a React Query query, refetched every ten seconds and keyed on the network and
-  the wallet connection generation, so a reconnected wallet never shows a replaced wallet's
-  numbers. The query function is `readMidnightBalanceAmounts()`
-  (`src/lib/balances/midnight-balances.ts`): the shielded balances first, then the unshielded,
-  each ordered by token type. The decimals, symbol and price of a Midnight token are not known
-  yet, so the amount is the base-unit integer written in full, the value is always `$0.00` and the
-  symbol is the first four characters of the token type hex (NIGHT reads `0000`). Without a wallet
-  the section says so, and a failed read shows the error instead of a zero. Each entry renders a
-  `BalanceBox`: the amount, its US dollar value, the `TokenIcon` (`src/components/token-icon.tsx`,
-  the asset icon with the network badge over its bottom right corner) and the Swap and Send
-  buttons. The Deposit, Swap and Send buttons do nothing yet.
+  shielded balances through a React Query query, refetched every ten seconds and keyed on the
+  network and the wallet connection generation, so a reconnected wallet never shows a replaced
+  wallet's numbers. The query function is `readMidnightBalanceAmounts()`
+  (`src/lib/balances/midnight-balances.ts`), ordered by token type. A token the registry knows
+  (see Token information below) shows its symbol, its amount in whole tokens and the chain it
+  came from. A token it does not know shows the first four characters of its token type as the
+  symbol, its amount in base units written in full and Midnight as its network. Every value is
+  `$0.00` until a price source exists. Without a wallet the section says so, and a failed read
+  shows the error instead of a zero. Each entry renders a `BalanceBox`: the amount, its US dollar
+  value, the `TokenIcon` and the Swap and Send buttons. The Deposit button is disabled until a
+  Midnight wallet is connected and the identity secret is set, and while disabled a popover on
+  hover, tap or focus names what is missing with the icon of its app bar control
+  (`missingDepositPrerequisites()` in `src/lib/deposit-prerequisites.ts`). The Deposit, Swap and
+  Send buttons do nothing yet when enabled.
 - `ActivitySection` (`src/components/activity-section.tsx`) reads `src/lib/activity/dummy-activity.ts`
   and renders `ActivityTable`. Each entry is a collapsible table body: from the `md` breakpoint up
   every column shows, below it a chevron expands the timestamp and block explorer details. The
@@ -962,8 +968,49 @@ under Styling and theme.
   `src/lib/swap/dummy-swap-tokens.ts`.
 
 `AssetAmount` (`src/lib/asset-amount.ts`) is the one shape for an amount of an asset on a network,
-shared by the balances and the activity entries. Icons are lucide placeholders until the asset
-and network artwork arrives.
+shared by the balances and the activity entries: the symbol, the network the asset came from,
+the exact amount and value as strings, and an `IconSource` (`src/lib/icon-source.ts`) for the
+asset and for the network. `TokenIcon` (`src/components/token-icon.tsx`) renders the pair as a
+28px avatar with a 12px network badge over its bottom right corner: an `image` source is a file
+under `public` served by its URL path, a `web3icons` source loads that icon from
+`@web3icons/react/dynamic` by its lookup name (a token symbol or a network id), and `none`
+renders the lucide coin glyph with an empty badge.
+
+The BTC, ETH and SOL artwork the design draws is bundled rather than fetched: `public/token-icons`
+holds the `btc`, `eth` and `SOL` components of `Product UI.fig` as SVG, and `public/network-icons`
+the 12px `BitcoinBadge`, `eth` and `SOL` badge instances with their own rounded border, so the
+badge frame draws none around a bundled image. `src/lib/tokens/bundled-icons.ts` names them by
+symbol and by network, and the dummy activity uses those entries.
+
+### Token information
+
+A Midnight balance is keyed by a 64-character token type, which says nothing about what the
+token is. `src/lib/tokens` holds what the UI needs to render one:
+
+- `token-id.ts`: `TokenId`, the ledger plus the raw token type. The ledger gives the shielded and
+  the unshielded native token the same raw hex, so the raw type alone is ambiguous.
+- `token-info.ts`: `TokenInfo`, the symbol, name, display decimals, icon source and origin of a
+  token, and `ORIGIN_NETWORKS`, the badge network of each origin kind (an ERC20 vault token came
+  from Ethereum).
+- `token-info-registry.ts`: `TokenInfoRegistry`, a lookup by `TokenId` built from a list of
+  `TokenInfo`. An unknown token answers undefined, and the balances fall back as described above.
+- `format-token-amount.ts`: `formatTokenAmount()`, base units to an exact decimal in whole tokens.
+
+The only source of entries today is `vaultTokenInfos()`
+(`src/lib/midnight/ethereum-erc20-vault/vault-token-infos.ts`). For each ERC20 the contract
+package exports (Circle USDC and EURC, WETH9, Chainlink LINK, Aave's test USDC and its static
+wrapper) it derives the shielded token type the configured vault mints, with `vaultTokenType()`
+over the vault's own domain-separator circuit, and pairs it with the token's symbol, name, icon
+and decimals. The vault mints the ERC20's base-unit amount one to one, so the display decimals
+are the ERC20's own `decimals()`, read from each contract on the Sepolia fork when the table was
+written. The addresses are Sepolia's, and the local chain is a Sepolia fork, so the table serves
+chain 11155111 and chain 31337 and no other.
+
+`TokenInfoRegistryProvider` (`src/components/contexts/TokenInfoRegistryContext.tsx`) builds the
+registry once per mount from the vault address and chain id in `useConfig()`, and
+`useTokenInfoRegistry()` hands it to the balances query. Valuation is the planned next source: a
+price port behind a React Query hook in the same context file, which is why `usdValue` is a
+string the UI already renders.
 
 ## Styling and theme
 

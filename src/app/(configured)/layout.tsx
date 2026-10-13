@@ -7,6 +7,7 @@ import { ConfigProvider } from '@/components/contexts/ConfigContext'
 import { MidnightWalletProvider } from '@/components/contexts/MidnightWalletContext'
 import { ReactQueryProvider } from '@/components/contexts/ReactQueryContext'
 import { SplashScreen } from '@/components/splash-screen'
+import { TokenInfoRegistryProvider } from '@/components/contexts/TokenInfoRegistryContext'
 import { getClientConfig } from '@/lib/config/server-config'
 
 export default async function ConfiguredLayout({ children }: LayoutProps<'/'>): Promise<ReactNode> {
@@ -19,15 +20,17 @@ export default async function ConfiguredLayout({ children }: LayoutProps<'/'>): 
     <Suspense fallback={<SplashScreen />}>
       <ReactQueryProvider>
         <ConfigProvider config={config}>
-          <CallerProvider>
-            <MidnightWalletProvider>
-              {/* Below md the app bar stays at the top while the page scrolls under it. */}
-              <div className="sticky top-0 z-10 md:static">
-                <AppBar />
-              </div>
-              {children}
-            </MidnightWalletProvider>
-          </CallerProvider>
+          <TokenInfoRegistryProvider>
+            <CallerProvider>
+              <MidnightWalletProvider>
+                {/* Below md the app bar stays at the top while the page scrolls under it. */}
+                <div className="sticky top-0 z-10 md:static">
+                  <AppBar />
+                </div>
+                {children}
+              </MidnightWalletProvider>
+            </CallerProvider>
+          </TokenInfoRegistryProvider>
         </ConfigProvider>
       </ReactQueryProvider>
     </Suspense>

@@ -1,6 +1,7 @@
-import { Menu, Settings, Wallet } from 'lucide-react'
+import { EyeOff, Menu, Settings, Wallet } from 'lucide-react'
 import type { ReactNode } from 'react'
 
+import { CallerPanel } from '@/components/caller-panel'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Separator } from '@/components/ui/separator'
@@ -18,6 +19,20 @@ export function MobileMenu(): ReactNode {
           <SheetTitle>Menu</SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1 px-2">
+          <Collapsible>
+            <CollapsibleTrigger
+              render={<Button variant="ghost" size="lg" className="w-full justify-start" />}
+            >
+              <EyeOff />
+              Identity secret
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-4 pt-2 pb-3">
+                <CallerPanel />
+              </div>
+              <Separator />
+            </CollapsibleContent>
+          </Collapsible>
           <Collapsible>
             <CollapsibleTrigger
               render={<Button variant="ghost" size="lg" className="w-full justify-start" />}

@@ -1,120 +1,127 @@
 import { describe, expect, test } from 'vitest'
 
 import {
-  MIDNIGHT_SHIELDED_NETWORK_NAME,
-  MIDNIGHT_UNSHIELDED_NETWORK_NAME,
+  MIDNIGHT_NETWORK_NAME,
   type MidnightBalanceAmount,
   readMidnightBalanceAmounts,
 } from '@/lib/balances/midnight-balances'
+import { NO_ICON } from '@/lib/icon-source'
 import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
+import { BUNDLED_NETWORK_ICONS } from '@/lib/tokens/bundled-icons'
+import type { TokenInfo } from '@/lib/tokens/token-info'
+import { TokenInfoRegistry } from '@/lib/tokens/token-info-registry'
 
-const NIGHT = '0'.repeat(64)
-const TOKEN_A = `a1b2${'0'.repeat(60)}`
-const TOKEN_B = `ffff${'1'.repeat(60)}`
-const SHIELDED_NIGHT_LIKE = `0000${'f'.repeat(60)}`
+const USDC_TYPE = `0000${'a'.repeat(60)}`
+const UNKNOWN_TYPE = '0'.repeat(64)
+const OTHER_UNKNOWN_TYPE = `0000${'f'.repeat(60)}`
+
+const USDC: TokenInfo = {
+  id: { ledger: 'shielded', tokenType: USDC_TYPE },
+  symbol: 'USDC',
+  name: 'USD Coin',
+  decimals: 6,
+  icon: { source: 'web3icons', name: 'USDC' },
+  origin: {
+    kind: 'ethereum-erc20-vault',
+    chainId: 11155111,
+    erc20Address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+    issuer: 'Circle',
+  },
+}
+
+const registry = new TokenInfoRegistry([USDC])
 
 interface Case {
   readonly name: string
   readonly shielded: Record<string, bigint>
-  readonly unshielded: Record<string, bigint>
   readonly expected: MidnightBalanceAmount[]
 }
 
 const cases: Case[] = [
   {
-    name: 'no balances on either ledger gives an empty list',
+    name: 'no shielded balances gives an empty list',
     shielded: {},
-    unshielded: {},
     expected: [],
   },
   {
-    name: 'the token code is the first four hex characters and the amount is written in full',
-    shielded: {},
-    unshielded: { [NIGHT]: 1234567890123456789n },
+    name: 'a registered token shows its symbol, whole-token amount, icons and origin chain',
+    shielded: { [USDC_TYPE]: 1_500_000n },
     expected: [
       {
-        tokenType: NIGHT,
+        tokenType: USDC_TYPE,
+        assetSymbol: 'USDC',
+        networkName: 'Ethereum',
+        amount: '1.5',
+        usdValue: '0.00',
+        icon: { source: 'web3icons', name: 'USDC' },
+        networkIcon: BUNDLED_NETWORK_ICONS.ethereum,
+      },
+    ],
+  },
+  {
+    name: 'an unregistered token shows four hex characters, base units and no icons',
+    shielded: { [UNKNOWN_TYPE]: 1234567890123456789n },
+    expected: [
+      {
+        tokenType: UNKNOWN_TYPE,
         assetSymbol: '0000',
-        networkName: MIDNIGHT_UNSHIELDED_NETWORK_NAME,
+        networkName: MIDNIGHT_NETWORK_NAME,
         amount: '1234567890123456789',
         usdValue: '0.00',
+        icon: NO_ICON,
+        networkIcon: NO_ICON,
       },
     ],
   },
   {
-    name: 'shielded balances come first and each ledger is ordered by token type',
-    shielded: { [TOKEN_B]: 5n, [TOKEN_A]: 7n },
-    unshielded: { [NIGHT]: 0n },
+    name: 'balances are ordered by token type and stay distinct when symbols collide',
+    shielded: { [OTHER_UNKNOWN_TYPE]: 3n, [USDC_TYPE]: 2_000_000n, [UNKNOWN_TYPE]: 4n },
     expected: [
       {
-        tokenType: TOKEN_A,
-        assetSymbol: 'a1b2',
-        networkName: MIDNIGHT_SHIELDED_NETWORK_NAME,
-        amount: '7',
-        usdValue: '0.00',
-      },
-      {
-        tokenType: TOKEN_B,
-        assetSymbol: 'ffff',
-        networkName: MIDNIGHT_SHIELDED_NETWORK_NAME,
-        amount: '5',
-        usdValue: '0.00',
-      },
-      {
-        tokenType: NIGHT,
+        tokenType: UNKNOWN_TYPE,
         assetSymbol: '0000',
-        networkName: MIDNIGHT_UNSHIELDED_NETWORK_NAME,
-        amount: '0',
-        usdValue: '0.00',
-      },
-    ],
-  },
-  {
-    name: 'token types sharing a symbol stay distinct by token type, on one ledger or across both',
-    shielded: { [SHIELDED_NIGHT_LIKE]: 3n, [NIGHT]: 2n },
-    unshielded: { [NIGHT]: 4n },
-    expected: [
-      {
-        tokenType: NIGHT,
-        assetSymbol: '0000',
-        networkName: MIDNIGHT_SHIELDED_NETWORK_NAME,
-        amount: '2',
-        usdValue: '0.00',
-      },
-      {
-        tokenType: SHIELDED_NIGHT_LIKE,
-        assetSymbol: '0000',
-        networkName: MIDNIGHT_SHIELDED_NETWORK_NAME,
-        amount: '3',
-        usdValue: '0.00',
-      },
-      {
-        tokenType: NIGHT,
-        assetSymbol: '0000',
-        networkName: MIDNIGHT_UNSHIELDED_NETWORK_NAME,
+        networkName: MIDNIGHT_NETWORK_NAME,
         amount: '4',
         usdValue: '0.00',
+        icon: NO_ICON,
+        networkIcon: NO_ICON,
+      },
+      {
+        tokenType: USDC_TYPE,
+        assetSymbol: 'USDC',
+        networkName: 'Ethereum',
+        amount: '2',
+        usdValue: '0.00',
+        icon: { source: 'web3icons', name: 'USDC' },
+        networkIcon: BUNDLED_NETWORK_ICONS.ethereum,
+      },
+      {
+        tokenType: OTHER_UNKNOWN_TYPE,
+        assetSymbol: '0000',
+        networkName: MIDNIGHT_NETWORK_NAME,
+        amount: '3',
+        usdValue: '0.00',
+        icon: NO_ICON,
+        networkIcon: NO_ICON,
       },
     ],
   },
 ]
 
 describe('readMidnightBalanceAmounts', () => {
-  test.each(cases)('$name', async ({ shielded, unshielded, expected }) => {
+  test.each(cases)('$name', async ({ shielded, expected }) => {
     const wallet = mock<Wallet>('wallet', {
       getShieldedBalances: () => Promise.resolve(shielded),
-      getUnshieldedBalances: () => Promise.resolve(unshielded),
     })
-    await expect(readMidnightBalanceAmounts(wallet)).resolves.toEqual(expected)
+    await expect(readMidnightBalanceAmounts(wallet, registry)).resolves.toEqual(expected)
   })
 
   test('a failed read rejects instead of reporting zero', async () => {
     const wallet = mock<Wallet>('wallet', {
       getShieldedBalances: () => Promise.reject(new Error('Wallet is still synchronising.')),
-      getUnshieldedBalances: () => Promise.resolve({}),
     })
-    await expect(readMidnightBalanceAmounts(wallet)).rejects.toThrow(
+    await expect(readMidnightBalanceAmounts(wallet, registry)).rejects.toThrow(
       'Wallet is still synchronising.',
     )
   })

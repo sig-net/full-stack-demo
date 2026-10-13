@@ -3757,6 +3757,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@web3icons/common@npm:0.11.53":
+  version: 0.11.53
+  resolution: "@web3icons/common@npm:0.11.53"
+  checksum: 10c0/b1d1c8fb47a1c7589eb0a95b2541f29da06063df6ed51e9752d189e14a57908362181cb6e4b88e70abeb5c42b4c93691b5feae7a36be6dfb8a8da9183ebe4891
+  languageName: node
+  linkType: hard
+
+"@web3icons/react@npm:^4.1.24":
+  version: 4.1.24
+  resolution: "@web3icons/react@npm:4.1.24"
+  dependencies:
+    "@web3icons/common": "npm:0.11.53"
+  peerDependencies:
+    react: ^18.0.0 || ^19.0.0
+  checksum: 10c0/19e0c7ef72750035677f30e7bb0272e44cfb10537d99c547bcb6eafcefab0d05510f6ff83ff80506ae351969f2b710c1366a8ec1ec5bf328b888beda9fd0f536
+  languageName: node
+  linkType: hard
+
 "@wry/caches@npm:^1.0.0":
   version: 1.0.1
   resolution: "@wry/caches@npm:1.0.1"
@@ -5348,6 +5366,7 @@ __metadata:
   dependencies:
     "@base-ui/react": "npm:^1.8.0"
     "@midnight-ntwrk/compact-js": "npm:2.5.5-rc.7"
+    "@midnight-ntwrk/compact-runtime": "npm:0.18.0-rc.1"
     "@midnight-ntwrk/midnight-js": "npm:5.0.0-beta.6"
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "npm:5.0.0-beta.6"
     "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "npm:5.0.0-beta.6"
@@ -5371,6 +5390,7 @@ __metadata:
     "@types/pg": "npm:^8.23.1"
     "@types/react": "npm:^19.3.0"
     "@types/react-dom": "npm:^19.3.0"
+    "@web3icons/react": "npm:^4.1.24"
     babel-plugin-react-compiler: "npm:^1.0.0"
     buffer: "npm:^6.0.3"
     class-variance-authority: "npm:^0.7.1"

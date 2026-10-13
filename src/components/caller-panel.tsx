@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react'
 
 import { CallerLoginDialog } from '@/components/caller-login-dialog'
 import { useCaller } from '@/components/contexts/CallerContext'
+import { CopyButton } from '@/components/copy-button'
 import { Button } from '@/components/ui/button'
 
 /** The hex caller id shortened to its first six and last four characters. */
@@ -12,29 +13,30 @@ function abbreviateCaller(callerName: string): string {
   return `${callerId.slice(0, 6)}…${callerId.slice(-4)}`
 }
 
-/** The caller's login state: the caller once logged in, otherwise the way in. */
+/** The identity secret's state: the caller it names and a copy of the secret once set, otherwise the way in. */
 export function CallerPanel(): ReactNode {
-  const { callerName, loggingIn, error, login, logout } = useCaller()
+  const { callerSecret, callerName, loggingIn, error, login, logout } = useCaller()
   const [open, setOpen] = useState(false)
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-sm font-medium">Caller</p>
-      {callerName === null ? (
+      <p className="text-sm font-medium">Identity secret</p>
+      {callerSecret === null || callerName === null ? (
         <>
-          <p className="text-sm text-muted-foreground">
-            {loggingIn ? 'Logging in…' : 'Not logged in.'}
-          </p>
+          <p className="text-sm text-muted-foreground">{loggingIn ? 'Setting…' : 'Not set.'}</p>
           <Button type="button" size="sm" disabled={loggingIn} onClick={() => setOpen(true)}>
-            Log in
+            Set secret
           </Button>
         </>
       ) : (
         <>
-          <p className="font-mono text-sm" title={callerName}>
-            {abbreviateCaller(callerName)}
-          </p>
+          <span className="flex items-center gap-1">
+            <CopyButton label="identity secret" value={callerSecret} />
+            <span className="font-mono text-sm" title={callerName}>
+              {abbreviateCaller(callerName)}
+            </span>
+          </span>
           <Button type="button" size="sm" variant="secondary" onClick={logout}>
-            Log out
+            Clear secret
           </Button>
         </>
       )}

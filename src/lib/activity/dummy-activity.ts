@@ -1,11 +1,14 @@
 import type { ActivityEntry } from '@/lib/activity/activity-entry'
 import type { AssetAmount } from '@/lib/asset-amount'
+import { BUNDLED_NETWORK_ICONS, BUNDLED_TOKEN_ICONS } from '@/lib/tokens/bundled-icons'
 
 const BTC_ON_BITCOIN: AssetAmount = {
   assetSymbol: 'BTC',
   networkName: 'Bitcoin',
   amount: '0.013',
   usdValue: '1478.35',
+  icon: BUNDLED_TOKEN_ICONS.BTC,
+  networkIcon: BUNDLED_NETWORK_ICONS.bitcoin,
 }
 
 const ETH_ON_ETHEREUM: AssetAmount = {
@@ -13,6 +16,8 @@ const ETH_ON_ETHEREUM: AssetAmount = {
   networkName: 'Ethereum',
   amount: '0.5',
   usdValue: '1478.35',
+  icon: BUNDLED_TOKEN_ICONS.ETH,
+  networkIcon: BUNDLED_NETWORK_ICONS.ethereum,
 }
 
 /** The activity drawn in the design, shown until a transaction data source replaces it. */

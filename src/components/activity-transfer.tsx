@@ -44,11 +44,16 @@ interface ActivityAssetProps {
 }
 
 function ActivityAsset({ asset, className }: ActivityAssetProps): ReactNode {
-  const { assetSymbol, networkName, amount, usdValue } = asset
+  const { assetSymbol, networkName, amount, usdValue, icon, networkIcon } = asset
   return (
     <div className={cn('flex shrink-0 items-center gap-1.5', className)}>
       <div className="max-md:hidden">
-        <TokenIcon assetSymbol={assetSymbol} networkName={networkName} />
+        <TokenIcon
+          assetSymbol={assetSymbol}
+          networkName={networkName}
+          icon={icon}
+          networkIcon={networkIcon}
+        />
       </div>
       {/* From md up the amount glyphs centre 5px and the USD glyphs 23.5px from the stack top. */}
       <div className="flex flex-col md:h-7">
