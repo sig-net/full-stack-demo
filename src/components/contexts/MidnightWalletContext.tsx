@@ -14,12 +14,7 @@ import {
 } from 'react'
 
 import { useConfig } from '@/components/contexts/ConfigContext'
-import {
-  clearStoredSeed,
-  readStoredSeed,
-  storeSeed,
-  subscribeToStoredSeed,
-} from '@/lib/midnight/wallet/seed-storage'
+import { seedStorage } from '@/lib/midnight/wallet/seed-storage'
 import type { Wallet, WalletAddressSnapshot } from '@/lib/midnight/wallet/wallet'
 
 export interface MidnightWalletContextValue {
@@ -58,7 +53,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
   const [error, setError] = useState<string | null>(null)
   const [publishedGeneration, setPublishedGeneration] = useState(0)
   // Undefined only while server rendering and hydrating, before the store has been read.
-  const storedSeed = useSyncExternalStore(subscribeToStoredSeed, readStoredSeed, () => undefined)
+  const storedSeed = useSyncExternalStore(seedStorage.subscribe, seedStorage.read, () => undefined)
   const restoring =
     storedSeed === undefined ||
     (storedSeed !== null && wallet === null && !connecting && error === null)
@@ -70,7 +65,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
   const disconnect = (): void => {
     generation.current += 1
     setPublishedGeneration(generation.current)
-    clearStoredSeed()
+    seedStorage.clear()
     installedSeed.current = null
     inFlight.current = null
     void active.current?.disconnect().catch(() => undefined)
@@ -90,7 +85,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
    * @returns The refusal, or null when the connection may go ahead.
    */
   const heldConnection = (seed?: string): Error | null => {
-    const stored = readStoredSeed()
+    const stored = seedStorage.read()
     const held =
       active.current !== null || inFlight.current !== null || (stored !== null && stored !== seed)
     return held ? new Error('Disconnect the current wallet before connecting another.') : null
@@ -113,7 +108,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
     setError(null)
     const attempt = generation.current
     installedSeed.current = seed
-    storeSeed(seed)
+    seedStorage.write(seed)
     setConnecting(true)
     setSyncStatus('starting wallet…')
     const promise = (async () => {
@@ -139,7 +134,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
           void active.current?.disconnect().catch(() => undefined)
           active.current = null
           installedSeed.current = null
-          clearStoredSeed()
+          seedStorage.clear()
           setWallet(null)
           setAddresses(null)
           setSyncStatus('')
@@ -158,7 +153,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
   }
 
   const restoreStoredSeed = useEffectEvent(() => {
-    const stored = readStoredSeed()
+    const stored = seedStorage.read()
     if (stored === null) return
     // The restore starts after the mount commit, so its state updates render as a new pass.
     queueMicrotask(() => {

@@ -375,9 +375,11 @@ at a fork, and the application's resource names must survive that.
   popover (`src/components/caller-popover.tsx`, the crossed-out eye beside the wallet button in
   the app bar, dotted green once set) or the Identity secret item of the mobile menu, by pasting
   a secret or generating a fresh one, and the panel then offers a copy button for the secret, the
-  caller's deposit account and a Clear secret button. `CallerProvider` (`src/components/contexts/CallerContext.tsx`) holds the secret in page
-  memory only, so a reload logs out, and `useCaller()` exposes it with the caller name, the
-  deposit account and the login state. The deposit account is derived in the browser by
+  caller's deposit account and a Clear secret button. `CallerProvider` (`src/components/contexts/CallerContext.tsx`) holds the secret for the
+  page and writes it to local storage (`src/lib/caller/secret-storage.ts`) once the login
+  succeeds, so a reload logs the same caller in again until Clear secret removes it. While the
+  stored secret is being checked on load, the panel reports it as restoring. `useCaller()`
+  exposes the secret with the caller name, the deposit account and the login state. The deposit account is derived in the browser by
   `depositAccountOf()` (`src/lib/midnight/ethereum-erc20-vault/deposit-account.ts`, the same
   function the deposit service uses) from the secret and the public signet and vault
   configuration, so the UI knows the account before any deposit exists.
@@ -926,10 +928,11 @@ wallet components read its types and the connection status label.
   results are dropped, its wallet is disconnected exactly once, and a query keyed on the
   generation never outlives the wallet it read. The SDK loads on the first connection through a
   dynamic import.
-  The connected seed is written to local storage (`src/lib/midnight/wallet/seed-storage.ts`) and
-  restored on the next load, so a refresh reconnects the same wallet. While a seed is stored, no
-  other seed can connect: disconnecting clears the store, and so does a failed connection. This
-  keeps a wallet secret in a persistent store on purpose, as a convenience for a demo.
+  The connected seed is written to local storage (`src/lib/midnight/wallet/seed-storage.ts`, a
+  slot from `src/lib/local-storage-slot.ts`) and restored on the next load, so a refresh
+  reconnects the same wallet. While a seed is stored, no other seed can connect: disconnecting
+  clears the store, and so does a failed connection. This keeps a wallet secret in a persistent
+  store on purpose, as a convenience for a demo, and the identity secret is kept the same way.
 - `WalletPanel` (`src/components/wallet-panel.tsx`) renders the wallet for both layouts: the
   connection status, the addresses once known, the seed dialog and disconnect. From the `md`
   breakpoint up, `WalletPopover` shows it from the app bar button that carries the status dot.

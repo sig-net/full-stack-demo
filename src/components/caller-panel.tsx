@@ -10,15 +10,23 @@ import { abbreviateHex } from '@/lib/abbreviate-hex'
 
 /** The identity secret's state: the caller it names and a copy of the secret once set, otherwise the way in. */
 export function CallerPanel(): ReactNode {
-  const { callerSecret, callerName, depositAccount, loggingIn, error, login, logout } = useCaller()
+  const { callerSecret, callerName, depositAccount, restoring, loggingIn, error, login, logout } =
+    useCaller()
   const [open, setOpen] = useState(false)
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm font-medium">Identity secret</p>
       {callerSecret === null || callerName === null || depositAccount === null ? (
         <>
-          <p className="text-sm text-muted-foreground">{loggingIn ? 'Setting…' : 'Not set.'}</p>
-          <Button type="button" size="sm" disabled={loggingIn} onClick={() => setOpen(true)}>
+          <p className="text-sm text-muted-foreground">
+            {restoring ? 'Checking for a saved secret…' : loggingIn ? 'Setting…' : 'Not set.'}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            disabled={restoring || loggingIn}
+            onClick={() => setOpen(true)}
+          >
             Set secret
           </Button>
         </>

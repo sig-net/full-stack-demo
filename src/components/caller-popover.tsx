@@ -1,6 +1,6 @@
 'use client'
 
-import { EyeOff } from 'lucide-react'
+import { EyeOff, LoaderCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { CallerPanel } from '@/components/caller-panel'
@@ -11,8 +11,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 
 /** The identity secret entry point in the app bar: the crossed-out eye, dotted once a secret is set. */
 export function CallerPopover(): ReactNode {
-  const { callerName, loggingIn } = useCaller()
-  const status = callerName === null ? (loggingIn ? 'logging in' : 'not set') : 'set'
+  const { callerName, restoring, loggingIn } = useCaller()
+  const status =
+    callerName !== null ? 'set' : restoring ? 'restoring' : loggingIn ? 'logging in' : 'not set'
   return (
     <Popover>
       <PopoverTrigger
@@ -25,7 +26,11 @@ export function CallerPopover(): ReactNode {
           />
         }
       >
-        <EyeOff className="size-6" />
+        {restoring || loggingIn ? (
+          <LoaderCircle className="size-6 animate-spin" />
+        ) : (
+          <EyeOff className="size-6" />
+        )}
         {callerName !== null && (
           <span className="absolute right-2 bottom-2 flex">
             <StatusDot tone="success" />
