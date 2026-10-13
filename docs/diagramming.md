@@ -29,10 +29,11 @@ Two kinds of diagram live here, and each has its own conventions below:
 
 ## Colour palette
 
-Colours mean who performs a transition. Every transition edge carries the colour of the
-actor whose code calls the state controller method, and nothing else is coloured:
-structure stays neutral, default black strokes on a white background, lanes and shapes
-unfilled.
+On a state machine, colours mean who performs a transition. Every transition edge carries
+the colour of the actor whose code calls the state controller method, and nothing else is
+coloured: structure stays neutral, default black strokes on a white background, lanes and
+shapes unfilled. An action flow colours its edges by stage instead (see the stage table
+under Action flows).
 
 | Actor    | Colour    | Performs                                                                 |
 | -------- | --------- | ------------------------------------------------------------------------ |
@@ -40,8 +41,8 @@ unfilled.
 | resolver | `#3969AC` | a transition the state resolver makes after a slow external call         |
 | expiry   | `#7F3C8D` | the transition the expiry sweep makes when `expireTime` passes           |
 
-Coloured transition edges turn their corners as arcs, and the neutral call edges of an
-action flow keep sharp corners, both carried by the palette's swatches.
+Coloured edges, state-machine transitions and action-flow calls alike, turn their
+corners as arcs, carried by the palette's swatches.
 
 ## Labels
 
@@ -55,6 +56,13 @@ action flow keep sharp corners, both carried by the palette's swatches.
   subject lands there in the same change as its first label.
 - On an action flow, a call edge's label is the call as the calling method spells it, a
   code label (`this.transactionRepository.get(args.name)`), which the format rule exempts.
+  Where the argument list spans several lines or nests another call, the label keeps the
+  callee exactly as written and elides the arguments (`createUnprovenCallTx(...)`), so it
+  still greps. A call from one row to another carries no label, since the two rows already
+  name caller and callee: labels go on the server-action calls from the browser, on calls
+  through a closure the backend wires in (`this.onFlushed()`), and on every call into an
+  actor box. Edges that leave one row with the same call share their first run, which
+  carries the label once.
 - Code text uses Menlo/Monaco monospace at 12px, the keyword in `#AF00DB`, the name in
   `#202020`. Copy the sample cell from the palette card.
 
@@ -111,14 +119,38 @@ first label, keeping one verb one meaning.
   source order.
 - An entity (a resource the action reads or writes, or an event it publishes) is an
   entity container copied whole from the diagram library, with a row per field.
-- A call is one neutral edge from the calling method's row to the called method's row,
-  attached at the rows' side midpoints, so the edge names exactly which method calls
-  which.
-- A store or broker the action reaches (Postgres, Kafka, the proof server, the indexer)
-  is an actor box carrying its icon from the icon table, and the edge to it leaves the
-  method row that reaches it.
+- A call is one edge from the calling method's row to the called method's row, attached
+  at the rows' side midpoints, so the edge names exactly which method calls which. It
+  carries the colour of the stage in which the call first happens (the stage table
+  below): a later stage that repeats the call reuses that edge.
+- A store or broker the action reaches (Postgres, Kafka, the proof server, the indexer,
+  the node) is an actor box carrying its icon from the icon table, and the edge to it
+  leaves the method row that reaches it. The node carries the Midnight logo, the icon of
+  the Midnight chain itself. Where one box would force two calls of the same stage to
+  cross, the store is drawn once per group of callers: the deposit flow has a Postgres box
+  beside each repository and two Indexer bars, one under the vault ledger and one under
+  the other ports. A bar is entered from its top or bottom side.
 - Container text uses the default font at normal weight with no icon: bold and icons
   stay with the edge labels and actor boxes.
+
+### Flow stages
+
+An action flow that spans several user actions and the event-driven work between them is
+coloured by stage: every edge of a stage carries that stage's colour, one numbered circle
+in that colour sits at the stage's most salient edge, edges of different stages may cross
+with a jump, and edges of one stage never cross each other. Where two calls of one stage
+leave the same provider or land on the same provider, they may meet at a junction of one
+bus. The deposit flow ([deposit.drawio.png](ethereum-erc20-vault/deposit/deposit.drawio.png))
+introduces the stages, and the palette card carries their swatches:
+
+| Stage | Colour    | Meaning                                                                                                   |
+| ----- | --------- | --------------------------------------------------------------------------------------------------------- |
+| 1     | `#E68310` | the user calls `startDeposit`, which creates the deposit and its start transaction                        |
+| 2     | `#11A579` | the outbox relays the lifecycle events to Kafka, the consumer hub dispatches them, the transaction proves |
+| 3     | `#D62728` | the user polls the transaction, balances it in the wallet and calls `submitTransaction`                   |
+| 4     | `#00A2B8` | the resolver submits the transaction to the node and watches the indexer for its inclusion                |
+| 5     | `#8C564B` | the vault request is flushed, sent, signed by the MPC, broadcast on Ethereum and attested                 |
+| 6     | `#B8A000` | the user calls `completeDeposit`, and the completion transaction runs to `Completed`                      |
 
 ### Provider and entity formats
 

@@ -1,0 +1,181 @@
+<mxfile host="65bd71144e">
+    <diagram id="deposit" name="deposit">
+        <mxGraphModel dx="3625" dy="1815" grid="0" gridSize="1" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-3" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="DepositRepositorySQLImpl&lt;br&gt;&amp;lt;midnight.ethereum-erc20-vault.deposit-v1.&lt;br&gt;DepositRepository&amp;gt;" vertex="1">
+                    <mxGeometry height="357" width="248" x="-465" y="-251" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-4" parent="TFWJNk8zQrKzoIgyMgio-3" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="create(&lt;br&gt;&amp;nbsp; resource: Deposit&lt;br&gt;) (Deposit)" vertex="1">
+                    <mxGeometry height="73" width="248" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-5" parent="TFWJNk8zQrKzoIgyMgio-3" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="get(&lt;br&gt;&amp;nbsp; name: string&lt;br&gt;) (Deposit | undefined)" vertex="1">
+                    <mxGeometry height="73" width="248" y="138" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-6" parent="TFWJNk8zQrKzoIgyMgio-3" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="update(&lt;br&gt;&amp;nbsp; resource: Deposit&lt;br&gt;) (Deposit)" vertex="1">
+                    <mxGeometry height="73" width="248" y="211" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-7" parent="TFWJNk8zQrKzoIgyMgio-3" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="search(&lt;br&gt;&amp;nbsp; args: SearchArgs&amp;lt;Deposit&amp;gt;&lt;br&gt;) (Deposit[])" vertex="1">
+                    <mxGeometry height="73" width="248" y="284" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-10" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="DepositStateControllerImpl&lt;br&gt;&amp;lt;midnight.ethereum-erc20-vault.deposit-v1.&lt;br&gt;DepositStateController&amp;gt;" vertex="1">
+                    <mxGeometry height="430" width="248" x="-814" y="-251" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-11" parent="TFWJNk8zQrKzoIgyMgio-10" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="startDeposit(&lt;br&gt;&amp;nbsp; args: StartDepositArgs&lt;br&gt;) (Deposit)" vertex="1">
+                    <mxGeometry height="73" width="248" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-12" parent="TFWJNk8zQrKzoIgyMgio-10" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordStarted(&lt;br&gt;&amp;nbsp; args: RecordStartedArgs&lt;br&gt;) (Deposit)" vertex="1">
+                    <mxGeometry height="73" width="248" y="138" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-13" parent="TFWJNk8zQrKzoIgyMgio-10" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordAttested(&lt;br&gt;&amp;nbsp; args: RecordAttestedArgs&lt;br&gt;) (Deposit)" vertex="1">
+                    <mxGeometry height="73" width="248" y="211" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-14" parent="TFWJNk8zQrKzoIgyMgio-10" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="completeDeposit(&lt;br&gt;&amp;nbsp; args: CompleteDepositArgs&lt;br&gt;) (Deposit)" vertex="1">
+                    <mxGeometry height="73" width="248" y="284" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-15" parent="TFWJNk8zQrKzoIgyMgio-10" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordCompleted(&lt;br&gt;&amp;nbsp; args: RecordCompletedArgs&lt;br&gt;) (Deposit)" vertex="1">
+                    <mxGeometry height="73" width="248" y="357" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-16" connectable="0" parent="1" style="group" value="" vertex="1">
+                    <mxGeometry height="260" width="120" x="-104" y="-177" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-8" parent="TFWJNk8zQrKzoIgyMgio-16" style="rounded=0;whiteSpace=wrap;html=1;fontStyle=1;verticalAlign=middle;align=center;spacingLeft=0;spacingTop=34;" value="Postgres" vertex="1">
+                    <mxGeometry height="260" width="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-9" parent="TFWJNk8zQrKzoIgyMgio-16" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;verticalLabelPosition=top;verticalAlign=bottom;image=img/lib/mscae/Database_General.svg;" value="" vertex="1">
+                    <mxGeometry height="26" width="26" x="47" y="102" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-17" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="DepositServiceImpl&lt;br&gt;&amp;lt;midnight.ethereum-erc20-vault.deposit-v1.&lt;br&gt;DepositService&amp;gt;" vertex="1">
+                    <mxGeometry height="211" width="248" x="-1412" y="-251" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-18" parent="TFWJNk8zQrKzoIgyMgio-17" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="startDeposit(&lt;br&gt;&amp;nbsp; caller: Caller,&lt;br&gt;&amp;nbsp; args: StartDepositArgs&lt;br&gt;) (Deposit)" vertex="1">
+                    <mxGeometry height="73" width="248" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-19" parent="TFWJNk8zQrKzoIgyMgio-17" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="completeDeposit(&lt;br&gt;&amp;nbsp; caller: Caller,&lt;br&gt;&amp;nbsp; args: CompleteDepositArgs&lt;br&gt;) (Deposit)" vertex="1">
+                    <mxGeometry height="73" width="248" y="138" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-20" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="DepositStateResolverImpl&lt;br&gt;&amp;lt;midnight.ethereum-erc20-vault.deposit-v1.&lt;br&gt;DepositStateResolver&amp;gt;" vertex="1">
+                    <mxGeometry height="138" width="248" x="-1181" y="225" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-21" parent="TFWJNk8zQrKzoIgyMgio-20" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="resolveDeposit(&lt;br&gt;&amp;nbsp; args: ResolveDepositArgs&lt;br&gt;) (void)" vertex="1">
+                    <mxGeometry height="73" width="248" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-22" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="DepositEventConsumer&lt;br&gt;&amp;lt;event.&lt;br&gt;EventConsumer&amp;gt;" vertex="1">
+                    <mxGeometry height="211" width="144" x="-1410" y="212" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-23" parent="TFWJNk8zQrKzoIgyMgio-22" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="wantsEvent(&lt;br&gt;&amp;nbsp; event: Event&lt;br&gt;) (boolean)" vertex="1">
+                    <mxGeometry height="73" width="144" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-24" parent="TFWJNk8zQrKzoIgyMgio-22" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="handleEvent(&lt;br&gt;&amp;nbsp; event: Event&lt;br&gt;) (void)" vertex="1">
+                    <mxGeometry height="73" width="144" y="138" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-25" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="VaultRequestStateControllerImpl&lt;br&gt;&amp;lt;midnight.ethereum-erc20-vault.vault-request-v1.&lt;br&gt;VaultRequestStateController&amp;gt;" vertex="1">
+                    <mxGeometry height="868" width="280" x="-465" y="722" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-26" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="queueRequest(&lt;br&gt;&amp;nbsp; args: QueueRequestArgs&lt;br&gt;) (VaultRequest)" vertex="1">
+                    <mxGeometry height="73" width="280" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-27" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordFlushed(&lt;br&gt;&amp;nbsp; args: RecordFlushedArgs&lt;br&gt;) (VaultRequest)" vertex="1">
+                    <mxGeometry height="73" width="280" y="138" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-28" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordSent(&lt;br&gt;&amp;nbsp; args: RecordSentArgs&lt;br&gt;) (VaultRequest)" vertex="1">
+                    <mxGeometry height="73" width="280" y="211" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-29" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordSignature(&lt;br&gt;&amp;nbsp; args: RecordSignatureArgs&lt;br&gt;) (VaultRequest)" vertex="1">
+                    <mxGeometry height="73" width="280" y="284" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-30" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordBroadcast(&lt;br&gt;&amp;nbsp; args: RecordBroadcastArgs&lt;br&gt;) (VaultRequest)" vertex="1">
+                    <mxGeometry height="73" width="280" y="357" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-31" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordAttestation(&lt;br&gt;&amp;nbsp; args: RecordAttestationArgs&lt;br&gt;) (VaultRequest)" vertex="1">
+                    <mxGeometry height="73" width="280" y="430" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-32" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordAttestationQueued(&lt;br&gt;&amp;nbsp; args: RecordAttestationQueuedArgs&lt;br&gt;) (VaultRequest)" vertex="1">
+                    <mxGeometry height="73" width="280" y="503" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-33" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordAttested(&lt;br&gt;&amp;nbsp; args: RecordAttestedArgs&lt;br&gt;) (VaultRequest)" vertex="1">
+                    <mxGeometry height="73" width="280" y="576" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-34" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="startSend(&lt;br&gt;&amp;nbsp; args: StartSendArgs&lt;br&gt;) (MidnightTransaction)" vertex="1">
+                    <mxGeometry height="73" width="280" y="649" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-35" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="startBroadcast(&lt;br&gt;&amp;nbsp; args: StartBroadcastArgs&lt;br&gt;) (EthereumTransaction)" vertex="1">
+                    <mxGeometry height="73" width="280" y="722" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-36" parent="TFWJNk8zQrKzoIgyMgio-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="startAttestationQueue(&lt;br&gt;&amp;nbsp; args: StartAttestationQueueArgs&lt;br&gt;) (MidnightTransaction)" vertex="1">
+                    <mxGeometry height="73" width="280" y="795" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-37" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="VaultRequestRepositorySQLImpl&lt;br&gt;&amp;lt;midnight.ethereum-erc20-vault.vault-request-v1.&lt;br&gt;VaultRequestRepository&amp;gt;" vertex="1">
+                    <mxGeometry height="357" width="280" x="-109" y="717" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-38" parent="TFWJNk8zQrKzoIgyMgio-37" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="create(&lt;br&gt;&amp;nbsp; resource: VaultRequest&lt;br&gt;) (VaultRequest)" vertex="1">
+                    <mxGeometry height="73" width="280" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-39" parent="TFWJNk8zQrKzoIgyMgio-37" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="get(&lt;br&gt;&amp;nbsp; name: string&lt;br&gt;) (VaultRequest | undefined)" vertex="1">
+                    <mxGeometry height="73" width="280" y="138" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-40" parent="TFWJNk8zQrKzoIgyMgio-37" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="update(&lt;br&gt;&amp;nbsp; resource: VaultRequest&lt;br&gt;) (VaultRequest)" vertex="1">
+                    <mxGeometry height="73" width="280" y="211" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-41" parent="TFWJNk8zQrKzoIgyMgio-37" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="search(&lt;br&gt;&amp;nbsp; args: SearchArgs&amp;lt;VaultRequest&amp;gt;&lt;br&gt;) (VaultRequest[])" vertex="1">
+                    <mxGeometry height="73" width="280" y="284" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-42" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="MidnightTransactionStateControllerImpl&lt;br&gt;&amp;lt;midnight.transaction-v1.&lt;br&gt;MidnightTransactionStateController&amp;gt;" vertex="1">
+                    <mxGeometry height="430" width="228" x="-471" y="125" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-43" parent="TFWJNk8zQrKzoIgyMgio-42" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="commitTransaction(&lt;br&gt;&amp;nbsp; args: CommitTransactionArgs&lt;br&gt;) (MidnightTransaction)" vertex="1">
+                    <mxGeometry height="73" width="228" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-44" parent="TFWJNk8zQrKzoIgyMgio-42" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordProof(&lt;br&gt;&amp;nbsp; args: RecordProofArgs&lt;br&gt;) (MidnightTransaction)" vertex="1">
+                    <mxGeometry height="73" width="228" y="138" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-45" parent="TFWJNk8zQrKzoIgyMgio-42" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="submitTransaction(&lt;br&gt;&amp;nbsp; args: SubmitTransactionArgs&lt;br&gt;) (MidnightTransaction)" vertex="1">
+                    <mxGeometry height="73" width="228" y="211" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-46" parent="TFWJNk8zQrKzoIgyMgio-42" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordSubmission(&lt;br&gt;&amp;nbsp; args: RecordSubmissionArgs&lt;br&gt;) (MidnightTransaction)" vertex="1">
+                    <mxGeometry height="73" width="228" y="284" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-47" parent="TFWJNk8zQrKzoIgyMgio-42" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="recordSuccess(&lt;br&gt;&amp;nbsp; args: RecordSuccessArgs&lt;br&gt;) (MidnightTransaction)" vertex="1">
+                    <mxGeometry height="73" width="228" y="357" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-48" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="MidnightTransactionRepositorySQLImpl&lt;br&gt;&amp;lt;midnight.transaction-v1.&lt;br&gt;MidnightTransactionRepository&amp;gt;" vertex="1">
+                    <mxGeometry height="357" width="238" x="-118" y="132" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-49" parent="TFWJNk8zQrKzoIgyMgio-48" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="create(&lt;br&gt;&amp;nbsp; resource: MidnightTransaction&lt;br&gt;) (MidnightTransaction)" vertex="1">
+                    <mxGeometry height="73" width="238" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-50" parent="TFWJNk8zQrKzoIgyMgio-48" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="get(&lt;br&gt;&amp;nbsp; name: string&lt;br&gt;) (MidnightTransaction | undefined)" vertex="1">
+                    <mxGeometry height="73" width="238" y="138" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-51" parent="TFWJNk8zQrKzoIgyMgio-48" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="update(&lt;br&gt;&amp;nbsp; resource: MidnightTransaction&lt;br&gt;) (MidnightTransaction)" vertex="1">
+                    <mxGeometry height="73" width="238" y="211" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-52" parent="TFWJNk8zQrKzoIgyMgio-48" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="search(&lt;br&gt;&amp;nbsp; args: SearchArgs&amp;lt;MidnightTransaction&amp;gt;&lt;br&gt;) (MidnightTransaction[])" vertex="1">
+                    <mxGeometry height="73" width="238" y="284" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-53" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="&amp;lt;event.&lt;br&gt;EventPublisher&amp;gt;" vertex="1">
+                    <mxGeometry height="138" width="160" x="-93" y="534" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-54" parent="TFWJNk8zQrKzoIgyMgio-53" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="publishEvent(&lt;br&gt;&amp;nbsp; event: Event&lt;br&gt;) (void)" vertex="1">
+                    <mxGeometry height="73" width="160" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-55" parent="1" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=65;fillColor=default;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;html=1;fillStyle=solid;" value="VaultCircuitsMidnightJsImpl&lt;br&gt;&amp;lt;midnight.ethereum-erc20-vault.&lt;br&gt;VaultCircuits&amp;gt;" vertex="1">
+                    <mxGeometry height="357" width="206" x="-465" y="-643" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-56" parent="TFWJNk8zQrKzoIgyMgio-55" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="startDeposit(&lt;br&gt;&amp;nbsp; args: StartDepositCircuitArgs&lt;br&gt;) (string)" vertex="1">
+                    <mxGeometry height="73" width="206" y="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-57" parent="TFWJNk8zQrKzoIgyMgio-55" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="completeDeposit(&lt;br&gt;&amp;nbsp; args: CompleteDepositCircuitArgs&lt;br&gt;) (string)" vertex="1">
+                    <mxGeometry height="73" width="206" y="138" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-58" parent="TFWJNk8zQrKzoIgyMgio-55" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="sendDeposit(&lt;br&gt;&amp;nbsp; args: SendDepositCircuitArgs&lt;br&gt;) (string)" vertex="1">
+                    <mxGeometry height="73" width="206" y="211" as="geometry"/>
+                </mxCell>
+                <mxCell id="TFWJNk8zQrKzoIgyMgio-59" parent="TFWJNk8zQrKzoIgyMgio-55" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="queueAttestation(&lt;br&gt;&amp;nbsp; args: QueueAttestationCircuitArgs&lt;br&gt;) (string)" vertex="1">
+                    <mxGeometry height="73" width="206" y="284" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
