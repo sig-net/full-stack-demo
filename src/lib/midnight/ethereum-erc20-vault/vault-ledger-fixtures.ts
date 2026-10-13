@@ -122,3 +122,14 @@ const DEPOSIT_ARGS = {
   path: new Uint8Array(32),
   gas: { gasLimit: 1n, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n },
 }
+
+/** A ledger set of byte values, for an allowed token ledger state. */
+export function ledgerSet(elements: Uint8Array[]) {
+  const keys = new Set(elements.map(bytesToHex))
+  return {
+    isEmpty: () => keys.size === 0,
+    size: () => BigInt(keys.size),
+    member: (element: Uint8Array) => keys.has(bytesToHex(element)),
+    [Symbol.iterator]: () => elements[Symbol.iterator](),
+  }
+}

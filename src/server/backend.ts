@@ -77,6 +77,8 @@ import type { DepositStateController } from '@/lib/midnight/ethereum-erc20-vault
 import { DepositStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller-impl'
 import type { DepositStateResolver } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-resolver'
 import { DepositStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-resolver-impl'
+import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
+import { Erc20ReaderEthersImpl } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader-ethers-impl'
 import { FlushEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/flush-event-consumer'
 import type { Flusher } from '@/lib/midnight/ethereum-erc20-vault/flusher'
 import { FlusherImpl } from '@/lib/midnight/ethereum-erc20-vault/flusher-impl'
@@ -87,6 +89,9 @@ import {
   type SignetReaders,
   signetReaders,
 } from '@/lib/midnight/ethereum-erc20-vault/signet-readers'
+import type { SupportedTokenService } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service'
+import { SupportedTokenServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service-adaptor'
+import { SupportedTokenServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service-impl'
 import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import {
@@ -230,6 +235,12 @@ export interface MidnightBackend {
       readonly repository: ActivityRepository
       readonly service: ActivityService
       readonly adaptor: ActivityServiceAdaptor
+    }
+    /** Reads of the vault's allowlist and of what a caller's deposit account holds of it on Ethereum. */
+    readonly supportedTokenV1: {
+      readonly erc20Reader: Erc20Reader
+      readonly service: SupportedTokenService
+      readonly adaptor: SupportedTokenServiceAdaptor
     }
   }
 }
@@ -554,7 +565,23 @@ function createMidnightEthereumErc20Vault(
       { circuits, ledger },
     ),
     activityV1: createMidnightEthereumErc20VaultActivityV1(db, config),
+    supportedTokenV1: createMidnightEthereumErc20VaultSupportedTokenV1(ethereum, config, ledger),
   }
+}
+
+function createMidnightEthereumErc20VaultSupportedTokenV1(
+  ethereum: EthereumBackend,
+  config: ServerConfig,
+  ledger: VaultLedger,
+): MidnightBackend['ethereumErc20Vault']['supportedTokenV1'] {
+  const erc20Reader = new Erc20ReaderEthersImpl(ethereum.provider)
+  const service = new SupportedTokenServiceImpl(
+    ledger,
+    erc20Reader,
+    config.client.midnightSignet,
+    config.client.midnightEthereumErc20Vault,
+  )
+  return { erc20Reader, service, adaptor: new SupportedTokenServiceAdaptor(service) }
 }
 
 function createMidnightEthereumErc20VaultActivityV1(

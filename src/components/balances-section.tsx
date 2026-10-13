@@ -43,7 +43,7 @@ export function BalancesSection(): ReactNode {
     </Button>
   )
   const balances = useQuery({
-    queryKey: ['midnight-balances', midnightNetwork.networkId, generation],
+    queryKey: ['midnight-balances', midnightNetwork.networkId, generation, registry.fingerprint],
     queryFn: wallet === null ? skipToken : () => readMidnightBalanceAmounts(wallet, registry),
     refetchInterval: BALANCES_REFETCH_INTERVAL_MS,
   })
@@ -76,8 +76,8 @@ export function BalancesSection(): ReactNode {
           </Popover>
         )}
       </div>
-      {depositAccount !== null && (
-        <DepositDialog open={depositOpen} onOpenChange={setDepositOpen} address={depositAccount} />
+      {depositOpen && depositAccount !== null && (
+        <DepositDialog open onOpenChange={setDepositOpen} address={depositAccount} />
       )}
       {wallet === null ? (
         <p role="status" className="text-muted-foreground">

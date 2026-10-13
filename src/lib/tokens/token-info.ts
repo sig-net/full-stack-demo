@@ -11,6 +11,8 @@ export interface TokenInfo {
   readonly decimals: number
   readonly icon: IconSource
   readonly origin: TokenOrigin
+  /** True when the vault's allowlist admits the token's ERC20, so the vault accepts deposits of it. */
+  readonly supported: boolean
 }
 
 /** The chain a token came from, which the badge on its icon shows. */
@@ -18,7 +20,7 @@ export interface EthereumErc20VaultTokenOrigin {
   readonly kind: 'ethereum-erc20-vault'
   readonly chainId: number
   readonly erc20Address: string
-  readonly issuer: string
+  readonly issuer?: string
 }
 
 export type TokenOrigin = EthereumErc20VaultTokenOrigin

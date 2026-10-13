@@ -63,6 +63,31 @@ describe('vaultTokenInfos', () => {
       symbol: 'USDC',
       decimals: 6,
       icon: { source: 'web3icons', name: 'USDC' },
+      supported: false,
     })
+  })
+
+  test('the allowlist marks bundled tokens supported and adds the unlisted ones without artwork', () => {
+    const unlisted = `0x${'ab'.repeat(20)}`
+    const infos = vaultTokenInfos(VAULT_ADDRESS, SEPOLIA, [
+      { erc20Address: CIRCLE_USDC.toLowerCase(), symbol: 'USDC', name: 'USDC', decimals: 6 },
+      { erc20Address: unlisted, symbol: 'NEW', name: 'New Token', decimals: 18 },
+    ])
+    const byAddress = (address: string) =>
+      infos.find((info) => info.origin.erc20Address.toLowerCase() === address.toLowerCase())
+    expect(byAddress(CIRCLE_USDC)).toMatchObject({
+      symbol: 'USDC',
+      name: 'USD Coin',
+      supported: true,
+    })
+    expect(byAddress(CIRCLE_EURC)).toMatchObject({ supported: false })
+    expect(byAddress(unlisted)).toMatchObject({
+      symbol: 'NEW',
+      name: 'New Token',
+      decimals: 18,
+      icon: { source: 'none' },
+      supported: true,
+    })
+    expect(infos.filter((info) => info.supported)).toHaveLength(2)
   })
 })

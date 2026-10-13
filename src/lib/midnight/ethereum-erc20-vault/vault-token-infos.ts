@@ -17,14 +17,29 @@ import {
 
 import { LOCAL_CHAIN_ID } from '@/lib/config/ethereum-config'
 import { type IconSource, NO_ICON } from '@/lib/icon-source'
+import type { SupportedToken } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token'
 import type { TokenInfo } from '@/lib/tokens/token-info'
 
-/** The vault's tokens on `chainId`: one shielded token per ERC20 it handles there, none on a chain it does not serve. */
+/**
+ * The vault's tokens on `chainId`: the allowlist the ledger reports, each with the artwork and
+ * naming of the bundled table when it lists the ERC20, plus the bundled tokens the allowlist does
+ * not admit, marked unsupported. A supported token's decimals are its contract's own, since the
+ * chain is authoritative; a bundled token the allowlist omits keeps the table's.
+ */
 export function vaultTokenInfos(
   vaultContractAddress: ContractAddress,
   chainId: number,
+  supportedTokens: readonly SupportedToken[] = [],
 ): TokenInfo[] {
-  return (VAULT_ERC20_TOKENS_BY_CHAIN[chainId] ?? []).map((token) => ({
+  const supportedByAddress = new Map(
+    supportedTokens.map((token) => [token.erc20Address.toLowerCase(), token]),
+  )
+  const bundled = VAULT_ERC20_TOKENS_BY_CHAIN[chainId] ?? []
+  const bundledAddresses = new Set(bundled.map((token) => token.erc20Address.toLowerCase()))
+  const info = (
+    token: Omit<VaultErc20Token, 'issuer'> & { issuer?: string },
+    supported: boolean,
+  ): TokenInfo => ({
     id: { ledger: 'shielded', tokenType: vaultTokenType(token.erc20Address, vaultContractAddress) },
     symbol: token.symbol,
     name: token.name,
@@ -36,7 +51,20 @@ export function vaultTokenInfos(
       erc20Address: token.erc20Address,
       issuer: token.issuer,
     },
-  }))
+    supported,
+  })
+  return [
+    ...bundled.map((token) => {
+      const supported = supportedByAddress.get(token.erc20Address.toLowerCase())
+      return info(
+        supported === undefined ? token : { ...token, decimals: supported.decimals },
+        supported !== undefined,
+      )
+    }),
+    ...supportedTokens
+      .filter((token) => !bundledAddresses.has(token.erc20Address.toLowerCase()))
+      .map((token) => info({ ...token, icon: NO_ICON }, true)),
+  ]
 }
 
 /** The shielded token type the vault at `vaultContractAddress` mints for an ERC20. */

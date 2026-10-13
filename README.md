@@ -59,37 +59,38 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 
 ## Layout
 
-| Path                                                     | Contents                                                                                                                                                                                                      |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/app`                                                | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.                                                                                                              |
-| `src/app/(configured)`                                   | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                                                                                                                           |
-| `src/components`                                         | Application React components.                                                                                                                                                                                 |
-| `src/components/ui`                                      | Components written by the shadcn CLI.                                                                                                                                                                         |
-| `src/components/contexts`                                | React contexts: each file holds a context, its provider and its `use<Name>` hook.                                                                                                                             |
-| `src/lib`                                                | Non-React modules. The files at its root serve every domain: `value-schemas.ts`, `lazy-singleton.ts`, `sweep.ts`, `run-until-aborted.ts`, `coalescing-runner.ts`, `delay-unless-aborted.ts`, `message-of.ts`. |
-| `src/lib/caller`                                         | The caller secret and caller name schemas (`caller.ts`, shared with the browser) and the server's `resolveCaller()`.                                                                                          |
-| `src/lib/config`                                         | Server configuration loading and the client configuration type.                                                                                                                                               |
-| `src/lib/db`                                             | The Drizzle schema and the Postgres connection pool.                                                                                                                                                          |
-| `src/lib/kafka`                                          | The Kafka producer and consumer factories and the connection options.                                                                                                                                         |
-| `src/lib/event`                                          | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.                                                                                                              |
-| `src/lib/repository`                                     | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.                                                                                                |
-| `src/lib/testing`                                        | Test helpers: the `mock()` double for any interface.                                                                                                                                                          |
-| `src/lib/ethereum/transaction-v1`                        | The Ethereum transaction resource, its repository, state machine, state controller, ledger, resolver and event consumer.                                                                                      |
-| `src/lib/midnight/ethereum-erc20-vault`                  | The ERC-20 vault: its action set, circuit and ledger ports, signet readers, respond outcome sources, the flusher, and one folder per resource version.                                                        |
-| `src/lib/midnight/ethereum-erc20-vault/vault-request-v1` | The vault request resource, its repository, state machine, state controller, resolver and event consumer.                                                                                                     |
-| `src/lib/midnight/ethereum-erc20-vault/activity-v1`      | The activity view: the resource the view projects, its read-only repository, service and adaptor.                                                                                                             |
-| `src/lib/midnight/ethereum-erc20-vault/deposit-v1`       | The deposit resource, its repository, state machine, state controller, resolver, event consumer, service and adaptor.                                                                                         |
-| `src/lib/midnight/transaction-v1`                        | The Midnight transaction resource, its repository, state machine, state controller, ledger, resolver, event consumer, service and adaptor.                                                                    |
-| `src/lib/midnight/wallet`                                | The wallet layer: the `Wallet` interface, the seed wallet and its facade, the stored seed, and the backend's relayer wallet.                                                                                  |
-| `src/lib/midnight`                                       | The Midnight modules every domain shares: the address abbreviation, the browser `Buffer` shim and the in-memory private state provider.                                                                       |
-| `src/server`                                             | The code that runs: the composition root, the server action files and the start-up.                                                                                                                           |
-| `src/instrumentation.ts`                                 | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                                                                                                                     |
-| `integration-tests`                                      | The integration tests and their helpers, run with `yarn test:integration` (see [Testing](#testing)).                                                                                                          |
-| `scripts`                                                | The boundary guard (`yarn boundaries`) and the diagram library generator (`yarn diagram-library`).                                                                                                            |
-| `drizzle`                                                | SQL migrations and their snapshots, written by `yarn db:generate`.                                                                                                                                            |
-| `zk-assets`                                              | One prover key bundle per contract, built by `yarn zk-assets` and gitignored.                                                                                                                                 |
-| `docs`                                                   | `architecture.md`, the design record the backend was built from, and the draw.io diagrams with their style guide `diagramming.md`.                                                                            |
-| `public/icons`                                           | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.                                                                                                                    |
+| Path                                                       | Contents                                                                                                                                                                                                      |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/app`                                                  | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.                                                                                                              |
+| `src/app/(configured)`                                     | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                                                                                                                           |
+| `src/components`                                           | Application React components.                                                                                                                                                                                 |
+| `src/components/ui`                                        | Components written by the shadcn CLI.                                                                                                                                                                         |
+| `src/components/contexts`                                  | React contexts: each file holds a context, its provider and its `use<Name>` hook.                                                                                                                             |
+| `src/lib`                                                  | Non-React modules. The files at its root serve every domain: `value-schemas.ts`, `lazy-singleton.ts`, `sweep.ts`, `run-until-aborted.ts`, `coalescing-runner.ts`, `delay-unless-aborted.ts`, `message-of.ts`. |
+| `src/lib/caller`                                           | The caller secret and caller name schemas (`caller.ts`, shared with the browser) and the server's `resolveCaller()`.                                                                                          |
+| `src/lib/config`                                           | Server configuration loading and the client configuration type.                                                                                                                                               |
+| `src/lib/db`                                               | The Drizzle schema and the Postgres connection pool.                                                                                                                                                          |
+| `src/lib/kafka`                                            | The Kafka producer and consumer factories and the connection options.                                                                                                                                         |
+| `src/lib/event`                                            | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.                                                                                                              |
+| `src/lib/repository`                                       | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.                                                                                                |
+| `src/lib/testing`                                          | Test helpers: the `mock()` double for any interface.                                                                                                                                                          |
+| `src/lib/ethereum/transaction-v1`                          | The Ethereum transaction resource, its repository, state machine, state controller, ledger, resolver and event consumer.                                                                                      |
+| `src/lib/midnight/ethereum-erc20-vault`                    | The ERC-20 vault: its action set, circuit and ledger ports, signet readers, respond outcome sources, the flusher, and one folder per resource version.                                                        |
+| `src/lib/midnight/ethereum-erc20-vault/vault-request-v1`   | The vault request resource, its repository, state machine, state controller, resolver and event consumer.                                                                                                     |
+| `src/lib/midnight/ethereum-erc20-vault/activity-v1`        | The activity view: the resource the view projects, its read-only repository, service and adaptor.                                                                                                             |
+| `src/lib/midnight/ethereum-erc20-vault/deposit-v1`         | The deposit resource, its repository, state machine, state controller, resolver, event consumer, service and adaptor.                                                                                         |
+| `src/lib/midnight/ethereum-erc20-vault/supported-token-v1` | The vault's allowlist as a resource with each token's on-chain metadata, the funds a caller's deposit account holds of it, and their service and adaptor over the ledger and an ERC20 reader.                 |
+| `src/lib/midnight/transaction-v1`                          | The Midnight transaction resource, its repository, state machine, state controller, ledger, resolver, event consumer, service and adaptor.                                                                    |
+| `src/lib/midnight/wallet`                                  | The wallet layer: the `Wallet` interface, the seed wallet and its facade, the stored seed, and the backend's relayer wallet.                                                                                  |
+| `src/lib/midnight`                                         | The Midnight modules every domain shares: the address abbreviation, the browser `Buffer` shim and the in-memory private state provider.                                                                       |
+| `src/server`                                               | The code that runs: the composition root, the server action files and the start-up.                                                                                                                           |
+| `src/instrumentation.ts`                                   | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                                                                                                                     |
+| `integration-tests`                                        | The integration tests and their helpers, run with `yarn test:integration` (see [Testing](#testing)).                                                                                                          |
+| `scripts`                                                  | The boundary guard (`yarn boundaries`) and the diagram library generator (`yarn diagram-library`).                                                                                                            |
+| `drizzle`                                                  | SQL migrations and their snapshots, written by `yarn db:generate`.                                                                                                                                            |
+| `zk-assets`                                                | One prover key bundle per contract, built by `yarn zk-assets` and gitignored.                                                                                                                                 |
+| `docs`                                                     | `architecture.md`, the design record the backend was built from, and the draw.io diagrams with their style guide `diagramming.md`.                                                                            |
+| `public/icons`                                             | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.                                                                                                                    |
 
 Pages and layouts are server components. A component opts into the browser with `'use client'`
 only when it needs state, effects or browser APIs, as `src/components/mode-toggle.tsx` does.
@@ -965,8 +966,12 @@ under Styling and theme.
   checksummed address as a QR code (`QrCode`, `src/components/qr-code.tsx`, round modules over the
   grid `src/lib/qr-modules.ts` encodes at error correction level H, with the Ethereum glyph over
   the centre) and as a copyable abbreviated address. The QR panel keeps the design's light
-  palette and gradient in both themes, since a code scans dark on light. The Swap and Send buttons
-  do nothing yet.
+  palette and gradient in both themes, since a code scans dark on light. Below it the dialog
+  scans the deposit account once as it opens, through the `listDepositAccountFunds` action, and
+  again only from its Check again control: it reports how many supported tokens the account holds
+  above zero and lists each as its icon, its symbol and its amount in whole tokens; the vault
+  admits more than one contract called USDC, so a symbol another fund shares is qualified by its
+  issuer. The Deposit control on each line is not wired yet, and neither are Swap and Send.
 - `ActivitySection` (`src/components/activity-section.tsx`) reads `src/lib/activity/dummy-activity.ts`
   and renders `ActivityTable`. Each entry is a collapsible table body: from the `md` breakpoint up
   every column shows, below it a chevron expands the timestamp and block explorer details. The
@@ -1004,21 +1009,33 @@ token is. `src/lib/tokens` holds what the UI needs to render one:
   `TokenInfo`. An unknown token answers undefined, and the balances fall back as described above.
 - `format-token-amount.ts`: `formatTokenAmount()`, base units to an exact decimal in whole tokens.
 
-The only source of entries today is `vaultTokenInfos()`
-(`src/lib/midnight/ethereum-erc20-vault/vault-token-infos.ts`). For each ERC20 the contract
-package exports (Circle USDC and EURC, WETH9, Chainlink LINK, Aave's test USDC and its static
-wrapper) it derives the shielded token type the configured vault mints, with `vaultTokenType()`
-over the vault's own domain-separator circuit, and pairs it with the token's symbol, name, icon
-and decimals. The vault mints the ERC20's base-unit amount one to one, so the display decimals
-are the ERC20's own `decimals()`, read from each contract on the Sepolia fork when the table was
-written. The addresses are Sepolia's, and the local chain is a Sepolia fork, so the table serves
-chain 11155111 and chain 31337 and no other.
+The vault itself decides which ERC20s it accepts: its `allowedTokens` ledger set, grown only by
+the deployer. `SupportedTokenService` (`src/lib/midnight/ethereum-erc20-vault/supported-token-v1`)
+reads that set from the indexer and each token's `symbol()`, `name()` and `decimals()` from the
+token contract through the `Erc20Reader` port (`erc20-reader.ts`, implemented over ethers in
+`erc20-reader-ethers-impl.ts`), and the `listSupportedTokens` action in
+`src/server/actions/supported-token-actions.ts` hands the list to the browser; the allowlist is
+public vault state, so that one action takes no caller secret. The same service's
+`listDepositAccountFunds` reads what the caller's deposit account holds of those tokens.
 
-`TokenInfoRegistryProvider` (`src/components/contexts/TokenInfoRegistryContext.tsx`) builds the
-registry once per mount from the vault address and chain id in `useConfig()`, and
-`useTokenInfoRegistry()` hands it to the balances query. Valuation is the planned next source: a
-price port behind a React Query hook in the same context file, which is why `usdValue` is a
-string the UI already renders.
+`vaultTokenInfos()` (`src/lib/midnight/ethereum-erc20-vault/vault-token-infos.ts`) turns the
+allowlist into registry entries: for each ERC20 it derives the shielded token type the configured
+vault mints, with `vaultTokenType()` over the vault's own domain-separator circuit, and marks the
+entry supported. A bundled table augments the entries of the tokens it lists (Circle USDC and
+EURC, WETH9, Chainlink LINK, Aave's test USDC and its static wrapper) with artwork, a display name
+and an issuer; a supported token the table omits renders with the metadata its contract reports
+and no artwork, and a table entry the allowlist omits stays in the registry unsupported. A
+supported token's decimals are its contract's own, since the vault mints the ERC20's base-unit
+amount one to one. The table's addresses are Sepolia's, and the local chain is a Sepolia fork, so
+it serves chain 11155111 and chain 31337 and no other.
+
+`TokenInfoRegistryProvider` (`src/components/contexts/TokenInfoRegistryContext.tsx`) fetches the
+allowlist once per page load through React Query and builds the registry from it and the config,
+holding the bundled table alone, nothing marked supported, until the list answers. The registry
+answers `get()` by token identity, `byErc20Address()` for the fund scan, and `supported()`; its
+`fingerprint` is part of the balances query key, so balances refetch when support arrives.
+Valuation is the planned next source: a price port behind a React Query hook in the same context
+file, which is why `usdValue` is a string the UI already renders.
 
 ## Styling and theme
 

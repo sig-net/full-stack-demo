@@ -15,6 +15,7 @@ function info(id: TokenId, symbol: string): TokenInfo {
     decimals: 6,
     icon: NO_ICON,
     origin: { kind: 'ethereum-erc20-vault', chainId: 1, erc20Address: '0x', issuer: 'Test' },
+    supported: false,
   }
 }
 
@@ -40,5 +41,27 @@ describe('TokenInfoRegistry', () => {
 
   test('the same identity registered twice is refused', () => {
     expect(() => new TokenInfoRegistry([SHIELDED, SHIELDED])).toThrow('registered twice')
+  })
+})
+
+describe('TokenInfoRegistry by ERC20 and by support', () => {
+  const supportedUsdc: TokenInfo = {
+    ...info({ ledger: 'shielded', tokenType: `cd${'0'.repeat(62)}` }, 'USDC'),
+    origin: { kind: 'ethereum-erc20-vault', chainId: 1, erc20Address: '0xAbCd', issuer: 'Circle' },
+    supported: true,
+  }
+  const registry = new TokenInfoRegistry([SHIELDED, supportedUsdc])
+
+  test('byErc20Address ignores letter case', () => {
+    expect(registry.byErc20Address('0xabcd')).toBe(supportedUsdc)
+  })
+
+  test('supported lists only the tokens the allowlist admits', () => {
+    expect(registry.supported()).toEqual([supportedUsdc])
+  })
+
+  test('the fingerprint changes when support changes', () => {
+    const unsupported = new TokenInfoRegistry([SHIELDED, { ...supportedUsdc, supported: false }])
+    expect(unsupported.fingerprint).not.toBe(registry.fingerprint)
   })
 })

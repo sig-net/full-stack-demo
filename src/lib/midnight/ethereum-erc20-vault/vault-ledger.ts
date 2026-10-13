@@ -8,7 +8,7 @@ import {
 import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 
 /** The vault contract's public state, read from the indexer. One read is one network round trip. */
-export interface VaultLedger extends RequestLedger {
+export interface VaultLedger extends RequestLedger, AllowedTokenLedger {
   state(): Promise<VaultLedgerState>
 }
 
@@ -16,6 +16,14 @@ export interface VaultLedger extends RequestLedger {
 export interface RequestLedger {
   state(): Promise<RequestLedgerState>
 }
+
+/** The part of the ledger the supported token service reads, so a unit test builds that and nothing else. */
+export interface AllowedTokenLedger {
+  state(): Promise<AllowedTokenLedgerState>
+}
+
+/** The deployer-grown set of ERC20 addresses the vault admits, as 20-byte values. */
+export type AllowedTokenLedgerState = Pick<VaultLedgerState, 'allowedTokens'>
 
 /** The request maps and the response key the attestation posts are verified against. */
 export type RequestLedgerState = RequestLedgerView & Pick<VaultLedgerState, 'mpcResponseKey'>

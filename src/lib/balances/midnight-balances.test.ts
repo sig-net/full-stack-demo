@@ -28,6 +28,7 @@ const USDC: TokenInfo = {
     erc20Address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
     issuer: 'Circle',
   },
+  supported: true,
 }
 
 const registry = new TokenInfoRegistry([USDC])
