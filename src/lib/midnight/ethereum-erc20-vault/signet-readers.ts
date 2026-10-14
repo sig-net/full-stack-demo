@@ -3,6 +3,8 @@ import { signetEventSourceFromIndexer, SignetRequestResponseReader } from '@sig-
 import {
   VAULT_APPROVE_REQUESTS_PATH,
   VAULT_DEPOSIT_REQUESTS_PATH,
+  VAULT_REDEEM_REQUESTS_PATH,
+  VAULT_SUPPLY_REQUESTS_PATH,
   VAULT_SWAP_REQUESTS_PATH,
   VAULT_WITHDRAW_REQUESTS_PATH,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
@@ -37,6 +39,8 @@ export function signetReaders(config: SignetReadersConfig): SignetReaders {
     deposit: reader(VAULT_DEPOSIT_REQUESTS_PATH),
     withdraw: reader(VAULT_WITHDRAW_REQUESTS_PATH),
     swap: reader(VAULT_SWAP_REQUESTS_PATH),
+    supply: reader(VAULT_SUPPLY_REQUESTS_PATH),
+    redeem: reader(VAULT_REDEEM_REQUESTS_PATH),
     approve: reader(VAULT_APPROVE_REQUESTS_PATH),
   }
 }

@@ -306,6 +306,10 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
         return this.circuits.sendWithdraw({ outIndex })
       case 'swap':
         return this.circuits.sendSwap({ outIndex })
+      case 'supply':
+        return this.circuits.sendSupply({ outIndex })
+      case 'redeem':
+        return this.circuits.sendRedeem({ outIndex })
       case 'approve':
         return this.circuits.sendApprove({ outIndex })
       default: {

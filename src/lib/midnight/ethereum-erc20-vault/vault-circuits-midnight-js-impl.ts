@@ -29,6 +29,8 @@ import {
 import {
   type CompleteApproveCircuitArgs,
   type CompleteDepositCircuitArgs,
+  type CompleteRedeemCircuitArgs,
+  type CompleteSupplyCircuitArgs,
   type CompleteSwapCircuitArgs,
   type CompleteWithdrawCircuitArgs,
   type QueueAttestationCircuitArgs,
@@ -37,6 +39,8 @@ import {
   type StartApproveRouterCircuitArgs,
   type StartApproveStataCircuitArgs,
   type StartDepositCircuitArgs,
+  type StartRedeemCircuitArgs,
+  type StartSupplyCircuitArgs,
   type StartSwapCircuitArgs,
   type StartWithdrawCircuitArgs,
   type VaultCircuits,
@@ -182,6 +186,70 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
       permissionlessVaultPrivateState(),
       this.relayerWallet,
       this.options('sendSwap', [args.outIndex]),
+    )
+  }
+
+  startSupply(args: StartSupplyCircuitArgs): Promise<string> {
+    return this.build(
+      createVaultPrivateState(args.secretKey),
+      args.wallet,
+      this.options('startSupply', [
+        args.inIndex,
+        { amount: args.amount },
+        {
+          nonce: crypto.getRandomValues(new Uint8Array(32)),
+          color: hexToBytes(args.coinType),
+          value: args.amount,
+        },
+      ]),
+    )
+  }
+
+  completeSupply(args: CompleteSupplyCircuitArgs): Promise<string> {
+    return this.build(
+      createVaultPrivateState(args.secretKey),
+      args.wallet,
+      this.options('completeSupply', [args.requestId, args.serializedOutput, args.mintNonce]),
+    )
+  }
+
+  sendSupply(args: SendRequestCircuitArgs): Promise<string> {
+    return this.build(
+      permissionlessVaultPrivateState(),
+      this.relayerWallet,
+      this.options('sendSupply', [args.outIndex]),
+    )
+  }
+
+  startRedeem(args: StartRedeemCircuitArgs): Promise<string> {
+    return this.build(
+      createVaultPrivateState(args.secretKey),
+      args.wallet,
+      this.options('startRedeem', [
+        args.inIndex,
+        { shares: args.shares },
+        {
+          nonce: crypto.getRandomValues(new Uint8Array(32)),
+          color: hexToBytes(args.coinType),
+          value: args.shares,
+        },
+      ]),
+    )
+  }
+
+  completeRedeem(args: CompleteRedeemCircuitArgs): Promise<string> {
+    return this.build(
+      createVaultPrivateState(args.secretKey),
+      args.wallet,
+      this.options('completeRedeem', [args.requestId, args.serializedOutput, args.mintNonce]),
+    )
+  }
+
+  sendRedeem(args: SendRequestCircuitArgs): Promise<string> {
+    return this.build(
+      permissionlessVaultPrivateState(),
+      this.relayerWallet,
+      this.options('sendRedeem', [args.outIndex]),
     )
   }
 

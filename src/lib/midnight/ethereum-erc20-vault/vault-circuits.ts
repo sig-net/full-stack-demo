@@ -23,6 +23,14 @@ export interface VaultCircuits {
   startSwap(args: StartSwapCircuitArgs): Promise<string>
   completeSwap(args: CompleteSwapCircuitArgs): Promise<string>
   sendSwap(args: SendRequestCircuitArgs): Promise<string>
+  /** Surrenders a fresh coin of the stata underlying worth exactly `amount`, which the caller's wallet funds when it balances the call. */
+  startSupply(args: StartSupplyCircuitArgs): Promise<string>
+  completeSupply(args: CompleteSupplyCircuitArgs): Promise<string>
+  sendSupply(args: SendRequestCircuitArgs): Promise<string>
+  /** Surrenders a fresh coin of the wrapper's vault token worth exactly `shares`, which the caller's wallet funds when it balances the call. */
+  startRedeem(args: StartRedeemCircuitArgs): Promise<string>
+  completeRedeem(args: CompleteRedeemCircuitArgs): Promise<string>
+  sendRedeem(args: SendRequestCircuitArgs): Promise<string>
   /** Deployer-gated: the contract refuses any other caller's secret at build time. */
   startApproveRouter(args: StartApproveRouterCircuitArgs): Promise<string>
   /** Deployer-gated: the contract refuses any other caller's secret at build time. */
@@ -103,6 +111,36 @@ export interface CompleteSwapCircuitArgs extends CallerCircuitArgs {
   readonly changeNonce: Uint8Array
 }
 
+export interface StartSupplyCircuitArgs extends CallerCircuitArgs {
+  readonly inIndex: bigint
+  readonly amount: bigint
+  /** The shielded token type of the stata underlying's vault coin, in hex. */
+  readonly coinType: string
+}
+
+export interface CompleteSupplyCircuitArgs extends CallerCircuitArgs {
+  readonly requestId: Uint8Array
+  /** 32 bytes: the attested shares for an executed deposit, ignored for the other verdicts. */
+  readonly serializedOutput: Uint8Array
+  /** 32 random bytes, fresh per call. */
+  readonly mintNonce: Uint8Array
+}
+
+export interface StartRedeemCircuitArgs extends CallerCircuitArgs {
+  readonly inIndex: bigint
+  readonly shares: bigint
+  /** The shielded token type of the wrapper's vault coin, in hex. */
+  readonly coinType: string
+}
+
+export interface CompleteRedeemCircuitArgs extends CallerCircuitArgs {
+  readonly requestId: Uint8Array
+  /** 32 bytes: the attested assets paid out for an executed redeem, ignored for the other verdicts. */
+  readonly serializedOutput: Uint8Array
+  /** 32 random bytes, fresh per call. */
+  readonly mintNonce: Uint8Array
+}
+
 export interface StartApproveRouterCircuitArgs extends CallerCircuitArgs {
   readonly inIndex: bigint
   /** `0x` plus 40 hex characters. */
@@ -134,6 +172,8 @@ export const SEND_CIRCUIT_BY_ACTION: Readonly<Record<VaultAction, VaultCircuitId
   deposit: 'sendDeposit',
   withdraw: 'sendWithdraw',
   swap: 'sendSwap',
+  supply: 'sendSupply',
+  redeem: 'sendRedeem',
   approve: 'sendApprove',
 }
 

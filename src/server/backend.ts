@@ -95,6 +95,26 @@ import type { ApprovalStateController } from '@/lib/midnight/ethereum-erc20-vaul
 import { ApprovalStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-controller-impl'
 import type { ApprovalStateResolver } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-resolver'
 import { ApprovalStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-resolver-impl'
+import { RedeemEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-event-consumer'
+import type { RedeemRepository } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-repository'
+import { RedeemRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-repository-sql-impl'
+import type { RedeemService } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service'
+import { RedeemServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service-adaptor'
+import { RedeemServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service-impl'
+import type { RedeemStateController } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-controller'
+import { RedeemStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-controller-impl'
+import type { RedeemStateResolver } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-resolver'
+import { RedeemStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-resolver-impl'
+import { SupplyEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-event-consumer'
+import type { SupplyRepository } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-repository'
+import { SupplyRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-repository-sql-impl'
+import type { SupplyService } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service'
+import { SupplyServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service-adaptor'
+import { SupplyServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service-impl'
+import type { SupplyStateController } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-controller'
+import { SupplyStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-controller-impl'
+import type { SupplyStateResolver } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-resolver'
+import { SupplyStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-resolver-impl'
 import { SwapEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-event-consumer'
 import type { SwapRepository } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-repository'
 import { SwapRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-repository-sql-impl'
@@ -292,6 +312,24 @@ export interface MidnightBackend {
       readonly service: SwapService
       readonly adaptor: SwapServiceAdaptor
     }
+    /** The caller's supplies: a vault coin of the stata underlying burnt for a deposit into Aave's static wrapper the vault account signs. */
+    readonly supplyV1: {
+      readonly repository: SupplyRepository
+      readonly stateController: SupplyStateController
+      readonly stateResolver: SupplyStateResolver
+      readonly eventConsumer: SupplyEventConsumer
+      readonly service: SupplyService
+      readonly adaptor: SupplyServiceAdaptor
+    }
+    /** The caller's redeems: a vault coin of the wrapper's shares burnt for a redemption the vault account signs, paid out as the underlying. */
+    readonly redeemV1: {
+      readonly repository: RedeemRepository
+      readonly stateController: RedeemStateController
+      readonly stateResolver: RedeemStateResolver
+      readonly eventConsumer: RedeemEventConsumer
+      readonly service: RedeemService
+      readonly adaptor: RedeemServiceAdaptor
+    }
     /** The deployer's approvals of the vault's spenders, the gate the swap's router spends under. */
     readonly approvalV1: {
       readonly repository: ApprovalRepository
@@ -362,6 +400,8 @@ function createLifecycle(backend: BackendPackages): Pick<Backend, 'start' | 'sto
       midnight.ethereumErc20Vault.depositV1.eventConsumer,
       midnight.ethereumErc20Vault.withdrawV1.eventConsumer,
       midnight.ethereumErc20Vault.swapV1.eventConsumer,
+      midnight.ethereumErc20Vault.supplyV1.eventConsumer,
+      midnight.ethereumErc20Vault.redeemV1.eventConsumer,
       midnight.ethereumErc20Vault.approvalV1.eventConsumer,
       midnight.ethereumErc20Vault.flushEventConsumer,
     ]
@@ -390,7 +430,7 @@ function createLifecycle(backend: BackendPackages): Pick<Backend, 'start' | 'sto
 
 /** Every resolver's sweep, then the flusher, so a request a sweep moved into a flush state is flushed at once. */
 function sweepTasks(ethereum: EthereumBackend, midnight: MidnightBackend): SweepTask[] {
-  const { vaultRequestV1, depositV1, withdrawV1, swapV1, approvalV1, flusher } =
+  const { vaultRequestV1, depositV1, withdrawV1, swapV1, supplyV1, redeemV1, approvalV1, flusher } =
     midnight.ethereumErc20Vault
   return [
     {
@@ -405,6 +445,8 @@ function sweepTasks(ethereum: EthereumBackend, midnight: MidnightBackend): Sweep
     { name: 'deposits', run: () => depositV1.stateResolver.resolvePending() },
     { name: 'withdrawals', run: () => withdrawV1.stateResolver.resolvePending() },
     { name: 'swaps', run: () => swapV1.stateResolver.resolvePending() },
+    { name: 'supplies', run: () => supplyV1.stateResolver.resolvePending() },
+    { name: 'redeems', run: () => redeemV1.stateResolver.resolvePending() },
     { name: 'approvals', run: () => approvalV1.stateResolver.resolvePending() },
     // The flusher coalesces and logs its own failures, and a flush that proves runs for minutes,
     // so the pass fires it and moves on.
@@ -675,6 +717,26 @@ function createMidnightEthereumErc20Vault(
         ledger,
       },
     ),
+    supplyV1: createMidnightEthereumErc20VaultSupplyV1(
+      db,
+      event,
+      ethereum,
+      config,
+      transactionV1,
+      vaultRequestV1,
+      { circuits, ledger },
+    ),
+    redeemV1: createMidnightEthereumErc20VaultRedeemV1(
+      db,
+      event,
+      config,
+      transactionV1,
+      vaultRequestV1,
+      {
+        circuits,
+        ledger,
+      },
+    ),
     approvalV1: createMidnightEthereumErc20VaultApprovalV1(
       db,
       event,
@@ -751,6 +813,94 @@ function createMidnightEthereumErc20VaultWithdrawV1(
     eventConsumer: new WithdrawEventConsumer(stateResolver),
     service,
     adaptor: new WithdrawServiceAdaptor(service),
+  }
+}
+
+function createMidnightEthereumErc20VaultSupplyV1(
+  db: DbBackend,
+  event: EventBackend,
+  ethereum: EthereumBackend,
+  config: ServerConfig,
+  transactionV1: MidnightBackend['transactionV1'],
+  vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+): MidnightBackend['ethereumErc20Vault']['supplyV1'] {
+  const repository = new SupplyRepositorySQLImpl(db.database)
+  const stateController = new SupplyStateControllerImpl(
+    repository,
+    event.publisher,
+    transactionV1.stateController,
+    vaultRequestV1.stateController,
+  )
+  const stateResolver = new SupplyStateResolverImpl(
+    repository,
+    stateController,
+    transactionV1.repository,
+    vaultRequestV1.repository,
+    vault.ledger,
+    db.unitOfWork,
+  )
+  const service = new SupplyServiceImpl(
+    repository,
+    stateController,
+    vaultRequestV1.repository,
+    vault.circuits,
+    vault.ledger,
+    new Erc20ReaderEthersImpl(ethereum.provider),
+    db.unitOfWork,
+    config.client.midnightSignet,
+    config.client.midnightEthereumErc20Vault,
+  )
+  return {
+    repository,
+    stateController,
+    stateResolver,
+    eventConsumer: new SupplyEventConsumer(stateResolver),
+    service,
+    adaptor: new SupplyServiceAdaptor(service),
+  }
+}
+
+function createMidnightEthereumErc20VaultRedeemV1(
+  db: DbBackend,
+  event: EventBackend,
+  config: ServerConfig,
+  transactionV1: MidnightBackend['transactionV1'],
+  vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+): MidnightBackend['ethereumErc20Vault']['redeemV1'] {
+  const repository = new RedeemRepositorySQLImpl(db.database)
+  const stateController = new RedeemStateControllerImpl(
+    repository,
+    event.publisher,
+    transactionV1.stateController,
+    vaultRequestV1.stateController,
+  )
+  const stateResolver = new RedeemStateResolverImpl(
+    repository,
+    stateController,
+    transactionV1.repository,
+    vaultRequestV1.repository,
+    vault.ledger,
+    db.unitOfWork,
+  )
+  const service = new RedeemServiceImpl(
+    repository,
+    stateController,
+    vaultRequestV1.repository,
+    vault.circuits,
+    vault.ledger,
+    db.unitOfWork,
+    config.client.midnightSignet,
+    config.client.midnightEthereumErc20Vault,
+  )
+  return {
+    repository,
+    stateController,
+    stateResolver,
+    eventConsumer: new RedeemEventConsumer(stateResolver),
+    service,
+    adaptor: new RedeemServiceAdaptor(service),
   }
 }
 
@@ -925,6 +1075,8 @@ function createRespondOutcomeSources(
     deposit: source('deposit'),
     withdraw: source('withdraw'),
     swap: source('swap'),
+    supply: source('supply'),
+    redeem: source('redeem'),
     approve: source('approve'),
   }
 }

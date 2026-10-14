@@ -26,7 +26,8 @@ import type { TokenInfoRegistry } from '@/lib/tokens/token-info-registry'
  * The row of an activity, with each token named and scaled by the registry, or by its address
  * in raw base units when the registry lacks it. A deposit moves the ERC20 from Ethereum to the
  * shielded wallet it mints to, a send moves a vault token to an address on Ethereum, a swap trades one vault
- * token for another, and an approval grants a spender on Ethereum.
+ * token for another, a supply deposits a vault token into the Aave wrapper on Ethereum, a redeem
+ * takes the underlying back out of it, and an approval grants a spender on Ethereum.
  */
 export function activityEntryOf(activity: Activity, registry: TokenInfoRegistry): ActivityEntry {
   const { from, to, description } = sidesOf(activity, registry)
@@ -80,6 +81,28 @@ function sidesOf(
         from,
         to: { kind: 'asset', asset },
         description: `swap of up to ${labelOf(from)} for ${labelOf(asset)}`,
+      }
+    }
+    case 'Supply': {
+      const from = assetAmount(registry, activity.erc20Address, activity.amount)
+      const wrapper = registry.byErc20Address(activity.destination)
+      const addressLabel =
+        wrapper === undefined ? abbreviateHex(activity.destination) : wrapper.symbol
+      return {
+        from,
+        to: { kind: 'wallet', address: activity.destination, addressLabel },
+        description: `supply of ${labelOf(from)} to ${addressLabel}`,
+      }
+    }
+    case 'Redeem': {
+      const from = assetAmount(registry, activity.erc20Address, activity.amount)
+      const underlying = registry.byErc20Address(activity.destination)
+      const addressLabel =
+        underlying === undefined ? abbreviateHex(activity.destination) : underlying.symbol
+      return {
+        from,
+        to: { kind: 'wallet', address: activity.destination, addressLabel },
+        description: `redeem of ${labelOf(from)} for ${addressLabel}`,
       }
     }
     case 'Approval': {
@@ -142,6 +165,8 @@ const ACTIVITY_KIND_BY_TYPE: Record<ActivityType, ActivityKind> = {
   Deposit: 'deposit',
   Withdraw: 'send',
   Swap: 'swap',
+  Supply: 'supply',
+  Redeem: 'redeem',
   Approval: 'approval',
 }
 

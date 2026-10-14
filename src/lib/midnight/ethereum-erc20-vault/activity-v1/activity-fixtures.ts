@@ -1,6 +1,8 @@
 import type {
   ApprovalActivity,
   DepositActivity,
+  RedeemActivity,
+  SupplyActivity,
   SwapActivity,
   WithdrawActivity,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
@@ -12,6 +14,12 @@ import {
   DEPOSIT_NAME,
   ERC20_ADDRESS,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-fixtures'
+import { REDEEM_NAME } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-fixtures'
+import {
+  STATA_ERC20_ADDRESS,
+  SUPPLY_NAME,
+  UNDERLYING_ERC20_ADDRESS,
+} from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-fixtures'
 import {
   ERC20_ADDRESS_OUT,
   SWAP_NAME,
@@ -77,6 +85,33 @@ export function swapActivityFixture(overrides: Partial<SwapActivity> = {}): Swap
     erc20AddressOut: ERC20_ADDRESS_OUT,
     amountOut: 1_000_000n,
     destination: null,
+    outcome: null,
+    ...overrides,
+  }
+}
+
+/** A pending supply's activity, depositing 1 of the underlying into the fixture wrapper. */
+export function supplyActivityFixture(overrides: Partial<SupplyActivity> = {}): SupplyActivity {
+  return {
+    ...activityFixture(),
+    name: SUPPLY_NAME,
+    type: 'Supply',
+    erc20Address: UNDERLYING_ERC20_ADDRESS,
+    destination: STATA_ERC20_ADDRESS,
+    outcome: null,
+    ...overrides,
+  }
+}
+
+/** A pending redeem's activity, redeeming 0.3 shares of the fixture wrapper for its underlying. */
+export function redeemActivityFixture(overrides: Partial<RedeemActivity> = {}): RedeemActivity {
+  return {
+    ...activityFixture(),
+    name: REDEEM_NAME,
+    type: 'Redeem',
+    erc20Address: STATA_ERC20_ADDRESS,
+    amount: 300_000n,
+    destination: UNDERLYING_ERC20_ADDRESS,
     outcome: null,
     ...overrides,
   }

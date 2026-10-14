@@ -78,10 +78,12 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/midnight/ethereum-erc20-vault`                    | The ERC-20 vault: its action set, circuit and ledger ports, signet readers, respond outcome sources, the flusher, and one folder per resource version.                                                        |
 | `src/lib/midnight/ethereum-erc20-vault/vault-request-v1`   | The vault request resource, its repository, state machine, state controller, resolver and event consumer.                                                                                                     |
 | `src/lib/midnight/ethereum-erc20-vault/activity-v1`        | The activity view: the resource the view projects, its read-only repository, service and adaptor.                                                                                                             |
-| `src/lib/midnight/ethereum-erc20-vault/caller-operation`   | The lifecycle every caller-started operation shares: its states, state machine, and the controller, resolver and event consumer bases the deposit, withdrawal, swap and approval build on.                    |
+| `src/lib/midnight/ethereum-erc20-vault/caller-operation`   | The lifecycle every caller-started operation shares: its states, state machine, and the controller, resolver and event consumer bases the deposit, withdrawal, swap, supply, redeem and approval build on.    |
 | `src/lib/midnight/ethereum-erc20-vault/deposit-v1`         | The deposit resource, its repository, state machine, state controller, resolver, event consumer, service and adaptor.                                                                                         |
 | `src/lib/midnight/ethereum-erc20-vault/withdraw-v1`        | The withdraw resource, the Send of the UI, with the same set of pieces as the deposit.                                                                                                                        |
 | `src/lib/midnight/ethereum-erc20-vault/swap-v1`            | The swap resource and its quote, with the same set of pieces as the deposit.                                                                                                                                  |
+| `src/lib/midnight/ethereum-erc20-vault/supply-v1`          | The supply resource, the Supply of the Lend tab, and its target (the pinned stata pair with the wrapper's allowance), with the same set of pieces as the deposit.                                             |
+| `src/lib/midnight/ethereum-erc20-vault/redeem-v1`          | The redeem resource, the Redeem of the Lend tab, with the same set of pieces as the deposit.                                                                                                                  |
 | `src/lib/midnight/ethereum-erc20-vault/approval-v1`        | The approval resource and the spender targets the deployer grants, with the same set of pieces as the deposit.                                                                                                |
 | `src/lib/midnight/ethereum-erc20-vault/supported-token-v1` | The vault's allowlist as a resource with each token's on-chain metadata, the funds a caller's deposit account holds of it, and their service and adaptor over the ledger and an ERC20 reader.                 |
 | `src/lib/midnight/transaction-v1`                          | The Midnight transaction resource, its repository, state machine, state controller, ledger, resolver, event consumer, service and adaptor.                                                                    |
@@ -338,27 +340,29 @@ one Kafka, `setup.ts` loads `.env.local`, `backend.ts` builds the test's backend
 `MIDNIGHT_USER_SEED`, and `operation-round-trip.ts` plays that wallet for any caller operation
 until it completes and deletes the operation and its children afterwards. A test file creates
 rows under a caller name of its own and deletes them, its outbox entries included, in
-`afterAll`, then stops the backend and ends the pool. The approval, swap and withdraw round
-trips run under the stack's user identity, which deployed the vault, so they delete only the
+`afterAll`, then stops the backend and ends the pool. The approval, swap, withdraw, supply and
+redeem round trips run under the stack's user identity, which deployed the vault, so they delete only the
 rows they created. Stop any
 dev server before a run: it joins the same Kafka consumer group, so its consumers and outbox
 relay would compete with the test's.
 
-| File                                         | Needs                                             | Covers                                                                                                                          |
-| -------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `repository-sql.test.ts`                     | Postgres                                          | `SQLRepository`: the round trip, a malformed row refused on read, a skip-locked search.                                         |
-| `backend-lifecycle.test.ts`                  | Postgres, Kafka, the Midnight stack               | `start()` runs once, syncs the relayer wallet and sweeps, and `stop()` ends every loop.                                         |
-| `midnight-transaction-ledger.test.ts`        | the indexer, the proof server                     | `MidnightTransactionLedgerImpl`: an unknown id is pending, an empty transaction proves.                                         |
-| `midnight-transaction-resolve.test.ts`       | Postgres, the proof server                        | A committed Midnight transaction is proven and the row and the outbox show it.                                                  |
-| `ethereum-transaction-broadcast.test.ts`     | Postgres, the anvil fork                          | A signed transaction is broadcast and included, and a second one at a consumed nonce ends `NonceConsumed`.                      |
-| `ethereum-erc20-vault-request.test.ts`       | Postgres, the indexer                             | Vault request storage, the one-live-request index, a starter's conflict mapping, the readers and the resolver's reads.          |
-| `ethereum-erc20-vault-flush.test.ts`         | the Midnight stack (the relayer wallet syncs)     | The first flush starts the relayer wallet and submits nothing when nothing is queued.                                           |
-| `ethereum-erc20-vault-approval.test.ts`      | the whole local stack                             | A router approval from `startApproval` to `Completed` under the deployer identity, the allowance read back on the fork.         |
-| `ethereum-erc20-vault-swap.test.ts`          | the whole local stack                             | A deposit, the router approval when the vault lacks it, then a swap of the deposited USDC for EURC at a live quote.             |
-| `ethereum-erc20-vault-withdraw.test.ts`      | the whole local stack                             | A deposit, then a send of the deposited USDC from the vault account to a fresh destination, its balance read back on the fork.  |
-| `ethereum-erc20-vault-deposit-start.test.ts` | Postgres, the indexer, the proof server, the fork | `startDeposit` stores the deposit and its start call, the call proves, listing and the early complete refusal, a refused token. |
-| `ethereum-erc20-vault-activity.test.ts`      | Postgres                                          | The activity view's projection of the newest children and its aggregated states.                                                |
-| `ethereum-erc20-vault-deposit.test.ts`       | the whole stack                                   | The end-to-end deposit below.                                                                                                   |
+| File                                         | Needs                                             | Covers                                                                                                                                             |
+| -------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `repository-sql.test.ts`                     | Postgres                                          | `SQLRepository`: the round trip, a malformed row refused on read, a skip-locked search.                                                            |
+| `backend-lifecycle.test.ts`                  | Postgres, Kafka, the Midnight stack               | `start()` runs once, syncs the relayer wallet and sweeps, and `stop()` ends every loop.                                                            |
+| `midnight-transaction-ledger.test.ts`        | the indexer, the proof server                     | `MidnightTransactionLedgerImpl`: an unknown id is pending, an empty transaction proves.                                                            |
+| `midnight-transaction-resolve.test.ts`       | Postgres, the proof server                        | A committed Midnight transaction is proven and the row and the outbox show it.                                                                     |
+| `ethereum-transaction-broadcast.test.ts`     | Postgres, the anvil fork                          | A signed transaction is broadcast and included, and a second one at a consumed nonce ends `NonceConsumed`.                                         |
+| `ethereum-erc20-vault-request.test.ts`       | Postgres, the indexer                             | Vault request storage, the one-live-request index, a starter's conflict mapping, the readers and the resolver's reads.                             |
+| `ethereum-erc20-vault-flush.test.ts`         | the Midnight stack (the relayer wallet syncs)     | The first flush starts the relayer wallet and submits nothing when nothing is queued.                                                              |
+| `ethereum-erc20-vault-approval.test.ts`      | the whole local stack                             | A router approval from `startApproval` to `Completed` under the deployer identity, the allowance read back on the fork.                            |
+| `ethereum-erc20-vault-swap.test.ts`          | the whole local stack                             | A deposit, the router approval when the vault lacks it, then a swap of the deposited USDC for EURC at a live quote.                                |
+| `ethereum-erc20-vault-withdraw.test.ts`      | the whole local stack                             | A deposit, then a send of the deposited USDC from the vault account to a fresh destination, its balance read back on the fork.                     |
+| `ethereum-erc20-vault-supply.test.ts`        | the whole local stack                             | A deposit of the stata underlying, the wrapper approval when the vault lacks it, then a supply into the wrapper, the shares read back on the fork. |
+| `ethereum-erc20-vault-redeem.test.ts`        | the whole local stack                             | A deposit and a supply, then a redeem of the minted shares, the underlying paid out read back on the fork.                                         |
+| `ethereum-erc20-vault-deposit-start.test.ts` | Postgres, the indexer, the proof server, the fork | `startDeposit` stores the deposit and its start call, the call proves, listing and the early complete refusal, a refused token.                    |
+| `ethereum-erc20-vault-activity.test.ts`      | Postgres                                          | The activity view's projection of the newest children and its aggregated states.                                                                   |
+| `ethereum-erc20-vault-deposit.test.ts`       | the whole stack                                   | The end-to-end deposit below.                                                                                                                      |
 
 The whole suite takes four and a half to five minutes, of which the end-to-end deposit is four
 to four and a half:
@@ -919,11 +923,11 @@ events and conflict error (`caller-operation-state-controller.ts`), and the cont
 resolver and event consumer bases (`-impl.ts` and `caller-operation-event-consumer.ts`) that
 take a `CallerOperationKind`: the vault action, the start and complete circuits, the events,
 the conflict class, the signer account and the outcome the complete call's attested request
-reads as. `deposit-v1`, `withdraw-v1`, `swap-v1` and `approval-v1` each keep their own
-resource, repository, service, adaptor, actions and fixtures, and their controller, resolver
-and consumer are the bases bound to their kind. The vault request names its `signerAccount`:
-the caller's deposit account for a deposit, the vault account for a withdrawal, a swap or an
-approval, whose nonce the flush assigns.
+reads as. `deposit-v1`, `withdraw-v1`, `swap-v1`, `supply-v1`, `redeem-v1` and `approval-v1`
+each keep their own resource, repository, service, adaptor, actions and fixtures, and their
+controller, resolver and consumer are the bases bound to their kind. The vault request names
+its `signerAccount`: the caller's deposit account for a deposit, the vault account for a
+withdrawal, a swap, a supply, a redeem or an approval, whose nonce the flush assigns.
 
 A withdrawal (`src/lib/midnight/ethereum-erc20-vault/withdraw-v1`) is the contract's ERC20
 transfer out of the vault, which the UI calls Send: `startWithdraw` burns a vault coin of the
@@ -947,6 +951,28 @@ allowance is the caller's `slippageBps`, ten percent (`SWAP_SLIPPAGE_BPS` in `sw
 when unset and at most half the output (`SWAP_MAX_SLIPPAGE_BPS`). A pair no pool prices is a
 result, not a failure.
 
+A supply (`src/lib/midnight/ethereum-erc20-vault/supply-v1`) is the contract's deposit into
+Aave's static wrapper, the pair the deployer pinned at initialisation (`stataUnderlying` and
+`stataToken` on the ledger): `startSupply` burns a vault coin of the underlying worth exactly
+`amount`, which the caller's wallet funds from its balance when it balances the call,
+`sendSupply` has the MPC sign the wrapper's `deposit(amount, vaultAccount)` from the vault
+account, and `completeSupply` mints the shares the MPC attested (the wrapper's `uint256`
+return, 32 bytes) as the wrapper's vault token to the caller, or re-mints the surrendered
+underlying after a deposit the MPC attested as failed or unviable (outcomes `supplied` and
+`refunded`). The wrapper pulls the underlying under the allowance `startApproveStata` grants,
+so a supply without that approval executes a failing deposit and refunds.
+`SupplyService.getSupplyTarget` reads the pair from the ledger and the wrapper's allowance from
+the chain, which the Lend tab gates Supply on. The caller supplies the amount and nothing else.
+
+A redeem (`src/lib/midnight/ethereum-erc20-vault/redeem-v1`) is the wrapper's redemption, the
+supply's reverse: `startRedeem` burns a vault coin of the wrapper's token worth exactly
+`shares`, `sendRedeem` has the MPC sign the wrapper's `redeem(shares, vaultAccount,
+vaultAccount)` from the vault account, which burns the shares it holds and pays it the
+underlying, and `completeRedeem` mints the underlying the MPC attested (the wrapper's
+`uint256` return, 32 bytes) as the underlying's vault token to the caller, or re-mints the
+surrendered shares after a redeem the MPC attested as failed or unviable (outcomes `redeemed`
+and `refunded`). No allowance is involved. The caller supplies the shares and nothing else.
+
 An approval (`src/lib/midnight/ethereum-erc20-vault/approval-v1`) is the vault account granting
 one of the contract's two spenders an unlimited allowance: the Uniswap router on a token a swap
 sells (`startApproveRouter`), or the Aave static wrapper on its underlying (`startApproveStata`).
@@ -962,8 +988,9 @@ popover links to it.
 ## Activity view
 
 `midnight_ethereum_erc20_vault_activity_v1` is a Postgres view over the lifecycle tables, one row
-per vault activity, defined in `src/lib/db/schema.ts` (migrations 0013 to 0018). It has one
-branch per caller operation, deposits, withdrawals, swaps and approvals, joined with
+per vault activity, defined in `src/lib/db/schema.ts` (migrations 0013 to 0022). It has one
+branch per caller operation, deposits, withdrawals, swaps, supplies, redeems and approvals,
+joined with
 `UNION ALL`. Each
 operation is projected with the newest child of each kind under it: its start and complete
 Midnight transactions (the approval's start may carry either approval circuit), its vault
@@ -1140,8 +1167,16 @@ under Styling and theme.
 - `SidePanel` (`src/components/side-panel.tsx`) is the right column: two line blocks, Swap and
   Lend, over the shadcn tabs primitive styled as the design draws them, the open one filled. A
   balance's Swap button also opens the Swap tab. `LendPanel` (`src/components/lend-panel.tsx`)
-  behind Lend is the place of the vault's Aave leg: a Supply and a Redeem action drawn with
-  their amount fields and controls, disabled until they are wired.
+  behind Lend is the vault's Aave leg. Supply reads the pinned pair and the wrapper's allowance
+  through `getSupplyTarget` (refreshed at the sweep's pace), fixes the field's token to the
+  underlying with the wallet's balance of it and a MAX control, and gates its control on the
+  identity secret, the wallet, a non-zero allowance (the admin page grants it), an amount within
+  the balance and the supply readiness checks. Starting a supply calls `startSupply` and hands
+  the rest to the Activity table, where it is listed as a Supply whose destination is the
+  wrapper, with the same wallet turns and auto-completion as a deposit. Redeem reads the same
+  pair, fixes its field to the wrapper's token with the wallet's balance of it (matched by token
+  type, since the wrapper is outside the allowlist) and a MAX control, needs no allowance, and
+  starts through `startRedeem`, listed as a Redeem whose destination is the underlying.
 - `SwapPanel` (`src/components/swap-panel.tsx`) sells a vault token the wallet holds for
   another the vault admits. The From field offers the wallet's supported balances
   (`useMidnightBalances`, `src/components/use-midnight-balances.ts`, the query the Balances

@@ -32,6 +32,8 @@ export function requestLedgerState(
     depositArgsMap: ledgerMap([]),
     withdrawArgsMap: ledgerMap([]),
     swapArgsMap: ledgerMap([]),
+    supplyArgsMap: ledgerMap([]),
+    redeemArgsMap: ledgerMap([]),
     approveArgsMap: ledgerMap([]),
     mpcResponseKey: { x: 1n, y: 2n, identity: false },
     ...overrides,

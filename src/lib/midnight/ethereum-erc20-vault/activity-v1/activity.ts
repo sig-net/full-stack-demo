@@ -13,6 +13,14 @@ import {
   depositNameSchema,
   depositOutcomeSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import {
+  redeemNameSchema,
+  redeemOutcomeSchema,
+} from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
+import {
+  supplyNameSchema,
+  supplyOutcomeSchema,
+} from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply'
 import { swapNameSchema, swapOutcomeSchema } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import { vaultRequestStateSchema } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import {
@@ -48,7 +56,14 @@ export const ACTIVITY_STATE_BY_OPERATION_STATE: Partial<
 }
 
 /** The kinds of vault activity, one per caller operation the view reads. */
-export const ACTIVITY_TYPES = ['Deposit', 'Withdraw', 'Swap', 'Approval'] as const
+export const ACTIVITY_TYPES = [
+  'Deposit',
+  'Withdraw',
+  'Swap',
+  'Supply',
+  'Redeem',
+  'Approval',
+] as const
 
 export const activityTypeSchema = z.enum(ACTIVITY_TYPES)
 
@@ -158,6 +173,30 @@ export const swapActivitySchema = activityFieldsSchema.extend({
   outcome: swapOutcomeSchema.nullable(),
 })
 
+/** A supply: `amount` of `erc20Address`, the stata underlying, deposited from the vault account into the wrapper at `destination`. */
+export const supplyActivitySchema = activityFieldsSchema.extend({
+  name: supplyNameSchema,
+  type: z.literal('Supply'),
+  amount: amountSchema,
+  erc20AddressOut: z.null(),
+  amountOut: z.null(),
+  spender: z.null(),
+  destination: evmAddressSchema,
+  outcome: supplyOutcomeSchema.nullable(),
+})
+
+/** A redeem: `amount` shares of `erc20Address`, the wrapper, redeemed from the vault account for the underlying at `destination`. */
+export const redeemActivitySchema = activityFieldsSchema.extend({
+  name: redeemNameSchema,
+  type: z.literal('Redeem'),
+  amount: amountSchema,
+  erc20AddressOut: z.null(),
+  amountOut: z.null(),
+  spender: z.null(),
+  destination: evmAddressSchema,
+  outcome: redeemOutcomeSchema.nullable(),
+})
+
 /** An approval: the vault account allowing `spender` to move `erc20Address`. */
 export const approvalActivitySchema = activityFieldsSchema.extend({
   name: approvalNameSchema,
@@ -179,6 +218,8 @@ export const activitySchema = z.discriminatedUnion('type', [
   depositActivitySchema,
   withdrawActivitySchema,
   swapActivitySchema,
+  supplyActivitySchema,
+  redeemActivitySchema,
   approvalActivitySchema,
 ])
 
@@ -187,12 +228,16 @@ export type Activity = z.infer<typeof activitySchema>
 export type DepositActivity = z.infer<typeof depositActivitySchema>
 export type WithdrawActivity = z.infer<typeof withdrawActivitySchema>
 export type SwapActivity = z.infer<typeof swapActivitySchema>
+export type SupplyActivity = z.infer<typeof supplyActivitySchema>
+export type RedeemActivity = z.infer<typeof redeemActivitySchema>
 export type ApprovalActivity = z.infer<typeof approvalActivitySchema>
 
-/** The name of the resource an activity projects, in any of the four forms. */
+/** The name of the resource an activity projects, in any of the six forms. */
 export const activityNameSchema = z.union([
   depositNameSchema,
   withdrawNameSchema,
   swapNameSchema,
+  supplyNameSchema,
+  redeemNameSchema,
   approvalNameSchema,
 ])

@@ -18,6 +18,8 @@ import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 import { completeApproval } from '@/server/actions/approval-actions'
 import { listActivities } from '@/server/actions/activity-actions'
 import { completeDeposit } from '@/server/actions/deposit-actions'
+import { completeRedeem } from '@/server/actions/redeem-actions'
+import { completeSupply } from '@/server/actions/supply-actions'
 import { completeSwap } from '@/server/actions/swap-actions'
 import { completeWithdraw } from '@/server/actions/withdraw-actions'
 
@@ -105,6 +107,8 @@ const COMPLETE_BY_TYPE: Record<
   Deposit: completeDeposit,
   Withdraw: completeWithdraw,
   Swap: completeSwap,
+  Supply: completeSupply,
+  Redeem: completeRedeem,
   Approval: completeApproval,
 }
 

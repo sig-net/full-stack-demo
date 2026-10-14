@@ -50,6 +50,16 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import { VAULT_ACTIONS } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 import {
+  REDEEM_FAILURES,
+  REDEEM_OUTCOMES,
+  REDEEM_STATES,
+} from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
+import {
+  SUPPLY_FAILURES,
+  SUPPLY_OUTCOMES,
+  SUPPLY_STATES,
+} from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply'
+import {
   WITHDRAW_FAILURES,
   WITHDRAW_OUTCOMES,
   WITHDRAW_STATES,
@@ -199,6 +209,50 @@ export const midnightEthereumErc20VaultSwapsV1 = pgTable('midnight_ethereum_erc2
 })
 
 /**
+ * One row per ERC-20 vault supply resource, keyed by its resource name: a deposit of the stata
+ * underlying into Aave's static wrapper paid from a surrendered vault coin.
+ */
+export const midnightEthereumErc20VaultSuppliesV1 = pgTable(
+  'midnight_ethereum_erc20_vault_supplies_v1',
+  {
+    name: text('name').primaryKey(),
+    underlyingErc20Address: text('underlying_erc20_address').notNull(),
+    stataErc20Address: text('stata_erc20_address').notNull(),
+    amount: contractInteger('amount').notNull(),
+    state: text('state', { enum: SUPPLY_STATES }).notNull(),
+    inIndex: contractInteger('in_index').notNull(),
+    vaultAccount: text('vault_account').notNull(),
+    outcome: text('outcome', { enum: SUPPLY_OUTCOMES }),
+    failure: text('failure', { enum: SUPPLY_FAILURES }),
+    error: text('error'),
+    createTime: timestamp('create_time', { withTimezone: true }).notNull(),
+    updateTime: timestamp('update_time', { withTimezone: true }).notNull(),
+  },
+)
+
+/**
+ * One row per ERC-20 vault redeem resource, keyed by its resource name: a redemption of shares
+ * of Aave's static wrapper for its underlying paid from a surrendered vault coin.
+ */
+export const midnightEthereumErc20VaultRedeemsV1 = pgTable(
+  'midnight_ethereum_erc20_vault_redeems_v1',
+  {
+    name: text('name').primaryKey(),
+    stataErc20Address: text('stata_erc20_address').notNull(),
+    underlyingErc20Address: text('underlying_erc20_address').notNull(),
+    shares: contractInteger('shares').notNull(),
+    state: text('state', { enum: REDEEM_STATES }).notNull(),
+    inIndex: contractInteger('in_index').notNull(),
+    vaultAccount: text('vault_account').notNull(),
+    outcome: text('outcome', { enum: REDEEM_OUTCOMES }),
+    failure: text('failure', { enum: REDEEM_FAILURES }),
+    error: text('error'),
+    createTime: timestamp('create_time', { withTimezone: true }).notNull(),
+    updateTime: timestamp('update_time', { withTimezone: true }).notNull(),
+  },
+)
+
+/**
  * One row per ERC-20 vault approval resource, keyed by its resource name: the vault account
  * granting one of its pinned spenders an allowance, which only the deployer starts.
  */
@@ -252,8 +306,8 @@ export const midnightEthereumErc20VaultRequestsV1 = pgTable(
 )
 
 /**
- * One row per vault activity, derived from the lifecycle tables: each deposit, withdrawal, swap
- * and approval with its newest start and complete calls, its newest vault request and that
+ * One row per vault activity, derived from the lifecycle tables: each deposit, withdrawal, swap,
+ * supply, redeem and approval with its newest start and complete calls, its newest vault request and that
  * request's newest foreign chain transaction. The states are aggregated here, so nothing above
  * a repository derives them.
  */
@@ -293,6 +347,8 @@ function activityViewQuery(): SQL {
   const deposits = midnightEthereumErc20VaultDepositsV1
   const withdraws = midnightEthereumErc20VaultWithdrawsV1
   const swaps = midnightEthereumErc20VaultSwapsV1
+  const supplies = midnightEthereumErc20VaultSuppliesV1
+  const redeems = midnightEthereumErc20VaultRedeemsV1
   const approvals = midnightEthereumErc20VaultApprovalsV1
   return sql.raw(
     [
@@ -331,6 +387,30 @@ function activityViewQuery(): SQL {
         amountOut: swaps.amountOut,
         spender: null,
         destination: null,
+      }),
+      activityBranch({
+        type: 'Supply',
+        table: supplies,
+        startCircuits: ['startSupply'],
+        completeCircuit: 'completeSupply',
+        erc20Address: supplies.underlyingErc20Address,
+        amount: supplies.amount,
+        erc20AddressOut: null,
+        amountOut: null,
+        spender: null,
+        destination: supplies.stataErc20Address,
+      }),
+      activityBranch({
+        type: 'Redeem',
+        table: redeems,
+        startCircuits: ['startRedeem'],
+        completeCircuit: 'completeRedeem',
+        erc20Address: redeems.stataErc20Address,
+        amount: redeems.shares,
+        erc20AddressOut: null,
+        amountOut: null,
+        spender: null,
+        destination: redeems.underlyingErc20Address,
       }),
       activityBranch({
         type: 'Approval',

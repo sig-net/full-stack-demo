@@ -78,6 +78,16 @@ export const ACTIVITY_STEPS_BY_TYPE: Readonly<
     'Tokens traded on Ethereum',
     'Trade attested by the MPC',
   ),
+  Supply: operationSteps(
+    'Deposit signed by the MPC',
+    'Tokens supplied on Ethereum',
+    'Deposit attested by the MPC',
+  ),
+  Redeem: operationSteps(
+    'Redeem signed by the MPC',
+    'Shares redeemed on Ethereum',
+    'Redeem attested by the MPC',
+  ),
   Approval: operationSteps(
     'Approval signed by the MPC',
     'Allowance granted on Ethereum',

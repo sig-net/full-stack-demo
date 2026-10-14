@@ -23,7 +23,7 @@ export function HomeSections(): ReactNode {
           }}
         />
       }
-      activity={<ActivitySection types={['Deposit', 'Withdraw', 'Swap']} />}
+      activity={<ActivitySection types={['Deposit', 'Withdraw', 'Swap', 'Supply', 'Redeem']} />}
       swap={<SidePanel sourceRequest={swapSource} />}
     />
   )

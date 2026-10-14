@@ -102,7 +102,7 @@ export type RequestStage =
     }
   | { readonly stage: 'settled' }
 
-/** The maps `requestStage` reads, so a unit test builds those nine and nothing else. */
+/** The maps `requestStage` reads, so a unit test builds those eleven and nothing else. */
 export type RequestLedgerView = Pick<
   VaultLedgerState,
   | 'inputRequestBuffer'
@@ -113,6 +113,8 @@ export type RequestLedgerView = Pick<
   | 'depositArgsMap'
   | 'withdrawArgsMap'
   | 'swapArgsMap'
+  | 'supplyArgsMap'
+  | 'redeemArgsMap'
   | 'approveArgsMap'
 >
 
@@ -157,6 +159,8 @@ const ARGS_MAP_BY_ACTION: Record<
   deposit: (state) => state.depositArgsMap,
   withdraw: (state) => state.withdrawArgsMap,
   swap: (state) => state.swapArgsMap,
+  supply: (state) => state.supplyArgsMap,
+  redeem: (state) => state.redeemArgsMap,
   approve: (state) => state.approveArgsMap,
 }
 
