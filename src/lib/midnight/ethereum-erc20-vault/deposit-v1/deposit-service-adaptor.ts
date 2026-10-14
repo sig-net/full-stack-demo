@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
 import type { Deposit } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import { DepositRecipientMismatch } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 import {
   completeDepositArgsSchema,
   type DepositService,
@@ -80,7 +81,9 @@ async function outcomeOf(action: () => Promise<Deposit>): Promise<DepositResult>
   try {
     return { ok: true, deposit: await action() }
   } catch (error: unknown) {
-    if (error instanceof DepositStateConflict) return { ok: false, error: error.message }
+    if (error instanceof DepositStateConflict || error instanceof DepositRecipientMismatch) {
+      return { ok: false, error: error.message }
+    }
     const refusal = circuitAssertMessage(error)
     if (refusal !== undefined) return { ok: false, error: refusal }
     throw error

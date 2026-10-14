@@ -67,6 +67,9 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
       error: null,
     })
     expect(deposit.depositAccount).toMatch(/^0x[0-9a-f]{40}$/)
+    expect(deposit.recipient).toMatch(
+      new RegExp(`^mn_shield-addr_${backend.config.client.midnightNetwork.networkId}1`),
+    )
     expect(deposit.inIndex).toBeLessThanOrEqual(2n ** 64n - 1n)
     expect(await repository.get(deposit.name)).toEqual(deposit)
 

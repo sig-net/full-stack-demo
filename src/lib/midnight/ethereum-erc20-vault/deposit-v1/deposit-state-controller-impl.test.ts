@@ -10,6 +10,7 @@ import {
   DEPOSIT_NAME,
   ERC20_ADDRESS,
   IN_INDEX,
+  RECIPIENT,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-fixtures'
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
 import {
@@ -105,6 +106,7 @@ describe('DepositStateControllerImpl.startDeposit', () => {
     maxFeePerGas: 30_000_000_000n,
     maxPriorityFeePerGas: 1_000_000_000n,
     depositAccount: DEPOSIT_ACCOUNT,
+    recipient: RECIPIENT,
     unprovenTx: 'start-call',
   }
 

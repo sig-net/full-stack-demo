@@ -24,6 +24,15 @@ export interface DepositService {
   listDeposits(caller: Caller, args: ListDepositsArgs): Promise<Deposit[]>
 }
 
+/** The completion was asked for with a wallet other than the one the deposit mints to. */
+export class DepositRecipientMismatch extends Error {
+  readonly name = 'DepositRecipientMismatch'
+
+  constructor(name: string) {
+    super(`${name} mints to the wallet it was started with: complete it with that wallet`)
+  }
+}
+
 /** A 32-byte key as the ledger renders it, which the browser wallet reports in hex. */
 const walletKeySchema = hexBytesSchema.pipe(z.string().length(64, 'expected a 32-byte key in hex'))
 

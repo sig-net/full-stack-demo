@@ -8,9 +8,11 @@ import type { Provider } from 'ethers'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
 import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
+import type { MidnightNetworkConfig } from '@/lib/config/midnight-network-config'
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
+import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
 import {
   type Deposit,
   depositName,
@@ -18,12 +20,13 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-machine'
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
-import type {
-  CompleteDepositArgs,
-  DepositService,
-  GetDepositArgs,
-  ListDepositsArgs,
-  StartDepositArgs,
+import {
+  type CompleteDepositArgs,
+  DepositRecipientMismatch,
+  type DepositService,
+  type GetDepositArgs,
+  type ListDepositsArgs,
+  type StartDepositArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 import {
   DepositStateConflict,
@@ -45,6 +48,7 @@ export class DepositServiceImpl implements DepositService {
   private readonly evmProvider: Provider
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
+  private readonly midnightNetwork: MidnightNetworkConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
 
   constructor(
@@ -56,7 +60,9 @@ export class DepositServiceImpl implements DepositService {
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
+    midnightNetwork: MidnightNetworkConfig,
   ) {
+    this.midnightNetwork = midnightNetwork
     this.depositRepository = depositRepository
     this.depositStateController = depositStateController
     this.vaultRequestRepository = vaultRequestRepository
@@ -90,6 +96,7 @@ export class DepositServiceImpl implements DepositService {
         amount: depositRequest.amount,
         inIndex,
         evmNonce,
+        recipient: shieldedAddressOf(wallet, this.midnightNetwork.networkId),
         ...SWEEP_GAS,
         depositAccount,
         unprovenTx,
@@ -102,6 +109,12 @@ export class DepositServiceImpl implements DepositService {
     const deposit = await this.ownDeposit(caller, name)
     if (nextState(deposit.state, 'complete') === undefined) {
       throw new DepositStateConflict(name, deposit.state, 'complete')
+    }
+    if (
+      deposit.recipient !== null &&
+      deposit.recipient !== shieldedAddressOf(wallet, this.midnightNetwork.networkId)
+    ) {
+      throw new DepositRecipientMismatch(name)
     }
     const request = await this.attestedRequestOf(name)
     const unprovenTx = await this.circuits.completeDeposit({

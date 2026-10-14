@@ -2,7 +2,7 @@
 
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, LoaderCircle, SlidersHorizontal } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ACTIVITIES_QUERY_KEY } from '@/components/activity-section'
@@ -26,21 +26,44 @@ const AMOUNT_INPUT = /^\d*\.?\d*$/
 /** How long the amount must rest before it is priced, so typing does not price every keystroke. */
 const QUOTE_DEBOUNCE_MS = 400
 
+/** A balance's Swap control asking for its token as the source, each press a new sequence number. */
+export interface SwapSourceRequest {
+  readonly erc20Address: string
+  readonly sequence: number
+}
+
+interface SwapPanelProps {
+  /** The latest request, which selects the From token until the user picks another and moves focus to the amount. */
+  sourceRequest: SwapSourceRequest | null
+}
+
 /**
  * Sells vault tokens the wallet holds for another token the vault admits, at a live quote. The
  * From amount is what the swap may spend at most and is surrendered whole, the To amount is the
  * least the trade accepts, and whatever the trade does not spend comes back as change.
  */
-export function SwapPanel(): ReactNode {
+export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   const { callerSecret, callerName } = useCaller()
   const { wallet } = useMidnightWallet()
   const registry = useTokenInfoRegistry()
   const { checks } = useVaultReadiness()
   const balances = useMidnightBalances()
   const queryClient = useQueryClient()
+  const amountInput = useRef<HTMLInputElement>(null)
   const [fromAmount, setFromAmount] = useState('')
-  const [fromErc20Address, setFromErc20Address] = useState<string | null>(null)
+  // The user's choice is tagged with the request it followed, so a newer request overrides it.
+  const [fromChoice, setFromChoice] = useState<{ erc20Address: string | null; after: number }>({
+    erc20Address: null,
+    after: 0,
+  })
   const [toErc20Address, setToErc20Address] = useState<string | null>(null)
+  const fromErc20Address =
+    sourceRequest !== null && sourceRequest.sequence > fromChoice.after
+      ? sourceRequest.erc20Address
+      : fromChoice.erc20Address
+  useEffect(() => {
+    if (sourceRequest !== null) amountInput.current?.focus()
+  }, [sourceRequest])
 
   const sources = (balances.data ?? []).flatMap((balance) => {
     const info = registry.get({ ledger: 'shielded', tokenType: balance.tokenType })
@@ -162,10 +185,11 @@ export function SwapPanel(): ReactNode {
           tokens={sources}
           token={fromToken}
           onTokenChange={(erc20Address) => {
-            setFromErc20Address(erc20Address)
+            setFromChoice({ erc20Address, after: sourceRequest?.sequence ?? 0 })
             if (erc20Address === toErc20Address) setToErc20Address(null)
           }}
           disabled={busy}
+          inputRef={amountInput}
         />
         <ArrowDown aria-hidden="true" className="size-5 shrink-0 text-swap-panel-icon" />
         <TokenAmountField

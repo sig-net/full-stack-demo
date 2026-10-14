@@ -143,6 +143,7 @@ export const midnightEthereumErc20VaultDepositsV1 = pgTable(
     maxFeePerGas: contractInteger('max_fee_per_gas').notNull(),
     maxPriorityFeePerGas: contractInteger('max_priority_fee_per_gas').notNull(),
     depositAccount: text('deposit_account').notNull(),
+    recipient: text('recipient'),
     outcome: text('outcome', { enum: DEPOSIT_OUTCOMES }),
     failure: text('failure', { enum: DEPOSIT_FAILURES }),
     error: text('error'),
@@ -305,7 +306,7 @@ function activityViewQuery(): SQL {
         erc20AddressOut: null,
         amountOut: null,
         spender: null,
-        destination: null,
+        destination: deposits.recipient,
       }),
       activityBranch({
         type: 'Withdraw',

@@ -76,6 +76,7 @@ export function swapActivityFixture(overrides: Partial<SwapActivity> = {}): Swap
     amount: 1_100_000n,
     erc20AddressOut: ERC20_ADDRESS_OUT,
     amountOut: 1_000_000n,
+    destination: null,
     outcome: null,
     ...overrides,
   }
@@ -91,6 +92,7 @@ export function approvalActivityFixture(
     type: 'Approval',
     amount: null,
     spender: ROUTER_ADDRESS,
+    destination: null,
     outcome: null,
     ...overrides,
   }

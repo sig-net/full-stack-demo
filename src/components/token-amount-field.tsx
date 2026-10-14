@@ -1,5 +1,5 @@
 import { cn } from 'cn'
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import {
@@ -24,6 +24,8 @@ interface TokenAmountFieldProps {
   disabled?: boolean
   /** A line under the amount row inside the field, such as the balance it draws on. */
   footer?: ReactNode
+  /** The amount input, for a caller that moves focus to it. */
+  inputRef?: Ref<HTMLInputElement>
 }
 
 /** An amount beside the token it is in, chosen from the tokens offered: one side of a swap, or what a send moves. */
@@ -36,6 +38,7 @@ export function TokenAmountField({
   onTokenChange,
   disabled = false,
   footer,
+  inputRef,
 }: TokenAmountFieldProps): ReactNode {
   return (
     <InputGroup
@@ -46,6 +49,7 @@ export function TokenAmountField({
       )}
     >
       <InputGroupInput
+        ref={inputRef}
         aria-label={`${label} amount`}
         inputMode="decimal"
         autoComplete="off"

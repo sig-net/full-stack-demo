@@ -16,6 +16,7 @@ import {
   amountSchema,
   evmAddressSchema,
   HEX_32_BYTES,
+  shieldedAddressSchema,
   uint64Schema,
   uint128Schema,
   UUID,
@@ -79,6 +80,8 @@ export const depositSchema = z.object({
   maxPriorityFeePerGas: uint128Schema,
   /** The EVM account the user funds and the MPC sweeps from, derived from the caller's commitment. */
   depositAccount: evmAddressSchema,
+  /** The shielded address of the wallet the start call was built for, which the completion mints to, null on a row stored without one. */
+  recipient: shieldedAddressSchema.nullable(),
   /** Set with `Completed`. */
   outcome: depositOutcomeSchema.nullable(),
   /** Set with `Failed`. */

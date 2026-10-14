@@ -1,13 +1,8 @@
 import { setNetworkId } from '@midnight-ntwrk/midnight-js/network-id'
-import {
-  DustAddress,
-  MidnightBech32m,
-  ShieldedAddress,
-  ShieldedCoinPublicKey,
-  ShieldedEncryptionPublicKey,
-} from '@midnightntwrk/wallet-sdk-address-format'
+import { DustAddress, MidnightBech32m } from '@midnightntwrk/wallet-sdk-address-format'
 
 import type { MidnightNetworkConfig } from '@/lib/config/midnight-network-config'
+import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
 import {
   type AccountKeys,
   createWalletAndMidnightProvider,
@@ -109,14 +104,7 @@ export class SeedWallet implements Wallet {
       setNetworkId(this.configuration.networkId)
       const keys = deriveAccountKeys(this.seed, this.configuration.networkId)
       this.keys = keys
-      const shieldedAddress = new ShieldedAddress(
-        ShieldedCoinPublicKey.fromHexString(keys.shieldedSecretKeys.coinPublicKey),
-        ShieldedEncryptionPublicKey.fromHexString(keys.shieldedSecretKeys.encryptionPublicKey),
-      )
-      this.shielded = MidnightBech32m.encode(
-        this.configuration.networkId,
-        shieldedAddress,
-      ).toString()
+      this.shielded = shieldedAddressOf(keys.shieldedSecretKeys, this.configuration.networkId)
       this.unshielded = keys.unshieldedKeystore.getBech32Address().toString()
       this.dust = MidnightBech32m.encode(
         this.configuration.networkId,

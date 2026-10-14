@@ -35,14 +35,23 @@ describe('activityEntryOf', () => {
         icon: USDC.icon,
         networkIcon: BUNDLED_NETWORK_ICONS.ethereum,
       },
-      to: {
-        kind: 'asset',
-        asset: { assetSymbol: 'USDC', networkName: 'Midnight', networkIcon: NO_ICON },
-      },
+      to: { kind: 'wallet', address: null, addressLabel: 'your wallet' },
       action: { kind: 'none' },
       error: null,
     })
     expect(entry.steps).toHaveLength(10)
+  })
+
+  test('a deposit with its recipient lands in that shielded wallet', () => {
+    const entry = activityEntryOf(
+      activityFixture({ destination: `mn_shield-addr_undeployed1${'q'.repeat(60)}` }),
+      new TokenInfoRegistry([USDC]),
+    )
+    expect(entry.to).toEqual({
+      kind: 'wallet',
+      address: `mn_shield-addr_undeployed1${'q'.repeat(60)}`,
+      addressLabel: 'qqqqqq…qqqq',
+    })
   })
 
   test('a withdrawal is a send from the vault token on Midnight to the destination address', () => {
@@ -50,8 +59,8 @@ describe('activityEntryOf', () => {
     expect(entry).toMatchObject({
       kind: 'send',
       description: 'send of 1 USDC to 0xd1d1…d1d1',
-      from: { assetSymbol: 'USDC', networkName: 'Midnight', amount: '1' },
-      to: { kind: 'wallet', addressLabel: '0xd1d1…d1d1' },
+      from: { assetSymbol: 'USDC', networkName: 'Ethereum', amount: '1' },
+      to: { kind: 'wallet', address: `0x${'d1'.repeat(20)}`, addressLabel: '0xd1d1…d1d1' },
     })
   })
 

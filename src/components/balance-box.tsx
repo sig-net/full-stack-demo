@@ -7,12 +7,14 @@ import type { AssetAmount } from '@/lib/asset-amount'
 
 interface BalanceBoxProps {
   balance: AssetAmount
+  /** Selects this balance's token in the swap panel, absent while the token cannot be swapped. */
+  onSwap?: () => void
   /** Opens the Send dialog on this balance, absent while the balance cannot be sent. */
   onSend?: () => void
 }
 
 /** One balance: amount, USD value and token, then the Swap and Send actions. */
-export function BalanceBox({ balance, onSend }: BalanceBoxProps): ReactNode {
+export function BalanceBox({ balance, onSwap, onSend }: BalanceBoxProps): ReactNode {
   const { assetSymbol, networkName, amount, usdValue, icon, networkIcon } = balance
   const token = `${assetSymbol} on ${networkName}`
   return (
@@ -39,7 +41,13 @@ export function BalanceBox({ balance, onSend }: BalanceBoxProps): ReactNode {
         </div>
       </div>
       <div className="flex items-start gap-2.75">
-        <Button variant="green" size="sm" aria-label={`Swap ${token}`}>
+        <Button
+          variant="green"
+          size="sm"
+          aria-label={`Swap ${token}`}
+          disabled={onSwap === undefined}
+          onClick={onSwap}
+        >
           <ArrowRightLeft aria-hidden />
           <span className="px-0.5">Swap</span>
         </Button>

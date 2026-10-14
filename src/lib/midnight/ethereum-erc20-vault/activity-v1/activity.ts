@@ -25,7 +25,12 @@ import {
   type MidnightTransactionState,
   midnightTransactionStateSchema,
 } from '@/lib/midnight/transaction-v1/transaction'
-import { amountSchema, evmAddressSchema, hex32BytesSchema } from '@/lib/value-schemas'
+import {
+  amountSchema,
+  evmAddressSchema,
+  hex32BytesSchema,
+  shieldedAddressSchema,
+} from '@/lib/value-schemas'
 
 /** Where an activity stands, aggregated from its lifecycle row by the view. */
 export const ACTIVITY_STATES = ['Pending', 'Complete', 'Failed'] as const
@@ -117,7 +122,7 @@ const activityFieldsSchema = z.object({
   updateTime: z.date(),
 })
 
-/** A deposit: `amount` of `erc20Address` moving from the deposit account into the vault. */
+/** A deposit: `amount` of `erc20Address` moving from the deposit account into the vault, minted to the shielded `destination`. */
 export const depositActivitySchema = activityFieldsSchema.extend({
   name: depositNameSchema,
   type: z.literal('Deposit'),
@@ -125,7 +130,7 @@ export const depositActivitySchema = activityFieldsSchema.extend({
   erc20AddressOut: z.null(),
   amountOut: z.null(),
   spender: z.null(),
-  destination: z.null(),
+  destination: shieldedAddressSchema.nullable(),
   outcome: depositOutcomeSchema.nullable(),
 })
 

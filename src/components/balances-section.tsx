@@ -15,7 +15,12 @@ import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { type DepositPrerequisite, missingDepositPrerequisites } from '@/lib/deposit-prerequisites'
 import { walletConnectionStatus } from '@/lib/midnight/wallet/connection-status'
 
-export function BalancesSection(): ReactNode {
+interface BalancesSectionProps {
+  /** Asked with the ERC20 of a balance whose Swap control was pressed. */
+  onSwap: (erc20Address: string) => void
+}
+
+export function BalancesSection({ onSwap }: BalancesSectionProps): ReactNode {
   const connection = useMidnightWallet()
   const { callerSecret, depositAccount } = useCaller()
   const registry = useTokenInfoRegistry()
@@ -102,23 +107,32 @@ export function BalancesSection(): ReactNode {
       ) : (
         // Two columns from 862px: each box's content is 410px wide (amount group, gap, Swap and Send), plus the 42px gap.
         <ul className="grid grid-cols-1 md:gap-y-4.5 @min-[862px]:grid-cols-2 @min-[862px]:gap-x-10.5">
-          {balances.data.map((balance) => (
-            <li key={`${balance.networkName}:${balance.tokenType}`}>
-              <BalanceBox
-                balance={balance}
-                onSend={
-                  // A send needs the identity secret and a token the vault admits.
-                  callerSecret !== null &&
-                  registry.get({ ledger: 'shielded', tokenType: balance.tokenType })?.supported ===
-                    true
-                    ? () => {
-                        setSendTokenType(balance.tokenType)
-                      }
-                    : undefined
-                }
-              />
-            </li>
-          ))}
+          {balances.data.map((balance) => {
+            const info = registry.get({ ledger: 'shielded', tokenType: balance.tokenType })
+            // Only a token the vault admits is swapped or sent, and a send also needs the identity secret.
+            const supported = info !== undefined && info.supported ? info : null
+            return (
+              <li key={`${balance.networkName}:${balance.tokenType}`}>
+                <BalanceBox
+                  balance={balance}
+                  onSwap={
+                    supported === null
+                      ? undefined
+                      : () => {
+                          onSwap(supported.origin.erc20Address)
+                        }
+                  }
+                  onSend={
+                    supported === null || callerSecret === null
+                      ? undefined
+                      : () => {
+                          setSendTokenType(balance.tokenType)
+                        }
+                  }
+                />
+              </li>
+            )
+          })}
         </ul>
       )}
     </section>

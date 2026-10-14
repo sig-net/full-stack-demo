@@ -42,6 +42,8 @@ export interface ActivityAssetDestination {
 
 export interface ActivityWalletDestination {
   readonly kind: 'wallet'
+  /** The full address, for the hover title, null when the row holds no address. */
+  readonly address: string | null
   /** Abbreviated by the source in its chain's own format, such as `0x10B4…6dFa`. */
   readonly addressLabel: string
 }

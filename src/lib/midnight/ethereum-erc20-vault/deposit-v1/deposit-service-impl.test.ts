@@ -6,6 +6,7 @@ import { describe, expect, test } from 'vitest'
 import type { Caller } from '@/lib/caller/caller'
 import { resolveCaller } from '@/lib/caller/resolve-caller'
 import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
+import { MIDNIGHT_NETWORK_DEFAULTS } from '@/lib/config/midnight-network-config'
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import type { Deposit } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
@@ -29,6 +30,7 @@ import {
   REQUEST_ID,
   VAULT_REQUEST_IN_STATE,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
+import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
 import { MemoryRepository } from '@/lib/repository/repository-memory-impl'
 import { mock } from '@/lib/testing/mock'
 import { UINT64_MAX, UUID } from '@/lib/value-schemas'
@@ -50,6 +52,7 @@ const CALLER_ACCOUNT = deriveEvmAddress(
 ).toLowerCase()
 const OTHER_ACCOUNT = `0x${'99'.repeat(20)}`
 const WALLET = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
+const NETWORK = MIDNIGHT_NETWORK_DEFAULTS.undeployed
 const GAS = {
   gasLimit: 100_000n,
   maxFeePerGas: 30_000_000_000n,
@@ -124,6 +127,7 @@ function serviceOver(options: {
     }),
     SIGNET,
     VAULT,
+    NETWORK,
   )
   return { service, recorded, ready }
 }
@@ -208,6 +212,7 @@ describe('DepositServiceImpl.startDeposit', () => {
       evmNonce: expectNonce,
       ...GAS,
       depositAccount: CALLER_ACCOUNT,
+      recipient: shieldedAddressOf(WALLET, NETWORK.networkId),
       outcome: null,
       failure: null,
       error: null,
@@ -223,6 +228,7 @@ describe('DepositServiceImpl.startDeposit', () => {
         evmNonce: expectNonce,
         ...GAS,
         depositAccount: CALLER_ACCOUNT,
+        recipient: shieldedAddressOf(WALLET, NETWORK.networkId),
         unprovenTx: 'start-call',
       },
     ])

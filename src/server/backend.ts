@@ -1000,6 +1000,7 @@ function createMidnightEthereumErc20VaultDepositV1(
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
+    config.client.midnightNetwork,
   )
   return {
     repository,

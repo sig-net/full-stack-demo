@@ -28,6 +28,11 @@ export const evmBytesSchema = z
   .string()
   .regex(/^0x(?:[0-9a-f]{2})+$/, 'expected 0x-prefixed lower-case hex')
 
+/** A bech32m Midnight shielded address: the prefix names the network, the data alphabet has no `1`, `b`, `i` or `o`. */
+export const shieldedAddressSchema = z
+  .string()
+  .regex(/^mn_shield-addr(_[a-z0-9]+)?1[02-9ac-hj-np-z]+$/, 'expected a shielded address')
+
 export const UINT64_MAX = 2n ** 64n - 1n
 export const UINT128_MAX = 2n ** 128n - 1n
 

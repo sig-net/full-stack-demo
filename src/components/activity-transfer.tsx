@@ -28,7 +28,10 @@ export function ActivityTransfer({ from, to }: ActivityTransferProps): ReactNode
       ) : (
         <div className="flex items-center gap-1.75">
           <Wallet className="size-5 shrink-0 text-muted-foreground max-md:hidden" aria-hidden />
-          <span className="text-sm/5 font-medium text-secondary-foreground">
+          <span
+            className="text-sm/5 font-medium text-secondary-foreground"
+            title={to.address ?? undefined}
+          >
             <span className="sr-only">wallet </span>
             {to.addressLabel}
           </span>

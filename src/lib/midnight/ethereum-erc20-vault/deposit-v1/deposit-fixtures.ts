@@ -1,4 +1,7 @@
+import { MidnightNetwork } from '@sig-net/midnight'
+
 import type { Deposit } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
 
 /** A deposit in `AwaitingStartTransaction`, as started, for tests that start from a stored row. */
 export function depositFixture(overrides: Partial<Deposit> = {}): Deposit {
@@ -13,6 +16,7 @@ export function depositFixture(overrides: Partial<Deposit> = {}): Deposit {
     maxFeePerGas: 30_000_000_000n,
     maxPriorityFeePerGas: 1_000_000_000n,
     depositAccount: DEPOSIT_ACCOUNT,
+    recipient: RECIPIENT,
     outcome: null,
     failure: null,
     error: null,
@@ -27,6 +31,11 @@ export const DEPOSIT_NAME = `${CALLER_NAME}/ethereum-erc20-vault-deposits/1f2e3d
 
 export const ERC20_ADDRESS = `0x${'ef'.repeat(20)}`
 export const DEPOSIT_ACCOUNT = `0x${'cd'.repeat(20)}`
+/** The shielded address of the keys every deposit test's wallet carries, on the local network. */
+export const RECIPIENT = shieldedAddressOf(
+  { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) },
+  MidnightNetwork.Undeployed,
+)
 export const IN_INDEX = 42n
 
 /** The row each state leaves behind, consistent with the state machine's field table. */

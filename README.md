@@ -831,7 +831,9 @@ to-do for exactly one actor:
 A deposit holds the caller's request (`erc20Address`, `amount`) and the fields the server assigns
 at start: `inIndex` (a random 64-bit slot in the vault's request buffer), `depositAccount` (the
 EVM account the user funds and the MPC sweeps from, derived from the MPC root key, the vault
-address and the contract's commitment of the caller secret), `evmNonce` (the higher of the
+address and the contract's commitment of the caller secret), `recipient` (the shielded address of
+the wallet the start call was built for, which the completion mints to and refuses any other
+wallet for), `evmNonce` (the higher of the
 account's pending transaction count on the EVM chain and one above the highest nonce held by the
 caller's live deposits, so no two sweeps share a nonce), and the gas envelope of the sweep
 (`gasLimit` 100 000, `maxFeePerGas` 30 gwei, `maxPriorityFeePerGas` 1 gwei). `outcome` is set on
@@ -1117,7 +1119,14 @@ under Styling and theme.
   `md` breakpoint up every column shows, below it a chevron expands the timestamp and block
   explorer details. The Status cell holds the badge, or the Balance button while a call waits
   for the wallet, and the progress info. The entry types live in `src/lib/activity/activity-entry.ts` and
-  the mapping from the resource in `src/lib/activity/activity-entries.ts`.
+  the mapping from the resource in `src/lib/activity/activity-entries.ts`. A deposit's destination
+  is the shielded wallet it mints to, its `recipient`: the row shows the first six and last four
+  characters of the address's data (`abbreviateAddressData()` in
+  `src/lib/midnight/abbreviate-address.ts`) beside the wallet icon, with the full address as the
+  hover title, and reads "your wallet" for a deposit stored without one.
+- `HomeSections` (`src/components/home-sections.tsx`) owns what the balances and the swap panel
+  share: a balance's Swap button asks for its token, which the swap panel selects as the From
+  token and moves focus to the amount, until the user picks another token.
 - `SwapPanel` (`src/components/swap-panel.tsx`) sells a vault token the wallet holds for
   another the vault admits. The From field offers the wallet's supported balances
   (`useMidnightBalances`, `src/components/use-midnight-balances.ts`, the query the Balances

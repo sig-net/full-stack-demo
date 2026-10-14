@@ -1,4 +1,5 @@
 import { abbreviateHex } from '@/lib/abbreviate-hex'
+import { abbreviateAddressData } from '@/lib/midnight/abbreviate-address'
 import type {
   ActivityDestination,
   ActivityEntry,
@@ -17,13 +18,14 @@ import {
   activityStepsOf,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress'
 import { BUNDLED_NETWORK_ICONS } from '@/lib/tokens/bundled-icons'
+import { ORIGIN_NETWORKS, type OriginNetwork } from '@/lib/tokens/token-info'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import type { TokenInfoRegistry } from '@/lib/tokens/token-info-registry'
 
 /**
  * The row of an activity, with each token named and scaled by the registry, or by its address
- * in raw base units when the registry lacks it. A deposit moves the ERC20 from Ethereum to its
- * vault token, a send moves a vault token to an address on Ethereum, a swap trades one vault
+ * in raw base units when the registry lacks it. A deposit moves the ERC20 from Ethereum to the
+ * shielded wallet it mints to, a send moves a vault token to an address on Ethereum, a swap trades one vault
  * token for another, and an approval grants a spender on Ethereum.
  */
 export function activityEntryOf(activity: Activity, registry: TokenInfoRegistry): ActivityEntry {
@@ -48,25 +50,32 @@ function sidesOf(
 ): { from: AssetAmount; to: ActivityDestination; description: string } {
   switch (activity.type) {
     case 'Deposit': {
-      const from = assetAmount(registry, activity.erc20Address, activity.amount, ETHEREUM)
+      const from = assetAmount(registry, activity.erc20Address, activity.amount)
       return {
         from,
-        to: { kind: 'asset', asset: { ...from, ...MIDNIGHT } },
+        to: {
+          kind: 'wallet',
+          address: activity.destination,
+          addressLabel:
+            activity.destination === null
+              ? YOUR_WALLET_LABEL
+              : abbreviateAddressData(activity.destination),
+        },
         description: `deposit of ${labelOf(from)}`,
       }
     }
     case 'Withdraw': {
-      const from = assetAmount(registry, activity.erc20Address, activity.amount, MIDNIGHT)
+      const from = assetAmount(registry, activity.erc20Address, activity.amount)
       const addressLabel = abbreviateHex(activity.destination)
       return {
         from,
-        to: { kind: 'wallet', addressLabel },
+        to: { kind: 'wallet', address: activity.destination, addressLabel },
         description: `send of ${labelOf(from)} to ${addressLabel}`,
       }
     }
     case 'Swap': {
-      const from = assetAmount(registry, activity.erc20Address, activity.amount, MIDNIGHT)
-      const asset = assetAmount(registry, activity.erc20AddressOut, activity.amountOut, MIDNIGHT)
+      const from = assetAmount(registry, activity.erc20Address, activity.amount)
+      const asset = assetAmount(registry, activity.erc20AddressOut, activity.amountOut)
       return {
         from,
         to: { kind: 'asset', asset },
@@ -74,11 +83,11 @@ function sidesOf(
       }
     }
     case 'Approval': {
-      const from = assetAmount(registry, activity.erc20Address, null, ETHEREUM)
+      const from = assetAmount(registry, activity.erc20Address, null)
       const addressLabel = abbreviateHex(activity.spender)
       return {
         from,
-        to: { kind: 'wallet', addressLabel },
+        to: { kind: 'wallet', address: activity.spender, addressLabel },
         description: `approval of ${from.assetSymbol} for ${addressLabel}`,
       }
     }
@@ -89,14 +98,18 @@ function sidesOf(
   }
 }
 
-/** The amount in whole tokens for a registered token, in base units otherwise, and unlimited for an approval. */
+/**
+ * The amount in whole tokens for a registered token, in base units otherwise, and unlimited for
+ * an approval. The asset is the ERC20, so its badge is the chain it lives on whichever ledger
+ * holds it: a vault coin is that ERC20 held on Midnight.
+ */
 function assetAmount(
   registry: TokenInfoRegistry,
   erc20Address: string,
   amount: bigint | null,
-  network: Pick<AssetAmount, 'networkName' | 'networkIcon'>,
 ): AssetAmount {
   const info = registry.byErc20Address(erc20Address)
+  const network = info === undefined ? ETHEREUM : ORIGIN_NETWORKS[info.origin.kind]
   return {
     assetSymbol: info?.symbol ?? abbreviateHex(erc20Address),
     amount:
@@ -107,7 +120,8 @@ function assetAmount(
           : formatTokenAmount(amount, info.decimals),
     usdValue: '0.00',
     icon: info?.icon ?? NO_ICON,
-    ...network,
+    networkName: network.name,
+    networkIcon: network.icon,
   }
 }
 
@@ -118,15 +132,11 @@ function labelOf(asset: AssetAmount): string {
 /** An approval grants the contract's unlimited allowance, which the row shows in place of an amount. */
 export const UNLIMITED_AMOUNT = 'Unlimited'
 
-const ETHEREUM: Pick<AssetAmount, 'networkName' | 'networkIcon'> = {
-  networkName: 'Ethereum',
-  networkIcon: BUNDLED_NETWORK_ICONS.ethereum,
-}
+/** The destination of a deposit stored without its recipient's address. */
+export const YOUR_WALLET_LABEL = 'your wallet'
 
-const MIDNIGHT: Pick<AssetAmount, 'networkName' | 'networkIcon'> = {
-  networkName: 'Midnight',
-  networkIcon: NO_ICON,
-}
+/** The chain of an ERC20 the registry does not know, which can only be the EVM chain the vault serves. */
+const ETHEREUM: OriginNetwork = { name: 'Ethereum', icon: BUNDLED_NETWORK_ICONS.ethereum }
 
 const ACTIVITY_KIND_BY_TYPE: Record<ActivityType, ActivityKind> = {
   Deposit: 'deposit',

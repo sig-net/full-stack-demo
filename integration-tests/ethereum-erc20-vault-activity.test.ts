@@ -34,6 +34,7 @@ describe('The activity view over Postgres', () => {
     maxFeePerGas: 1n,
     maxPriorityFeePerGas: 1n,
     depositAccount,
+    recipient: null,
     outcome: null,
     failure: null,
     error: null,

@@ -24,6 +24,7 @@ describe('SQLRepository over Postgres', () => {
     maxFeePerGas: 1n,
     maxPriorityFeePerGas: 1n,
     depositAccount: `0x${'cd'.repeat(20)}`,
+    recipient: null,
     outcome: null,
     failure: null,
     error: null,
