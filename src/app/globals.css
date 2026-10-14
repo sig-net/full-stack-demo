@@ -392,3 +392,11 @@
 ):not(:disabled, [aria-disabled='true'], [data-disabled]) {
   cursor: pointer;
 }
+
+/* The shadcn toaster's colour variables, which it reads from its own root. */
+.toaster {
+  --normal-bg: var(--popover);
+  --normal-text: var(--popover-foreground);
+  --normal-border: var(--border);
+  --border-radius: var(--radius);
+}

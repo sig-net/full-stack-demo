@@ -36,7 +36,7 @@ export function ActivityTable({ entries }: ActivityTableProps): ReactNode {
           </TableRow>
         </TableHeader>
         {entries.map((entry) => (
-          <ActivityRow key={entry.id} entry={entry} />
+          <ActivityRow key={entry.name} entry={entry} />
         ))}
       </Table>
     </div>

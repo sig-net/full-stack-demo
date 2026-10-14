@@ -39,6 +39,13 @@ export interface WalletAddressSnapshot {
 export interface Wallet extends WalletMetadata {
   readonly transactions?: WalletTransactions
   readonly transactionUnavailable?: string
+  /** The keys a call is built for, known once the wallet has derived them. */
+  readonly publicKeys: WalletPublicKeys
+  /**
+   * Balances, signs and finalises the unbound bytes of a proven call, resolving with the
+   * finalized bytes, both in hex as the transaction resource carries them.
+   */
+  finalize(unboundTx: string): Promise<string>
   readonly registrationUnavailable?: string
   readonly recoveryUnavailable?: string
   readonly reportedProofServerUrl?: string

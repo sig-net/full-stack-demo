@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 
 import { CIRCLE_USDC } from '@sig-net/midnight-examples-erc20-vault-contract'
-import { AbiCoder, Interface, JsonRpcProvider, keccak256, toBeHex, toBigInt } from 'ethers'
+import { Interface, JsonRpcProvider, toBigInt } from 'ethers'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { z } from 'zod'
 
@@ -83,7 +83,7 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
       caller = deposit.name.split('/').slice(0, 2).join('/')
       log(`started ${deposit.name} in ${String(Date.now() - startedAt)} ms`)
 
-      await fundDepositAccount(evm, deposit.depositAccount, deposit.amount)
+      await fundDepositAccount(backend, evm, deposit.depositAccount, deposit.amount)
       log(`funded ${deposit.depositAccount} with one ETH and ${deposit.amount.toString()} USDC`)
 
       const submitted = new Set<string>()
@@ -372,60 +372,26 @@ async function waitFor(condition: () => Promise<boolean>): Promise<void> {
   }
 }
 
-const ONE_ETH = toBeHex(10n ** 18n)
-const ERC20 = new Interface(['function balanceOf(address) view returns (uint256)'])
-
-/** anvil's `setBalance` for the gas and a write of the USDC balance slot for the token, read back to be sure. */
+/** The faucet's ETH for the gas and its write of the USDC balance, read back to be sure. */
 async function fundDepositAccount(
+  backend: Backend,
   provider: JsonRpcProvider,
   account: string,
   amount: bigint,
 ): Promise<void> {
-  await provider.send('anvil_setBalance', [account, ONE_ETH])
-  const location = await findBalanceLocation(provider, CIRCLE_USDC, account)
-  await provider.send('anvil_setStorageAt', [CIRCLE_USDC, location, toBeHex(amount, 32)])
-  const observed = await readBalance(provider, CIRCLE_USDC, account)
-  if (observed !== amount) {
+  const { service } = backend.ethereum.localFaucetV1
+  if (service === null) throw new Error('the deposit test needs the local stack and its faucet')
+  await service.fundAccount({ account })
+  await service.fundErc20({ account, erc20Address: CIRCLE_USDC.toLowerCase(), amount })
+  const observed = toBigInt(
+    await provider.call({
+      to: CIRCLE_USDC,
+      data: ERC20.encodeFunctionData('balanceOf', [account]),
+    }),
+  )
+  if (observed < amount) {
     throw new Error(`funded ${amount.toString()} USDC but balanceOf reads ${observed.toString()}`)
   }
 }
 
-async function readBalance(
-  provider: JsonRpcProvider,
-  token: string,
-  holder: string,
-): Promise<bigint> {
-  return toBigInt(
-    await provider.call({ to: token, data: ERC20.encodeFunctionData('balanceOf', [holder]) }),
-  )
-}
-
-/**
- * The holder's slot in the token's balance mapping, found by writing a sentinel at the location
- * each candidate mapping slot implies (Solidity and Vyper layouts) and reading `balanceOf` back,
- * restoring the word either way.
- */
-async function findBalanceLocation(
-  provider: JsonRpcProvider,
-  token: string,
-  holder: string,
-): Promise<string> {
-  const abi = AbiCoder.defaultAbiCoder()
-  const current = await readBalance(provider, token, holder)
-  const sentinel = current === 1_337_733_113_377_331n ? current + 1n : 1_337_733_113_377_331n
-  const sentinelWord = toBeHex(sentinel, 32)
-  for (let slot = 0; slot < 64; slot++) {
-    const candidates = [
-      keccak256(abi.encode(['address', 'uint256'], [holder, slot])),
-      keccak256(abi.encode(['uint256', 'address'], [slot, holder])),
-    ]
-    for (const location of candidates) {
-      const original = await provider.getStorage(token, location)
-      await provider.send('anvil_setStorageAt', [token, location, sentinelWord])
-      const observed = await readBalance(provider, token, holder)
-      await provider.send('anvil_setStorageAt', [token, location, original])
-      if (observed === sentinel) return location
-    }
-  }
-  throw new Error(`no balance mapping slot of ${token} found in slots 0..63`)
-}
+const ERC20 = new Interface(['function balanceOf(address) view returns (uint256)'])

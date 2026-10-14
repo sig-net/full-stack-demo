@@ -12,12 +12,14 @@ import {
   type AccountKeys,
   createWalletAndMidnightProvider,
   deriveAccountKeys,
+  finalizeUnboundTransaction,
   initialiseWalletFacade,
   type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
 import type {
   Wallet,
   WalletAddressSnapshot,
+  WalletPublicKeys,
   WalletTransactions,
 } from '@/lib/midnight/wallet/wallet'
 
@@ -238,6 +240,19 @@ export class SeedWallet implements Wallet {
     this.assertActive()
     if (!this.dust) throw new Error(SYNCHRONISING)
     return this.dust
+  }
+
+  get publicKeys(): WalletPublicKeys {
+    this.assertActive()
+    if (!this.keys) throw new Error(SYNCHRONISING)
+    return {
+      coinPublicKey: this.keys.shieldedSecretKeys.coinPublicKey,
+      encryptionPublicKey: this.keys.shieldedSecretKeys.encryptionPublicKey,
+    }
+  }
+
+  finalize(unboundTx: string): Promise<string> {
+    return finalizeUnboundTransaction(this.requireProvider(), unboundTx)
   }
 
   get unshieldedPublicKey(): ReturnType<AccountKeys['unshieldedKeystore']['getPublicKey']> {

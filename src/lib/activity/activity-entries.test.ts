@@ -1,0 +1,82 @@
+import { describe, expect, test } from 'vitest'
+
+import { activityEntryOf, formatTimestamp } from '@/lib/activity/activity-entries'
+import { NO_ICON } from '@/lib/icon-source'
+import { activityFixture } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
+import { ERC20_ADDRESS } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-fixtures'
+import { BUNDLED_NETWORK_ICONS } from '@/lib/tokens/bundled-icons'
+import type { TokenInfo } from '@/lib/tokens/token-info'
+import { TokenInfoRegistry } from '@/lib/tokens/token-info-registry'
+
+const USDC: TokenInfo = {
+  id: { ledger: 'shielded', tokenType: '11'.repeat(32) },
+  symbol: 'USDC',
+  name: 'USD Coin',
+  decimals: 6,
+  icon: { source: 'web3icons', name: 'USDC' },
+  origin: { kind: 'ethereum-erc20-vault', chainId: 31337, erc20Address: ERC20_ADDRESS },
+  supported: true,
+}
+
+describe('activityEntryOf', () => {
+  test('names and scales a registered token on both sides', () => {
+    const entry = activityEntryOf(activityFixture(), new TokenInfoRegistry([USDC]))
+    expect(entry).toMatchObject({
+      name: activityFixture().name,
+      kind: 'deposit',
+      status: 'pending',
+      from: {
+        assetSymbol: 'USDC',
+        networkName: 'Ethereum',
+        amount: '1',
+        icon: USDC.icon,
+        networkIcon: BUNDLED_NETWORK_ICONS.ethereum,
+      },
+      to: {
+        kind: 'asset',
+        asset: { assetSymbol: 'USDC', networkName: 'Midnight', networkIcon: NO_ICON },
+      },
+      transactionHashLabel: '111111…1111',
+      action: { kind: 'none' },
+      error: null,
+    })
+    expect(entry.steps).toHaveLength(10)
+  })
+
+  test('falls back to the address and raw base units for an unregistered token', () => {
+    const entry = activityEntryOf(activityFixture(), new TokenInfoRegistry([]))
+    expect(entry.from).toMatchObject({
+      assetSymbol: '0xefef…efef',
+      amount: '1000000',
+      icon: NO_ICON,
+    })
+  })
+
+  test.each([
+    { state: 'Pending', status: 'pending' },
+    { state: 'Complete', status: 'complete' },
+    { state: 'Failed', status: 'failed' },
+  ] as const)('maps $state to $status', ({ state, status }) => {
+    expect(activityEntryOf(activityFixture({ state }), new TokenInfoRegistry([])).status).toBe(
+      status,
+    )
+  })
+
+  test('reads pending for a hash the chain has not assigned', () => {
+    const entry = activityEntryOf(
+      activityFixture({
+        startTransaction: { hash: null, state: 'Pending', lifecycleState: 'AwaitingProof' },
+      }),
+      new TokenInfoRegistry([]),
+    )
+    expect(entry.transactionHashLabel).toBe('pending')
+  })
+})
+
+describe('formatTimestamp', () => {
+  test('writes the design format', () => {
+    expect(formatTimestamp(new Date(Date.UTC(2025, 6, 8, 19, 18)))).toMatch(
+      /^July 8, 2025 \d{2}:\d{2} [AP]M$/,
+    )
+  })
+})

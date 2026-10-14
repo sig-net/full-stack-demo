@@ -12,9 +12,21 @@ import {
   START_TX_HASH,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
 
-const start: ActivityTransaction = { hash: START_TX_HASH, state: 'Succeeded' }
-const foreign: ActivityTransaction = { hash: FOREIGN_TX_HASH, state: 'Succeeded' }
-const complete: ActivityTransaction = { hash: COMPLETE_TX_HASH, state: 'Pending' }
+const start: ActivityTransaction = {
+  hash: START_TX_HASH,
+  state: 'Succeeded',
+  lifecycleState: 'Succeeded',
+}
+const foreign: ActivityTransaction = {
+  hash: FOREIGN_TX_HASH,
+  state: 'Succeeded',
+  lifecycleState: 'Succeeded',
+}
+const complete: ActivityTransaction = {
+  hash: COMPLETE_TX_HASH,
+  state: 'Pending',
+  lifecycleState: 'AwaitingInclusion',
+}
 
 const cases: ReadonlyArray<{
   name: string
@@ -37,9 +49,9 @@ const cases: ReadonlyArray<{
     activity: {
       startTransaction: start,
       foreignChainTransaction: foreign,
-      completeTransaction: { hash: null, state: 'Pending' },
+      completeTransaction: { hash: null, state: 'Pending', lifecycleState: 'AwaitingInclusion' },
     },
-    expect: { hash: null, state: 'Pending' },
+    expect: { hash: null, state: 'Pending', lifecycleState: 'AwaitingInclusion' },
   },
   {
     name: 'the complete call once it has a hash',

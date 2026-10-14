@@ -1,15 +1,17 @@
 import 'server-only'
 
-import { type JsonRpcApiProvider, toBeHex } from 'ethers'
+import { AbiCoder, Interface, type JsonRpcApiProvider, keccak256, toBeHex, toBigInt } from 'ethers'
 
 import type { AccountFunding } from '@/lib/ethereum/local-faucet-v1/account-funding'
+import type { Erc20Funding } from '@/lib/ethereum/local-faucet-v1/erc20-funding'
 import {
   FAUCET_AMOUNT,
   type FundAccountArgs,
+  type FundErc20Args,
   type LocalFaucetService,
 } from '@/lib/ethereum/local-faucet-v1/local-faucet-service'
 
-/** The faucet over anvil's `anvil_setBalance`, which no other node answers. */
+/** The faucet over anvil's `anvil_setBalance` and `anvil_setStorageAt`, which no other node answers. */
 export class LocalFaucetServiceAnvilImpl implements LocalFaucetService {
   private readonly provider: JsonRpcApiProvider
 
@@ -22,4 +24,66 @@ export class LocalFaucetServiceAnvilImpl implements LocalFaucetService {
     await this.provider.send('anvil_setBalance', [account, toBeHex(before + FAUCET_AMOUNT)])
     return { account, balance: await this.provider.getBalance(account) }
   }
+
+  async fundErc20({ account, erc20Address, amount }: FundErc20Args): Promise<Erc20Funding> {
+    const before = await this.balanceOf(erc20Address, account)
+    const location = await this.balanceLocation(erc20Address, account, before)
+    await this.provider.send('anvil_setStorageAt', [
+      erc20Address,
+      location,
+      toBeHex(before + amount, 32),
+    ])
+    return { account, erc20Address, balance: await this.balanceOf(erc20Address, account) }
+  }
+
+  private async balanceOf(erc20Address: string, holder: string): Promise<bigint> {
+    return toBigInt(
+      await this.provider.call({
+        to: erc20Address,
+        data: ERC20.encodeFunctionData('balanceOf', [holder]),
+      }),
+    )
+  }
+
+  /**
+   * The holder's slot in the token's balance mapping, found by writing a sentinel at the location
+   * each candidate mapping slot implies (Solidity and Vyper layouts) and reading `balanceOf` back,
+   * restoring the word either way. A token whose balance lives behind a proxy or in another
+   * contract has no such slot and is refused.
+   */
+  private async balanceLocation(
+    erc20Address: string,
+    holder: string,
+    current: bigint,
+  ): Promise<string> {
+    const abi = AbiCoder.defaultAbiCoder()
+    const sentinel = current === SENTINEL ? SENTINEL + 1n : SENTINEL
+    for (let slot = 0; slot < MAPPING_SLOTS_PROBED; slot++) {
+      const candidates = [
+        keccak256(abi.encode(['address', 'uint256'], [holder, slot])),
+        keccak256(abi.encode(['uint256', 'address'], [slot, holder])),
+      ]
+      for (const location of candidates) {
+        const original = await this.provider.getStorage(erc20Address, location)
+        await this.provider.send('anvil_setStorageAt', [
+          erc20Address,
+          location,
+          toBeHex(sentinel, 32),
+        ])
+        const observed = await this.balanceOf(erc20Address, holder)
+        await this.provider.send('anvil_setStorageAt', [erc20Address, location, original])
+        if (observed === sentinel) return location
+      }
+    }
+    throw new Error(
+      `No balance slot of ${erc20Address} was found in the first ${String(MAPPING_SLOTS_PROBED)} storage slots, so the faucet cannot fund it.`,
+    )
+  }
 }
+
+const ERC20 = new Interface(['function balanceOf(address) view returns (uint256)'])
+
+/** A balance no real account holds, so reading it back proves the probed slot. */
+const SENTINEL = 1_337_733_113_377_331n
+
+const MAPPING_SLOTS_PROBED = 64

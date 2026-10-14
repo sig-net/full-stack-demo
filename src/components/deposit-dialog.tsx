@@ -1,6 +1,6 @@
 'use client'
 
-import { skipToken, useQuery } from '@tanstack/react-query'
+import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cn } from 'cn'
 import { getAddress } from 'ethers'
 import {
@@ -13,12 +13,16 @@ import {
   X,
 } from 'lucide-react'
 import Image from 'next/image'
-import { type ReactNode, useEffect, useEffectEvent } from 'react'
+import { type ReactNode, useEffect, useEffectEvent, useState } from 'react'
+import { toast } from 'sonner'
 
+import { ACTIVITIES_QUERY_KEY } from '@/components/activity-section'
 import { useCaller } from '@/components/contexts/CallerContext'
+import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { CopyButton } from '@/components/copy-button'
+import { LocalErc20FaucetPopover } from '@/components/local-erc20-faucet-popover'
 import { QrCode } from '@/components/qr-code'
 import { ReadinessChecklist } from '@/components/readiness-checklist'
 import { ReadinessRecheckButton } from '@/components/readiness-recheck-button'
@@ -37,7 +41,9 @@ import { abbreviateHex } from '@/lib/abbreviate-hex'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { fundLabel } from '@/lib/tokens/fund-label'
+import type { DepositAccountFund } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/deposit-account-fund'
 import { ORIGIN_NETWORKS } from '@/lib/tokens/token-info'
+import { startDeposit } from '@/server/actions/deposit-actions'
 import { listDepositAccountFunds } from '@/server/actions/supported-token-actions'
 
 interface DepositDialogProps {
@@ -51,18 +57,27 @@ interface DepositDialogProps {
  * The deposit address as a QR code and a copyable checksummed address, then what the account
  * holds of the vault's supported tokens, scanned once as the dialog opens and again on demand.
  * The QR panel keeps the design's light palette in both themes, since a code scans dark on
- * light, and its tinted background is the design's own gradient.
+ * light, and its tinted background is the design's own gradient. While a deposit is being
+ * started the dialog is inert: nothing closes it and no other control answers.
  */
 export function DepositDialog({ open, onOpenChange, address }: DepositDialogProps): ReactNode {
   const checksummed = getAddress(address)
+  const [busy, setBusy] = useState(false)
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!busy) onOpenChange(value)
+      }}
+    >
       <DialogContent showCloseButton={false} className="gap-5 p-6 sm:max-w-110 sm:p-10">
         <DialogHeader className="flex-row items-center justify-between">
           <DialogTitle className="text-xl font-semibold text-secondary-foreground">
             Deposit address
           </DialogTitle>
-          <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label="Close" />}>
+          <DialogClose
+            render={<Button variant="ghost" size="icon-sm" aria-label="Close" disabled={busy} />}
+          >
             <X />
           </DialogClose>
         </DialogHeader>
@@ -96,8 +111,13 @@ export function DepositDialog({ open, onOpenChange, address }: DepositDialogProp
           <CircleAlert className="size-6 shrink-0" aria-hidden />
           Use this address to deposit on Ethereum
         </DialogDescription>
-        <DepositAccountFunds address={checksummed} />
-        <DepositReadiness />
+        <DepositAccountFunds
+          address={checksummed}
+          busy={busy}
+          onBusyChange={setBusy}
+          onDeposited={() => onOpenChange(false)}
+        />
+        <DepositReadiness busy={busy} />
       </DialogContent>
     </Dialog>
   )
@@ -106,12 +126,62 @@ export function DepositDialog({ open, onOpenChange, address }: DepositDialogProp
 /** The 48px logo over the 242px code, plus a margin, so the covered modules stay within level H's tolerance. */
 const LOGO_FRACTION = 0.22
 
-/** The scan of the deposit account: a status line with a check-again control, then one line per fund. */
-function DepositAccountFunds({ address }: { address: string }): ReactNode {
+/**
+ * The scan of the deposit account: a status line with a check-again control, then one line per
+ * fund with the control that deposits the whole fund. Starting a deposit is the dialog's one
+ * action: the server builds the start call and records the deposit, and the activity row takes
+ * it from there.
+ */
+function DepositAccountFunds({
+  address,
+  busy,
+  onBusyChange,
+  onDeposited,
+}: {
+  address: string
+  busy: boolean
+  onBusyChange: (busy: boolean) => void
+  onDeposited: () => void
+}): ReactNode {
   const { callerSecret, callerName } = useCaller()
+  const { wallet } = useMidnightWallet()
   const registry = useTokenInfoRegistry()
-  const { checks } = useVaultReadiness()
+  const { checks, recheck } = useVaultReadiness()
+  const queryClient = useQueryClient()
   const ready = missingReadiness('deposit', checks).length === 0
+  const depositing = useMutation({
+    mutationFn: async (fund: DepositAccountFund) => {
+      if (callerSecret === null) throw new Error('The identity secret is not set.')
+      if (wallet === null) throw new Error('No Midnight wallet is connected.')
+      const result = await startDeposit(callerSecret, {
+        depositRequest: { erc20Address: fund.erc20Address, amount: fund.amount },
+        wallet: wallet.publicKeys,
+      })
+      if (!result.ok) throw new Error(result.error)
+      return result.deposit
+    },
+    onMutate: () => {
+      onBusyChange(true)
+    },
+    onSuccess: async (deposit) => {
+      const info = registry.byErc20Address(deposit.erc20Address)
+      const amount =
+        info === undefined
+          ? deposit.amount.toString()
+          : `${formatTokenAmount(deposit.amount, info.decimals)} ${info.symbol}`
+      toast.success(
+        `Deposit of ${amount} started. Balance its start call from the Activity row once it is proved.`,
+      )
+      await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
+      onBusyChange(false)
+      onDeposited()
+    },
+    onError: async (error) => {
+      toast.error(`Starting the deposit failed: ${error.message}`)
+      await Promise.all([funds.refetch(), recheck()])
+      onBusyChange(false)
+    },
+  })
   const funds = useQuery({
     queryKey: ['deposit-account-funds', callerName, address],
     queryFn:
@@ -153,6 +223,7 @@ function DepositAccountFunds({ address }: { address: string }): ReactNode {
                     variant="ghost"
                     size="icon-xs"
                     aria-label="Check again"
+                    disabled={busy}
                     onClick={() => {
                       void funds.refetch()
                     }}
@@ -164,6 +235,11 @@ function DepositAccountFunds({ address }: { address: string }): ReactNode {
               <TooltipContent>Check again</TooltipContent>
             </Tooltip>
           )}
+          <LocalErc20FaucetPopover
+            account={address}
+            disabled={busy}
+            onFunded={() => funds.refetch()}
+          />
         </div>
         {funds.status === 'success' && funds.data.length > 0 && (
           <ul className="grid w-fit grid-cols-[auto_auto_auto_auto] items-center gap-x-2 gap-y-1.5">
@@ -189,23 +265,34 @@ function DepositAccountFunds({ address }: { address: string }): ReactNode {
                       : formatTokenAmount(fund.amount, info.decimals)}
                   </span>
                   {/* A disabled button takes no pointer events, so the wrapper is the hover target. */}
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={<span tabIndex={0} className="inline-flex rounded-md" />}
-                    >
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        disabled={!ready || !DEPOSIT_WIRED}
-                        aria-label={`Deposit ${label}`}
+                  {depositing.isPending &&
+                  depositing.variables.erc20Address === fund.erc20Address ? (
+                    <LoaderCircle
+                      className="size-4 animate-spin"
+                      aria-label="Starting the deposit"
+                    />
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<span tabIndex={0} className="inline-flex rounded-md" />}
                       >
-                        <Download />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {ready ? 'Deposit these funds' : 'Not ready to deposit'}
-                    </TooltipContent>
-                  </Tooltip>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          disabled={!ready || busy}
+                          aria-label={`Deposit ${label}`}
+                          onClick={() => {
+                            depositing.mutate(fund)
+                          }}
+                        >
+                          <Download />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {ready ? 'Deposit these funds' : 'Not ready to deposit'}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </li>
               )
             })}
@@ -216,11 +303,8 @@ function DepositAccountFunds({ address }: { address: string }): ReactNode {
   )
 }
 
-/** The deposit control has no action behind it yet, so it stays disabled even when every check passes. */
-const DEPOSIT_WIRED = false
-
 /** Whether every payer of a deposit holds what it costs, read afresh as the dialog opens and again on demand. */
-function DepositReadiness(): ReactNode {
+function DepositReadiness({ busy }: { busy: boolean }): ReactNode {
   const { checks, recheck } = useVaultReadiness()
   const missing = missingReadiness('deposit', checks)
   const recheckOnOpen = useEffectEvent(() => {
@@ -245,7 +329,7 @@ function DepositReadiness(): ReactNode {
         <span role="status">
           {missing.length === 0 ? 'Ready to deposit' : 'Not ready to deposit'}
         </span>
-        <ReadinessRecheckButton />
+        <ReadinessRecheckButton disabled={busy} />
       </div>
       {missing.length > 0 && <ReadinessChecklist checkIds={missing} />}
     </div>

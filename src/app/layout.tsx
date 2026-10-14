@@ -3,6 +3,7 @@ import { ThemeProvider } from 'next-themes'
 import type { ReactNode } from 'react'
 
 import { soehneMono } from '@/app/fonts/soehne-mono'
+import { Toaster } from '@/components/ui/sonner'
 
 import './globals.css'
 
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>): ReactNode {
           disableTransitionOnChange
         >
           <div className="flex min-h-dvh flex-col">{children}</div>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

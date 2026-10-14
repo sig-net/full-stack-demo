@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 
-import { getAddress, JsonRpcProvider } from 'ethers'
+import { CIRCLE_USDC } from '@sig-net/midnight-examples-erc20-vault-contract'
+import { getAddress, Interface, JsonRpcProvider, toBigInt } from 'ethers'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import type { Backend } from '@/server/backend'
@@ -38,5 +39,32 @@ describe('The local faucet over the local stack', () => {
       funding: { account, balance: 2n * 10n ** 18n },
     })
     expect(await provider.getBalance(account)).toBe(2n * 10n ** 18n)
+  })
+
+  test('a fresh account holds the USDC it is given, twice over on a second call', async () => {
+    const account = getAddress(`0x${randomBytes(20).toString('hex')}`).toLowerCase()
+    const erc20Address = CIRCLE_USDC.toLowerCase()
+    const { adaptor } = backend.ethereum.localFaucetV1
+    await expect(adaptor.fundErc20({ account, erc20Address, amount: 5_000_000n })).resolves.toEqual(
+      {
+        ok: true,
+        funding: { account, erc20Address, balance: 5_000_000n },
+      },
+    )
+    await expect(adaptor.fundErc20({ account, erc20Address, amount: 5_000_000n })).resolves.toEqual(
+      {
+        ok: true,
+        funding: { account, erc20Address, balance: 10_000_000n },
+      },
+    )
+    const erc20 = new Interface(['function balanceOf(address) view returns (uint256)'])
+    expect(
+      toBigInt(
+        await provider.call({
+          to: erc20Address,
+          data: erc20.encodeFunctionData('balanceOf', [account]),
+        }),
+      ),
+    ).toBe(10_000_000n)
   })
 })

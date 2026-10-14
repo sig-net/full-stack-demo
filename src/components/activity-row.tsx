@@ -1,17 +1,20 @@
+'use client'
+
 import { ChevronDown } from 'lucide-react'
-import type { ComponentProps, ReactNode } from 'react'
+import { type ComponentProps, type ReactNode, useState } from 'react'
 
 import { ActivityExplorer } from '@/components/activity-explorer'
+import { ActivityProgressPopover } from '@/components/activity-progress-popover'
 import { ActivityTransfer } from '@/components/activity-transfer'
+import { DepositActionDialog } from '@/components/deposit-action-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { TableBody, TableCell, TableRow } from '@/components/ui/table'
 import type { ActivityEntry, ActivityKind, ActivityStatus } from '@/lib/activity/activity-entry'
+import type { ActivityAction } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress'
 
 const KIND_LABELS: Record<ActivityKind, string> = {
-  send: 'Send',
-  swap: 'Swap',
   deposit: 'Deposit',
 }
 
@@ -21,6 +24,14 @@ const STATUS_BADGES: Record<
 > = {
   pending: { label: 'Pending', variant: 'warning' },
   complete: { label: 'Complete', variant: 'success' },
+  failed: { label: 'Failed', variant: 'destructive' },
+}
+
+/** The user's next step as the Status cell's button, which replaces the Pending badge while it is the user's turn. */
+const ACTION_ITEMS: Record<ActivityAction['kind'], { label: string; name: string } | null> = {
+  balance: { label: 'Balance', name: 'Balance with wallet' },
+  complete: { label: 'Complete', name: 'Complete deposit' },
+  none: null,
 }
 
 /** Four columns show below `md`: the expanded row's single cell spans them. */
@@ -48,6 +59,8 @@ export function ActivityRow({ entry }: ActivityRowProps): ReactNode {
   const { kind, from, to, timestampLabel, status, transactionHashLabel } = entry
   const kindLabel = KIND_LABELS[kind]
   const badge = STATUS_BADGES[status]
+  const [actionOpen, setActionOpen] = useState(false)
+  const action = ACTION_ITEMS[entry.action.kind]
   return (
     <Collapsible render={<TableBody />}>
       <TableRow className="hover:bg-transparent has-aria-expanded:bg-transparent">
@@ -63,9 +76,26 @@ export function ActivityRow({ entry }: ActivityRowProps): ReactNode {
           {timestampLabel}
         </TableCell>
         <TableCell className={CELL_CLASS}>
-          <Badge variant={badge.variant} className="flex">
-            {badge.label}
-          </Badge>
+          {/* The status column holds the badge, or the user's next step while it is their turn, and the progress info. */}
+          <div className="flex items-center gap-1">
+            {action === null ? (
+              <Badge variant={badge.variant} className="flex">
+                {badge.label}
+              </Badge>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                aria-label={action.name}
+                onClick={() => {
+                  setActionOpen(true)
+                }}
+              >
+                {action.label}
+              </Button>
+            )}
+            <ActivityProgressPopover entry={entry} />
+          </div>
         </TableCell>
         <TableCell className={`hidden ${CELL_CLASS} md:table-cell`}>
           <ActivityExplorer transactionHashLabel={transactionHashLabel} />
@@ -105,6 +135,7 @@ export function ActivityRow({ entry }: ActivityRowProps): ReactNode {
           </CollapsibleContent>
         </TableCell>
       </TableRow>
+      {actionOpen && <DepositActionDialog entry={entry} onOpenChange={setActionOpen} />}
     </Collapsible>
   )
 }

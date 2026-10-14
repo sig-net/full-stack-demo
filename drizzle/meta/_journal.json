@@ -99,6 +99,13 @@
       "when": 1791814572795,
       "tag": "0013_activity_view",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791910850176,
+      "tag": "0014_activity_wallet_action",
+      "breakpoints": true
     }
   ]
 }

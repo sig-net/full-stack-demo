@@ -178,9 +178,20 @@ describe('The activity view over Postgres', () => {
       amount: 5n,
       outcome: null,
       error: null,
-      startTransaction: { hash: 'start-2', state: 'Succeeded' },
-      foreignChainTransaction: { hash: `0x${'33'.repeat(32)}`, state: 'Succeeded' },
-      completeTransaction: { hash: 'complete-1', state: 'Pending' },
+      depositState: 'AwaitingCompleteTransaction',
+      vaultRequestState: 'AwaitingAttestation',
+      walletTransaction: null,
+      startTransaction: { hash: 'start-2', state: 'Succeeded', lifecycleState: 'Succeeded' },
+      foreignChainTransaction: {
+        hash: `0x${'33'.repeat(32)}`,
+        state: 'Succeeded',
+        lifecycleState: 'Succeeded',
+      },
+      completeTransaction: {
+        hash: 'complete-1',
+        state: 'Pending',
+        lifecycleState: 'AwaitingInclusion',
+      },
       createTime: at(0),
       updateTime: at(8),
     })

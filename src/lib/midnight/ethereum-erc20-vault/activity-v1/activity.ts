@@ -1,10 +1,19 @@
 import { z } from 'zod'
 
+import { ethereumTransactionStateSchema } from '@/lib/ethereum/transaction-v1/transaction'
 import {
   depositNameSchema,
   depositOutcomeSchema,
   type DepositState,
+  depositStateSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import { vaultRequestStateSchema } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
+import {
+  midnightTransactionNameSchema,
+  type MidnightTransactionSigner,
+  type MidnightTransactionState,
+  midnightTransactionStateSchema,
+} from '@/lib/midnight/transaction-v1/transaction'
 import { amountSchema, evmAddressSchema } from '@/lib/value-schemas'
 
 /** Where an activity stands, aggregated from its lifecycle row by the view. */
@@ -44,9 +53,25 @@ export const activityTransactionSchema = z.object({
   /** The chain's identifier, null until the transaction reached the node. */
   hash: z.string().nullable(),
   state: activityTransactionStateSchema,
+  /** The transaction's own state, which says what it waits for. */
+  lifecycleState: z.union([midnightTransactionStateSchema, ethereumTransactionStateSchema]),
 })
 
 export type ActivityTransaction = z.infer<typeof activityTransactionSchema>
+
+/** The state and signer of a Midnight transaction the caller's wallet must balance, as the view selects it. */
+export const ACTIVITY_WALLET_TRANSACTION_STATE = 'AwaitingWallet' satisfies MidnightTransactionState
+export const ACTIVITY_WALLET_TRANSACTION_SIGNER = 'caller' satisfies MidnightTransactionSigner
+
+/** The caller's Midnight transaction waiting for the wallet, with the circuit it carries and its deadline. */
+export const activityWalletTransactionSchema = z.object({
+  name: midnightTransactionNameSchema,
+  circuit: z.string(),
+  /** The view carries it through JSON as text, so the schema accepts both forms. */
+  expireTime: z.coerce.date().nullable(),
+})
+
+export type ActivityWalletTransaction = z.infer<typeof activityWalletTransactionSchema>
 
 /** The name of the resource an activity projects, one schema per activity type. */
 export const activityNameSchema = depositNameSchema
@@ -66,6 +91,12 @@ export const activitySchema = z.object({
   amount: amountSchema,
   outcome: depositOutcomeSchema.nullable(),
   error: z.string().nullable(),
+  /** The deposit's own state, which says what it waits for. */
+  depositState: depositStateSchema,
+  /** The newest vault request's own state, null before the request exists. */
+  vaultRequestState: vaultRequestStateSchema.nullable(),
+  /** The newest caller transaction the wallet must balance now, null when none waits. */
+  walletTransaction: activityWalletTransactionSchema.nullable(),
   /** The caller's call that put the request on the vault. */
   startTransaction: activityTransactionSchema.nullable(),
   /** The MPC-signed transaction on the foreign chain. */

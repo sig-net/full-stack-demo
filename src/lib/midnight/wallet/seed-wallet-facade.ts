@@ -4,6 +4,7 @@ import type {
   WalletProvider,
 } from '@midnight-ntwrk/midnight-js/types'
 import * as ledger from '@midnightntwrk/ledger-v9'
+import { bytesToHex, hexToBytes as sigNetHexToBytes } from '@sig-net/midnight'
 import {
   InMemoryTransactionHistoryStorage,
   SerializedTransaction,
@@ -244,4 +245,21 @@ export function createWalletAndMidnightProvider(
     },
     submitTx: (tx) => facade.submitTransaction(tx),
   }
+}
+
+/**
+ * Balances, signs and finalises the unbound bytes of a proven call through the provider,
+ * resolving with the finalized bytes, both in hex as the transaction resource carries them.
+ */
+export async function finalizeUnboundTransaction(
+  provider: WalletProvider,
+  unboundTx: string,
+): Promise<string> {
+  const unbound = ledger.Transaction.deserialize<
+    ledger.SignatureEnabled,
+    ledger.Proof,
+    ledger.PreBinding
+  >('signature', 'proof', 'pre-binding', sigNetHexToBytes(unboundTx))
+  const finalized = await provider.balanceTx(unbound)
+  return bytesToHex(finalized.serialize())
 }

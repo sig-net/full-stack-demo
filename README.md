@@ -906,6 +906,34 @@ actions in `src/server/actions/activity-actions.ts` expose both, and nothing wri
 aggregation back from Postgres, and the end-to-end deposit asserts its row is `Complete` with all
 three hashes.
 
+### Driving a deposit from the Activity table
+
+The browser keeps no flow state of its own: every step it offers is read from the activity row,
+so a closed tab, a reload or a lost connection loses nothing and the next refresh offers the
+same step again. The view projects, beside the aggregated state, the deposit's own state, the
+newest vault request's state, each child transaction's own state as `lifecycleState`, and
+`walletTransaction`, the newest caller-signed Midnight transaction in `AwaitingWallet` with its
+circuit and deadline. `activityActionOf()` and `activityStepsOf()`
+(`src/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress.ts`) derive from those
+the user's next step (`balance`, `complete` or `none`) and the ten-step progress the row's info
+popover shows.
+
+`ActivitySection` reads `listActivities` through React Query, every five seconds while a row
+is pending and every thirty otherwise, and maps each row with `activityEntryOf()`
+(`src/lib/activity/activity-entries.ts`). A row with a next step shows a button, "Balance with
+wallet" or "Complete deposit", which opens `DepositActionDialog`
+(`src/components/deposit-action-dialog.tsx`). Balancing reads the transaction afresh through
+`listTransactions`, has the wallet balance, sign and finalise its `unboundTx` with
+`Wallet.finalize()`, and hands the result to `submitTransaction`. Completing calls
+`completeDeposit` as the dialog opens, polls the deposit's calls until the completion call is
+proved, and then offers the same balance step for it. Success and failure surface as toasts
+from the shadcn `sonner` toaster mounted in the root layout.
+
+The deposit itself starts from the deposit dialog: each fund line's control calls
+`startDeposit` for the whole fund with the wallet's public keys, with the dialog inert until the
+server answers, and closes on success with a toast. From then on the Activity table is the only
+place the flow is driven from.
+
 ## Midnight wallet
 
 `src/lib/midnight/wallet` holds the wallet layer. `MidnightWalletProvider` drives it, and the
@@ -974,11 +1002,14 @@ under Styling and theme.
   again only from its Check again control: it reports how many supported tokens the account holds
   above zero and lists each as its icon, its symbol and its amount in whole tokens; the vault
   admits more than one contract called USDC, so a symbol another fund shares is qualified by its
-  issuer. The Deposit control on each line is not wired yet, and neither are Swap and Send.
-- `ActivitySection` (`src/components/activity-section.tsx`) reads `src/lib/activity/dummy-activity.ts`
-  and renders `ActivityTable`. Each entry is a collapsible table body: from the `md` breakpoint up
-  every column shows, below it a chevron expands the timestamp and block explorer details. The
-  entry types live in `src/lib/activity/activity-entry.ts`.
+  issuer. The Deposit control on each line starts the deposit of the whole fund (see Driving a
+  deposit from the Activity table under Activity view). Swap and Send are not wired.
+- `ActivitySection` (`src/components/activity-section.tsx`) reads the caller's activity through
+  `listActivities` and renders `ActivityTable`. Each entry is a collapsible table body: from the
+  `md` breakpoint up every column shows, below it a chevron expands the timestamp and block
+  explorer details. The Status cell holds the badge, or the user's next step while it is their
+  turn, and the progress info. The entry types live in `src/lib/activity/activity-entry.ts` and
+  the mapping from the resource in `src/lib/activity/activity-entries.ts`.
 - `SwapPanel` (`src/components/swap-panel.tsx`) holds the local form state for two
   `SwapAmountField`s and the disabled Swap call to action. The token list comes from
   `src/lib/swap/dummy-swap-tokens.ts`.
@@ -1089,8 +1120,17 @@ carries a wand that funds the account with one ETH and rechecks. The wand is the
 `isLocalEnvironment()` (`src/lib/config/local-environment.ts`) holds, an undeployed Midnight
 network with the EVM RPC on a loopback host, since the fork reports Sepolia's chain id; anywhere
 else the adaptor is built without a service and refuses every call, and the browser, reading the
-same public configuration, renders no wand. `integration-tests/ethereum-local-faucet.test.ts`
-funds a fresh account through it.
+same public configuration, renders no wand. The same faucet's `fundErc20({ account,
+erc20Address, amount })` gives an account any ERC20 by writing its balance slot through
+`anvil_setStorageAt`: the slot is found by writing a sentinel at the location each of the first
+64 mapping slots implies, in the Solidity and the Vyper layouts, reading `balanceOf` back and
+restoring the word, and a token whose balance lives elsewhere is refused with that reason. The
+deposit dialog's funds line carries a second wand on the local stack that opens a popover with
+the vault's supported tokens and an amount in whole tokens (100 by default), parsed by
+`parseTokenAmount()` (`src/lib/tokens/parse-token-amount.ts`), which refuses more decimals than
+the token has. `integration-tests/ethereum-local-faucet.test.ts` funds a fresh account with ETH
+and with USDC through the faucet, and the end-to-end deposit test funds its deposit account the
+same way.
 
 ## Styling and theme
 

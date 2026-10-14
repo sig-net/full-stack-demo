@@ -1,20 +1,13 @@
 import 'server-only'
 
 import type { MidnightProvider, WalletProvider } from '@midnight-ntwrk/midnight-js/types'
-import {
-  type PreBinding,
-  type Proof,
-  type SignatureEnabled,
-  Transaction,
-} from '@midnightntwrk/ledger-v9'
-import { bytesToHex, hexToBytes } from '@sig-net/midnight'
-
 import type { MidnightNetworkConfig } from '@/lib/config/midnight-network-config'
 import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
 import {
   type AccountKeys,
   createWalletAndMidnightProvider,
   deriveAccountKeys,
+  finalizeUnboundTransaction,
   initialiseWalletFacade,
   type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
@@ -56,14 +49,7 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
     if (this.starting === undefined) {
       throw new Error('The relayer wallet was not started: start the backend first')
     }
-    const unbound = Transaction.deserialize<SignatureEnabled, Proof, PreBinding>(
-      'signature',
-      'proof',
-      'pre-binding',
-      hexToBytes(unboundTx),
-    )
-    const finalized = await (await this.starting).provider.balanceTx(unbound)
-    return bytesToHex(finalized.serialize())
+    return finalizeUnboundTransaction((await this.starting).provider, unboundTx)
   }
 
   async provider(): Promise<WalletProvider & MidnightProvider> {

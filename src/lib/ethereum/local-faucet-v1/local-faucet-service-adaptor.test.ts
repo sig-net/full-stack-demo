@@ -5,14 +5,19 @@ import type { LocalFaucetService } from '@/lib/ethereum/local-faucet-v1/local-fa
 import { mock } from '@/lib/testing/mock'
 
 const ACCOUNT = `0x${'ab'.repeat(20)}`
+const TOKEN = `0x${'cd'.repeat(20)}`
 
-function adaptorOver(accounts: string[] = []): LocalFaucetServiceAdaptor {
+function adaptorOver(accounts: string[] = [], erc20Error?: Error): LocalFaucetServiceAdaptor {
   return new LocalFaucetServiceAdaptor(
     mock<LocalFaucetService>('LocalFaucetService', {
       fundAccount: ({ account }) => {
         accounts.push(account)
         return Promise.resolve({ account, balance: 7n })
       },
+      fundErc20: ({ account, erc20Address, amount }) =>
+        erc20Error === undefined
+          ? Promise.resolve({ account, erc20Address, balance: amount })
+          : Promise.reject(erc20Error),
     }),
   )
 }
@@ -44,5 +49,44 @@ describe('LocalFaucetServiceAdaptor.fundAccount', () => {
       ok: false,
       error: 'The faucet is available on the local stack only.',
     })
+  })
+})
+
+describe('LocalFaucetServiceAdaptor.fundErc20', () => {
+  test('answers the funding with the amount as a bigint or a decimal string', async () => {
+    await expect(
+      adaptorOver().fundErc20({ account: ACCOUNT, erc20Address: TOKEN, amount: '5' }),
+    ).resolves.toEqual({
+      ok: true,
+      funding: { account: ACCOUNT, erc20Address: TOKEN, balance: 5n },
+    })
+  })
+
+  test.each([
+    { name: 'a zero amount', args: { account: ACCOUNT, erc20Address: TOKEN, amount: 0n } },
+    { name: 'a missing token', args: { account: ACCOUNT, amount: 1n } },
+    { name: 'arguments that are not an object', args: 'no' },
+  ])('refuses $name', async ({ args }) => {
+    await expect(adaptorOver().fundErc20(args)).resolves.toMatchObject({ ok: false })
+  })
+
+  test('reports a token the faucet cannot write as a refusal', async () => {
+    await expect(
+      adaptorOver([], new Error('No balance slot found')).fundErc20({
+        account: ACCOUNT,
+        erc20Address: TOKEN,
+        amount: 1n,
+      }),
+    ).resolves.toEqual({ ok: false, error: 'No balance slot found' })
+  })
+
+  test('refuses every call outside the local stack', async () => {
+    await expect(
+      new LocalFaucetServiceAdaptor(null).fundErc20({
+        account: ACCOUNT,
+        erc20Address: TOKEN,
+        amount: 1n,
+      }),
+    ).resolves.toEqual({ ok: false, error: 'The faucet is available on the local stack only.' })
   })
 })
