@@ -27,12 +27,10 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 import { Label } from '@/components/ui/label'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
-import type { MidnightBalanceAmount } from '@/lib/balances/midnight-balances'
+import { type SupportedBalance, supportedBalancesOf } from '@/lib/balances/supported-balances'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
-import type { TokenInfo } from '@/lib/tokens/token-info'
-import type { TokenInfoRegistry } from '@/lib/tokens/token-info-registry'
 import { startWithdraw } from '@/server/actions/withdraw-actions'
 
 const AMOUNT_INPUT = /^\d*\.?\d*$/
@@ -63,7 +61,7 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
   const [amountText, setAmountText] = useState('')
   const [destination, setDestination] = useState('')
 
-  const sources = supportedBalances(balances.data ?? [], registry)
+  const sources = supportedBalancesOf(balances.data ?? [], registry)
   const source = sources.find(({ token }) => token.origin.erc20Address === erc20Address) ?? null
   const amount = amountOf(amountText, source)
   const destinationValid = isAddress(destination)
@@ -150,26 +148,15 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
           token={source?.token ?? null}
           onTokenChange={setErc20Address}
           disabled={busy}
-          footer={
-            <div className="flex items-center justify-between font-mono text-xs/3.5 font-medium text-tertiary-foreground">
-              <span>≈ $0.00</span>
-              {source !== null && (
-                <span className="flex items-center gap-2.5">
-                  <span>Balance: {source.balance.amount}</span>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className="h-3.5 px-0 font-sans text-xs/3.5 font-semibold text-tertiary-foreground"
-                    disabled={busy}
-                    onClick={() => {
-                      setAmountText(source.balance.amount)
-                    }}
-                  >
-                    MAX
-                  </Button>
-                </span>
-              )}
-            </div>
+          balance={
+            source === null
+              ? undefined
+              : {
+                  amount: source.balance.amount,
+                  onMax: () => {
+                    setAmountText(source.balance.amount)
+                  },
+                }
           }
         />
         <p className="text-center text-sm/5 font-medium text-muted-foreground">to</p>
@@ -242,26 +229,10 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
   )
 }
 
-interface SendSource {
-  readonly token: TokenInfo
-  readonly balance: MidnightBalanceAmount
-}
-
-/** The wallet's balances in tokens the vault admits, each with the registry entry that names it. */
-function supportedBalances(
-  balances: readonly MidnightBalanceAmount[],
-  registry: TokenInfoRegistry,
-): SendSource[] {
-  return balances.flatMap((balance) => {
-    const token = registry.get({ ledger: 'shielded', tokenType: balance.tokenType })
-    return token !== undefined && token.supported ? [{ token, balance }] : []
-  })
-}
-
 /** The typed amount in base units, or why it cannot be sent yet. */
 function amountOf(
   text: string,
-  source: SendSource | null,
+  source: SupportedBalance | null,
 ): { value: bigint | null; error: string | null } {
   if (source === null || text === '') return { value: null, error: null }
   try {

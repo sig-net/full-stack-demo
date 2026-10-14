@@ -15,6 +15,7 @@ import { TokenAmountField } from '@/components/token-amount-field'
 import { Button } from '@/components/ui/button'
 import { useDebouncedValue } from '@/components/use-debounced-value'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
+import { supportedBalancesOf } from '@/lib/balances/supported-balances'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
@@ -65,11 +66,10 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
     if (sourceRequest !== null) amountInput.current?.focus()
   }, [sourceRequest])
 
-  const sources = (balances.data ?? []).flatMap((balance) => {
-    const info = registry.get({ ledger: 'shielded', tokenType: balance.tokenType })
-    return info !== undefined && info.supported ? [info] : []
-  })
-  const fromToken = sources.find((info) => info.origin.erc20Address === fromErc20Address) ?? null
+  const sources = supportedBalancesOf(balances.data ?? [], registry)
+  const fromSource =
+    sources.find(({ token }) => token.origin.erc20Address === fromErc20Address) ?? null
+  const fromToken = fromSource?.token ?? null
   const destinations = registry
     .supported()
     .filter((info) => info.origin.erc20Address !== fromToken?.origin.erc20Address)
@@ -150,15 +150,7 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
           ? 'Deposit a token first: the wallet holds nothing the vault admits.'
           : amountIn.error
   const busy = swapping.isPending
-  const ready =
-    blocker === null &&
-    missing.length === 0 &&
-    quoteCurrent &&
-    (balances.data ?? []).some(
-      (balance) =>
-        registry.get({ ledger: 'shielded', tokenType: balance.tokenType })?.origin.erc20Address ===
-        fromToken?.origin.erc20Address,
-    )
+  const ready = blocker === null && missing.length === 0 && quoteCurrent && fromSource !== null
 
   return (
     <section aria-labelledby="swap-title" className="flex min-h-0 flex-1 flex-col">
@@ -182,13 +174,23 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
           onAmountChange={(amount) => {
             if (AMOUNT_INPUT.test(amount)) setFromAmount(amount)
           }}
-          tokens={sources}
+          tokens={sources.map(({ token }) => token)}
           token={fromToken}
           onTokenChange={(erc20Address) => {
             setFromChoice({ erc20Address, after: sourceRequest?.sequence ?? 0 })
             if (erc20Address === toErc20Address) setToErc20Address(null)
           }}
           disabled={busy}
+          balance={
+            fromSource === null
+              ? undefined
+              : {
+                  amount: fromSource.balance.amount,
+                  onMax: () => {
+                    setFromAmount(fromSource.balance.amount)
+                  },
+                }
+          }
           inputRef={amountInput}
         />
         <ArrowDown aria-hidden="true" className="size-5 shrink-0 text-swap-panel-icon" />

@@ -14,22 +14,28 @@ interface TokenIconProps {
   networkName: string
   icon: IconSource
   networkIcon: IconSource
+  /** `sm` is the 20px icon of a select option, `default` the 28px icon of a row or a balance. */
+  size?: 'default' | 'sm'
 }
 
 /**
- * A 28px asset icon with a 12px badge of the network the asset came from on its bottom-right
- * corner. A bundled badge image carries its own rounded border, so the badge frame draws none.
+ * An asset icon with a badge of the network the asset came from on its bottom-right corner:
+ * 28px with a 12px badge, or 20px with an 8px badge. A bundled badge image carries its own
+ * rounded border, so the badge frame draws none.
  */
 export function TokenIcon({
   assetSymbol,
   networkName,
   icon,
   networkIcon,
+  size = 'default',
 }: TokenIconProps): ReactNode {
   const glyph = <Coins className="size-4" aria-hidden />
+  const badgeSize = size === 'sm' ? 8 : 12
   return (
     <Avatar
-      className="size-7 after:hidden"
+      size={size}
+      className={cn('after:hidden', size === 'sm' ? 'size-5' : 'size-7')}
       role="img"
       aria-label={`${assetSymbol} on ${networkName}`}
     >
@@ -50,7 +56,7 @@ export function TokenIcon({
       </AvatarFallback>
       <AvatarBadge
         className={cn(
-          'overflow-hidden rounded-xs ring-0 group-data-[size=default]/avatar:size-3 group-data-[size=default]/avatar:[&>svg]:size-3',
+          'overflow-hidden rounded-xs ring-0 group-data-[size=default]/avatar:size-3 group-data-[size=default]/avatar:[&>svg]:size-3 group-data-[size=sm]/avatar:size-2 group-data-[size=sm]/avatar:[&>svg]:block group-data-[size=sm]/avatar:[&>svg]:size-2',
           networkIcon.source === 'image' ? 'border-0 bg-transparent' : 'border',
         )}
       >
@@ -58,14 +64,14 @@ export function TokenIcon({
           <Image
             src={networkIcon.url}
             alt=""
-            width={12}
-            height={12}
+            width={badgeSize}
+            height={badgeSize}
             unoptimized
-            className="size-3"
+            className={size === 'sm' ? 'size-2' : 'size-3'}
           />
         )}
         {networkIcon.source === 'web3icons' && (
-          <NetworkIcon name={networkIcon.name} variant="branded" size={12} aria-hidden />
+          <NetworkIcon name={networkIcon.name} variant="branded" size={badgeSize} aria-hidden />
         )}
       </AvatarBadge>
     </Avatar>

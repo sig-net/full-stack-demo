@@ -1,6 +1,8 @@
 import { cn } from 'cn'
 import type { ReactNode, Ref } from 'react'
 
+import { TokenIcon } from '@/components/token-icon'
+import { Button } from '@/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import {
   Select,
@@ -9,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { TokenInfo } from '@/lib/tokens/token-info'
+import { ORIGIN_NETWORKS, type TokenInfo } from '@/lib/tokens/token-info'
 import { tokenLabel } from '@/lib/tokens/token-label'
 
 interface TokenAmountFieldProps {
@@ -22,13 +24,26 @@ interface TokenAmountFieldProps {
   token: TokenInfo | null
   onTokenChange: (erc20Address: string) => void
   disabled?: boolean
-  /** A line under the amount row inside the field, such as the balance it draws on. */
-  footer?: ReactNode
+  /** The balance the amount draws on, shown under it with the control that spends it whole. */
+  balance?: TokenAmountBalance
   /** The amount input, for a caller that moves focus to it. */
   inputRef?: Ref<HTMLInputElement>
 }
 
-/** An amount beside the token it is in, chosen from the tokens offered: one side of a swap, or what a send moves. */
+export interface TokenAmountBalance {
+  /** In whole tokens, as the amount input takes it. */
+  readonly amount: string
+  onMax(): void
+}
+
+/** Every amount is worth this until a price source exists. */
+const USD_ESTIMATE = '≈ $0.00'
+
+/**
+ * An amount beside the token it is in, chosen from the tokens offered with their icons: one side
+ * of a swap, or what a send moves. With a balance, a second line shows the amount's value, the
+ * balance and a MAX control.
+ */
 export function TokenAmountField({
   label,
   amount,
@@ -37,7 +52,7 @@ export function TokenAmountField({
   token,
   onTokenChange,
   disabled = false,
-  footer,
+  balance,
   inputRef,
 }: TokenAmountFieldProps): ReactNode {
   return (
@@ -45,7 +60,7 @@ export function TokenAmountField({
       aria-label={label}
       className={cn(
         'h-17.5 rounded-xs border-swap-panel-field-border bg-swap-panel-field px-4.75 dark:bg-swap-panel-field',
-        footer !== undefined && 'h-auto flex-wrap gap-y-3 py-5',
+        balance !== undefined && 'h-auto flex-wrap gap-y-3 py-5',
       )}
     >
       <InputGroupInput
@@ -69,7 +84,7 @@ export function TokenAmountField({
           disabled={disabled}
           items={tokens.map((option) => ({
             value: option.origin.erc20Address,
-            label: tokenLabel(option),
+            label: <TokenOption token={option} />,
           }))}
         >
           <SelectTrigger
@@ -82,14 +97,49 @@ export function TokenAmountField({
           <SelectContent>
             {tokens.map((option) => (
               <SelectItem key={option.origin.erc20Address} value={option.origin.erc20Address}>
-                {tokenLabel(option)}
+                <TokenOption token={option} />
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </InputGroupAddon>
-      {/* The inline-end addon is ordered last, so the footer shares that order to wrap under it. */}
-      {footer !== undefined && <div className="order-last basis-full">{footer}</div>}
+      {/* The inline-end addon is ordered last, so the balance line shares that order to wrap under it. */}
+      {balance !== undefined && (
+        <div className="order-last flex basis-full items-center justify-between font-mono text-xs/3.5 font-medium text-tertiary-foreground">
+          <span>{USD_ESTIMATE}</span>
+          <span className="flex items-center gap-2.5">
+            <span>Balance: {balance.amount}</span>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="h-3.5 px-0 font-sans text-xs/3.5 font-semibold text-tertiary-foreground"
+              disabled={disabled}
+              onClick={() => {
+                balance.onMax()
+              }}
+            >
+              MAX
+            </Button>
+          </span>
+        </div>
+      )}
     </InputGroup>
+  )
+}
+
+/** A token as the select lists it: its icon with the chain badge, then its label. */
+function TokenOption({ token }: { token: TokenInfo }): ReactNode {
+  const network = ORIGIN_NETWORKS[token.origin.kind]
+  return (
+    <span className="flex items-center gap-1.5">
+      <TokenIcon
+        size="sm"
+        assetSymbol={token.symbol}
+        networkName={network.name}
+        icon={token.icon}
+        networkIcon={network.icon}
+      />
+      {tokenLabel(token)}
+    </span>
   )
 }

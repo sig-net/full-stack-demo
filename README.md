@@ -1138,7 +1138,12 @@ under Styling and theme.
 - `SwapPanel` (`src/components/swap-panel.tsx`) sells a vault token the wallet holds for
   another the vault admits. The From field offers the wallet's supported balances
   (`useMidnightBalances`, `src/components/use-midnight-balances.ts`, the query the Balances
-  section reads too) and the To field every other supported token. The From amount rests for
+  section reads too, narrowed by `supportedBalancesOf()` in
+  `src/lib/balances/supported-balances.ts`) and the To field every other supported token, each
+  option with its `TokenIcon`. Under the From amount the field (`TokenAmountField`,
+  `src/components/token-amount-field.tsx`, which the Send dialog shares) shows the amount's
+  value, `$0.00` until a price source exists, the balance of the chosen token and a MAX control
+  that spends it whole. The From amount rests for
   400 ms, then `quoteSwap` prices it and the To field shows the least the swap accepts; Swap
   calls `startSwap` with the From amount as the cap and that minimum as the exact output, toasts
   and hands the rest to the Activity table (see Swaps and approvals).
@@ -1147,7 +1152,8 @@ under Styling and theme.
 shared by the balances and the activity entries: the symbol, the network the asset came from,
 the exact amount and value as strings, and an `IconSource` (`src/lib/icon-source.ts`) for the
 asset and for the network. `TokenIcon` (`src/components/token-icon.tsx`) renders the pair as a
-28px avatar with a 12px network badge over its bottom right corner: an `image` source is a file
+28px avatar with a 12px network badge over its bottom right corner, or at its `sm` size as 20px
+with an 8px badge for a select option: an `image` source is a file
 under `public` served by its URL path, a `web3icons` source loads that icon from
 `@web3icons/react/dynamic` by its lookup name (a token symbol or a network id), and `none`
 renders the lucide coin glyph with an empty badge.
