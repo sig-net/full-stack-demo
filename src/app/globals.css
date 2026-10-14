@@ -400,3 +400,42 @@
   --normal-border: var(--border);
   --border-radius: var(--radius);
 }
+
+/*
+ * The GitHub corner's artwork (`src/components/github-corner.tsx`): the fold takes the colour
+ * of the brand logo beside it (the brown logo's fill in light mode, white in dark mode), the
+ * Octocat the background, and the arm waves on hover about the point in the artwork's 250-unit
+ * box where it meets the body.
+ */
+.github-corner {
+  fill: var(--color-dark-neutral-300);
+  color: var(--background);
+}
+.dark .github-corner {
+  fill: var(--color-white);
+}
+.github-corner-arm {
+  transform-origin: 130px 106px;
+}
+.github-corner:hover .github-corner-arm {
+  animation: octocat-wave 560ms ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .github-corner:hover .github-corner-arm {
+    animation: none;
+  }
+}
+@keyframes octocat-wave {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20%,
+  60% {
+    transform: rotate(-25deg);
+  }
+  40%,
+  80% {
+    transform: rotate(10deg);
+  }
+}

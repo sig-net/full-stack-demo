@@ -1120,6 +1120,14 @@ props down, so the presentation never changes when a data source does. The balan
 activity table render every entry at full height and leave scrolling to `HomeLayout`, described
 under Styling and theme.
 
+- `AppBar` (`src/components/app-bar.tsx`) is the header: the brand, the total balance, the
+  Settings, identity and wallet popovers, and `GitHubCorner` (`src/components/github-corner.tsx`)
+  folded over its top-left corner from the `md` breakpoint up, a link to the source repository
+  drawn with the github-corners artwork (Tim Holman, MIT licence), whose Octocat waves its arm on
+  hover unless the user prefers reduced motion. Its two colours (the brand logo's, brown in light mode and
+  white in dark mode, and the background) and keyframes live at the end of
+  `src/app/globals.css` as the one artwork exception to the shared presentation contract.
+
 - `BalancesSection` (`src/components/balances-section.tsx`) reads the connected Midnight wallet's
   shielded balances through a React Query query, refetched every ten seconds and keyed on the
   network and the wallet connection generation, so a reconnected wallet never shows a replaced
