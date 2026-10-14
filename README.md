@@ -1137,6 +1137,11 @@ under Styling and theme.
 - `HomeSections` (`src/components/home-sections.tsx`) owns what the balances and the swap panel
   share: a balance's Swap button asks for its token, which the swap panel selects as the From
   token and moves focus to the amount, until the user picks another token.
+- `SidePanel` (`src/components/side-panel.tsx`) is the right column: two line blocks, Swap and
+  Lend, over the shadcn tabs primitive styled as the design draws them, the open one filled. A
+  balance's Swap button also opens the Swap tab. `LendPanel` (`src/components/lend-panel.tsx`)
+  behind Lend is the place of the vault's Aave leg: a Supply and a Redeem action drawn with
+  their amount fields and controls, disabled until they are wired.
 - `SwapPanel` (`src/components/swap-panel.tsx`) sells a vault token the wallet holds for
   another the vault admits. The From field offers the wallet's supported balances
   (`useMidnightBalances`, `src/components/use-midnight-balances.ts`, the query the Balances

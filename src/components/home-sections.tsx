@@ -5,7 +5,8 @@ import { type ReactNode, useState } from 'react'
 import { ActivitySection } from '@/components/activity-section'
 import { BalancesSection } from '@/components/balances-section'
 import { HomeLayout } from '@/components/home-layout'
-import { SwapPanel, type SwapSourceRequest } from '@/components/swap-panel'
+import { SidePanel } from '@/components/side-panel'
+import type { SwapSourceRequest } from '@/components/swap-panel'
 
 /**
  * The home page's sections, with the one thing two of them share: a balance's Swap control asks
@@ -23,7 +24,7 @@ export function HomeSections(): ReactNode {
         />
       }
       activity={<ActivitySection types={['Deposit', 'Withdraw', 'Swap']} />}
-      swap={<SwapPanel sourceRequest={swapSource} />}
+      swap={<SidePanel sourceRequest={swapSource} />}
     />
   )
 }

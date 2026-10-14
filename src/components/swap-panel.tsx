@@ -176,11 +176,9 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   return (
     <section aria-labelledby="swap-title" className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col items-center gap-5 border-[0.5px] bg-linear-to-b from-swap-panel-from to-swap-panel-to p-[39.5px] md:border-x-0 md:border-y md:p-9.75">
-        <div className="flex h-8 items-center self-stretch">
-          <h2 id="swap-title" className="text-xl/6 font-semibold text-swap-panel-foreground">
-            Swap
-          </h2>
-        </div>
+        <h2 id="swap-title" className="text-base/6 font-medium text-swap-panel-foreground">
+          Swap on Uniswap
+        </h2>
         <TokenAmountField
           label="From"
           amount={fromAmount}
