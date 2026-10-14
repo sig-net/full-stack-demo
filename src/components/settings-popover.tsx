@@ -32,7 +32,13 @@ export function SettingsPopover(): ReactNode {
             <ReadinessRecheckButton />
           </div>
           <ReadinessChecklist checkIds={READINESS_CHECK_IDS} />
-          <Button variant="ghost" size="sm" className="self-start" render={<Link href="/admin" />}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="self-start"
+            nativeButton={false}
+            render={<Link href="/admin" />}
+          >
             <ShieldCheck aria-hidden />
             Admin
           </Button>
