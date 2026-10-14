@@ -23,6 +23,7 @@ import { isLocalEnvironment } from '@/lib/config/local-environment'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
 import type { TokenInfo } from '@/lib/tokens/token-info'
+import { tokenLabel } from '@/lib/tokens/token-label'
 import { fundErc20 } from '@/server/actions/local-faucet-actions'
 
 interface LocalErc20FaucetPopoverProps {
@@ -156,11 +157,4 @@ export function LocalErc20FaucetPopover({
       </PopoverContent>
     </Popover>
   )
-}
-
-/** The symbol, qualified by the issuer where the vault admits more than one token of that symbol. */
-function tokenLabel(token: TokenInfo): string {
-  return token.origin.issuer === undefined
-    ? token.symbol
-    : `${token.symbol} (${token.origin.issuer})`
 }

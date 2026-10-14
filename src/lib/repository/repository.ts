@@ -34,4 +34,6 @@ export interface ReadSearchArgs<Resource> {
 
 export type Criterion<Resource> =
   | { type: 'exact-text'; field: keyof Resource & string; text: string }
+  /** The field starts with `prefix`, compared as plain text: a resource name under a parent, for one. */
+  | { type: 'prefix-text'; field: keyof Resource & string; prefix: string }
   | { type: 'bool'; field: keyof Resource & string; bool: boolean }

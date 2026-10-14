@@ -10,6 +10,7 @@ import {
 } from '@/lib/ethereum/transaction-v1/transaction-fixtures'
 import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
 import type { RespondOutcomeSource } from '@/lib/midnight/ethereum-erc20-vault/respond-outcome-source'
+import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import type {
   RequestLedger,
@@ -453,8 +454,8 @@ function resolverOver(doubles: Doubles): VaultRequestStateResolverImpl {
           },
     ),
     mock<VaultCircuits>('VaultCircuits', doubles.circuits),
-    { deposit: mock<SignetRequestResponseReader>('SignetRequestResponseReader', doubles.reader) },
-    { deposit: mock<RespondOutcomeSource>('RespondOutcomeSource', doubles.outcomeSource) },
+    perAction(mock<SignetRequestResponseReader>('SignetRequestResponseReader', doubles.reader)),
+    perAction(mock<RespondOutcomeSource>('RespondOutcomeSource', doubles.outcomeSource)),
     mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
       search: async (args) => {
         const child = doubles.midnightChild
@@ -610,3 +611,8 @@ describe('VaultRequestStateResolverImpl sweeps', () => {
     ])
   })
 })
+
+/** The same double behind every action: the fixture request is a deposit, so only that entry is read. */
+function perAction<Double>(double: Double): Readonly<Record<VaultAction, Double>> {
+  return { deposit: double, swap: double, approve: double }
+}

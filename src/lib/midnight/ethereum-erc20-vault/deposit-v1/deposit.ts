@@ -2,6 +2,17 @@ import { z } from 'zod'
 
 import { CALLER_COLLECTION } from '@/lib/caller/caller'
 import {
+  CALLER_OPERATION_FAILURES,
+  CALLER_OPERATION_PENDING_STATES,
+  CALLER_OPERATION_STATES,
+  CALLER_OPERATION_TERMINAL_STATES,
+  type CallerOperationFailure,
+  callerOperationFailureSchema,
+  type CallerOperationState,
+  callerOperationStateSchema,
+  isTerminalCallerOperationState,
+} from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
+import {
   amountSchema,
   evmAddressSchema,
   HEX_32_BYTES,
@@ -21,41 +32,24 @@ export const depositNameSchema = z
     `expected callers/{caller}/${DEPOSIT_COLLECTION}/{uuid}`,
   )
 
-/** Each state names what the deposit waits for, so it is a to-do for exactly one actor. */
-export const DEPOSIT_STATES = [
-  'AwaitingStartTransaction',
-  'AwaitingVaultRequest',
-  'AwaitingCompletion',
-  'AwaitingCompleteTransaction',
-  'Completed',
-  'Failed',
-] as const
+/** The deposit's lifecycle is the caller operation's, under its own names. */
+export const DEPOSIT_STATES = CALLER_OPERATION_STATES
 
-export const depositStateSchema = z.enum(DEPOSIT_STATES)
+export const depositStateSchema = callerOperationStateSchema
 
-export type DepositState = z.infer<typeof depositStateSchema>
+export type DepositState = CallerOperationState
 
-/** The states a deposit never leaves. */
-export const DEPOSIT_TERMINAL_STATES = [
-  'Completed',
-  'Failed',
-] as const satisfies readonly DepositState[]
+export const DEPOSIT_TERMINAL_STATES = CALLER_OPERATION_TERMINAL_STATES
 
-export function isTerminalDepositState(state: DepositState): boolean {
-  return DEPOSIT_TERMINAL_STATES.some((terminal) => terminal === state)
-}
+export const isTerminalDepositState = isTerminalCallerOperationState
 
-/** The states a resolver still has work for. */
-export const DEPOSIT_PENDING_STATES: readonly DepositState[] = DEPOSIT_STATES.filter(
-  (state) => !isTerminalDepositState(state),
-)
+export const DEPOSIT_PENDING_STATES = CALLER_OPERATION_PENDING_STATES
 
-/** Why a deposit failed: the start transaction ended without queueing the request. */
-export const DEPOSIT_FAILURES = ['StartFailed'] as const
+export const DEPOSIT_FAILURES = CALLER_OPERATION_FAILURES
 
-export const depositFailureSchema = z.enum(DEPOSIT_FAILURES)
+export const depositFailureSchema = callerOperationFailureSchema
 
-export type DepositFailure = z.infer<typeof depositFailureSchema>
+export type DepositFailure = CallerOperationFailure
 
 /** What the complete circuit did: minted the tokens the sweep moved, or closed a request whose sweep moved nothing. */
 export const DEPOSIT_OUTCOMES = ['minted', 'closed'] as const

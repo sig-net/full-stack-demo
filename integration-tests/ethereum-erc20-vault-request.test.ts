@@ -24,7 +24,7 @@ describe('Vault requests over Postgres, the indexer and the vault ledger', () =>
     action: 'deposit',
     state: 'AwaitingFlush',
     inIndex: 2n ** 64n - 1n,
-    depositAccount: `0x${'ab'.repeat(20)}`,
+    signerAccount: `0x${'ab'.repeat(20)}`,
     outIndex: null,
     requestId: null,
     signedTx: null,

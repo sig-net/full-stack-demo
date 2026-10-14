@@ -9,7 +9,7 @@ export default function HomePage(): ReactNode {
   return (
     <HomeLayout
       balances={<BalancesSection />}
-      activity={<ActivitySection />}
+      activity={<ActivitySection types={['Deposit', 'Swap']} />}
       swap={<SwapPanel />}
     />
   )

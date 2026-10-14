@@ -113,6 +113,20 @@
       "when": 1791972707934,
       "tag": "0015_activity_references",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791974731514,
+      "tag": "0016_swap_and_approval",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791975204173,
+      "tag": "0017_activity_types",
+      "breakpoints": true
     }
   ]
 }

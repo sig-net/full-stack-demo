@@ -85,6 +85,27 @@ import type { DepositStateResolver } from '@/lib/midnight/ethereum-erc20-vault/d
 import { DepositStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-resolver-impl'
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
 import { Erc20ReaderEthersImpl } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader-ethers-impl'
+import { ApprovalEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-event-consumer'
+import type { ApprovalRepository } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-repository'
+import { ApprovalRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-repository-sql-impl'
+import type { ApprovalService } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service'
+import { ApprovalServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service-adaptor'
+import { ApprovalServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service-impl'
+import type { ApprovalStateController } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-controller'
+import { ApprovalStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-controller-impl'
+import type { ApprovalStateResolver } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-resolver'
+import { ApprovalStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-resolver-impl'
+import { SwapEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-event-consumer'
+import type { SwapRepository } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-repository'
+import { SwapRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-repository-sql-impl'
+import type { SwapService } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service'
+import { SwapServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service-adaptor'
+import { SwapServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service-impl'
+import type { SwapStateController } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-state-controller'
+import { SwapStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-state-controller-impl'
+import type { SwapStateResolver } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-state-resolver'
+import { SwapStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-state-resolver-impl'
+import { UniswapQuoterEthersImpl } from '@/lib/ethereum/uniswap-quoter-ethers-impl'
 import { FlushEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/flush-event-consumer'
 import type { Flusher } from '@/lib/midnight/ethereum-erc20-vault/flusher'
 import { FlusherImpl } from '@/lib/midnight/ethereum-erc20-vault/flusher-impl'
@@ -244,6 +265,23 @@ export interface MidnightBackend {
       readonly service: DepositService
       readonly adaptor: DepositServiceAdaptor
     }
+    readonly swapV1: {
+      readonly repository: SwapRepository
+      readonly stateController: SwapStateController
+      readonly stateResolver: SwapStateResolver
+      readonly eventConsumer: SwapEventConsumer
+      readonly service: SwapService
+      readonly adaptor: SwapServiceAdaptor
+    }
+    /** The deployer's approvals of the vault's spenders, the gate the swap's router spends under. */
+    readonly approvalV1: {
+      readonly repository: ApprovalRepository
+      readonly stateController: ApprovalStateController
+      readonly stateResolver: ApprovalStateResolver
+      readonly eventConsumer: ApprovalEventConsumer
+      readonly service: ApprovalService
+      readonly adaptor: ApprovalServiceAdaptor
+    }
     /** The read model over the lifecycle tables: the database derives its rows, so it has no writer. */
     readonly activityV1: {
       readonly repository: ActivityRepository
@@ -303,6 +341,8 @@ function createLifecycle(backend: BackendPackages): Pick<Backend, 'start' | 'sto
       ethereum.transactionV1.eventConsumer,
       midnight.ethereumErc20Vault.vaultRequestV1.eventConsumer,
       midnight.ethereumErc20Vault.depositV1.eventConsumer,
+      midnight.ethereumErc20Vault.swapV1.eventConsumer,
+      midnight.ethereumErc20Vault.approvalV1.eventConsumer,
       midnight.ethereumErc20Vault.flushEventConsumer,
     ]
     for (const consumer of consumers) event.consumerHub.registerConsumer(consumer)
@@ -330,7 +370,7 @@ function createLifecycle(backend: BackendPackages): Pick<Backend, 'start' | 'sto
 
 /** Every resolver's sweep, then the flusher, so a request a sweep moved into a flush state is flushed at once. */
 function sweepTasks(ethereum: EthereumBackend, midnight: MidnightBackend): SweepTask[] {
-  const { vaultRequestV1, depositV1, flusher } = midnight.ethereumErc20Vault
+  const { vaultRequestV1, depositV1, swapV1, approvalV1, flusher } = midnight.ethereumErc20Vault
   return [
     {
       name: 'Midnight transactions',
@@ -342,6 +382,8 @@ function sweepTasks(ethereum: EthereumBackend, midnight: MidnightBackend): Sweep
     },
     { name: 'vault requests', run: () => vaultRequestV1.stateResolver.resolvePending() },
     { name: 'deposits', run: () => depositV1.stateResolver.resolvePending() },
+    { name: 'swaps', run: () => swapV1.stateResolver.resolvePending() },
+    { name: 'approvals', run: () => approvalV1.stateResolver.resolvePending() },
     // The flusher coalesces and logs its own failures, and a flush that proves runs for minutes,
     // so the pass fires it and moves on.
     {
@@ -591,7 +633,28 @@ function createMidnightEthereumErc20Vault(
       vaultRequestV1,
       { circuits, ledger },
     ),
-    activityV1: createMidnightEthereumErc20VaultActivityV1(db, config),
+    swapV1: createMidnightEthereumErc20VaultSwapV1(
+      db,
+      event,
+      ethereum,
+      config,
+      transactionV1,
+      vaultRequestV1,
+      {
+        circuits,
+        ledger,
+      },
+    ),
+    approvalV1: createMidnightEthereumErc20VaultApprovalV1(
+      db,
+      event,
+      ethereum,
+      config,
+      transactionV1,
+      vaultRequestV1,
+      { circuits, ledger },
+    ),
+    activityV1: createMidnightEthereumErc20VaultActivityV1(db),
     supportedTokenV1: createMidnightEthereumErc20VaultSupportedTokenV1(ethereum, config, ledger),
     readinessV1: createMidnightEthereumErc20VaultReadinessV1(
       ethereum,
@@ -619,6 +682,95 @@ function createMidnightEthereumErc20VaultReadinessV1(
   return { accountReader, service, adaptor: new ReadinessServiceAdaptor(service) }
 }
 
+function createMidnightEthereumErc20VaultSwapV1(
+  db: DbBackend,
+  event: EventBackend,
+  ethereum: EthereumBackend,
+  config: ServerConfig,
+  transactionV1: MidnightBackend['transactionV1'],
+  vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+): MidnightBackend['ethereumErc20Vault']['swapV1'] {
+  const repository = new SwapRepositorySQLImpl(db.database)
+  const stateController = new SwapStateControllerImpl(
+    repository,
+    event.publisher,
+    transactionV1.stateController,
+    vaultRequestV1.stateController,
+  )
+  const stateResolver = new SwapStateResolverImpl(
+    repository,
+    stateController,
+    transactionV1.repository,
+    vaultRequestV1.repository,
+    vault.ledger,
+    db.unitOfWork,
+  )
+  const service = new SwapServiceImpl(
+    repository,
+    stateController,
+    vaultRequestV1.repository,
+    vault.circuits,
+    new UniswapQuoterEthersImpl(ethereum.provider, config.client.ethereum.uniswapQuoterAddress),
+    db.unitOfWork,
+    config.client.midnightSignet,
+    config.client.midnightEthereumErc20Vault,
+  )
+  return {
+    repository,
+    stateController,
+    stateResolver,
+    eventConsumer: new SwapEventConsumer(stateResolver),
+    service,
+    adaptor: new SwapServiceAdaptor(service),
+  }
+}
+
+function createMidnightEthereumErc20VaultApprovalV1(
+  db: DbBackend,
+  event: EventBackend,
+  ethereum: EthereumBackend,
+  config: ServerConfig,
+  transactionV1: MidnightBackend['transactionV1'],
+  vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+): MidnightBackend['ethereumErc20Vault']['approvalV1'] {
+  const repository = new ApprovalRepositorySQLImpl(db.database)
+  const stateController = new ApprovalStateControllerImpl(
+    repository,
+    event.publisher,
+    transactionV1.stateController,
+    vaultRequestV1.stateController,
+  )
+  const stateResolver = new ApprovalStateResolverImpl(
+    repository,
+    stateController,
+    transactionV1.repository,
+    vaultRequestV1.repository,
+    vault.ledger,
+    db.unitOfWork,
+  )
+  const service = new ApprovalServiceImpl(
+    repository,
+    stateController,
+    vaultRequestV1.repository,
+    vault.circuits,
+    vault.ledger,
+    new Erc20ReaderEthersImpl(ethereum.provider),
+    db.unitOfWork,
+    config.client.midnightSignet,
+    config.client.midnightEthereumErc20Vault,
+  )
+  return {
+    repository,
+    stateController,
+    stateResolver,
+    eventConsumer: new ApprovalEventConsumer(stateResolver),
+    service,
+    adaptor: new ApprovalServiceAdaptor(service),
+  }
+}
+
 function createMidnightEthereumErc20VaultSupportedTokenV1(
   ethereum: EthereumBackend,
   config: ServerConfig,
@@ -636,14 +788,9 @@ function createMidnightEthereumErc20VaultSupportedTokenV1(
 
 function createMidnightEthereumErc20VaultActivityV1(
   db: DbBackend,
-  config: ServerConfig,
 ): MidnightBackend['ethereumErc20Vault']['activityV1'] {
   const repository = new ActivityRepositorySQLImpl(db.database)
-  const service = new ActivityServiceImpl(
-    repository,
-    config.client.midnightSignet,
-    config.client.midnightEthereumErc20Vault,
-  )
+  const service = new ActivityServiceImpl(repository)
   return { repository, service, adaptor: new ActivityServiceAdaptor(service) }
 }
 
@@ -702,7 +849,7 @@ function createRespondOutcomeSources(
       }
     }
   }
-  return { deposit: source('deposit') }
+  return { deposit: source('deposit'), swap: source('swap'), approve: source('approve') }
 }
 
 function createMidnightEthereumErc20VaultRequestV1(

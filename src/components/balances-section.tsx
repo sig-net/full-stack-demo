@@ -1,30 +1,23 @@
 'use client'
 
-import { skipToken, useQuery } from '@tanstack/react-query'
 import { Download, EyeOff, type LucideIcon, Wallet } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 
 import { BalanceBox } from '@/components/balance-box'
 import { useCaller } from '@/components/contexts/CallerContext'
-import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
-import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { DepositDialog } from '@/components/deposit-dialog'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { readMidnightBalanceAmounts } from '@/lib/balances/midnight-balances'
+import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { type DepositPrerequisite, missingDepositPrerequisites } from '@/lib/deposit-prerequisites'
 import { walletConnectionStatus } from '@/lib/midnight/wallet/connection-status'
 
-const BALANCES_REFETCH_INTERVAL_MS = 10_000
-
 export function BalancesSection(): ReactNode {
-  const { midnightNetwork } = useConfig()
   const connection = useMidnightWallet()
-  const registry = useTokenInfoRegistry()
   const { callerSecret, depositAccount } = useCaller()
   const [depositOpen, setDepositOpen] = useState(false)
-  const { wallet, generation } = connection
+  const { wallet } = connection
   const status = walletConnectionStatus(connection)
   const missing = missingDepositPrerequisites({
     walletConnected: wallet !== null,
@@ -42,11 +35,7 @@ export function BalancesSection(): ReactNode {
       <span className="px-0.5">Deposit</span>
     </Button>
   )
-  const balances = useQuery({
-    queryKey: ['midnight-balances', midnightNetwork.networkId, generation, registry.fingerprint],
-    queryFn: wallet === null ? skipToken : () => readMidnightBalanceAmounts(wallet, registry),
-    refetchInterval: BALANCES_REFETCH_INTERVAL_MS,
-  })
+  const balances = useMidnightBalances()
   return (
     <section aria-labelledby="balances-title" className="@container flex flex-col gap-4 md:gap-4.5">
       <div className="flex items-start justify-between border-t border-section-rule pt-5 pb-5.25">

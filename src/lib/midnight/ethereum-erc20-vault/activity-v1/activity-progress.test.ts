@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest'
 
 import type {
-  Activity,
   ActivityTransaction,
+  DepositActivity,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import {
   activityFixture,
@@ -13,7 +13,7 @@ import {
   activityActionOf,
   type ActivityStepStatus,
   activityStepsOf,
-  DEPOSIT_STEPS,
+  ACTIVITY_STEPS_BY_TYPE,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress'
 
 const WALLET_TRANSACTION = {
@@ -36,7 +36,7 @@ function transaction(
 }
 
 describe('activityActionOf', () => {
-  const cases: { name: string; activity: Partial<Activity>; expected: ActivityAction }[] = [
+  const cases: { name: string; activity: Partial<DepositActivity>; expected: ActivityAction }[] = [
     {
       name: 'a waiting wallet transaction asks for balancing',
       activity: { walletTransaction: WALLET_TRANSACTION },
@@ -44,22 +44,22 @@ describe('activityActionOf', () => {
     },
     {
       name: 'a deposit awaiting completion asks for the completion',
-      activity: { depositState: 'AwaitingCompletion' },
+      activity: { resourceState: 'AwaitingCompletion' },
       expected: { kind: 'complete' },
     },
     {
       name: 'balancing comes before completion when both apply',
-      activity: { depositState: 'AwaitingCompletion', walletTransaction: WALLET_TRANSACTION },
+      activity: { resourceState: 'AwaitingCompletion', walletTransaction: WALLET_TRANSACTION },
       expected: { kind: 'balance', transaction: WALLET_TRANSACTION },
     },
     {
       name: 'the backend at work asks for nothing',
-      activity: { depositState: 'AwaitingVaultRequest', vaultRequestState: 'AwaitingSend' },
+      activity: { resourceState: 'AwaitingVaultRequest', vaultRequestState: 'AwaitingSend' },
       expected: { kind: 'none' },
     },
     {
       name: 'a completed deposit asks for nothing',
-      activity: { depositState: 'Completed', state: 'Complete', outcome: 'minted' },
+      activity: { resourceState: 'Completed', state: 'Complete', outcome: 'minted' },
       expected: { kind: 'none' },
     },
   ]
@@ -76,7 +76,7 @@ describe('activityStepsOf', () => {
     pending: 'p',
     failed: 'f',
   }
-  const cases: { name: string; activity: Partial<Activity>; expected: string }[] = [
+  const cases: { name: string; activity: Partial<DepositActivity>; expected: string }[] = [
     {
       name: 'a start call being proved stands at the signing step',
       activity: { startTransaction: transaction('AwaitingProof', null) },
@@ -94,18 +94,18 @@ describe('activityStepsOf', () => {
     },
     {
       name: 'a request awaiting its flush',
-      activity: { depositState: 'AwaitingVaultRequest', vaultRequestState: 'AwaitingFlush' },
+      activity: { resourceState: 'AwaitingVaultRequest', vaultRequestState: 'AwaitingFlush' },
       expected: 'ddcppppppp',
     },
     {
       name: 'a request awaiting the MPC signature',
-      activity: { depositState: 'AwaitingVaultRequest', vaultRequestState: 'AwaitingSignature' },
+      activity: { resourceState: 'AwaitingVaultRequest', vaultRequestState: 'AwaitingSignature' },
       expected: 'ddddcppppp',
     },
     {
       name: 'a failed sweep is reported at its step while the request goes on',
       activity: {
-        depositState: 'AwaitingVaultRequest',
+        resourceState: 'AwaitingVaultRequest',
         vaultRequestState: 'AwaitingBroadcast',
         foreignChainTransaction: transaction('Failed'),
       },
@@ -114,20 +114,20 @@ describe('activityStepsOf', () => {
     {
       name: 'an attestation awaiting its flush',
       activity: {
-        depositState: 'AwaitingVaultRequest',
+        resourceState: 'AwaitingVaultRequest',
         vaultRequestState: 'AwaitingAttestationFlush',
       },
       expected: 'dddddddcpp',
     },
     {
       name: 'a deposit awaiting the user completion',
-      activity: { depositState: 'AwaitingCompletion', vaultRequestState: 'Attested' },
+      activity: { resourceState: 'AwaitingCompletion', vaultRequestState: 'Attested' },
       expected: 'ddddddddcp',
     },
     {
       name: 'a complete call submitted stands at its inclusion',
       activity: {
-        depositState: 'AwaitingCompleteTransaction',
+        resourceState: 'AwaitingCompleteTransaction',
         vaultRequestState: 'Attested',
         completeTransaction: transaction('AwaitingSubmission'),
       },
@@ -135,13 +135,13 @@ describe('activityStepsOf', () => {
     },
     {
       name: 'a completed deposit has every step done',
-      activity: { depositState: 'Completed', state: 'Complete', outcome: 'minted' },
+      activity: { resourceState: 'Completed', state: 'Complete', outcome: 'minted' },
       expected: 'dddddddddd',
     },
     {
       name: 'a deposit whose start never reached the node failed at signing',
       activity: {
-        depositState: 'Failed',
+        resourceState: 'Failed',
         state: 'Failed',
         startTransaction: transaction('Failed', null),
       },
@@ -150,7 +150,7 @@ describe('activityStepsOf', () => {
     {
       name: 'a deposit whose start was refused on chain failed at inclusion',
       activity: {
-        depositState: 'Failed',
+        resourceState: 'Failed',
         state: 'Failed',
         startTransaction: transaction('Failed'),
       },
@@ -160,7 +160,7 @@ describe('activityStepsOf', () => {
   test.each(cases)('$name', ({ activity, expected }) => {
     const steps = activityStepsOf(activityFixture(activity))
     expect(steps.map(({ label, walletTurn }) => ({ label, walletTurn }))).toEqual(
-      DEPOSIT_STEPS.map(({ label, walletTurn }) => ({ label, walletTurn })),
+      ACTIVITY_STEPS_BY_TYPE.Deposit.map(({ label, walletTurn }) => ({ label, walletTurn })),
     )
     expect(steps.map((step) => letters[step.status]).join('')).toBe(expected)
   })

@@ -178,24 +178,23 @@ function description(
   entry: ActivityEntry,
   walletTransaction: ActivityWalletTransaction | null,
 ): string {
-  const kind = ACTIVITY_KIND_LABELS[entry.kind].toLowerCase()
-  const amount = `${entry.from.amount} ${entry.from.assetSymbol}`
-  if (entry.status === 'complete') return `The ${kind} of ${amount} is complete.`
-  if (entry.status === 'failed') return `The ${kind} of ${amount} failed.`
+  const subject = `The ${entry.description}`
+  if (entry.status === 'complete') return `${subject} is complete.`
+  if (entry.status === 'failed') return `${subject} failed.`
   if (walletTransaction !== null) {
     const expiry =
       walletTransaction.expireTime === null
         ? ''
         : ` It expires at ${formatTimestamp(walletTransaction.expireTime)}.`
-    return `The ${kind} of ${amount} is in progress. You need to sign with your wallet for the ${callLabel(walletTransaction)} call: it is proved, your Midnight wallet pays its DUST fee and signs it, then the backend submits it.${expiry}`
+    return `${subject} is in progress. You need to sign with your wallet for the ${callLabel(walletTransaction)} call: it is proved, your Midnight wallet pays its DUST fee and signs it, then the backend submits it.${expiry}`
   }
   if (entry.action.kind === 'complete') {
-    return `The ${kind} of ${amount} is in progress. Nothing for you to do now: the completion call is being built for your wallet, and starts by itself while this page is open with the wallet connected.`
+    return `${subject} is in progress. Nothing for you to do now: the completion call is being built for your wallet, and starts by itself while this page is open with the wallet connected.`
   }
   const turns = entry.steps.filter((step) => step.walletTurn && step.status !== 'done').length
   const approvals =
     turns === 0 ? '' : ` Your wallet will need to approve ${TURN_WORDS[turns] ?? String(turns)}.`
-  return `The ${kind} of ${amount} is in progress. Nothing for you to do now.${approvals}`
+  return `${subject} is in progress. Nothing for you to do now.${approvals}`
 }
 
 const TURN_WORDS: Record<number, string> = { 1: 'once more', 2: 'twice' }
@@ -207,6 +206,11 @@ function callLabel(transaction: ActivityWalletTransaction): string {
 const CIRCUIT_LABELS: Record<string, string> = {
   startDeposit: 'start',
   completeDeposit: 'completion',
+  startSwap: 'start',
+  completeSwap: 'completion',
+  startApproveRouter: 'start',
+  startApproveStata: 'start',
+  completeApprove: 'completion',
 }
 
 /**

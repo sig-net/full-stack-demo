@@ -10,9 +10,21 @@ import {
 import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 
 /** The vault contract's public state, read from the indexer. One read is one network round trip. */
-export interface VaultLedger extends RequestLedger, AllowedTokenLedger, VaultGasLedger {
+export interface VaultLedger
+  extends RequestLedger, AllowedTokenLedger, VaultGasLedger, SpenderLedger {
   state(): Promise<VaultLedgerState>
 }
+
+/** The part of the ledger the approval service reads, so a unit test builds that and nothing else. */
+export interface SpenderLedger {
+  state(): Promise<SpenderLedgerState>
+}
+
+/** The pinned spenders and the tokens they may be granted: the router on any allowed token, the wrapper on its underlying. */
+export type SpenderLedgerState = Pick<
+  VaultLedgerState,
+  'allowedTokens' | 'uniswapRouter' | 'stataUnderlying' | 'stataToken'
+>
 
 /** The part of the ledger a request resolver reads, so a unit test builds that and nothing else. */
 export interface RequestLedger {
@@ -90,7 +102,7 @@ export type RequestStage =
     }
   | { readonly stage: 'settled' }
 
-/** The maps `requestStage` reads, so a unit test builds those six and nothing else. */
+/** The maps `requestStage` reads, so a unit test builds those eight and nothing else. */
 export type RequestLedgerView = Pick<
   VaultLedgerState,
   | 'inputRequestBuffer'
@@ -99,6 +111,8 @@ export type RequestLedgerView = Pick<
   | 'outputAttestationBuffer'
   | 'evictionMap'
   | 'depositArgsMap'
+  | 'swapArgsMap'
+  | 'approveArgsMap'
 >
 
 /**
@@ -140,6 +154,8 @@ const ARGS_MAP_BY_ACTION: Record<
   (state: RequestLedgerView) => { member(key: bigint): boolean }
 > = {
   deposit: (state) => state.depositArgsMap,
+  swap: (state) => state.swapArgsMap,
+  approve: (state) => state.approveArgsMap,
 }
 
 /**

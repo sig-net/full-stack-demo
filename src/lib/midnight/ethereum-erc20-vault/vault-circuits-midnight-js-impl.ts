@@ -14,7 +14,7 @@ import type {
   WalletProvider,
   ZKConfigProvider,
 } from '@midnight-ntwrk/midnight-js/types'
-import { bytesToHex, respondBidirectionalEventToCircuitInput } from '@sig-net/midnight'
+import { bytesToHex, hexToBytes, respondBidirectionalEventToCircuitInput } from '@sig-net/midnight'
 import {
   Contract,
   createVaultPrivateState,
@@ -27,11 +27,16 @@ import {
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import {
+  type CompleteApproveCircuitArgs,
   type CompleteDepositCircuitArgs,
+  type CompleteSwapCircuitArgs,
   type QueueAttestationCircuitArgs,
   queueAttestationCircuit,
-  type SendDepositCircuitArgs,
+  type SendRequestCircuitArgs,
+  type StartApproveRouterCircuitArgs,
+  type StartApproveStataCircuitArgs,
   type StartDepositCircuitArgs,
+  type StartSwapCircuitArgs,
   type VaultCircuits,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import { PrivateStateProviderMemoryImpl } from '@/lib/midnight/private-state-provider-memory-impl'
@@ -91,11 +96,86 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     )
   }
 
-  sendDeposit(args: SendDepositCircuitArgs): Promise<string> {
+  sendDeposit(args: SendRequestCircuitArgs): Promise<string> {
     return this.build(
       permissionlessVaultPrivateState(),
       this.relayerWallet,
       this.options('sendDeposit', [args.outIndex]),
+    )
+  }
+
+  startSwap(args: StartSwapCircuitArgs): Promise<string> {
+    return this.build(
+      createVaultPrivateState(args.secretKey),
+      args.wallet,
+      this.options('startSwap', [
+        args.inIndex,
+        {
+          erc20AddressIn: evmAddressBytes(args.erc20AddressIn),
+          erc20AddressOut: evmAddressBytes(args.erc20AddressOut),
+          fee: args.fee,
+          amountOut: args.amountOut,
+          amountInMaximum: args.amountInMaximum,
+        },
+        {
+          nonce: crypto.getRandomValues(new Uint8Array(32)),
+          color: hexToBytes(args.coinType),
+          value: args.amountInMaximum,
+        },
+      ]),
+    )
+  }
+
+  completeSwap(args: CompleteSwapCircuitArgs): Promise<string> {
+    return this.build(
+      createVaultPrivateState(args.secretKey),
+      args.wallet,
+      this.options('completeSwap', [
+        args.requestId,
+        args.serializedOutput,
+        args.mintNonce,
+        args.changeNonce,
+      ]),
+    )
+  }
+
+  sendSwap(args: SendRequestCircuitArgs): Promise<string> {
+    return this.build(
+      permissionlessVaultPrivateState(),
+      this.relayerWallet,
+      this.options('sendSwap', [args.outIndex]),
+    )
+  }
+
+  startApproveRouter(args: StartApproveRouterCircuitArgs): Promise<string> {
+    return this.build(
+      createVaultPrivateState(args.secretKey),
+      args.wallet,
+      this.options('startApproveRouter', [args.inIndex, evmAddressBytes(args.erc20Address)]),
+    )
+  }
+
+  startApproveStata(args: StartApproveStataCircuitArgs): Promise<string> {
+    return this.build(
+      createVaultPrivateState(args.secretKey),
+      args.wallet,
+      this.options('startApproveStata', [args.inIndex]),
+    )
+  }
+
+  completeApprove(args: CompleteApproveCircuitArgs): Promise<string> {
+    return this.build(
+      createVaultPrivateState(args.secretKey),
+      args.wallet,
+      this.options('completeApprove', [args.requestId, args.serializedOutput]),
+    )
+  }
+
+  sendApprove(args: SendRequestCircuitArgs): Promise<string> {
+    return this.build(
+      permissionlessVaultPrivateState(),
+      this.relayerWallet,
+      this.options('sendApprove', [args.outIndex]),
     )
   }
 

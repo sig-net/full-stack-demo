@@ -1,10 +1,16 @@
 import { abbreviateHex } from '@/lib/abbreviate-hex'
-import type { ActivityEntry, ActivityStatus } from '@/lib/activity/activity-entry'
+import type {
+  ActivityDestination,
+  ActivityEntry,
+  ActivityKind,
+  ActivityStatus,
+} from '@/lib/activity/activity-entry'
 import type { AssetAmount } from '@/lib/asset-amount'
 import { NO_ICON } from '@/lib/icon-source'
 import type {
   Activity,
   ActivityState,
+  ActivityType,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import {
   activityActionOf,
@@ -15,33 +21,108 @@ import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import type { TokenInfoRegistry } from '@/lib/tokens/token-info-registry'
 
 /**
- * The row of an activity: the ERC20 on Ethereum moving to the vault's token on Midnight, named
- * and scaled by the registry, or by its address in raw base units when the registry lacks it.
+ * The row of an activity, with each token named and scaled by the registry, or by its address
+ * in raw base units when the registry lacks it. A deposit moves the ERC20 from Ethereum to its
+ * vault token, a swap trades one vault token for another, and an approval grants a spender on
+ * Ethereum.
  */
 export function activityEntryOf(activity: Activity, registry: TokenInfoRegistry): ActivityEntry {
-  const info = registry.byErc20Address(activity.erc20Address)
-  const from: AssetAmount = {
-    assetSymbol: info?.symbol ?? abbreviateHex(activity.erc20Address),
-    networkName: 'Ethereum',
-    amount:
-      info === undefined
-        ? activity.amount.toString()
-        : formatTokenAmount(activity.amount, info.decimals),
-    usdValue: '0.00',
-    icon: info?.icon ?? NO_ICON,
-    networkIcon: BUNDLED_NETWORK_ICONS.ethereum,
-  }
+  const { from, to, description } = sidesOf(activity, registry)
   return {
     name: activity.name,
-    kind: 'deposit',
+    kind: ACTIVITY_KIND_BY_TYPE[activity.type],
+    description,
     from,
-    to: { kind: 'asset', asset: { ...from, networkName: 'Midnight', networkIcon: NO_ICON } },
+    to,
     timestampLabel: formatTimestamp(activity.createTime),
     status: ACTIVITY_STATUS_BY_STATE[activity.state],
     action: activityActionOf(activity),
     steps: activityStepsOf(activity),
     error: activity.error,
   }
+}
+
+function sidesOf(
+  activity: Activity,
+  registry: TokenInfoRegistry,
+): { from: AssetAmount; to: ActivityDestination; description: string } {
+  switch (activity.type) {
+    case 'Deposit': {
+      const from = assetAmount(registry, activity.erc20Address, activity.amount, ETHEREUM)
+      return {
+        from,
+        to: { kind: 'asset', asset: { ...from, ...MIDNIGHT } },
+        description: `deposit of ${labelOf(from)}`,
+      }
+    }
+    case 'Swap': {
+      const from = assetAmount(registry, activity.erc20Address, activity.amount, MIDNIGHT)
+      const asset = assetAmount(registry, activity.erc20AddressOut, activity.amountOut, MIDNIGHT)
+      return {
+        from,
+        to: { kind: 'asset', asset },
+        description: `swap of up to ${labelOf(from)} for ${labelOf(asset)}`,
+      }
+    }
+    case 'Approval': {
+      const from = assetAmount(registry, activity.erc20Address, null, ETHEREUM)
+      const addressLabel = abbreviateHex(activity.spender)
+      return {
+        from,
+        to: { kind: 'wallet', addressLabel },
+        description: `approval of ${from.assetSymbol} for ${addressLabel}`,
+      }
+    }
+    default: {
+      const unhandled: never = activity
+      throw new Error(`Unhandled activity ${JSON.stringify(unhandled)}`)
+    }
+  }
+}
+
+/** The amount in whole tokens for a registered token, in base units otherwise, and unlimited for an approval. */
+function assetAmount(
+  registry: TokenInfoRegistry,
+  erc20Address: string,
+  amount: bigint | null,
+  network: Pick<AssetAmount, 'networkName' | 'networkIcon'>,
+): AssetAmount {
+  const info = registry.byErc20Address(erc20Address)
+  return {
+    assetSymbol: info?.symbol ?? abbreviateHex(erc20Address),
+    amount:
+      amount === null
+        ? UNLIMITED_AMOUNT
+        : info === undefined
+          ? amount.toString()
+          : formatTokenAmount(amount, info.decimals),
+    usdValue: '0.00',
+    icon: info?.icon ?? NO_ICON,
+    ...network,
+  }
+}
+
+function labelOf(asset: AssetAmount): string {
+  return `${asset.amount} ${asset.assetSymbol}`
+}
+
+/** An approval grants the contract's unlimited allowance, which the row shows in place of an amount. */
+export const UNLIMITED_AMOUNT = 'Unlimited'
+
+const ETHEREUM: Pick<AssetAmount, 'networkName' | 'networkIcon'> = {
+  networkName: 'Ethereum',
+  networkIcon: BUNDLED_NETWORK_ICONS.ethereum,
+}
+
+const MIDNIGHT: Pick<AssetAmount, 'networkName' | 'networkIcon'> = {
+  networkName: 'Midnight',
+  networkIcon: NO_ICON,
+}
+
+const ACTIVITY_KIND_BY_TYPE: Record<ActivityType, ActivityKind> = {
+  Deposit: 'deposit',
+  Swap: 'swap',
+  Approval: 'approval',
 }
 
 const ACTIVITY_STATUS_BY_STATE: Record<ActivityState, ActivityStatus> = {

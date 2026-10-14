@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { and, asc, desc, eq, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, like, type SQL } from 'drizzle-orm'
 import type { PgColumn, PgTable, PgView } from 'drizzle-orm/pg-core'
 import type { z } from 'zod'
 
@@ -21,14 +21,15 @@ export class SQLReadRepository<
   private readonly source: PgTable | PgView
   private readonly columns: Record<keyof Resource & string, PgColumn>
   private readonly schema: z.ZodType<Resource>
-  private readonly fromRow: (row: Row) => Resource
+  /** The row under the resource's field names, typed by the schema parse that follows and nowhere else. */
+  private readonly fromRow: (row: Row) => unknown
 
   constructor(
     database: DatabaseExecutor,
     source: PgTable | PgView,
     columns: Record<keyof Resource & string, PgColumn>,
     schema: z.ZodType<Resource>,
-    fromRow: (row: Row) => Resource,
+    fromRow: (row: Row) => unknown,
   ) {
     this.database = database
     this.source = source
@@ -100,6 +101,8 @@ export class SQLReadRepository<
     switch (criterion.type) {
       case 'exact-text':
         return eq(this.column(criterion.field), criterion.text)
+      case 'prefix-text':
+        return like(this.column(criterion.field), `${escapeLikePattern(criterion.prefix)}%`)
       case 'bool':
         return eq(this.column(criterion.field), criterion.bool)
       default: {
@@ -108,4 +111,9 @@ export class SQLReadRepository<
       }
     }
   }
+}
+
+/** `LIKE` reads `%`, `_` and the backslash as pattern characters, so a prefix taken as text escapes them. */
+function escapeLikePattern(text: string): string {
+  return text.replace(/[\\%_]/g, (character) => `\\${character}`)
 }

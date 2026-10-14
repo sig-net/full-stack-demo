@@ -2,11 +2,18 @@ import { z } from 'zod'
 
 import { ethereumTransactionStateSchema } from '@/lib/ethereum/transaction-v1/transaction'
 import {
+  approvalNameSchema,
+  approvalOutcomeSchema,
+} from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
+import {
+  type CallerOperationState,
+  callerOperationStateSchema,
+} from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
+import {
   depositNameSchema,
   depositOutcomeSchema,
-  type DepositState,
-  depositStateSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import { swapNameSchema, swapOutcomeSchema } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import { vaultRequestStateSchema } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import {
   midnightTransactionNameSchema,
@@ -23,14 +30,16 @@ export const activityStateSchema = z.enum(ACTIVITY_STATES)
 
 export type ActivityState = z.infer<typeof activityStateSchema>
 
-/** How the view aggregates a deposit's state; a state not listed here is `Pending`. */
-export const ACTIVITY_STATE_BY_DEPOSIT_STATE: Partial<Record<DepositState, ActivityState>> = {
+/** How the view aggregates an operation's state; a state not listed here is `Pending`. */
+export const ACTIVITY_STATE_BY_OPERATION_STATE: Partial<
+  Record<CallerOperationState, ActivityState>
+> = {
   Completed: 'Complete',
   Failed: 'Failed',
 }
 
-/** The kinds of vault activity, one per lifecycle resource the view reads. */
-export const ACTIVITY_TYPES = ['Deposit'] as const
+/** The kinds of vault activity, one per caller operation the view reads. */
+export const ACTIVITY_TYPES = ['Deposit', 'Swap', 'Approval'] as const
 
 export const activityTypeSchema = z.enum(ACTIVITY_TYPES)
 
@@ -73,26 +82,17 @@ export const activityWalletTransactionSchema = z.object({
 
 export type ActivityWalletTransaction = z.infer<typeof activityWalletTransactionSchema>
 
-/** The name of the resource an activity projects, one schema per activity type. */
-export const activityNameSchema = depositNameSchema
-
 /**
- * One row of the activity view: a lifecycle resource with its newest children projected onto
- * it. The row is read only, derived by the database from the lifecycle tables, and named after
- * the resource it projects.
+ * The fields every activity row carries: the projected operation with its newest children.
+ * `erc20Address` and `amount` are what the operation surrenders or moves, the out side and the
+ * spender belong to one type each, and each type keeps `outcome` to its own set.
  */
-export const activitySchema = z.object({
-  name: activityNameSchema,
-  type: activityTypeSchema,
+const activityFieldsSchema = z.object({
   state: activityStateSchema,
-  /** The EVM account the activity moves funds through, which stands in for the caller. */
-  depositAccount: evmAddressSchema,
   erc20Address: evmAddressSchema,
-  amount: amountSchema,
-  outcome: depositOutcomeSchema.nullable(),
   error: z.string().nullable(),
-  /** The deposit's own state, which says what it waits for. */
-  depositState: depositStateSchema,
+  /** The operation's own state, which says what it waits for. */
+  resourceState: callerOperationStateSchema,
   /** The newest vault request's own state, null before the request exists. */
   vaultRequestState: vaultRequestStateSchema.nullable(),
   /** The id the MPC recorded the newest vault request under, null until the request is sent. */
@@ -110,4 +110,55 @@ export const activitySchema = z.object({
   updateTime: z.date(),
 })
 
+/** A deposit: `amount` of `erc20Address` moving from the deposit account into the vault. */
+export const depositActivitySchema = activityFieldsSchema.extend({
+  name: depositNameSchema,
+  type: z.literal('Deposit'),
+  amount: amountSchema,
+  erc20AddressOut: z.null(),
+  amountOut: z.null(),
+  spender: z.null(),
+  outcome: depositOutcomeSchema.nullable(),
+})
+
+/** A swap: up to `amount` of `erc20Address` sold for exactly `amountOut` of `erc20AddressOut`. */
+export const swapActivitySchema = activityFieldsSchema.extend({
+  name: swapNameSchema,
+  type: z.literal('Swap'),
+  amount: amountSchema,
+  erc20AddressOut: evmAddressSchema,
+  amountOut: amountSchema,
+  spender: z.null(),
+  outcome: swapOutcomeSchema.nullable(),
+})
+
+/** An approval: the vault account allowing `spender` to move `erc20Address`. */
+export const approvalActivitySchema = activityFieldsSchema.extend({
+  name: approvalNameSchema,
+  type: z.literal('Approval'),
+  amount: z.null(),
+  erc20AddressOut: z.null(),
+  amountOut: z.null(),
+  spender: evmAddressSchema,
+  outcome: approvalOutcomeSchema.nullable(),
+})
+
+/**
+ * One row of the activity view: a caller operation with its newest children projected onto it.
+ * The row is read only, derived by the database from the lifecycle tables, and named after the
+ * resource it projects.
+ */
+export const activitySchema = z.discriminatedUnion('type', [
+  depositActivitySchema,
+  swapActivitySchema,
+  approvalActivitySchema,
+])
+
 export type Activity = z.infer<typeof activitySchema>
+
+export type DepositActivity = z.infer<typeof depositActivitySchema>
+export type SwapActivity = z.infer<typeof swapActivitySchema>
+export type ApprovalActivity = z.infer<typeof approvalActivitySchema>
+
+/** The name of the resource an activity projects, in any of the three forms. */
+export const activityNameSchema = z.union([depositNameSchema, swapNameSchema, approvalNameSchema])

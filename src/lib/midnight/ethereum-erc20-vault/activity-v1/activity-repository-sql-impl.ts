@@ -32,12 +32,14 @@ const ACTIVITY_COLUMNS: Record<keyof Activity, PgColumn> = {
   name: midnightEthereumErc20VaultActivityV1.name,
   type: midnightEthereumErc20VaultActivityV1.type,
   state: midnightEthereumErc20VaultActivityV1.state,
-  depositAccount: midnightEthereumErc20VaultActivityV1.depositAccount,
   erc20Address: midnightEthereumErc20VaultActivityV1.erc20Address,
   amount: midnightEthereumErc20VaultActivityV1.amount,
+  erc20AddressOut: midnightEthereumErc20VaultActivityV1.erc20AddressOut,
+  amountOut: midnightEthereumErc20VaultActivityV1.amountOut,
+  spender: midnightEthereumErc20VaultActivityV1.spender,
   outcome: midnightEthereumErc20VaultActivityV1.outcome,
   error: midnightEthereumErc20VaultActivityV1.error,
-  depositState: midnightEthereumErc20VaultActivityV1.depositState,
+  resourceState: midnightEthereumErc20VaultActivityV1.resourceState,
   vaultRequestState: midnightEthereumErc20VaultActivityV1.vaultRequestState,
   vaultRequestId: midnightEthereumErc20VaultActivityV1.vaultRequestId,
   walletTransaction: midnightEthereumErc20VaultActivityV1.walletTransaction,
@@ -48,17 +50,20 @@ const ACTIVITY_COLUMNS: Record<keyof Activity, PgColumn> = {
   updateTime: midnightEthereumErc20VaultActivityV1.updateTime,
 }
 
-function fromActivityRow(row: ActivityRow): Activity {
+/** The row's columns under the resource's field names: the schema's union picks the type's shape. */
+function fromActivityRow(row: ActivityRow): unknown {
   return {
     name: row.name,
     type: row.type,
     state: row.state,
-    depositAccount: row.depositAccount,
     erc20Address: row.erc20Address,
     amount: row.amount,
+    erc20AddressOut: row.erc20AddressOut,
+    amountOut: row.amountOut,
+    spender: row.spender,
     outcome: row.outcome,
     error: row.error,
-    depositState: row.depositState,
+    resourceState: row.resourceState,
     vaultRequestState: row.vaultRequestState,
     vaultRequestId: row.vaultRequestId,
     walletTransaction: row.walletTransaction,

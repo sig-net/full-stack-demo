@@ -1,6 +1,10 @@
 import type { PublicDataProvider } from '@midnight-ntwrk/midnight-js/types'
 import { signetEventSourceFromIndexer, SignetRequestResponseReader } from '@sig-net/midnight'
-import { VAULT_DEPOSIT_REQUESTS_PATH } from '@sig-net/midnight-examples-erc20-vault-contract'
+import {
+  VAULT_APPROVE_REQUESTS_PATH,
+  VAULT_DEPOSIT_REQUESTS_PATH,
+  VAULT_SWAP_REQUESTS_PATH,
+} from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 
@@ -28,5 +32,9 @@ export function signetReaders(config: SignetReadersConfig): SignetReaders {
       publicDataProvider: config.publicDataProvider,
       eventSource,
     })
-  return { deposit: reader(VAULT_DEPOSIT_REQUESTS_PATH) }
+  return {
+    deposit: reader(VAULT_DEPOSIT_REQUESTS_PATH),
+    swap: reader(VAULT_SWAP_REQUESTS_PATH),
+    approve: reader(VAULT_APPROVE_REQUESTS_PATH),
+  }
 }

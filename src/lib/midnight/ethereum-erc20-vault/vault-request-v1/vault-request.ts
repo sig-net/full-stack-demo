@@ -86,8 +86,8 @@ export const vaultRequestSchema = z.object({
   state: vaultRequestStateSchema,
   /** The slot the start circuit queued the request under. */
   inIndex: uint64Schema,
-  /** The EVM account the MPC signs the request's transaction from, the expected signer of its signature posts. */
-  depositAccount: evmAddressSchema,
+  /** The EVM account the MPC signs the request's transaction from, the expected signer of its signature posts: the caller's deposit account for a deposit, the vault account for a vault-signed action. */
+  signerAccount: evmAddressSchema,
   /** The request index the flush moved the entry to, set from `AwaitingSend`. */
   outIndex: hex32BytesSchema.nullable(),
   /** The id the send recorded the request under, set from `AwaitingSignature`. */

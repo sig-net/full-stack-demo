@@ -1,8 +1,6 @@
 import 'server-only'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
-import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
-import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { Activity } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import type { ActivityRepository } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-repository'
 import type {
@@ -10,35 +8,23 @@ import type {
   GetActivityArgs,
   ListActivitiesArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service'
-import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
 
 export class ActivityServiceImpl implements ActivityService {
   private readonly activityRepository: ActivityRepository
-  private readonly signet: MidnightSignetConfig
-  private readonly vault: MidnightEthereumErc20VaultConfig
 
-  constructor(
-    activityRepository: ActivityRepository,
-    signet: MidnightSignetConfig,
-    vault: MidnightEthereumErc20VaultConfig,
-  ) {
+  constructor(activityRepository: ActivityRepository) {
     this.activityRepository = activityRepository
-    this.signet = signet
-    this.vault = vault
   }
 
-  /** Every activity of a caller shares the deposit account, which stands in for the caller in the search. */
-  async listActivities(caller: Caller, _args: ListActivitiesArgs): Promise<Activity[]> {
-    return this.activityRepository.search({
-      criteria: [
-        {
-          type: 'exact-text',
-          field: 'depositAccount',
-          text: depositAccountOf(caller, this.signet, this.vault),
-        },
-      ],
+  /** Every activity of a caller is named under the caller, which stands in for it in the search. */
+  async listActivities(caller: Caller, { types }: ListActivitiesArgs): Promise<Activity[]> {
+    const activities = await this.activityRepository.search({
+      criteria: [{ type: 'prefix-text', field: 'name', prefix: `${caller.name}/` }],
       order: { field: 'createTime', direction: 'desc' },
     })
+    return types === undefined
+      ? activities
+      : activities.filter((activity) => types.includes(activity.type))
   }
 
   async getActivity(caller: Caller, args: GetActivityArgs): Promise<Activity | undefined> {

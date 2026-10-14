@@ -191,16 +191,16 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     }
   }
 
-  /** The signature post is judged by the reader: a valid one recovers to the deposit account. */
+  /** The signature post is judged by the reader: a valid one recovers to the signer account. */
   private async resolveAwaitingSignature(
-    { name, state, action, requestId, depositAccount }: VaultRequest,
+    { name, state, action, requestId, signerAccount }: VaultRequest,
     stage: RequestStage,
   ): Promise<void> {
     if (stage.stage === 'settled') return settledEarly(name, state)
     if (requestId === null) throw new Error(`${name} in ${state} holds no requestId`)
     const signed = await this.signetReaders[action].getSignedEvmTransaction(
       parseRequestIdHex(requestId),
-      depositAccount,
+      signerAccount,
     )
     if (signed === undefined) return
     return this.write(() =>
@@ -264,7 +264,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
         }
         if (attestationBlockHeight <= stage.lastSeen) {
           // Only a nonce consumed before the start reaches here, which the deposit service's
-          // nonce assignment prevents, so the row is left for the sweep to re-check.
+          // nonce assignment and the flush's vault nonce prevent, so the row is left for the sweep to re-check.
           console.error(
             `vault request ${name} attested at ${attestationBlockHeight.toString()}, at or below the entry's lastSeen ${stage.lastSeen.toString()}: nonce reuse at start`,
           )
@@ -302,6 +302,10 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     switch (action) {
       case 'deposit':
         return this.circuits.sendDeposit({ outIndex })
+      case 'swap':
+        return this.circuits.sendSwap({ outIndex })
+      case 'approve':
+        return this.circuits.sendApprove({ outIndex })
       default: {
         const unhandled: never = action
         throw new Error(`Unhandled action ${JSON.stringify(unhandled)}`)

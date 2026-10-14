@@ -1,56 +1,67 @@
-import { SigningKey } from 'ethers'
 import { describe, expect, test } from 'vitest'
 
 import type { Caller } from '@/lib/caller/caller'
 import { resolveCaller } from '@/lib/caller/resolve-caller'
-import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
-import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
-import type { Activity } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
-import { activityFixture } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
+import type {
+  Activity,
+  DepositActivity,
+} from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
+import {
+  activityFixture,
+  approvalActivityFixture,
+  swapActivityFixture,
+} from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
 import { ActivityServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-impl'
-import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
 import { MemoryRepository } from '@/lib/repository/repository-memory-impl'
-
-/** A throwaway MPC root key: the derivation needs a point on the curve, not the stack's key. */
-const SIGNET: MidnightSignetConfig = {
-  contractAddress: '11'.repeat(32),
-  mpcRootPublicKey: SigningKey.computePublicKey(`0x${'22'.repeat(32)}`, false),
-}
-const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(32) }
 
 const caller: Caller = resolveCaller('ab'.repeat(32))
 const stranger: Caller = resolveCaller('cd'.repeat(32))
 
-const own = (id: string, overrides: Partial<Activity> = {}): Activity =>
-  activityFixture({
-    name: `${caller.name}/ethereum-erc20-vault-deposits/${id}`,
-    depositAccount: depositAccountOf(caller, SIGNET, VAULT),
-    ...overrides,
-  })
+const deposit = (id: string, overrides: Partial<DepositActivity> = {}): Activity =>
+  activityFixture({ name: `${caller.name}/ethereum-erc20-vault-deposits/${id}`, ...overrides })
 
 const mine = [
-  own('1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b', { createTime: new Date('2026-01-01T00:00:00Z') }),
-  own('2f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b', {
+  deposit('1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b', {
+    createTime: new Date('2026-01-01T00:00:00Z'),
+  }),
+  deposit('2f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b', {
     state: 'Complete',
     createTime: new Date('2026-01-02T00:00:00Z'),
+  }),
+  swapActivityFixture({
+    name: `${caller.name}/ethereum-erc20-vault-swaps/4f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b`,
+    createTime: new Date('2026-01-03T00:00:00Z'),
+  }),
+  approvalActivityFixture({
+    name: `${caller.name}/ethereum-erc20-vault-approvals/5f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b`,
+    createTime: new Date('2026-01-04T00:00:00Z'),
   }),
 ]
 const theirs = activityFixture({
   name: `${stranger.name}/ethereum-erc20-vault-deposits/3f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b`,
-  depositAccount: depositAccountOf(stranger, SIGNET, VAULT),
 })
 
 async function serviceOver(activities: readonly Activity[]): Promise<ActivityServiceImpl> {
   const repository = new MemoryRepository<Activity>()
   for (const activity of activities) await repository.create(activity)
-  return new ActivityServiceImpl(repository, SIGNET, VAULT)
+  return new ActivityServiceImpl(repository)
 }
 
 describe('ActivityServiceImpl', () => {
-  test("listActivities lists the caller's activities newest first", async () => {
+  test("listActivities lists the caller's activities of every type newest first", async () => {
     const service = await serviceOver([...mine, theirs])
-    expect(await service.listActivities(caller, {})).toEqual([mine[1], mine[0]])
+    expect(await service.listActivities(caller, {})).toEqual([...mine].reverse())
     expect(await service.listActivities(stranger, {})).toEqual([theirs])
+  })
+
+  test('listActivities keeps to the types asked for', async () => {
+    const service = await serviceOver([...mine, theirs])
+    expect(await service.listActivities(caller, { types: ['Deposit', 'Swap'] })).toEqual([
+      mine[2],
+      mine[1],
+      mine[0],
+    ])
+    expect(await service.listActivities(caller, { types: ['Approval'] })).toEqual([mine[3]])
   })
 
   test('getActivity answers only for the owner', async () => {

@@ -8,25 +8,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import type { TokenInfo } from '@/lib/tokens/token-info'
+import { tokenLabel } from '@/lib/tokens/token-label'
 
-interface SwapAmountFieldProps<TToken extends string> {
+interface SwapAmountFieldProps {
   /** Names the field for assistive technology, e.g. "From" or "To". */
   label: string
   amount: string
-  onAmountChange: (amount: string) => void
-  tokens: readonly TToken[]
-  token: TToken | null
-  onTokenChange: (token: TToken | null) => void
+  /** Absent for a field whose amount the quote fills in. */
+  onAmountChange?: (amount: string) => void
+  tokens: readonly TokenInfo[]
+  token: TokenInfo | null
+  onTokenChange: (erc20Address: string) => void
+  disabled?: boolean
 }
 
-export function SwapAmountField<TToken extends string>({
+/** One side of the swap: an amount beside the token it is in, chosen from the tokens offered. */
+export function SwapAmountField({
   label,
   amount,
   onAmountChange,
   tokens,
   token,
   onTokenChange,
-}: SwapAmountFieldProps<TToken>): ReactNode {
+  disabled = false,
+}: SwapAmountFieldProps): ReactNode {
   return (
     <InputGroup
       aria-label={label}
@@ -38,11 +44,23 @@ export function SwapAmountField<TToken extends string>({
         autoComplete="off"
         placeholder="0"
         value={amount}
-        onChange={(event) => onAmountChange(event.target.value)}
+        readOnly={onAmountChange === undefined}
+        disabled={disabled}
+        onChange={(event) => onAmountChange?.(event.target.value)}
         className="h-7.5 p-0 font-mono text-xl/7.5 font-light text-tertiary-foreground placeholder:text-tertiary-foreground md:text-xl/7.5"
       />
       <InputGroupAddon align="inline-end" className="p-0 has-[>button]:mr-0">
-        <Select value={token} onValueChange={onTokenChange}>
+        <Select
+          value={token?.origin.erc20Address ?? null}
+          onValueChange={(value) => {
+            if (value !== null) onTokenChange(value)
+          }}
+          disabled={disabled}
+          items={tokens.map((option) => ({
+            value: option.origin.erc20Address,
+            label: tokenLabel(option),
+          }))}
+        >
           <SelectTrigger
             size="sm"
             aria-label={`${label} token`}
@@ -52,8 +70,8 @@ export function SwapAmountField<TToken extends string>({
           </SelectTrigger>
           <SelectContent>
             {tokens.map((option) => (
-              <SelectItem key={option} value={option}>
-                {option}
+              <SelectItem key={option.origin.erc20Address} value={option.origin.erc20Address}>
+                {tokenLabel(option)}
               </SelectItem>
             ))}
           </SelectContent>

@@ -9,6 +9,8 @@ export interface ActivityEntry {
   /** The activity's resource name, the row's key and the argument of every action on it. */
   readonly name: string
   readonly kind: ActivityKind
+  /** The activity in a phrase that follows "the", such as `deposit of 100 USDC`. */
+  readonly description: string
   readonly from: AssetAmount
   readonly to: ActivityDestination
   /** Formatted by the source, such as `July 8, 2025 07:18 PM`. */
@@ -21,11 +23,13 @@ export interface ActivityEntry {
   readonly error: string | null
 }
 
-export type ActivityKind = 'deposit'
+export type ActivityKind = 'deposit' | 'swap' | 'approval'
 
 /** The kind as the table and its dialog name it. */
 export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   deposit: 'Deposit',
+  swap: 'Swap',
+  approval: 'Approval',
 }
 
 export type ActivityStatus = 'pending' | 'complete' | 'failed'

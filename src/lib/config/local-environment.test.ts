@@ -48,7 +48,7 @@ describe('isLocalEnvironment', () => {
           nodeURL: '',
           proofServerURL: '',
         },
-        ethereum: { chainId: 11155111, rpcURL },
+        ethereum: { chainId: 11155111, rpcURL, uniswapQuoterAddress: `0x${'00'.repeat(20)}` },
       }),
     ).toBe(expected)
   })

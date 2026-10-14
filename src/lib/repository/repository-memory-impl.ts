@@ -48,6 +48,8 @@ function holds<Resource>(criterion: Criterion<Resource>, row: Resource): boolean
   switch (criterion.type) {
     case 'exact-text':
       return row[criterion.field] === criterion.text
+    case 'prefix-text':
+      return String(row[criterion.field]).startsWith(criterion.prefix)
     case 'bool':
       return row[criterion.field] === criterion.bool
     default: {

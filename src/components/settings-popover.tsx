@@ -1,6 +1,7 @@
 'use client'
 
-import { Settings } from 'lucide-react'
+import { Settings, ShieldCheck } from 'lucide-react'
+import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { ReadinessChecklist } from '@/components/readiness-checklist'
@@ -31,6 +32,10 @@ export function SettingsPopover(): ReactNode {
             <ReadinessRecheckButton />
           </div>
           <ReadinessChecklist checkIds={READINESS_CHECK_IDS} />
+          <Button variant="ghost" size="sm" className="self-start" render={<Link href="/admin" />}>
+            <ShieldCheck aria-hidden />
+            Admin
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

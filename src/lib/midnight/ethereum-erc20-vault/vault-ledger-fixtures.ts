@@ -30,6 +30,8 @@ export function requestLedgerState(
     outputAttestationBuffer: ledgerMap([]),
     evictionMap: ledgerMap([]),
     depositArgsMap: ledgerMap([]),
+    swapArgsMap: ledgerMap([]),
+    approveArgsMap: ledgerMap([]),
     mpcResponseKey: { x: 1n, y: 2n, identity: false },
     ...overrides,
   }

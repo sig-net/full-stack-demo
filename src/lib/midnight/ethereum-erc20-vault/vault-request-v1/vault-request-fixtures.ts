@@ -17,7 +17,7 @@ export function vaultRequestFixture(overrides: Partial<VaultRequest> = {}): Vaul
     action: 'deposit',
     state: 'AwaitingFlush',
     inIndex: IN_INDEX,
-    depositAccount: DEPOSIT_ACCOUNT,
+    signerAccount: DEPOSIT_ACCOUNT,
     outIndex: null,
     requestId: null,
     signedTx: null,

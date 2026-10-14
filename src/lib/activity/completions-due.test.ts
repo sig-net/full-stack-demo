@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'vitest'
 
-import { depositsDueForCompletion } from '@/lib/activity/completions-due'
+import { activitiesDueForCompletion } from '@/lib/activity/completions-due'
 import { activityFixture } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
 
 const awaiting = activityFixture({
   name: `${activityFixture().name.slice(0, -1)}a`,
-  depositState: 'AwaitingCompletion',
+  resourceState: 'AwaitingCompletion',
 })
-const working = activityFixture({ depositState: 'AwaitingVaultRequest' })
+const working = activityFixture({ resourceState: 'AwaitingVaultRequest' })
 const RETRY_MS = 30_000
 
-describe('depositsDueForCompletion', () => {
+describe('activitiesDueForCompletion', () => {
   test.each([
     {
       name: 'a deposit awaiting completion that was never attempted',
@@ -38,7 +38,7 @@ describe('depositsDueForCompletion', () => {
     },
   ])('$name', ({ attempted, now, expected }) => {
     expect(
-      depositsDueForCompletion([working, awaiting], attempted, now, RETRY_MS).map((a) => a.name),
+      activitiesDueForCompletion([working, awaiting], attempted, now, RETRY_MS).map((a) => a.name),
     ).toEqual(expected)
   })
 })

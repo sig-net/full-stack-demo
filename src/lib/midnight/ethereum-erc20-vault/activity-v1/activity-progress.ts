@@ -1,9 +1,10 @@
 import type {
   Activity,
   ActivityTransaction,
+  ActivityType,
   ActivityWalletTransaction,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
-import type { DepositState } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import type { CallerOperationState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
 import type { VaultRequestState } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 
 /**
@@ -19,7 +20,7 @@ export function activityActionOf(activity: Activity): ActivityAction {
   if (activity.walletTransaction !== null) {
     return { kind: 'balance', transaction: activity.walletTransaction }
   }
-  if (activity.depositState === 'AwaitingCompletion') return { kind: 'complete' }
+  if (activity.resourceState === 'AwaitingCompletion') return { kind: 'complete' }
   return { kind: 'none' }
 }
 
@@ -53,48 +54,77 @@ export interface ActivityStepDefinition {
   } | null
 }
 
-/** The deposit's steps in order; a second activity type brings its own list. */
-export const DEPOSIT_STEPS: readonly ActivityStepDefinition[] = [
-  { label: 'Start call signed by your wallet', walletTurn: true, reference: null },
-  {
-    label: 'Start call included on Midnight',
-    walletTurn: false,
-    reference: {
-      kind: 'midnightTransaction',
-      idOf: (activity) => activity.startTransaction?.hash ?? null,
+/**
+ * Every activity type runs the same ten steps, as every caller operation does: the three
+ * steps the MPC and Ethereum take are named for what the type's request does there.
+ */
+export const ACTIVITY_STEPS_BY_TYPE: Readonly<
+  Record<ActivityType, readonly ActivityStepDefinition[]>
+> = {
+  Deposit: operationSteps(
+    'Sweep signed by the MPC',
+    'Funds swept on Ethereum',
+    'Sweep attested by the MPC',
+  ),
+  Swap: operationSteps(
+    'Trade signed by the MPC',
+    'Tokens traded on Ethereum',
+    'Trade attested by the MPC',
+  ),
+  Approval: operationSteps(
+    'Approval signed by the MPC',
+    'Allowance granted on Ethereum',
+    'Approval attested by the MPC',
+  ),
+}
+
+function operationSteps(
+  signed: string,
+  executed: string,
+  attested: string,
+): readonly ActivityStepDefinition[] {
+  return [
+    { label: 'Start call signed by your wallet', walletTurn: true, reference: null },
+    {
+      label: 'Start call included on Midnight',
+      walletTurn: false,
+      reference: {
+        kind: 'midnightTransaction',
+        idOf: (activity) => activity.startTransaction?.hash ?? null,
+      },
     },
-  },
-  { label: 'Request flushed to the vault queue', walletTurn: false, reference: null },
-  {
-    label: 'Request sent to the MPC',
-    walletTurn: false,
-    reference: { kind: 'vaultRequest', idOf: (activity) => activity.vaultRequestId },
-  },
-  { label: 'Sweep signed by the MPC', walletTurn: false, reference: null },
-  {
-    label: 'Funds swept on Ethereum',
-    walletTurn: false,
-    reference: {
-      kind: 'ethereumTransaction',
-      idOf: (activity) => activity.foreignChainTransaction?.hash ?? null,
+    { label: 'Request flushed to the vault queue', walletTurn: false, reference: null },
+    {
+      label: 'Request sent to the MPC',
+      walletTurn: false,
+      reference: { kind: 'vaultRequest', idOf: (activity) => activity.vaultRequestId },
     },
-  },
-  { label: 'Sweep attested by the MPC', walletTurn: false, reference: null },
-  { label: 'Attestation flushed to the vault', walletTurn: false, reference: null },
-  { label: 'Completion signed by your wallet', walletTurn: true, reference: null },
-  {
-    label: 'Completion included on Midnight',
-    walletTurn: false,
-    reference: {
-      kind: 'midnightTransaction',
-      idOf: (activity) => activity.completeTransaction?.hash ?? null,
+    { label: signed, walletTurn: false, reference: null },
+    {
+      label: executed,
+      walletTurn: false,
+      reference: {
+        kind: 'ethereumTransaction',
+        idOf: (activity) => activity.foreignChainTransaction?.hash ?? null,
+      },
     },
-  },
-]
+    { label: attested, walletTurn: false, reference: null },
+    { label: 'Attestation flushed to the vault', walletTurn: false, reference: null },
+    { label: 'Completion signed by your wallet', walletTurn: true, reference: null },
+    {
+      label: 'Completion included on Midnight',
+      walletTurn: false,
+      reference: {
+        kind: 'midnightTransaction',
+        idOf: (activity) => activity.completeTransaction?.hash ?? null,
+      },
+    },
+  ]
+}
 
 export function activityStepsOf(activity: Activity): ActivityStep[] {
-  const { current, failed } = depositProgress(activity)
-  return DEPOSIT_STEPS.map(({ label, walletTurn, reference }, index) => ({
+  const { current, failed } = operationProgress(activity)
+  return ACTIVITY_STEPS_BY_TYPE[activity.type].map(({ label, walletTurn, reference }, index) => ({
     label,
     walletTurn,
     status: index < current ? 'done' : index > current ? 'pending' : failed ? 'failed' : 'current',
@@ -102,13 +132,15 @@ export function activityStepsOf(activity: Activity): ActivityStep[] {
   }))
 }
 
-/** The index of the step the deposit stands at, `DEPOSIT_STEPS.length` once every step is done. */
-function depositProgress(activity: Activity): { current: number; failed: boolean } {
-  return DEPOSIT_PROGRESS_BY_STATE[activity.depositState](activity)
+/** The index of the step the operation stands at, the step count once every step is done. */
+function operationProgress(activity: Activity): { current: number; failed: boolean } {
+  return PROGRESS_BY_OPERATION_STATE[activity.resourceState](activity)
 }
 
-const DEPOSIT_PROGRESS_BY_STATE: Record<
-  DepositState,
+const STEP_COUNT = 10
+
+const PROGRESS_BY_OPERATION_STATE: Record<
+  CallerOperationState,
   (activity: Activity) => { current: number; failed: boolean }
 > = {
   AwaitingStartTransaction: (activity) => ({
@@ -125,7 +157,7 @@ const DEPOSIT_PROGRESS_BY_STATE: Record<
     current: signingStep(activity.completeTransaction, 8),
     failed: false,
   }),
-  Completed: () => ({ current: DEPOSIT_STEPS.length, failed: false }),
+  Completed: () => ({ current: STEP_COUNT, failed: false }),
   Failed: (activity) => ({
     current: activity.startTransaction?.hash === null ? 0 : 1,
     failed: true,

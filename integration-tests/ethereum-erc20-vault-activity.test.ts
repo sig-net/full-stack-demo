@@ -3,7 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import type { EthereumTransaction } from '@/lib/ethereum/transaction-v1/transaction'
+import type { Approval } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
 import type { Deposit } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import type { Swap } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
 import type { Backend } from '@/server/backend'
@@ -39,6 +41,40 @@ describe('The activity view over Postgres', () => {
     ...overrides,
   })
 
+  const swap = (overrides: Partial<Swap> = {}): Swap => ({
+    name: `${caller}/ethereum-erc20-vault-swaps/${randomUUID()}`,
+    erc20AddressIn: `0x${'ab'.repeat(20)}`,
+    erc20AddressOut: `0x${'ba'.repeat(20)}`,
+    fee: 500n,
+    amountOut: 9n,
+    amountInMaximum: 10n,
+    state: 'AwaitingStartTransaction',
+    inIndex: 2n,
+    vaultAccount: `0x${'cc'.repeat(20)}`,
+    outcome: null,
+    failure: null,
+    error: null,
+    createTime: at(20),
+    updateTime: at(20),
+    ...overrides,
+  })
+
+  const approval = (overrides: Partial<Approval> = {}): Approval => ({
+    name: `${caller}/ethereum-erc20-vault-approvals/${randomUUID()}`,
+    kind: 'stata',
+    erc20Address: `0x${'ab'.repeat(20)}`,
+    spender: `0x${'0a'.repeat(20)}`,
+    state: 'AwaitingStartTransaction',
+    inIndex: 3n,
+    vaultAccount: `0x${'cc'.repeat(20)}`,
+    outcome: null,
+    failure: null,
+    error: null,
+    createTime: at(30),
+    updateTime: at(30),
+    ...overrides,
+  })
+
   const midnightTransaction = (
     parent: string,
     circuit: string,
@@ -67,7 +103,7 @@ describe('The activity view over Postgres', () => {
     action: 'deposit',
     state: 'AwaitingFlush',
     inIndex: 1n,
-    depositAccount,
+    signerAccount: depositAccount,
     outIndex: null,
     requestId: null,
     signedTx: null,
@@ -111,6 +147,8 @@ describe('The activity view over Postgres', () => {
     for (const table of [
       'midnight_ethereum_erc20_vault_requests_v1',
       'midnight_ethereum_erc20_vault_deposits_v1',
+      'midnight_ethereum_erc20_vault_swaps_v1',
+      'midnight_ethereum_erc20_vault_approvals_v1',
     ]) {
       await pool.query(`delete from ${table} where name like $1`, [`${caller}/%`])
     }
@@ -173,12 +211,14 @@ describe('The activity view over Postgres', () => {
       name: row.name,
       type: 'Deposit',
       state: 'Pending',
-      depositAccount,
       erc20Address: row.erc20Address,
       amount: 5n,
+      erc20AddressOut: null,
+      amountOut: null,
+      spender: null,
       outcome: null,
       error: null,
-      depositState: 'AwaitingCompleteTransaction',
+      resourceState: 'AwaitingCompleteTransaction',
       vaultRequestState: 'AwaitingAttestation',
       vaultRequestId: '22'.repeat(32),
       walletTransaction: null,
@@ -219,7 +259,7 @@ describe('The activity view over Postgres', () => {
       outcome: 'minted',
     })
     const listed = await activityV1.repository.search({
-      criteria: [{ type: 'exact-text', field: 'depositAccount', text: depositAccount }],
+      criteria: [{ type: 'prefix-text', field: 'name', prefix: `${caller}/` }],
       order: { field: 'createTime', direction: 'desc' },
     })
     expect(listed.map((activity) => activity.name)).toEqual([
@@ -228,5 +268,48 @@ describe('The activity view over Postgres', () => {
       ...listed.slice(2).map((activity) => activity.name),
     ])
     expect(listed).toHaveLength(3)
+  })
+
+  test('a swap and an approval project their own sides, and the start call of either approval circuit', async () => {
+    const { midnight } = backend
+    const { swapV1, approvalV1, activityV1 } = midnight.ethereumErc20Vault
+    const traded = await swapV1.repository.create(swap())
+    const granted = await approvalV1.repository.create(approval())
+    await midnight.transactionV1.repository.create(
+      midnightTransaction(granted.name, 'startApproveStata', {
+        state: 'AwaitingWallet',
+        unprovenTx: null,
+        unboundTx: 'bb',
+        expireTime: at(40),
+        createTime: at(31),
+        updateTime: at(31),
+      }),
+    )
+
+    expect(await activityV1.repository.get(traded.name)).toMatchObject({
+      type: 'Swap',
+      state: 'Pending',
+      erc20Address: traded.erc20AddressIn,
+      amount: 10n,
+      erc20AddressOut: traded.erc20AddressOut,
+      amountOut: 9n,
+      spender: null,
+      resourceState: 'AwaitingStartTransaction',
+      startTransaction: null,
+    })
+    expect(await activityV1.repository.get(granted.name)).toMatchObject({
+      type: 'Approval',
+      state: 'Pending',
+      erc20Address: granted.erc20Address,
+      amount: null,
+      spender: granted.spender,
+      walletTransaction: { circuit: 'startApproveStata', expireTime: at(40) },
+      startTransaction: { hash: null, state: 'Pending', lifecycleState: 'AwaitingWallet' },
+    })
+    const listed = await activityV1.repository.search({
+      criteria: [{ type: 'prefix-text', field: 'name', prefix: `${caller}/` }],
+      order: { field: 'createTime', direction: 'desc' },
+    })
+    expect(listed.slice(0, 2).map((activity) => activity.type)).toEqual(['Approval', 'Swap'])
   })
 })

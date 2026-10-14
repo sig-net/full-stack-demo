@@ -32,6 +32,13 @@ export class Erc20ReaderEthersImpl implements Erc20Reader {
       .parse(await this.read(erc20Address, 'balanceOf', [holder]))
   }
 
+  async allowance(erc20Address: string, owner: string, spender: string): Promise<bigint> {
+    return z
+      .bigint()
+      .nonnegative()
+      .parse(await this.read(erc20Address, 'allowance', [owner, spender]))
+  }
+
   /** The first return value of a view call, validated by the caller: the chain is an external input. */
   private async read(erc20Address: string, method: string, args: unknown[] = []): Promise<unknown> {
     const data = await this.provider.call({
@@ -47,4 +54,5 @@ const ERC20 = new Interface([
   'function name() view returns (string)',
   'function decimals() view returns (uint8)',
   'function balanceOf(address) view returns (uint256)',
+  'function allowance(address,address) view returns (uint256)',
 ])

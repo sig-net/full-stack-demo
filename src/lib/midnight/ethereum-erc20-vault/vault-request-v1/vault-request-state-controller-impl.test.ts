@@ -134,7 +134,7 @@ describe('VaultRequestStateControllerImpl.queueRequest', () => {
     parent: DEPOSIT_NAME,
     action: 'deposit',
     inIndex: IN_INDEX,
-    depositAccount: DEPOSIT_ACCOUNT,
+    signerAccount: DEPOSIT_ACCOUNT,
   }
 
   const cases: ReadonlyArray<{

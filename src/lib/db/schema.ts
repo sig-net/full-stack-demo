@@ -21,10 +21,11 @@ import {
   ETHEREUM_TRANSACTION_TERMINAL_STATES,
 } from '@/lib/ethereum/transaction-v1/transaction'
 import {
-  ACTIVITY_STATE_BY_DEPOSIT_STATE,
+  ACTIVITY_STATE_BY_OPERATION_STATE,
   ACTIVITY_STATES,
   ACTIVITY_TRANSACTION_STATE_BY_STATE,
   ACTIVITY_TYPES,
+  type ActivityType,
   ACTIVITY_WALLET_TRANSACTION_SIGNER,
   ACTIVITY_WALLET_TRANSACTION_STATE,
   type ActivityTransaction,
@@ -35,6 +36,18 @@ import {
   DEPOSIT_OUTCOMES,
   DEPOSIT_STATES,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import { CALLER_OPERATION_STATES } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
+import {
+  APPROVAL_FAILURES,
+  APPROVAL_KINDS,
+  APPROVAL_OUTCOMES,
+  APPROVAL_STATES,
+} from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
+import {
+  SWAP_FAILURES,
+  SWAP_OUTCOMES,
+  SWAP_STATES,
+} from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import { VAULT_ACTIONS } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 import {
   ATTESTATION_OUTPUT_KINDS,
@@ -136,6 +149,49 @@ export const midnightEthereumErc20VaultDepositsV1 = pgTable(
 )
 
 /**
+ * One row per ERC-20 vault swap resource, keyed by its resource name: an exact-output trade on
+ * the vault's router paid from a surrendered vault coin.
+ */
+export const midnightEthereumErc20VaultSwapsV1 = pgTable('midnight_ethereum_erc20_vault_swaps_v1', {
+  name: text('name').primaryKey(),
+  erc20AddressIn: text('erc20_address_in').notNull(),
+  erc20AddressOut: text('erc20_address_out').notNull(),
+  fee: contractInteger('fee').notNull(),
+  amountOut: contractInteger('amount_out').notNull(),
+  amountInMaximum: contractInteger('amount_in_maximum').notNull(),
+  state: text('state', { enum: SWAP_STATES }).notNull(),
+  inIndex: contractInteger('in_index').notNull(),
+  vaultAccount: text('vault_account').notNull(),
+  outcome: text('outcome', { enum: SWAP_OUTCOMES }),
+  failure: text('failure', { enum: SWAP_FAILURES }),
+  error: text('error'),
+  createTime: timestamp('create_time', { withTimezone: true }).notNull(),
+  updateTime: timestamp('update_time', { withTimezone: true }).notNull(),
+})
+
+/**
+ * One row per ERC-20 vault approval resource, keyed by its resource name: the vault account
+ * granting one of its pinned spenders an allowance, which only the deployer starts.
+ */
+export const midnightEthereumErc20VaultApprovalsV1 = pgTable(
+  'midnight_ethereum_erc20_vault_approvals_v1',
+  {
+    name: text('name').primaryKey(),
+    kind: text('kind', { enum: APPROVAL_KINDS }).notNull(),
+    erc20Address: text('erc20_address').notNull(),
+    spender: text('spender').notNull(),
+    state: text('state', { enum: APPROVAL_STATES }).notNull(),
+    inIndex: contractInteger('in_index').notNull(),
+    vaultAccount: text('vault_account').notNull(),
+    outcome: text('outcome', { enum: APPROVAL_OUTCOMES }),
+    failure: text('failure', { enum: APPROVAL_FAILURES }),
+    error: text('error'),
+    createTime: timestamp('create_time', { withTimezone: true }).notNull(),
+    updateTime: timestamp('update_time', { withTimezone: true }).notNull(),
+  },
+)
+
+/**
  * One row per ERC-20 vault request resource, keyed by its resource name. The partial unique index
  * allows one live request per parent and action, so two resolvers cannot both queue one.
  */
@@ -147,7 +203,7 @@ export const midnightEthereumErc20VaultRequestsV1 = pgTable(
     action: text('action', { enum: VAULT_ACTIONS }).notNull(),
     state: text('state', { enum: VAULT_REQUEST_STATES }).notNull(),
     inIndex: contractInteger('in_index').notNull(),
-    depositAccount: text('deposit_account').notNull(),
+    signerAccount: text('signer_account').notNull(),
     outIndex: text('out_index'),
     requestId: text('request_id'),
     signedTx: text('signed_tx'),
@@ -167,9 +223,10 @@ export const midnightEthereumErc20VaultRequestsV1 = pgTable(
 )
 
 /**
- * One row per vault activity, derived from the lifecycle tables: each deposit with its newest
- * start and complete calls, its newest vault request and that request's newest foreign chain
- * transaction. The states are aggregated here, so nothing above a repository derives them.
+ * One row per vault activity, derived from the lifecycle tables: each deposit, swap and
+ * approval with its newest start and complete calls, its newest vault request and that
+ * request's newest foreign chain transaction. The states are aggregated here, so nothing above
+ * a repository derives them.
  */
 export const midnightEthereumErc20VaultActivityV1 = pgView(
   'midnight_ethereum_erc20_vault_activity_v1',
@@ -177,12 +234,14 @@ export const midnightEthereumErc20VaultActivityV1 = pgView(
     name: text('name').notNull(),
     type: text('type', { enum: ACTIVITY_TYPES }).notNull(),
     state: text('state', { enum: ACTIVITY_STATES }).notNull(),
-    depositAccount: text('deposit_account').notNull(),
     erc20Address: text('erc20_address').notNull(),
-    amount: contractInteger('amount').notNull(),
-    outcome: text('outcome', { enum: DEPOSIT_OUTCOMES }),
+    amount: contractInteger('amount'),
+    erc20AddressOut: text('erc20_address_out'),
+    amountOut: contractInteger('amount_out'),
+    spender: text('spender'),
+    outcome: text('outcome'),
     error: text('error'),
-    depositState: text('deposit_state', { enum: DEPOSIT_STATES }).notNull(),
+    resourceState: text('resource_state', { enum: CALLER_OPERATION_STATES }).notNull(),
     vaultRequestState: text('vault_request_state', { enum: VAULT_REQUEST_STATES }),
     vaultRequestId: text('vault_request_id'),
     // The repository parses every row with the resource schema, which checks the shape claimed here.
@@ -195,9 +254,69 @@ export const midnightEthereumErc20VaultActivityV1 = pgView(
   },
 ).as(activityViewQuery())
 
-/** The deposit branch of the view. A second activity type joins it with `UNION ALL`. */
+/** One branch of the view per caller operation, joined with `UNION ALL`. */
 function activityViewQuery(): SQL {
-  const d = midnightEthereumErc20VaultDepositsV1
+  const deposits = midnightEthereumErc20VaultDepositsV1
+  const swaps = midnightEthereumErc20VaultSwapsV1
+  const approvals = midnightEthereumErc20VaultApprovalsV1
+  return sql.raw(
+    [
+      activityBranch({
+        type: 'Deposit',
+        table: deposits,
+        startCircuits: ['startDeposit'],
+        completeCircuit: 'completeDeposit',
+        erc20Address: deposits.erc20Address.name,
+        amount: deposits.amount.name,
+        erc20AddressOut: 'NULL',
+        amountOut: 'NULL',
+        spender: 'NULL',
+      }),
+      activityBranch({
+        type: 'Swap',
+        table: swaps,
+        startCircuits: ['startSwap'],
+        completeCircuit: 'completeSwap',
+        erc20Address: swaps.erc20AddressIn.name,
+        amount: swaps.amountInMaximum.name,
+        erc20AddressOut: `d.${swaps.erc20AddressOut.name}`,
+        amountOut: `d.${swaps.amountOut.name}`,
+        spender: 'NULL',
+      }),
+      activityBranch({
+        type: 'Approval',
+        table: approvals,
+        startCircuits: ['startApproveRouter', 'startApproveStata'],
+        completeCircuit: 'completeApprove',
+        erc20Address: approvals.erc20Address.name,
+        amount: 'NULL',
+        erc20AddressOut: 'NULL',
+        amountOut: 'NULL',
+        spender: `d.${approvals.spender.name}`,
+      }),
+    ].join('\n    UNION ALL\n'),
+  )
+}
+
+interface ActivityBranch {
+  readonly type: ActivityType
+  readonly table: PgTable
+  readonly startCircuits: readonly string[]
+  readonly completeCircuit: string
+  /** The column of the operation's own table holding the token it surrenders or moves. */
+  readonly erc20Address: string
+  /** SQL expressions over the alias `d`, or a column name of `d` for `amount`. */
+  readonly amount: string
+  readonly erc20AddressOut: string
+  readonly amountOut: string
+  readonly spender: string
+}
+
+/**
+ * The operation row as `d`, its newest start call `s`, request `r`, foreign transaction `e` and
+ * complete call `c`. Every operation table shares the caller operation's columns by name.
+ */
+function activityBranch(branch: ActivityBranch): string {
   const t = midnightTransactionsV1
   const r = midnightEthereumErc20VaultRequestsV1
   const e = ethereumTransactionsV1
@@ -209,31 +328,34 @@ function activityViewQuery(): SQL {
     `${alias}.${t.state.name} = '${ACTIVITY_WALLET_TRANSACTION_STATE}' AND ${alias}.${t.signer.name} = '${ACTIVITY_WALLET_TRANSACTION_SIGNER}'`
   const walletTransaction = (alias: string): string =>
     `jsonb_build_object('name', ${alias}.name, 'circuit', ${alias}.${t.circuit.name}, 'expireTime', ${alias}.${t.expireTime.name})`
-  return sql.raw(`
+  const circuits = (names: readonly string[]): string => names.map((name) => `'${name}'`).join(', ')
+  const amount = branch.amount === 'NULL' ? 'NULL' : `d.${branch.amount}`
+  return `
     SELECT
-      d.${d.name.name} AS name,
-      '${ACTIVITY_TYPES[0]}' AS type,
-      ${caseOver(`d.${d.state.name}`, ACTIVITY_STATE_BY_DEPOSIT_STATE, 'Pending')} AS state,
-      d.${d.depositAccount.name} AS deposit_account,
-      d.${d.erc20Address.name} AS erc20_address,
-      d.${d.amount.name} AS amount,
-      d.${d.outcome.name} AS outcome,
-      d.${d.error.name} AS error,
-      d.${d.state.name} AS deposit_state,
+      d.name AS name,
+      '${branch.type}' AS type,
+      ${caseOver('d.state', ACTIVITY_STATE_BY_OPERATION_STATE, 'Pending')} AS state,
+      d.${branch.erc20Address} AS erc20_address,
+      ${amount} AS amount,
+      ${branch.erc20AddressOut} AS erc20_address_out,
+      ${branch.amountOut} AS amount_out,
+      ${branch.spender} AS spender,
+      d.outcome AS outcome,
+      d.error AS error,
+      d.state AS resource_state,
       r.${r.state.name} AS vault_request_state,
       r.${r.requestId.name} AS vault_request_id,
       CASE WHEN ${waitingForWallet('c')} THEN ${walletTransaction('c')} WHEN ${waitingForWallet('s')} THEN ${walletTransaction('s')} ELSE NULL END AS wallet_transaction,
       ${transaction('s', t.txId)} AS start_transaction,
       ${transaction('e', e.txHash)} AS foreign_chain_transaction,
       ${transaction('c', t.txId)} AS complete_transaction,
-      d.${d.createTime.name} AS create_time,
+      d.create_time AS create_time,
       GREATEST(d.update_time, s.update_time, r.update_time, e.update_time, c.update_time) AS update_time
-    FROM "${getTableName(d)}" d
-    ${newest(t, 's', `x.${t.parent.name} = d.name AND x.${t.circuit.name} = 'startDeposit'`)}
+    FROM "${getTableName(branch.table)}" d
+    ${newest(t, 's', `x.${t.parent.name} = d.name AND x.${t.circuit.name} IN (${circuits(branch.startCircuits)})`)}
     ${newest(r, 'r', `x.${r.parent.name} = d.name`)}
     ${newest(e, 'e', `x.${e.parent.name} = r.name`)}
-    ${newest(t, 'c', `x.${t.parent.name} = d.name AND x.${t.circuit.name} = 'completeDeposit'`)}
-  `)
+    ${newest(t, 'c', `x.${t.parent.name} = d.name AND x.${t.circuit.name} = '${branch.completeCircuit}'`)}`
 }
 
 /** A `CASE` over the column, mapping each listed value and falling back for the rest. */
