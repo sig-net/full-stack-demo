@@ -522,8 +522,10 @@ in the table hold the definitions.
    step is done (`AwaitingAttestation`). The MPC watches the mined transaction and posts an
    attestation of its result, which the resolver reads on a sweep and verifies over the bytes
    `RESPOND_OUTPUT_SOURCE` recovers (`AwaitingAttestationQueue`). The resolver commits the
-   relayer's `queueAttestation` call (`AwaitingAttestationFlush`), the flusher flushes the
-   attestation, and the request is `Attested`.
+   relayer's `queueAttestation` call, which checks the post's signature over the output's width
+   and hash and so needs no output (`AwaitingAttestationFlush`), the flusher flushes the
+   attestation, and the request is `Attested`. The output itself is presented to the complete
+   circuit, which checks it against the recorded width and hash.
 5. **The ledger is the acknowledgement.** Every step of the request is recorded only when the
    vault ledger, read through `requestStage()`, or the singleton's posts show it done. A step is
    never inferred from a child transaction's outcome: a child that failed is replaced while the
@@ -751,7 +753,8 @@ attestation is verified over, which travel off chain: `RESPOND_OUTPUT_SOURCE` se
 response key and keeps the first that verifies. The row stores the verified attestation as five
 columns (`attestationBlockHeight`, `attestationOutputKind`, `attestationDigest`,
 `attestationSignature` as `bigR.x || bigR.y || s || recoveryId` in hex, `attestationOutput`),
-and `vault-request-attestation.ts` rebuilds the event the queue circuit takes from them.
+and `vault-request-attestation.ts` rebuilds the event the queue circuit takes from them, with
+the output's width and hash the post carries recomputed from the stored output.
 
 ### Flushing the vault queue
 

@@ -12,10 +12,7 @@ import {
 import type { EthereumTransactionRepository } from '@/lib/ethereum/transaction-v1/transaction-repository'
 import type { EthereumTransactionStateController } from '@/lib/ethereum/transaction-v1/transaction-state-controller'
 import type { EventPublisher } from '@/lib/event/event-publisher'
-import {
-  queueAttestationCircuit,
-  SEND_CIRCUIT_BY_ACTION,
-} from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import { SEND_CIRCUIT_BY_ACTION } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 import {
@@ -160,13 +157,10 @@ export class VaultRequestStateControllerImpl implements VaultRequestStateControl
     unprovenTx,
   }: StartAttestationQueueArgs): Promise<MidnightTransaction> {
     const request = await this.lockedIn(name, 'AwaitingAttestationQueue', 'startAttestationQueue')
-    if (request.attestationOutput === null) {
-      throw new Error(`${name} holds no attestation`)
-    }
     return this.commitMidnightChild(
       request,
       'startAttestationQueue',
-      queueAttestationCircuit(request.attestationOutput.length / 2),
+      'queueAttestation',
       unprovenTx,
     )
   }

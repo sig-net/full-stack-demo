@@ -1,12 +1,12 @@
 import { randomBytes } from 'node:crypto'
 
-import { CIRCLE_USDC } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { getAddress, Interface, JsonRpcProvider, toBigInt } from 'ethers'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
+import { CIRCLE_USDC } from './sepolia-tokens'
 
 /** The local faucet over the fork: the backend builds it for the local stack and it tops an account up by one ETH. */
 describe('The local faucet over the local stack', () => {

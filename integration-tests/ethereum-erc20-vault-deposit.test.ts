@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto'
 
-import { CIRCLE_USDC } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { Interface, JsonRpcProvider, toBigInt } from 'ethers'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { z } from 'zod'
@@ -12,6 +11,7 @@ import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transact
 import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
+import { CIRCLE_USDC } from './sepolia-tokens'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 40 * 60_000

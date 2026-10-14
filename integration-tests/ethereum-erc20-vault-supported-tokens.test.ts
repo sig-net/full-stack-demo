@@ -1,11 +1,11 @@
 import { randomBytes } from 'node:crypto'
 
-import { CIRCLE_USDC } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
+import { CIRCLE_USDC } from './sepolia-tokens'
 
 /** The vault's allowlist read from the indexer and each token's metadata read from the fork. */
 describe('The vault allowlist over the local stack', () => {

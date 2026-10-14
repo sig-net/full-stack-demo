@@ -1,12 +1,10 @@
-import {
-  CIRCLE_USDC,
-  UNISWAP_SWAP_ROUTER_02,
-} from '@sig-net/midnight-examples-erc20-vault-contract'
+import { UNISWAP_SWAP_ROUTER_02 } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
+import { CIRCLE_USDC } from './sepolia-tokens'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 

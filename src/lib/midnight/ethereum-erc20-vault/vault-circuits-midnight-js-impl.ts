@@ -34,7 +34,6 @@ import {
   type CompleteSwapCircuitArgs,
   type CompleteWithdrawCircuitArgs,
   type QueueAttestationCircuitArgs,
-  queueAttestationCircuit,
   type SendRequestCircuitArgs,
   type StartApproveRouterCircuitArgs,
   type StartApproveStataCircuitArgs,
@@ -286,33 +285,11 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
   }
 
   queueAttestation(args: QueueAttestationCircuitArgs): Promise<string> {
-    const attestation = respondBidirectionalEventToCircuitInput(args.attestation)
-    const output = args.serializedOutput
-    const circuit = queueAttestationCircuit(output.length)
-    switch (circuit) {
-      case 'queueAttestation0':
-        return this.build(
-          permissionlessVaultPrivateState(),
-          this.relayerWallet,
-          this.options('queueAttestation0', [attestation, output]),
-        )
-      case 'queueAttestation1':
-        return this.build(
-          permissionlessVaultPrivateState(),
-          this.relayerWallet,
-          this.options('queueAttestation1', [attestation, output]),
-        )
-      case 'queueAttestation32':
-        return this.build(
-          permissionlessVaultPrivateState(),
-          this.relayerWallet,
-          this.options('queueAttestation32', [attestation, output]),
-        )
-      default: {
-        const unhandled: never = circuit
-        throw new Error(`Unhandled circuit ${JSON.stringify(unhandled)}`)
-      }
-    }
+    return this.build(
+      permissionlessVaultPrivateState(),
+      this.relayerWallet,
+      this.options('queueAttestation', [respondBidirectionalEventToCircuitInput(args.attestation)]),
+    )
   }
 
   private options<Circuit extends VaultCircuitId>(

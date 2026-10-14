@@ -1,14 +1,14 @@
 import {
   type RespondBidirectionalEvent,
   type Secp256k1Point,
-  verifyRespondBidirectionalSignature,
+  verifyRespondBidirectionalEvent,
 } from '@sig-net/midnight'
 
 /**
  * Where the bytes an MPC attestation is verified over come from. The singleton's attestation
- * posts carry everything the MPC signed except the output, and anyone may post, so a post counts
- * only once its signature verifies over bytes obtained here against the vault's pinned response
- * key. Every call reads external systems and is made outside any database transaction.
+ * posts carry the output's width and hash under the MPC's signature but not the output, and
+ * anyone may post, so a post counts only once bytes obtained here match its width and hash and
+ * its signature verifies against the vault's pinned response key. Every call reads external systems and is made outside any database transaction.
  */
 export interface RespondOutcomeSource {
   /** The first attestation post whose signature verifies over bytes obtained from this source, or undefined while none does. */
@@ -41,7 +41,7 @@ export function firstVerifiedOutcome(
     const serializedOutput = candidateOf(event)
     if (
       serializedOutput !== undefined &&
-      verifyRespondBidirectionalSignature(serializedOutput, event, mpcResponseKey)
+      verifyRespondBidirectionalEvent(serializedOutput, event, mpcResponseKey)
     ) {
       return { event, serializedOutput }
     }

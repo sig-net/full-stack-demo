@@ -26,7 +26,6 @@ import {
   ATTESTATION,
   ATTESTATION_BLOCK_HEIGHT,
   ATTESTATION_FIELDS,
-  ATTESTATION_OUTPUT,
   DEPOSIT_ACCOUNT,
   MPC_RESPONSE_KEY,
   OUT_INDEX,
@@ -82,7 +81,7 @@ const failedSend = midnightTransactionFixture({
   failure: 'Rejected',
   error: 'refused',
 })
-const liveQueue = { ...liveSend, circuit: 'queueAttestation1' }
+const liveQueue = { ...liveSend, circuit: 'queueAttestation' }
 
 const sendDepositFor = (outIndex: Uint8Array) => async (args: { outIndex: Uint8Array }) => {
   expect(args.outIndex).toEqual(outIndex)
@@ -320,13 +319,12 @@ const cases: Case[] = [
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue,
     ledger: requestLedgerAt('sent'),
     circuits: {
-      queueAttestation: async ({ attestation, serializedOutput }) => {
+      queueAttestation: async ({ attestation }) => {
         expect(attestation).toEqual(ATTESTATION.event)
-        expect(serializedOutput).toEqual(ATTESTATION_OUTPUT)
         return 'queue-call'
       },
     },
-    midnightChild: { circuit: 'queueAttestation1', rows: [] },
+    midnightChild: { circuit: 'queueAttestation', rows: [] },
     expectTransitions: [
       {
         method: 'startAttestationQueue',
@@ -338,7 +336,7 @@ const cases: Case[] = [
     name: 'AwaitingAttestationQueue - a live queue child does the step',
     stored: VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue,
     ledger: requestLedgerAt('sent'),
-    midnightChild: { circuit: 'queueAttestation1', rows: [liveQueue] },
+    midnightChild: { circuit: 'queueAttestation', rows: [liveQueue] },
     expectTransitions: [],
   },
   {

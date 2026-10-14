@@ -1,5 +1,6 @@
 import {
   bytesToHex,
+  calculateAttestedOutputHash,
   hexToBytes,
   type MpcSignature,
   OutputKind,
@@ -54,14 +55,16 @@ export function attestedRequestFields(request: VaultRequest): AttestedRequestFie
   }
 }
 
-/** The attestation as the singleton posted it, rebuilt from a row that holds one. */
+/** The attestation as the singleton posted it, rebuilt from a row that holds one: the output's width and hash come from the stored output. */
 export function attestationToEvent(request: VaultRequest): RespondBidirectionalEvent {
   const attested = attestedRequestFields(request)
+  const serializedOutput = hexToBytes(attested.attestationOutput)
   return {
     requestId: hexToBytes(attested.requestId),
     blockHeight: attested.attestationBlockHeight,
     outputKind: OutputKind[attested.attestationOutputKind],
-    serializedOutputLength: BigInt(attested.attestationOutput.length / 2),
+    serializedOutputLength: BigInt(serializedOutput.length),
+    outputHash: calculateAttestedOutputHash(serializedOutput),
     digest: hexToBytes(attested.attestationDigest),
     signature: decodeMpcSignature(attested.attestationSignature),
   }

@@ -1,14 +1,11 @@
-import {
-  CIRCLE_EURC,
-  CIRCLE_USDC,
-  deriveVaultEvmAddress,
-} from '@sig-net/midnight-examples-erc20-vault-contract'
+import { deriveVaultEvmAddress } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { Interface, JsonRpcProvider, toBigInt } from 'ethers'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
+import { CIRCLE_EURC, CIRCLE_USDC } from './sepolia-tokens'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 

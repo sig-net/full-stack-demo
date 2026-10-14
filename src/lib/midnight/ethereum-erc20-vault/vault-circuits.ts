@@ -37,7 +37,7 @@ export interface VaultCircuits {
   startApproveStata(args: StartApproveStataCircuitArgs): Promise<string>
   completeApprove(args: CompleteApproveCircuitArgs): Promise<string>
   sendApprove(args: SendRequestCircuitArgs): Promise<string>
-  /** Picks the queue circuit for the output's width: 0, 1 or 32 bytes. */
+  /** Queues an attestation from the post alone: the MPC's signature covers the output's width and hash, so the output is presented at completion. */
   queueAttestation(args: QueueAttestationCircuitArgs): Promise<string>
 }
 
@@ -164,7 +164,6 @@ export interface SendRequestCircuitArgs {
 
 export interface QueueAttestationCircuitArgs {
   readonly attestation: RespondBidirectionalEvent
-  readonly serializedOutput: Uint8Array
 }
 
 /** The circuit that sends each action's flushed request to the MPC. */
@@ -175,29 +174,6 @@ export const SEND_CIRCUIT_BY_ACTION: Readonly<Record<VaultAction, VaultCircuitId
   supply: 'sendSupply',
   redeem: 'sendRedeem',
   approve: 'sendApprove',
-}
-
-/** The queue circuits, one per output width the contract verifies. */
-export const QUEUE_ATTESTATION_CIRCUITS = [
-  'queueAttestation0',
-  'queueAttestation1',
-  'queueAttestation32',
-] as const satisfies readonly VaultCircuitId[]
-
-export type QueueAttestationCircuit = (typeof QUEUE_ATTESTATION_CIRCUITS)[number]
-
-/** The queue circuit that takes an output of `outputLength` bytes, or throws for a width none takes. */
-export function queueAttestationCircuit(outputLength: number): QueueAttestationCircuit {
-  switch (outputLength) {
-    case 0:
-      return 'queueAttestation0'
-    case 1:
-      return 'queueAttestation1'
-    case 32:
-      return 'queueAttestation32'
-    default:
-      throw new Error(`No queue circuit takes a ${outputLength.toString()}-byte output`)
-  }
 }
 
 /**

@@ -30,7 +30,12 @@ const entry: RequestBufferEntry = {
   argsHash: new Uint8Array(32),
 }
 const flushed: OutputRequestEntry = { entry, lastSeen: 100n }
-const record: AttestationRecord = { blockHeight: 120n, outputKind: 0, digest: new Uint8Array(32) }
+const record: AttestationRecord = {
+  blockHeight: 120n,
+  outputKind: 0,
+  serializedOutputLength: 1n,
+  outputHash: new Uint8Array(32),
+}
 const args = {
   request: { erc20Address: new Uint8Array(20), amount: 1n },
   path: new Uint8Array(32),

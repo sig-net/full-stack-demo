@@ -1,6 +1,6 @@
-import { CIRCLE_EURC, CIRCLE_USDC } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { describe, expect, test } from 'vitest'
 
+import { CIRCLE_EURC, CIRCLE_USDC } from '@/lib/ethereum/sepolia-tokens'
 import {
   vaultTokenInfos,
   vaultTokenType,

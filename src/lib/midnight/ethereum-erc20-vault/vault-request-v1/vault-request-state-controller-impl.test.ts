@@ -352,15 +352,15 @@ describe('VaultRequestStateControllerImpl child starters', () => {
     expect(calls.updated).toHaveLength(0)
   })
 
-  const queueCircuits: ReadonlyArray<[string, string, string]> = [
-    ['a one-byte output', ATTESTATION_FIELDS.attestationOutput, 'queueAttestation1'],
-    ['the empty output', '', 'queueAttestation0'],
-    ['a 32-byte output', 'ab'.repeat(32), 'queueAttestation32'],
+  const queueOutputs: ReadonlyArray<[string, string]> = [
+    ['a one-byte output', ATTESTATION_FIELDS.attestationOutput],
+    ['the empty output', ''],
+    ['a 32-byte output', 'ab'.repeat(32)],
   ]
 
-  test.each(queueCircuits)(
-    'startAttestationQueue commits the queue call for %s',
-    async (_name, attestationOutput, circuit) => {
+  test.each(queueOutputs)(
+    'startAttestationQueue commits the one queue call for %s',
+    async (_name, attestationOutput) => {
       const calls = emptyCalls()
       const child = await controllerOver(
         { ...VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue, attestationOutput },
@@ -369,7 +369,7 @@ describe('VaultRequestStateControllerImpl child starters', () => {
       expect(calls.midnightChildren).toHaveLength(1)
       expect(calls.midnightChildren[0]).toMatchObject({
         parent: VAULT_REQUEST_NAME,
-        circuit,
+        circuit: 'queueAttestation',
         signer: 'relayer',
         unprovenTx: 'queue-call',
       })

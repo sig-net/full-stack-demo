@@ -119,7 +119,8 @@ const REQUEST_ENTRY: RequestBufferEntry = {
 const ATTESTATION_RECORD: AttestationRecord = {
   blockHeight: ATTESTATION_BLOCK_HEIGHT,
   outputKind: 0,
-  digest: new Uint8Array(32),
+  serializedOutputLength: 1n,
+  outputHash: new Uint8Array(32),
 }
 
 const DEPOSIT_ARGS = {

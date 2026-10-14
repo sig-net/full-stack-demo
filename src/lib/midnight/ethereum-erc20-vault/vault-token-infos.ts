@@ -5,17 +5,19 @@ import {
 } from '@midnight-ntwrk/compact-runtime'
 import {
   AAVE_USDC,
-  CHAINLINK_LINK,
-  CIRCLE_EURC,
-  CIRCLE_USDC,
   evmAddressBytes,
   pureCircuits,
-  SEPOLIA_CHAIN_ID,
   STATA_USDC,
-  WETH9,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import { LOCAL_CHAIN_ID } from '@/lib/config/ethereum-config'
+import {
+  CHAINLINK_LINK,
+  CIRCLE_EURC,
+  CIRCLE_USDC,
+  SEPOLIA_CHAIN_ID,
+  WETH9,
+} from '@/lib/ethereum/sepolia-tokens'
 import { type IconSource, NO_ICON } from '@/lib/icon-source'
 import type { PriceRequest } from '@/lib/pricing/spot-price'
 import type { SupportedToken } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token'
@@ -161,6 +163,6 @@ const SEPOLIA_VAULT_ERC20_TOKENS: readonly VaultErc20Token[] = [
 
 // The local chain forks Sepolia, so the same contracts live at the same addresses.
 const VAULT_ERC20_TOKENS_BY_CHAIN: Readonly<Record<number, readonly VaultErc20Token[]>> = {
-  [Number(SEPOLIA_CHAIN_ID)]: SEPOLIA_VAULT_ERC20_TOKENS,
+  [SEPOLIA_CHAIN_ID]: SEPOLIA_VAULT_ERC20_TOKENS,
   [LOCAL_CHAIN_ID]: SEPOLIA_VAULT_ERC20_TOKENS,
 }

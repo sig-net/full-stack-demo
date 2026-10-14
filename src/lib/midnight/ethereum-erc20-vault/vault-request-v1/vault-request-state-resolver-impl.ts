@@ -14,7 +14,6 @@ import type { RespondOutcomeSource } from '@/lib/midnight/ethereum-erc20-vault/r
 import type { SignetReaders } from '@/lib/midnight/ethereum-erc20-vault/signet-readers'
 import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 import {
-  queueAttestationCircuit,
   SEND_CIRCUIT_BY_ACTION,
   type VaultCircuits,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
@@ -270,12 +269,9 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
           )
           return
         }
-        const serializedOutput = hexToBytes(attestationOutput)
-        if (await this.liveMidnightChild(name, queueAttestationCircuit(serializedOutput.length)))
-          return
+        if (await this.liveMidnightChild(name, 'queueAttestation')) return
         const unprovenTx = await this.circuits.queueAttestation({
           attestation: attestationToEvent(request),
-          serializedOutput,
         })
         return this.write(() => this.stateController.startAttestationQueue({ name, unprovenTx }))
       }
