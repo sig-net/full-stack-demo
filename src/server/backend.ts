@@ -84,6 +84,7 @@ import { DepositStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/
 import type { DepositStateResolver } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-resolver'
 import { DepositStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-resolver-impl'
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
+import { Erc4626ReaderEthersImpl } from '@/lib/ethereum/erc4626-reader-ethers-impl'
 import { Erc20ReaderEthersImpl } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader-ethers-impl'
 import { ApprovalEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-event-consumer'
 import type { ApprovalRepository } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-repository'
@@ -183,6 +184,11 @@ import type { MidnightTransactionStateController } from '@/lib/midnight/transact
 import { MidnightTransactionStateControllerImpl } from '@/lib/midnight/transaction-v1/transaction-state-controller-impl'
 import type { MidnightTransactionStateResolver } from '@/lib/midnight/transaction-v1/transaction-state-resolver'
 import { MidnightTransactionStateResolverImpl } from '@/lib/midnight/transaction-v1/transaction-state-resolver-impl'
+import type { SpotPriceService } from '@/lib/pricing/spot-price-service'
+import { SpotPriceServiceAdaptor } from '@/lib/pricing/spot-price-service-adaptor'
+import { SpotPriceServiceImpl } from '@/lib/pricing/spot-price-service-impl'
+import type { SpotPriceSource } from '@/lib/pricing/spot-price-source'
+import { SpotPriceSourceCoinGeckoImpl } from '@/lib/pricing/spot-price-source-coingecko-impl'
 import { PrivateStateProviderMemoryImpl } from '@/lib/midnight/private-state-provider-memory-impl'
 import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
 import { RelayerWalletSeedImpl } from '@/lib/midnight/wallet/relayer-wallet-seed-impl'
@@ -200,6 +206,7 @@ export interface Backend {
   readonly event: EventBackend
   readonly ethereum: EthereumBackend
   readonly midnight: MidnightBackend
+  readonly pricing: PricingBackend
   /**
    * Starts the long-running work of the process: the relayer wallet's sync, the consumers on the
    * hub, the hub's Kafka loop, the outbox relay and the sweep. It runs once per instance, a later
@@ -239,6 +246,15 @@ export interface EventBackend {
   readonly outboxEntryV1: {
     readonly repository: OutboxEntryRepository
     readonly processor: OutboxEntryProcessor
+  }
+}
+
+/** Market data for display: spot prices in USD, cached in the process in front of the public source. */
+export interface PricingBackend {
+  readonly spotPriceV1: {
+    readonly source: SpotPriceSource
+    readonly service: SpotPriceService
+    readonly adaptor: SpotPriceServiceAdaptor
   }
 }
 
@@ -377,8 +393,15 @@ export function createBackend(config: ServerConfig): Backend {
   const event = createEvent(db, kafka)
   const ethereum = createEthereum(db, event, config)
   const midnight = createMidnight(db, event, ethereum, config)
-  const packages: BackendPackages = { config, db, kafka, event, ethereum, midnight }
+  const pricing = createPricing(ethereum)
+  const packages: BackendPackages = { config, db, kafka, event, ethereum, midnight, pricing }
   return { ...packages, ...createLifecycle(packages) }
+}
+
+function createPricing(ethereum: EthereumBackend): PricingBackend {
+  const source = new SpotPriceSourceCoinGeckoImpl()
+  const service = new SpotPriceServiceImpl(source, new Erc4626ReaderEthersImpl(ethereum.provider))
+  return { spotPriceV1: { source, service, adaptor: new SpotPriceServiceAdaptor(service) } }
 }
 
 /** The sweep's period, which bounds how long a lost event or an expiry goes unnoticed. */

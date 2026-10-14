@@ -16,6 +16,7 @@ function info(id: TokenId, symbol: string): TokenInfo {
     icon: NO_ICON,
     origin: { kind: 'ethereum-erc20-vault', chainId: 1, erc20Address: '0x', issuer: 'Test' },
     supported: false,
+    pricing: null,
   }
 }
 
@@ -49,6 +50,7 @@ describe('TokenInfoRegistry by ERC20 and by support', () => {
     ...info({ ledger: 'shielded', tokenType: `cd${'0'.repeat(62)}` }, 'USDC'),
     origin: { kind: 'ethereum-erc20-vault', chainId: 1, erc20Address: '0xAbCd', issuer: 'Circle' },
     supported: true,
+    pricing: null,
   }
   const registry = new TokenInfoRegistry([SHIELDED, supportedUsdc])
 

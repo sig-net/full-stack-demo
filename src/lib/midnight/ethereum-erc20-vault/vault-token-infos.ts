@@ -17,6 +17,7 @@ import {
 
 import { LOCAL_CHAIN_ID } from '@/lib/config/ethereum-config'
 import { type IconSource, NO_ICON } from '@/lib/icon-source'
+import type { PriceRequest } from '@/lib/pricing/spot-price'
 import type { SupportedToken } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token'
 import type { TokenInfo } from '@/lib/tokens/token-info'
 
@@ -24,7 +25,9 @@ import type { TokenInfo } from '@/lib/tokens/token-info'
  * The vault's tokens on `chainId`: the allowlist the ledger reports, each with the artwork and
  * naming of the bundled table when it lists the ERC20, plus the bundled tokens the allowlist does
  * not admit, marked unsupported. A supported token's decimals are its contract's own, since the
- * chain is authoritative; a bundled token the allowlist omits keeps the table's.
+ * chain is authoritative; a bundled token the allowlist omits keeps the table's. A bundled token
+ * is valued as the mainnet asset it stands for, whichever test chain it lives on; a token the
+ * table does not list is unpriced.
  */
 export function vaultTokenInfos(
   vaultContractAddress: ContractAddress,
@@ -37,7 +40,8 @@ export function vaultTokenInfos(
   const bundled = VAULT_ERC20_TOKENS_BY_CHAIN[chainId] ?? []
   const bundledAddresses = new Set(bundled.map((token) => token.erc20Address.toLowerCase()))
   const info = (
-    token: Omit<VaultErc20Token, 'issuer'> & { issuer?: string },
+    token: Omit<VaultErc20Token, 'issuer' | 'pricing'> &
+      Partial<Pick<VaultErc20Token, 'issuer' | 'pricing'>>,
     supported: boolean,
   ): TokenInfo => ({
     id: { ledger: 'shielded', tokenType: vaultTokenType(token.erc20Address, vaultContractAddress) },
@@ -52,6 +56,7 @@ export function vaultTokenInfos(
       issuer: token.issuer,
     },
     supported,
+    pricing: token.pricing ?? null,
   })
   return [
     ...bundled.map((token) => {
@@ -86,9 +91,12 @@ interface VaultErc20Token {
   readonly decimals: number
   readonly issuer: string
   readonly icon: IconSource
+  readonly pricing: PriceRequest
 }
 
 const USDC_ICON: IconSource = { source: 'web3icons', name: 'USDC' }
+
+const USDC_PRICING: PriceRequest = { kind: 'coin', coinId: 'usd-coin' }
 
 const SEPOLIA_VAULT_ERC20_TOKENS: readonly VaultErc20Token[] = [
   {
@@ -98,6 +106,7 @@ const SEPOLIA_VAULT_ERC20_TOKENS: readonly VaultErc20Token[] = [
     decimals: 6,
     issuer: 'Circle',
     icon: USDC_ICON,
+    pricing: USDC_PRICING,
   },
   {
     erc20Address: CIRCLE_EURC,
@@ -106,6 +115,7 @@ const SEPOLIA_VAULT_ERC20_TOKENS: readonly VaultErc20Token[] = [
     decimals: 6,
     issuer: 'Circle',
     icon: { source: 'web3icons', name: 'EURC' },
+    pricing: { kind: 'coin', coinId: 'euro-coin' },
   },
   {
     erc20Address: WETH9,
@@ -114,6 +124,7 @@ const SEPOLIA_VAULT_ERC20_TOKENS: readonly VaultErc20Token[] = [
     decimals: 18,
     issuer: 'WETH9',
     icon: { source: 'web3icons', name: 'ETH' },
+    pricing: { kind: 'coin', coinId: 'weth' },
   },
   {
     erc20Address: CHAINLINK_LINK,
@@ -122,6 +133,7 @@ const SEPOLIA_VAULT_ERC20_TOKENS: readonly VaultErc20Token[] = [
     decimals: 18,
     issuer: 'Chainlink',
     icon: { source: 'web3icons', name: 'LINK' },
+    pricing: { kind: 'coin', coinId: 'chainlink' },
   },
   {
     erc20Address: AAVE_USDC,
@@ -130,6 +142,7 @@ const SEPOLIA_VAULT_ERC20_TOKENS: readonly VaultErc20Token[] = [
     decimals: 6,
     issuer: 'Aave',
     icon: USDC_ICON,
+    pricing: USDC_PRICING,
   },
   {
     erc20Address: STATA_USDC,
@@ -138,6 +151,11 @@ const SEPOLIA_VAULT_ERC20_TOKENS: readonly VaultErc20Token[] = [
     decimals: 6,
     issuer: 'Aave',
     icon: NO_ICON,
+    pricing: {
+      kind: 'erc4626Share',
+      wrapperErc20Address: STATA_USDC.toLowerCase(),
+      underlyingCoinId: USDC_PRICING.coinId,
+    },
   },
 ]
 

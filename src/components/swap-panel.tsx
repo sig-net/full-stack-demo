@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDebouncedValue } from '@/components/use-debounced-value'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
+import { useSpotPrices } from '@/components/use-spot-prices'
 import { supportedBalancesOf } from '@/lib/balances/supported-balances'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { SWAP_MAX_SLIPPAGE_BPS } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-quote'
@@ -60,6 +61,7 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   const registry = useTokenInfoRegistry()
   const { checks } = useVaultReadiness()
   const balances = useMidnightBalances()
+  const prices = useSpotPrices()
   const queryClient = useQueryClient()
   const amountInput = useRef<HTMLInputElement>(null)
   const [fromAmount, setFromAmount] = useState('')
@@ -201,6 +203,11 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
                     setFromAmount(fromSource.balance.amount)
                   },
                 }
+          }
+          usdEstimate={
+            fromToken === null || amountIn.value === null
+              ? null
+              : prices.table.usdValueOf(fromToken, amountIn.value)
           }
           inputRef={amountInput}
         />

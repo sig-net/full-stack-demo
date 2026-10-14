@@ -26,6 +26,8 @@ interface TokenAmountFieldProps {
   disabled?: boolean
   /** The balance the amount draws on, shown under it with the control that spends it whole. */
   balance?: TokenAmountBalance
+  /** The typed amount's value to the cent at the spot price, shown with the balance; null while the token is unpriced or the amount is empty. */
+  usdEstimate?: string | null
   /** The amount input, for a caller that moves focus to it. */
   inputRef?: Ref<HTMLInputElement>
 }
@@ -35,9 +37,6 @@ export interface TokenAmountBalance {
   readonly amount: string
   onMax(): void
 }
-
-/** Every amount is worth this until a price source exists. */
-const USD_ESTIMATE = '≈ $0.00'
 
 /**
  * An amount beside the token it is in, chosen from the tokens offered with their icons: one side
@@ -53,6 +52,7 @@ export function TokenAmountField({
   onTokenChange,
   disabled = false,
   balance,
+  usdEstimate = null,
   inputRef,
 }: TokenAmountFieldProps): ReactNode {
   return (
@@ -106,7 +106,7 @@ export function TokenAmountField({
       {/* The inline-end addon is ordered last, so the balance line shares that order to wrap under it. */}
       {balance !== undefined && (
         <div className="order-last flex basis-full items-center justify-between font-mono text-xs/3.5 font-medium text-tertiary-foreground">
-          <span>{USD_ESTIMATE}</span>
+          <span>{usdEstimate === null ? '' : `≈ $${usdEstimate}`}</span>
           <span className="flex items-center gap-2.5">
             <span>Balance: {balance.amount}</span>
             <Button

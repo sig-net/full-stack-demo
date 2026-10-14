@@ -7,8 +7,8 @@ export interface AssetAmount {
   readonly networkName: string
   /** Exact decimal amount in whole tokens, such as `0.013`. */
   readonly amount: string
-  /** Exact decimal value in US dollars, such as `1470.67`. */
-  readonly usdValue: string
+  /** The value in US dollars to the cent at the spot price, such as `1470.67`, null while the asset is unpriced. */
+  readonly usdValue: string | null
   readonly icon: IconSource
   readonly networkIcon: IconSource
 }

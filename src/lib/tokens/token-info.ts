@@ -1,4 +1,5 @@
 import type { IconSource } from '@/lib/icon-source'
+import type { PriceRequest } from '@/lib/pricing/spot-price'
 import { BUNDLED_NETWORK_ICONS } from '@/lib/tokens/bundled-icons'
 import type { TokenId } from '@/lib/tokens/token-id'
 
@@ -13,6 +14,8 @@ export interface TokenInfo {
   readonly origin: TokenOrigin
   /** True when the vault's allowlist admits the token's ERC20, so the vault accepts deposits of it. */
   readonly supported: boolean
+  /** How the token is valued in USD, null for one no market quotes. */
+  readonly pricing: PriceRequest | null
 }
 
 /** The chain a token came from, which the badge on its icon shows. */

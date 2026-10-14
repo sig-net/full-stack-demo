@@ -8,6 +8,7 @@ import type {
 } from '@/lib/activity/activity-entry'
 import type { AssetAmount } from '@/lib/asset-amount'
 import { NO_ICON } from '@/lib/icon-source'
+import type { SpotPriceTable } from '@/lib/pricing/spot-price-table'
 import type {
   Activity,
   ActivityState,
@@ -29,8 +30,12 @@ import type { TokenInfoRegistry } from '@/lib/tokens/token-info-registry'
  * token for another, a supply deposits a vault token into the Aave wrapper on Ethereum, a redeem
  * takes the underlying back out of it, and an approval grants a spender on Ethereum.
  */
-export function activityEntryOf(activity: Activity, registry: TokenInfoRegistry): ActivityEntry {
-  const { from, to, description } = sidesOf(activity, registry)
+export function activityEntryOf(
+  activity: Activity,
+  registry: TokenInfoRegistry,
+  prices: SpotPriceTable,
+): ActivityEntry {
+  const { from, to, description } = sidesOf(activity, registry, prices)
   return {
     name: activity.name,
     kind: ACTIVITY_KIND_BY_TYPE[activity.type],
@@ -48,10 +53,13 @@ export function activityEntryOf(activity: Activity, registry: TokenInfoRegistry)
 function sidesOf(
   activity: Activity,
   registry: TokenInfoRegistry,
+  prices: SpotPriceTable,
 ): { from: AssetAmount; to: ActivityDestination; description: string } {
+  const assetAmount = (erc20Address: string, amount: bigint | null): AssetAmount =>
+    assetAmountOf(registry, prices, erc20Address, amount)
   switch (activity.type) {
     case 'Deposit': {
-      const from = assetAmount(registry, activity.erc20Address, activity.amount)
+      const from = assetAmount(activity.erc20Address, activity.amount)
       return {
         from,
         to: {
@@ -66,7 +74,7 @@ function sidesOf(
       }
     }
     case 'Withdraw': {
-      const from = assetAmount(registry, activity.erc20Address, activity.amount)
+      const from = assetAmount(activity.erc20Address, activity.amount)
       const addressLabel = abbreviateHex(activity.destination)
       return {
         from,
@@ -75,8 +83,8 @@ function sidesOf(
       }
     }
     case 'Swap': {
-      const from = assetAmount(registry, activity.erc20Address, activity.amount)
-      const asset = assetAmount(registry, activity.erc20AddressOut, activity.amountOut)
+      const from = assetAmount(activity.erc20Address, activity.amount)
+      const asset = assetAmount(activity.erc20AddressOut, activity.amountOut)
       return {
         from,
         to: { kind: 'asset', asset },
@@ -84,7 +92,7 @@ function sidesOf(
       }
     }
     case 'Supply': {
-      const from = assetAmount(registry, activity.erc20Address, activity.amount)
+      const from = assetAmount(activity.erc20Address, activity.amount)
       const wrapper = registry.byErc20Address(activity.destination)
       const addressLabel =
         wrapper === undefined ? abbreviateHex(activity.destination) : wrapper.symbol
@@ -95,7 +103,7 @@ function sidesOf(
       }
     }
     case 'Redeem': {
-      const from = assetAmount(registry, activity.erc20Address, activity.amount)
+      const from = assetAmount(activity.erc20Address, activity.amount)
       const underlying = registry.byErc20Address(activity.destination)
       const addressLabel =
         underlying === undefined ? abbreviateHex(activity.destination) : underlying.symbol
@@ -106,7 +114,7 @@ function sidesOf(
       }
     }
     case 'Approval': {
-      const from = assetAmount(registry, activity.erc20Address, null)
+      const from = assetAmount(activity.erc20Address, null)
       const addressLabel = abbreviateHex(activity.spender)
       return {
         from,
@@ -124,10 +132,12 @@ function sidesOf(
 /**
  * The amount in whole tokens for a registered token, in base units otherwise, and unlimited for
  * an approval. The asset is the ERC20, so its badge is the chain it lives on whichever ledger
- * holds it: a vault coin is that ERC20 held on Midnight.
+ * holds it: a vault coin is that ERC20 held on Midnight. The value is at today's spot price,
+ * whenever the activity ran.
  */
-function assetAmount(
+function assetAmountOf(
   registry: TokenInfoRegistry,
+  prices: SpotPriceTable,
   erc20Address: string,
   amount: bigint | null,
 ): AssetAmount {
@@ -141,7 +151,7 @@ function assetAmount(
         : info === undefined
           ? amount.toString()
           : formatTokenAmount(amount, info.decimals),
-    usdValue: '0.00',
+    usdValue: amount === null || info === undefined ? null : prices.usdValueOf(info, amount),
     icon: info?.icon ?? NO_ICON,
     networkName: network.name,
     networkIcon: network.icon,

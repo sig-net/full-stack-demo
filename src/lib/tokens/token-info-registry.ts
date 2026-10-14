@@ -36,4 +36,9 @@ export class TokenInfoRegistry {
   supported(): TokenInfo[] {
     return [...this.byKey.values()].filter((info) => info.supported)
   }
+
+  /** The tokens a market values, whose prices a page asks for. */
+  priced(): TokenInfo[] {
+    return [...this.byKey.values()].filter((info) => info.pricing !== null)
+  }
 }

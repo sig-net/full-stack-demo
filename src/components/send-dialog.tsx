@@ -26,6 +26,7 @@ import {
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
+import { useSpotPrices } from '@/components/use-spot-prices'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
 import { type SupportedBalance, supportedBalancesOf } from '@/lib/balances/supported-balances'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
@@ -54,6 +55,7 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
   const registry = useTokenInfoRegistry()
   const { checks, recheck } = useVaultReadiness()
   const balances = useMidnightBalances()
+  const prices = useSpotPrices()
   const queryClient = useQueryClient()
   const [erc20Address, setErc20Address] = useState(
     () => registry.get({ ledger: 'shielded', tokenType })?.origin.erc20Address ?? null,
@@ -157,6 +159,11 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
                     setAmountText(source.balance.amount)
                   },
                 }
+          }
+          usdEstimate={
+            source === null || amount.value === null
+              ? null
+              : prices.table.usdValueOf(source.token, amount.value)
           }
         />
         <p className="text-center text-sm/5 font-medium text-muted-foreground">to</p>

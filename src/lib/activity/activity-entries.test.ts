@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 
 import { activityEntryOf, formatTimestamp } from '@/lib/activity/activity-entries'
 import { NO_ICON } from '@/lib/icon-source'
+import { NO_PRICES, SpotPriceTable } from '@/lib/pricing/spot-price-table'
 import {
   activityFixture,
   withdrawActivityFixture,
@@ -19,11 +20,24 @@ const USDC: TokenInfo = {
   icon: { source: 'web3icons', name: 'USDC' },
   origin: { kind: 'ethereum-erc20-vault', chainId: 31337, erc20Address: ERC20_ADDRESS },
   supported: true,
+  pricing: null,
 }
 
 describe('activityEntryOf', () => {
+  test('values both sides at the spot price of a priced token, to the cent', () => {
+    const priced = { ...USDC, pricing: { kind: 'coin' as const, coinId: 'usd-coin' } }
+    const table = new SpotPriceTable([
+      { key: 'coin:usd-coin', usd: 99_972_700n, fetchTime: new Date('2026-01-01T00:00:00Z') },
+    ])
+    const entry = activityEntryOf(activityFixture(), new TokenInfoRegistry([priced]), table)
+    expect(entry.from.usdValue).toBe('1.00')
+    expect(
+      activityEntryOf(activityFixture(), new TokenInfoRegistry([USDC]), table).from.usdValue,
+    ).toBeNull()
+  })
+
   test('names and scales a registered token on both sides', () => {
-    const entry = activityEntryOf(activityFixture(), new TokenInfoRegistry([USDC]))
+    const entry = activityEntryOf(activityFixture(), new TokenInfoRegistry([USDC]), NO_PRICES)
     expect(entry).toMatchObject({
       name: activityFixture().name,
       kind: 'deposit',
@@ -46,6 +60,7 @@ describe('activityEntryOf', () => {
     const entry = activityEntryOf(
       activityFixture({ destination: `mn_shield-addr_undeployed1${'q'.repeat(60)}` }),
       new TokenInfoRegistry([USDC]),
+      NO_PRICES,
     )
     expect(entry.to).toEqual({
       kind: 'wallet',
@@ -55,7 +70,11 @@ describe('activityEntryOf', () => {
   })
 
   test('a withdrawal is a send from the vault token on Midnight to the destination address', () => {
-    const entry = activityEntryOf(withdrawActivityFixture(), new TokenInfoRegistry([USDC]))
+    const entry = activityEntryOf(
+      withdrawActivityFixture(),
+      new TokenInfoRegistry([USDC]),
+      NO_PRICES,
+    )
     expect(entry).toMatchObject({
       kind: 'send',
       description: 'send of 1 USDC to 0xd1d1…d1d1',
@@ -65,7 +84,7 @@ describe('activityEntryOf', () => {
   })
 
   test('falls back to the address and raw base units for an unregistered token', () => {
-    const entry = activityEntryOf(activityFixture(), new TokenInfoRegistry([]))
+    const entry = activityEntryOf(activityFixture(), new TokenInfoRegistry([]), NO_PRICES)
     expect(entry.from).toMatchObject({
       assetSymbol: '0xefef…efef',
       amount: '1000000',
@@ -78,9 +97,9 @@ describe('activityEntryOf', () => {
     { state: 'Complete', status: 'complete' },
     { state: 'Failed', status: 'failed' },
   ] as const)('maps $state to $status', ({ state, status }) => {
-    expect(activityEntryOf(activityFixture({ state }), new TokenInfoRegistry([])).status).toBe(
-      status,
-    )
+    expect(
+      activityEntryOf(activityFixture({ state }), new TokenInfoRegistry([]), NO_PRICES).status,
+    ).toBe(status)
   })
 })
 

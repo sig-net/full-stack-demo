@@ -25,7 +25,7 @@ export function BalanceBox({ balance, onSwap, onSend }: BalanceBoxProps): ReactN
             {amount}
           </span>
           <span className="font-mono text-sm leading-[21px] font-medium tracking-[-0.01em] text-fiat-foreground">
-            ${usdValue}
+            {usdValue === null ? <span className="sr-only">unpriced</span> : `$${usdValue}`}
           </span>
         </div>
         <div className="flex h-7 shrink-0 items-center gap-1.5">

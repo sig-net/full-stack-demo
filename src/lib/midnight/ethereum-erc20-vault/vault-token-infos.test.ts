@@ -64,6 +64,7 @@ describe('vaultTokenInfos', () => {
       decimals: 6,
       icon: { source: 'web3icons', name: 'USDC' },
       supported: false,
+      pricing: { kind: 'coin', coinId: 'usd-coin' },
     })
   })
 
@@ -79,6 +80,7 @@ describe('vaultTokenInfos', () => {
       symbol: 'USDC',
       name: 'USD Coin',
       supported: true,
+      pricing: { kind: 'coin', coinId: 'usd-coin' },
     })
     expect(byAddress(CIRCLE_EURC)).toMatchObject({ supported: false })
     expect(byAddress(unlisted)).toMatchObject({
@@ -87,6 +89,7 @@ describe('vaultTokenInfos', () => {
       decimals: 18,
       icon: { source: 'none' },
       supported: true,
+      pricing: null,
     })
     expect(infos.filter((info) => info.supported)).toHaveLength(2)
   })

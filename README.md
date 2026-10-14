@@ -75,6 +75,7 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/repository`                                       | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.                                                                                                |
 | `src/lib/testing`                                          | Test helpers: the `mock()` double for any interface.                                                                                                                                                          |
 | `src/lib/ethereum/transaction-v1`                          | The Ethereum transaction resource, its repository, state machine, state controller, ledger, resolver and event consumer.                                                                                      |
+| `src/lib/ethereum`                                         | The Ethereum modules the domains share: the account, ERC20 and ERC-4626 readers and the Uniswap quoter.                                                                                                       |
 | `src/lib/midnight/ethereum-erc20-vault`                    | The ERC-20 vault: its action set, circuit and ledger ports, signet readers, respond outcome sources, the flusher, and one folder per resource version.                                                        |
 | `src/lib/midnight/ethereum-erc20-vault/vault-request-v1`   | The vault request resource, its repository, state machine, state controller, resolver and event consumer.                                                                                                     |
 | `src/lib/midnight/ethereum-erc20-vault/activity-v1`        | The activity view: the resource the view projects, its read-only repository, service and adaptor.                                                                                                             |
@@ -88,6 +89,7 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/midnight/ethereum-erc20-vault/supported-token-v1` | The vault's allowlist as a resource with each token's on-chain metadata, the funds a caller's deposit account holds of it, and their service and adaptor over the ledger and an ERC20 reader.                 |
 | `src/lib/midnight/transaction-v1`                          | The Midnight transaction resource, its repository, state machine, state controller, ledger, resolver, event consumer, service and adaptor.                                                                    |
 | `src/lib/midnight/wallet`                                  | The wallet layer: the `Wallet` interface, the seed wallet and its facade, the stored seed, and the backend's relayer wallet.                                                                                  |
+| `src/lib/pricing`                                          | Spot prices for display: the price request and price resources, the market source port with its CoinGecko implementation, the cached service and its adaptor.                                                 |
 | `src/lib/midnight`                                         | The Midnight modules every domain shares: the address abbreviation, the browser `Buffer` shim and the in-memory private state provider.                                                                       |
 | `src/server`                                               | The code that runs: the composition root, the server action files and the start-up.                                                                                                                           |
 | `src/instrumentation.ts`                                   | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                                                                                                                     |
@@ -1125,9 +1127,10 @@ under Styling and theme.
   (`src/lib/balances/midnight-balances.ts`), ordered by token type. A token the registry knows
   (see Token information below) shows its symbol, its amount in whole tokens and the chain it
   came from. A token it does not know shows the first four characters of its token type as the
-  symbol, its amount in base units written in full and Midnight as its network. Every value is
-  `$0.00` until a price source exists. Without a wallet the section says so, and a failed read
-  shows the error instead of a zero. Each entry renders a `BalanceBox`: the amount, its US dollar
+  symbol, its amount in base units written in full and Midnight as its network. The section
+  values each balance at its token's spot price through `pricedBalance()` and the page's price
+  table (see Spot prices below), and a balance without a price shows no value, never a zero.
+  Without a wallet the section says so, and a failed read shows the error instead of a zero. Each entry renders a `BalanceBox`: the amount, its US dollar
   value, the `TokenIcon` and the Swap and Send buttons. The Deposit button is disabled until a
   Midnight wallet is connected and the identity secret is set, and while disabled a popover on
   hover, tap or focus names what is missing with the icon of its app bar control
@@ -1183,9 +1186,9 @@ under Styling and theme.
   section reads too, narrowed by `supportedBalancesOf()` in
   `src/lib/balances/supported-balances.ts`) and the To field every other supported token, each
   option with its `TokenIcon`. Under the From amount the field (`TokenAmountField`,
-  `src/components/token-amount-field.tsx`, which the Send dialog shares) shows the amount's
-  value, `$0.00` until a price source exists, the balance of the chosen token and a MAX control
-  that spends it whole. An Advanced pane under the Swap button opens closed and holds the
+  `src/components/token-amount-field.tsx`, which the Send dialog and the Lend tab share) shows
+  the typed amount's value at spot (`usdEstimate`, blank while the token is unpriced), the
+  balance of the chosen token and a MAX control that spends it whole. An Advanced pane under the Swap button opens closed and holds the
   slippage allowance as a percentage, 10 unless changed, with a tip saying what it is for: the
   quote is asked again whenever it changes. The From amount rests for
   400 ms, then `quoteSwap` prices it and the To field shows the least the swap accepts; Swap
@@ -1235,9 +1238,11 @@ public vault state, so that one action takes no caller secret. The same service'
 allowlist into registry entries: for each ERC20 it derives the shielded token type the configured
 vault mints, with `vaultTokenType()` over the vault's own domain-separator circuit, and marks the
 entry supported. A bundled table augments the entries of the tokens it lists (Circle USDC and
-EURC, WETH9, Chainlink LINK, Aave's test USDC and its static wrapper) with artwork, a display name
-and an issuer; a supported token the table omits renders with the metadata its contract reports
-and no artwork, and a table entry the allowlist omits stays in the registry unsupported. A
+EURC, WETH9, Chainlink LINK, Aave's test USDC and its static wrapper) with artwork, a display name,
+an issuer and how it is priced (`pricing`, a `PriceRequest`: the CoinGecko coin id, or for the
+wrapper the ERC-4626 share over its underlying's id); a supported token the table omits renders
+with the metadata its contract reports, no artwork and no price, and a table entry the allowlist
+omits stays in the registry unsupported. A
 supported token's decimals are its contract's own, since the vault mints the ERC20's base-unit
 amount one to one. The table's addresses are Sepolia's, and the local chain is a Sepolia fork, so
 it serves chain 11155111 and chain 31337 and no other.
@@ -1310,6 +1315,38 @@ the vault's supported tokens and an amount in whole tokens (100 by default), par
 the token has. `integration-tests/ethereum-local-faucet.test.ts` funds a fresh account with ETH
 and with USDC through the faucet, and the end-to-end deposit test funds its deposit account the
 same way.
+
+## Spot prices
+
+Every US dollar figure on the page is a spot valuation: the balance boxes, both sides of an
+Activity row (valued at today's price, whenever the activity ran), the estimate under an amount
+field and the total in the app bar. `src/lib/pricing` holds the domain. A `PriceRequest`
+(`spot-price.ts`) says what to value: a `coin` by its CoinGecko id, or an `erc4626Share` of a
+wrapper, worth its underlying's quote times what the wrapper pays out for one share
+(`Erc4626Reader`, `src/lib/ethereum/erc4626-reader.ts`, over `decimals()`, `asset()` and
+`convertToAssets()`). A `SpotPrice` answers one request with `usd` scaled by `10^8`, and every
+value is computed in integers (`usdValueOf()`) and written to the cent (`formatUsd()`) at the
+edge. The bundled token table assigns each token its request, so a test token on Sepolia or the
+local fork is valued as the mainnet asset it stands for.
+
+`SpotPriceSourceCoinGeckoImpl` reads CoinGecko's keyless public API, one `simple/price` request
+for every id at once and no retry. That API's per-IP pool is shared and dynamic (about 10 to 30
+calls a minute) and its terms exclude scheduled polling, so nothing but the server's cache may
+call it. `SpotPriceServiceImpl` is that cache: a read serves what it holds, refreshes only the
+entries older than ten minutes (`PRICE_TTL_MS`) in one source request shared by every read
+waiting on it (the `CoalescingRunner`), records a coin the market does not quote so it is not
+asked again before its TTL, and on a failed refresh keeps the old entries, waits thirty seconds
+before trying the source again (`REFRESH_RETRY_DELAY_MS`) and withholds an entry an hour after
+it was fetched (`PRICE_STALE_CEILING_MS`). The bound is therefore six source requests an hour
+per server process, whatever the number of tabs or users. The adaptor parses up to fifty
+requests per call, and `listSpotPrices` is the one action.
+
+The browser reads the table through `useSpotPrices()` (`src/components/use-spot-prices.ts`),
+one query over every token the registry values, kept for ten minutes. Until it answers, and
+while it fails, the table is empty: a `usdValue` is then null, a balance box and an Activity row
+show no figure, the amount field's estimate is blank and the total counts the balance as
+unpriced beside the sum rather than as zero. A CoinGecko Demo key is not used; the public pool
+suffices at the cache's rate.
 
 ## Styling and theme
 

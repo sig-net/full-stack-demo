@@ -8,6 +8,7 @@ import { ActivityTable } from '@/components/activity-table'
 import { useCaller } from '@/components/contexts/CallerContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
+import { useSpotPrices } from '@/components/use-spot-prices'
 import { activityEntryOf } from '@/lib/activity/activity-entries'
 import { activitiesDueForCompletion } from '@/lib/activity/completions-due'
 import type {
@@ -15,6 +16,7 @@ import type {
   ActivityType,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
+import { NO_PRICES } from '@/lib/pricing/spot-price-table'
 import { completeApproval } from '@/server/actions/approval-actions'
 import { listActivities } from '@/server/actions/activity-actions'
 import { completeDeposit } from '@/server/actions/deposit-actions'
@@ -47,6 +49,7 @@ interface ActivitySectionProps {
 export function ActivitySection({ types, title = 'Activity' }: ActivitySectionProps): ReactNode {
   const { callerSecret, callerName } = useCaller()
   const registry = useTokenInfoRegistry()
+  const prices = useSpotPrices()
   const activities = useQuery({
     queryKey: [ACTIVITIES_QUERY_KEY, callerName, ...types],
     queryFn:
@@ -89,7 +92,9 @@ export function ActivitySection({ types, title = 'Activity' }: ActivitySectionPr
         </p>
       ) : (
         <ActivityTable
-          entries={activities.data.map((activity) => activityEntryOf(activity, registry))}
+          entries={activities.data.map((activity) =>
+            activityEntryOf(activity, registry, prices.table),
+          )}
         />
       )}
     </section>
@@ -126,7 +131,7 @@ function useAutoCompletion(activities: readonly Activity[] | undefined): void {
   const complete = useEffectEvent(async (activity: Activity) => {
     if (callerSecret === null || wallet === null) return
     attemptedAt.current.set(activity.name, Date.now())
-    const { description } = activityEntryOf(activity, registry)
+    const { description } = activityEntryOf(activity, registry, NO_PRICES)
     try {
       const result = await COMPLETE_BY_TYPE[activity.type](callerSecret, {
         name: activity.name,

@@ -14,6 +14,7 @@ import { ReadinessChecklist } from '@/components/readiness-checklist'
 import { TokenAmountField } from '@/components/token-amount-field'
 import { Button } from '@/components/ui/button'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
+import { useSpotPrices } from '@/components/use-spot-prices'
 import type { SupportedBalance } from '@/lib/balances/supported-balances'
 import {
   missingReadiness,
@@ -43,6 +44,7 @@ export function LendPanel(): ReactNode {
   const registry = useTokenInfoRegistry()
   const { checks } = useVaultReadiness()
   const balances = useMidnightBalances()
+  const prices = useSpotPrices()
   const queryClient = useQueryClient()
   const [supplyText, setSupplyText] = useState('')
   const [redeemText, setRedeemText] = useState('')
@@ -160,6 +162,11 @@ export function LendPanel(): ReactNode {
           source={supplySource}
           amountText={supplyText}
           onAmountChange={setSupplyText}
+          usdEstimate={
+            underlying === undefined || supplyAmount.value === null
+              ? null
+              : prices.table.usdValueOf(underlying, supplyAmount.value)
+          }
           blocker={supplyBlocker}
           summary={`Deposits ${underlying?.symbol ?? ''} into the wrapper from the vault account and mints you its ${stata?.symbol ?? 'shares'}.`}
           missing={missingReadiness('supply', checks)}
@@ -177,6 +184,11 @@ export function LendPanel(): ReactNode {
           source={redeemSource}
           amountText={redeemText}
           onAmountChange={setRedeemText}
+          usdEstimate={
+            stata === undefined || redeemAmount.value === null
+              ? null
+              : prices.table.usdValueOf(stata, redeemAmount.value)
+          }
           blocker={redeemBlocker}
           summary={`Burns your ${stata?.symbol ?? 'shares'} for the ${underlying?.symbol ?? ''} the wrapper pays the vault account, minted back to you.`}
           missing={missingReadiness('redeem', checks)}
@@ -201,6 +213,8 @@ interface LendActionProps {
   source: SupportedBalance | null
   amountText: string
   onAmountChange: (text: string) => void
+  /** The typed amount at spot, for the field's value line. */
+  usdEstimate: string | null
   /** Why the action cannot start yet, or null to show the summary. */
   blocker: string | null
   summary: string
@@ -219,6 +233,7 @@ function LendAction({
   source,
   amountText,
   onAmountChange,
+  usdEstimate,
   blocker,
   summary,
   missing,
@@ -250,6 +265,7 @@ function LendAction({
                 },
               }
         }
+        usdEstimate={usdEstimate}
       />
       <div role="status" className="text-sm text-muted-foreground">
         {blocker ?? summary}

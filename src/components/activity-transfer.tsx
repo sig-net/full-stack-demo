@@ -64,7 +64,7 @@ function ActivityAsset({ asset, className }: ActivityAssetProps): ReactNode {
           {amount} {assetSymbol}
         </span>
         <span className="mt-2.5 text-[10px] leading-[7px] font-semibold text-fiat-foreground max-md:hidden">
-          ${usdValue}
+          {usdValue === null ? <span className="sr-only">unpriced</span> : `$${usdValue}`}
         </span>
       </div>
     </div>

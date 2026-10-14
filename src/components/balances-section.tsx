@@ -12,6 +12,8 @@ import { SendDialog } from '@/components/send-dialog'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
+import { useSpotPrices } from '@/components/use-spot-prices'
+import { pricedBalance } from '@/lib/balances/midnight-balances'
 import { type DepositPrerequisite, missingDepositPrerequisites } from '@/lib/deposit-prerequisites'
 import { walletConnectionStatus } from '@/lib/midnight/wallet/connection-status'
 
@@ -45,6 +47,7 @@ export function BalancesSection({ onSwap }: BalancesSectionProps): ReactNode {
     </Button>
   )
   const balances = useMidnightBalances()
+  const prices = useSpotPrices()
   return (
     <section aria-labelledby="balances-title" className="@container flex flex-col gap-4 md:gap-4.5">
       <div className="flex items-start justify-between border-t border-section-rule pt-5 pb-5.25">
@@ -114,7 +117,7 @@ export function BalancesSection({ onSwap }: BalancesSectionProps): ReactNode {
             return (
               <li key={`${balance.networkName}:${balance.tokenType}`}>
                 <BalanceBox
-                  balance={balance}
+                  balance={pricedBalance(balance, registry, prices.table)}
                   onSwap={
                     supported === null
                       ? undefined
