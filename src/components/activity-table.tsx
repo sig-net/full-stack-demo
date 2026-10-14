@@ -21,7 +21,7 @@ export function ActivityTable({ entries }: ActivityTableProps): ReactNode {
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           <TableHead className={`w-15 md:w-24.5 ${HEAD_CLASS}`}>Activity</TableHead>
-          <TableHead className={`md:w-77 ${HEAD_CLASS}`}>Details</TableHead>
+          <TableHead className={`md:w-90 ${HEAD_CLASS}`}>Details</TableHead>
           <TableHead className={`hidden md:table-cell ${HEAD_CLASS}`}>Timestamp</TableHead>
           <TableHead className={`w-20 md:w-27.75 ${HEAD_CLASS}`}>Status</TableHead>
           <TableHead className={`w-7.5 md:hidden ${HEAD_CLASS}`}>

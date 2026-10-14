@@ -20,7 +20,7 @@ interface ActivityTransferProps {
 export function ActivityTransfer({ from, to }: ActivityTransferProps): ReactNode {
   return (
     <div className="flex flex-wrap items-center gap-x-3.75 md:flex-nowrap">
-      <ActivityAsset asset={from} className="md:w-25" />
+      <ActivityAsset asset={from} className="md:w-40" />
       <ArrowRight className="size-5 shrink-0 text-muted-foreground" aria-hidden />
       <span className="sr-only">to</span>
       {to.kind === 'asset' ? (
