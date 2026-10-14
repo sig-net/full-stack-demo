@@ -942,8 +942,10 @@ change, or re-mints the surrendered amount after a trade the MPC attested as fai
 unviable (outcomes `swapped` and `refunded`). `SwapService.quoteSwap` asks Uniswap's QuoterV2
 (`UniswapQuoter`, `src/lib/ethereum/uniswap-quoter.ts`, over `EVM_UNISWAP_QUOTER_ADDRESS`) for
 the exact-input price on every fee tier and answers with the tier that pays most, what it pays
-and that less one percent (`SWAP_SLIPPAGE_BPS` in `swap-quote.ts`), which a swap started from
-the quote asks for. A pair no pool prices is a result, not a failure.
+and that less the slippage allowance, which a swap started from the quote asks for. The
+allowance is the caller's `slippageBps`, ten percent (`SWAP_SLIPPAGE_BPS` in `swap-quote.ts`)
+when unset and at most half the output (`SWAP_MAX_SLIPPAGE_BPS`). A pair no pool prices is a
+result, not a failure.
 
 An approval (`src/lib/midnight/ethereum-erc20-vault/approval-v1`) is the vault account granting
 one of the contract's two spenders an unlimited allowance: the Uniswap router on a token a swap
@@ -1143,7 +1145,9 @@ under Styling and theme.
   option with its `TokenIcon`. Under the From amount the field (`TokenAmountField`,
   `src/components/token-amount-field.tsx`, which the Send dialog shares) shows the amount's
   value, `$0.00` until a price source exists, the balance of the chosen token and a MAX control
-  that spends it whole. The From amount rests for
+  that spends it whole. An Advanced pane under the Swap button opens closed and holds the
+  slippage allowance as a percentage, 10 unless changed, with a tip saying what it is for: the
+  quote is asked again whenever it changes. The From amount rests for
   400 ms, then `quoteSwap` prices it and the To field shows the least the swap accepts; Swap
   calls `startSwap` with the From amount as the cap and that minimum as the exact output, toasts
   and hands the rest to the Activity table (see Swaps and approvals).

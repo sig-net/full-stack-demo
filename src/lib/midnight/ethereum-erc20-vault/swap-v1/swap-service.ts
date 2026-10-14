@@ -7,7 +7,11 @@ import {
   swapNameSchema,
   swapRequestSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
-import type { SwapQuote } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-quote'
+import {
+  SWAP_SLIPPAGE_BPS,
+  type SwapQuote,
+  swapSlippageBpsSchema,
+} from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-quote'
 import { amountSchema, evmAddressSchema } from '@/lib/value-schemas'
 
 /**
@@ -31,6 +35,7 @@ export const quoteSwapArgsSchema = z.object({
   erc20AddressIn: evmAddressSchema,
   erc20AddressOut: evmAddressSchema,
   amountIn: amountSchema,
+  slippageBps: swapSlippageBpsSchema.default(SWAP_SLIPPAGE_BPS),
 })
 export type QuoteSwapArgs = z.infer<typeof quoteSwapArgsSchema>
 

@@ -163,7 +163,11 @@ describe('SwapServiceImpl.quoteSwap', () => {
 
   test.each(cases)('$name', async ({ quotesByFee, expected }) => {
     const { service, recorded } = serviceOver({ quotesByFee })
-    const quote = await service.quoteSwap(caller, { ...PAIR, amountIn: 5_000_000n })
+    const quote = await service.quoteSwap(caller, {
+      ...PAIR,
+      amountIn: 5_000_000n,
+      slippageBps: 100n,
+    })
     expect(recorded.quotes.map((args) => args.fee)).toEqual([500n, 3000n, 10000n])
     expect(recorded.quotes[0]).toEqual({
       tokenIn: ERC20_ADDRESS_IN,
@@ -172,7 +176,9 @@ describe('SwapServiceImpl.quoteSwap', () => {
       fee: 500n,
     })
     expect(quote).toEqual(
-      expected === undefined ? undefined : { ...PAIR, amountIn: 5_000_000n, ...expected },
+      expected === undefined
+        ? undefined
+        : { ...PAIR, amountIn: 5_000_000n, slippageBps: 100n, ...expected },
     )
   })
 })

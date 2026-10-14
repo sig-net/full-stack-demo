@@ -88,7 +88,7 @@ export class SwapServiceImpl implements SwapService {
       }
     }
     if (best === undefined) return undefined
-    const amountOutMinimum = amountOutMinimumOf(best.amountOut)
+    const amountOutMinimum = amountOutMinimumOf(best.amountOut, args.slippageBps)
     if (amountOutMinimum === 0n) return undefined
     return { ...args, fee: best.fee, amountOut: best.amountOut, amountOutMinimum }
   }

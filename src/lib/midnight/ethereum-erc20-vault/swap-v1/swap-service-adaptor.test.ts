@@ -22,6 +22,7 @@ const quote: SwapQuote = {
   amountIn: 1_000_000n,
   fee: 500n,
   amountOut: 990_000n,
+  slippageBps: 100n,
   amountOutMinimum: 980_100n,
 }
 const REQUEST = {
@@ -59,7 +60,7 @@ describe('SwapServiceAdaptor parsing', () => {
     expectError?: string
   }> = [
     {
-      name: 'quoteSwap carries the amount as a bigint',
+      name: 'quoteSwap carries the amount as a bigint and takes the default slippage',
       call: (a) =>
         a.quoteSwap(CALLER_SECRET, {
           erc20AddressIn: ERC20_ADDRESS_IN,
@@ -71,8 +72,21 @@ describe('SwapServiceAdaptor parsing', () => {
           erc20AddressIn: ERC20_ADDRESS_IN,
           erc20AddressOut: ERC20_ADDRESS_OUT,
           amountIn: 1_000_000n,
+          slippageBps: 1_000n,
         },
       ],
+    },
+    {
+      name: 'quoteSwap refuses a slippage past half the output',
+      call: (a) =>
+        a.quoteSwap(CALLER_SECRET, {
+          erc20AddressIn: ERC20_ADDRESS_IN,
+          erc20AddressOut: ERC20_ADDRESS_OUT,
+          amountIn: '1000000',
+          slippageBps: '5001',
+        }),
+      expectReceived: [],
+      expectError: 'slippageBps',
     },
     {
       name: 'quoteSwap refuses a zero amount',
