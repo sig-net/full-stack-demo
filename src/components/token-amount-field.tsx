@@ -1,3 +1,4 @@
+import { cn } from 'cn'
 import type { ReactNode } from 'react'
 
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
@@ -11,7 +12,7 @@ import {
 import type { TokenInfo } from '@/lib/tokens/token-info'
 import { tokenLabel } from '@/lib/tokens/token-label'
 
-interface SwapAmountFieldProps {
+interface TokenAmountFieldProps {
   /** Names the field for assistive technology, e.g. "From" or "To". */
   label: string
   amount: string
@@ -21,10 +22,12 @@ interface SwapAmountFieldProps {
   token: TokenInfo | null
   onTokenChange: (erc20Address: string) => void
   disabled?: boolean
+  /** A line under the amount row inside the field, such as the balance it draws on. */
+  footer?: ReactNode
 }
 
-/** One side of the swap: an amount beside the token it is in, chosen from the tokens offered. */
-export function SwapAmountField({
+/** An amount beside the token it is in, chosen from the tokens offered: one side of a swap, or what a send moves. */
+export function TokenAmountField({
   label,
   amount,
   onAmountChange,
@@ -32,11 +35,15 @@ export function SwapAmountField({
   token,
   onTokenChange,
   disabled = false,
-}: SwapAmountFieldProps): ReactNode {
+  footer,
+}: TokenAmountFieldProps): ReactNode {
   return (
     <InputGroup
       aria-label={label}
-      className="h-17.5 rounded-xs border-swap-panel-field-border bg-swap-panel-field px-4.75 dark:bg-swap-panel-field"
+      className={cn(
+        'h-17.5 rounded-xs border-swap-panel-field-border bg-swap-panel-field px-4.75 dark:bg-swap-panel-field',
+        footer !== undefined && 'h-auto flex-wrap gap-y-3 py-5',
+      )}
     >
       <InputGroupInput
         aria-label={`${label} amount`}
@@ -47,7 +54,7 @@ export function SwapAmountField({
         readOnly={onAmountChange === undefined}
         disabled={disabled}
         onChange={(event) => onAmountChange?.(event.target.value)}
-        className="h-7.5 p-0 font-mono text-xl/7.5 font-light text-tertiary-foreground placeholder:text-tertiary-foreground md:text-xl/7.5"
+        className="h-7.5 min-w-0 basis-0 p-0 font-mono text-xl/7.5 font-light text-tertiary-foreground placeholder:text-tertiary-foreground md:text-xl/7.5"
       />
       <InputGroupAddon align="inline-end" className="p-0 has-[>button]:mr-0">
         <Select
@@ -77,6 +84,8 @@ export function SwapAmountField({
           </SelectContent>
         </Select>
       </InputGroupAddon>
+      {/* The inline-end addon is ordered last, so the footer shares that order to wrap under it. */}
+      {footer !== undefined && <div className="order-last basis-full">{footer}</div>}
     </InputGroup>
   )
 }

@@ -7,10 +7,12 @@ import type { AssetAmount } from '@/lib/asset-amount'
 
 interface BalanceBoxProps {
   balance: AssetAmount
+  /** Opens the Send dialog on this balance, absent while the balance cannot be sent. */
+  onSend?: () => void
 }
 
 /** One balance: amount, USD value and token, then the Swap and Send actions. */
-export function BalanceBox({ balance }: BalanceBoxProps): ReactNode {
+export function BalanceBox({ balance, onSend }: BalanceBoxProps): ReactNode {
   const { assetSymbol, networkName, amount, usdValue, icon, networkIcon } = balance
   const token = `${assetSymbol} on ${networkName}`
   return (
@@ -41,7 +43,13 @@ export function BalanceBox({ balance }: BalanceBoxProps): ReactNode {
           <ArrowRightLeft aria-hidden />
           <span className="px-0.5">Swap</span>
         </Button>
-        <Button variant="pink" size="sm" aria-label={`Send ${token}`}>
+        <Button
+          variant="pink"
+          size="sm"
+          aria-label={`Send ${token}`}
+          disabled={onSend === undefined}
+          onClick={onSend}
+        >
           <Send aria-hidden />
           <span className="px-0.5">Send</span>
         </Button>

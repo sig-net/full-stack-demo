@@ -78,8 +78,9 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/midnight/ethereum-erc20-vault`                    | The ERC-20 vault: its action set, circuit and ledger ports, signet readers, respond outcome sources, the flusher, and one folder per resource version.                                                        |
 | `src/lib/midnight/ethereum-erc20-vault/vault-request-v1`   | The vault request resource, its repository, state machine, state controller, resolver and event consumer.                                                                                                     |
 | `src/lib/midnight/ethereum-erc20-vault/activity-v1`        | The activity view: the resource the view projects, its read-only repository, service and adaptor.                                                                                                             |
-| `src/lib/midnight/ethereum-erc20-vault/caller-operation`   | The lifecycle every caller-started operation shares: its states, state machine, and the controller, resolver and event consumer bases the deposit, swap and approval build on.                                |
+| `src/lib/midnight/ethereum-erc20-vault/caller-operation`   | The lifecycle every caller-started operation shares: its states, state machine, and the controller, resolver and event consumer bases the deposit, withdrawal, swap and approval build on.                    |
 | `src/lib/midnight/ethereum-erc20-vault/deposit-v1`         | The deposit resource, its repository, state machine, state controller, resolver, event consumer, service and adaptor.                                                                                         |
+| `src/lib/midnight/ethereum-erc20-vault/withdraw-v1`        | The withdraw resource, the Send of the UI, with the same set of pieces as the deposit.                                                                                                                        |
 | `src/lib/midnight/ethereum-erc20-vault/swap-v1`            | The swap resource and its quote, with the same set of pieces as the deposit.                                                                                                                                  |
 | `src/lib/midnight/ethereum-erc20-vault/approval-v1`        | The approval resource and the spender targets the deployer grants, with the same set of pieces as the deposit.                                                                                                |
 | `src/lib/midnight/ethereum-erc20-vault/supported-token-v1` | The vault's allowlist as a resource with each token's on-chain metadata, the funds a caller's deposit account holds of it, and their service and adaptor over the ledger and an ERC20 reader.                 |
@@ -190,17 +191,27 @@ Next.js provides one.
 ## Local services
 
 `compose.yaml` runs the two services the backend depends on, the same engines the deployed
-application uses:
+application uses, and the block explorer of the local EVM node:
 
 - Postgres 18 on `127.0.0.1:5432`, with the user, password and database all named `demo`.
 - Kafka 4.2 on `127.0.0.1:9092`, a single node in KRaft mode without authentication. Topics are
   created on first use.
+- Otterscan 2.11 on `127.0.0.1:5100`, a block explorer whose page the browser runs against the
+  anvil fork's own JSON-RPC at `127.0.0.1:8545` (anvil serves Otterscan's `ots_` API). It is
+  where the Activity dialog's Ethereum transaction links open on the local stack, so it needs
+  the local stack's node to be up.
+- Polkadot.js Apps on `127.0.0.1:5300`, the generic Substrate explorer, whose page the browser
+  runs against the local Midnight node's WebSocket at `127.0.0.1:9944`. It is where the Activity
+  dialog's Midnight transaction links open on the local stack. Apps finds a block, never a
+  Midnight transaction by its id, so a link opens the block that holds the transaction, where
+  it is the `midnight.sendMnTransaction` extrinsic. The image is published for amd64 only, so
+  it runs under emulation on Apple silicon.
 
-`DB_CONNECTION_STRING` and `KAFKA_BROKERS` in `.env.example` point at them. Their data lives in
-the `full-stack-demo_postgres-data` and `full-stack-demo_kafka-data` Docker volumes and survives
-a restart of the containers.
+`DB_CONNECTION_STRING` and `KAFKA_BROKERS` in `.env.example` point at the first two. Their data
+lives in the `full-stack-demo_postgres-data` and `full-stack-demo_kafka-data` Docker volumes and
+survives a restart of the containers.
 
-Start them and wait until both accept connections:
+Start them and wait until they accept connections:
 
 ```bash
 docker compose up -d --wait
@@ -321,9 +332,9 @@ one Kafka, `setup.ts` loads `.env.local`, `backend.ts` builds the test's backend
 `MIDNIGHT_USER_SEED`, and `operation-round-trip.ts` plays that wallet for any caller operation
 until it completes and deletes the operation and its children afterwards. A test file creates
 rows under a caller name of its own and deletes them, its outbox entries included, in
-`afterAll`, then stops the backend and ends the pool. The approval and swap round trips run
-under the stack's user identity, which deployed the vault, so they delete only the rows they
-created. Stop any
+`afterAll`, then stops the backend and ends the pool. The approval, swap and withdraw round
+trips run under the stack's user identity, which deployed the vault, so they delete only the
+rows they created. Stop any
 dev server before a run: it joins the same Kafka consumer group, so its consumers and outbox
 relay would compete with the test's.
 
@@ -338,6 +349,7 @@ relay would compete with the test's.
 | `ethereum-erc20-vault-flush.test.ts`         | the Midnight stack (the relayer wallet syncs)     | The first flush starts the relayer wallet and submits nothing when nothing is queued.                                           |
 | `ethereum-erc20-vault-approval.test.ts`      | the whole local stack                             | A router approval from `startApproval` to `Completed` under the deployer identity, the allowance read back on the fork.         |
 | `ethereum-erc20-vault-swap.test.ts`          | the whole local stack                             | A deposit, the router approval when the vault lacks it, then a swap of the deposited USDC for EURC at a live quote.             |
+| `ethereum-erc20-vault-withdraw.test.ts`      | the whole local stack                             | A deposit, then a send of the deposited USDC from the vault account to a fresh destination, its balance read back on the fork.  |
 | `ethereum-erc20-vault-deposit-start.test.ts` | Postgres, the indexer, the proof server, the fork | `startDeposit` stores the deposit and its start call, the call proves, listing and the early complete refusal, a refused token. |
 | `ethereum-erc20-vault-activity.test.ts`      | Postgres                                          | The activity view's projection of the newest children and its aggregated states.                                                |
 | `ethereum-erc20-vault-deposit.test.ts`       | the whole stack                                   | The end-to-end deposit below.                                                                                                   |
@@ -899,11 +911,20 @@ events and conflict error (`caller-operation-state-controller.ts`), and the cont
 resolver and event consumer bases (`-impl.ts` and `caller-operation-event-consumer.ts`) that
 take a `CallerOperationKind`: the vault action, the start and complete circuits, the events,
 the conflict class, the signer account and the outcome the complete call's attested request
-reads as. `deposit-v1`, `swap-v1` and `approval-v1` each keep their own resource, repository,
-service, adaptor, actions and fixtures, and their controller, resolver and consumer are the
-bases bound to their kind. The vault request names its `signerAccount`: the caller's deposit
-account for a deposit, the vault account for a swap or an approval, whose nonce the flush
-assigns.
+reads as. `deposit-v1`, `withdraw-v1`, `swap-v1` and `approval-v1` each keep their own
+resource, repository, service, adaptor, actions and fixtures, and their controller, resolver
+and consumer are the bases bound to their kind. The vault request names its `signerAccount`:
+the caller's deposit account for a deposit, the vault account for a withdrawal, a swap or an
+approval, whose nonce the flush assigns.
+
+A withdrawal (`src/lib/midnight/ethereum-erc20-vault/withdraw-v1`) is the contract's ERC20
+transfer out of the vault, which the UI calls Send: `startWithdraw` burns a vault coin of the
+token worth exactly `amount`, which the caller's wallet funds from its balance when it balances
+the call, `sendWithdraw` has the MPC sign `transfer(destEvmAddress, amount)` from the vault
+account, and `completeWithdraw` closes the withdrawal after a transfer that returned true or
+re-mints the surrendered amount to the caller after one the MPC attested as failed, unviable or
+returning false (outcomes `sent` and `refunded`). The caller supplies the token, the amount and
+the destination address, and nothing else: the destination is pasted, never connected.
 
 A swap (`src/lib/midnight/ethereum-erc20-vault/swap-v1`) is the contract's exact-output trade
 on its pinned Uniswap router: `startSwap` burns a vault coin of the sold token worth exactly
@@ -931,8 +952,9 @@ popover links to it.
 ## Activity view
 
 `midnight_ethereum_erc20_vault_activity_v1` is a Postgres view over the lifecycle tables, one row
-per vault activity, defined in `src/lib/db/schema.ts` (migrations 0013 to 0017). It has one
-branch per caller operation, deposits, swaps and approvals, joined with `UNION ALL`. Each
+per vault activity, defined in `src/lib/db/schema.ts` (migrations 0013 to 0018). It has one
+branch per caller operation, deposits, withdrawals, swaps and approvals, joined with
+`UNION ALL`. Each
 operation is projected with the newest child of each kind under it: its start and complete
 Midnight transactions (the approval's start may carry either approval circuit), its vault
 request and that request's Ethereum transaction, each found by parent (and circuit) and ordered
@@ -986,7 +1008,14 @@ into `ActivityFlowDialog` (`src/components/activity-flow-dialog.tsx`): a wallet 
 (tooltip "View details") otherwise. The dialog says where the activity stands and whether the
 user must act, keeps the ten steps behind a "See more details" pane that opens closed, where a
 step's reference shows abbreviated with its meaning in a tip, a copy button and a block
-explorer button that is disabled until an explorer is wired, and has
+explorer link: an Ethereum transaction opens in the chain's explorer
+(`ethereumExplorerOf()` in `src/lib/config/ethereum-explorer.ts`: Otterscan from `compose.yaml`
+on the local stack, which `isLocalEnvironment()` recognises by its undeployed Midnight network
+and loopback EVM node, Etherscan on Sepolia or mainnet), a Midnight transaction opens the block
+that holds it in Polkadot.js Apps once the ledger has recorded it (`midnightExplorerOf()` in
+`src/lib/config/midnight-explorer.ts`: the copy from `compose.yaml` on the local stack, the
+public site over the configured node elsewhere), while the Sig Network reference keeps a
+disabled button until its explorer is wired, and has
 a footer only while it is the wallet's turn: its "Sign with wallet" button reads the
 transaction afresh through `listTransactions`, has the wallet balance, sign and finalise its
 `unboundTx` with `Wallet.finalize()`, and hands the result to `submitTransaction`. The
@@ -1074,7 +1103,15 @@ under Styling and theme.
   above zero and lists each as its icon, its symbol and its amount in whole tokens; the vault
   admits more than one contract called USDC, so a symbol another fund shares is qualified by its
   issuer. The Deposit control on each line starts the deposit of the whole fund (see Driving a
-  deposit from the Activity table under Activity view). Send is not wired.
+  deposit from the Activity table under Activity view). Send on a balance the vault admits opens
+  `SendDialog` (`src/components/send-dialog.tsx`) on that token: the amount beside a token select
+  over the wallet's supported balances, with the balance and a MAX control under it, then a
+  pasted Ethereum address, which the dialog checks as one is typed, and a Send control gated on
+  the identity secret, the wallet, an amount within the balance, a valid address and the
+  withdraw readiness checks. Starting a send calls `startWithdraw` and hands the rest to the
+  Activity table, where the withdrawal is listed as a Send with the same wallet turns and
+  auto-completion as a deposit. Send is disabled on a balance the vault does not admit and while
+  the identity secret is unset.
 - `ActivitySection` (`src/components/activity-section.tsx`) reads the caller's activity through
   `listActivities` and renders `ActivityTable`. Each entry is a collapsible table body: from the
   `md` breakpoint up every column shows, below it a chevron expands the timestamp and block

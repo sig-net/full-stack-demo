@@ -32,7 +32,7 @@ function transaction(
       : lifecycleState === 'Failed'
         ? 'Failed'
         : 'Pending'
-  return { hash, state, lifecycleState }
+  return { hash, blockNumber: null, state, lifecycleState }
 }
 
 describe('activityActionOf', () => {
@@ -171,6 +171,7 @@ describe('activityStepsOf', () => {
         vaultRequestId: '22'.repeat(32),
         foreignChainTransaction: {
           hash: null,
+          blockNumber: null,
           state: 'Pending',
           lifecycleState: 'AwaitingSubmission',
         },
@@ -179,15 +180,15 @@ describe('activityStepsOf', () => {
     )
     expect(steps.map((step) => step.reference)).toEqual([
       null,
-      { kind: 'midnightTransaction', id: START_TX_HASH },
+      { kind: 'midnightTransaction', id: START_TX_HASH, blockNumber: null },
       null,
-      { kind: 'vaultRequest', id: '22'.repeat(32) },
+      { kind: 'vaultRequest', id: '22'.repeat(32), blockNumber: null },
       null,
-      { kind: 'ethereumTransaction', id: null },
+      { kind: 'ethereumTransaction', id: null, blockNumber: null },
       null,
       null,
       null,
-      { kind: 'midnightTransaction', id: null },
+      { kind: 'midnightTransaction', id: null, blockNumber: null },
     ])
   })
 })

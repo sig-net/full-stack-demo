@@ -36,10 +36,11 @@ export interface ActivityStep {
 
 export type ActivityStepStatus = 'done' | 'current' | 'pending' | 'failed'
 
-/** An identifier a step leaves behind, with `id` null until the step assigns it. */
+/** An identifier a step leaves behind, with `id` null until the step assigns it, and the block that holds it once a chain recorded it. */
 export interface ActivityReference {
   readonly kind: ActivityReferenceKind
   readonly id: string | null
+  readonly blockNumber: number | null
 }
 
 export type ActivityReferenceKind = 'midnightTransaction' | 'vaultRequest' | 'ethereumTransaction'
@@ -51,6 +52,7 @@ export interface ActivityStepDefinition {
   readonly reference: {
     readonly kind: ActivityReferenceKind
     readonly idOf: (activity: Activity) => string | null
+    readonly blockNumberOf: (activity: Activity) => number | null
   } | null
 }
 
@@ -65,6 +67,11 @@ export const ACTIVITY_STEPS_BY_TYPE: Readonly<
     'Sweep signed by the MPC',
     'Funds swept on Ethereum',
     'Sweep attested by the MPC',
+  ),
+  Withdraw: operationSteps(
+    'Transfer signed by the MPC',
+    'Tokens sent on Ethereum',
+    'Transfer attested by the MPC',
   ),
   Swap: operationSteps(
     'Trade signed by the MPC',
@@ -91,13 +98,18 @@ function operationSteps(
       reference: {
         kind: 'midnightTransaction',
         idOf: (activity) => activity.startTransaction?.hash ?? null,
+        blockNumberOf: (activity) => activity.startTransaction?.blockNumber ?? null,
       },
     },
     { label: 'Request flushed to the vault queue', walletTurn: false, reference: null },
     {
       label: 'Request sent to the MPC',
       walletTurn: false,
-      reference: { kind: 'vaultRequest', idOf: (activity) => activity.vaultRequestId },
+      reference: {
+        kind: 'vaultRequest',
+        idOf: (activity) => activity.vaultRequestId,
+        blockNumberOf: () => null,
+      },
     },
     { label: signed, walletTurn: false, reference: null },
     {
@@ -106,6 +118,7 @@ function operationSteps(
       reference: {
         kind: 'ethereumTransaction',
         idOf: (activity) => activity.foreignChainTransaction?.hash ?? null,
+        blockNumberOf: (activity) => activity.foreignChainTransaction?.blockNumber ?? null,
       },
     },
     { label: attested, walletTurn: false, reference: null },
@@ -117,6 +130,7 @@ function operationSteps(
       reference: {
         kind: 'midnightTransaction',
         idOf: (activity) => activity.completeTransaction?.hash ?? null,
+        blockNumberOf: (activity) => activity.completeTransaction?.blockNumber ?? null,
       },
     },
   ]
@@ -128,7 +142,14 @@ export function activityStepsOf(activity: Activity): ActivityStep[] {
     label,
     walletTurn,
     status: index < current ? 'done' : index > current ? 'pending' : failed ? 'failed' : 'current',
-    reference: reference === null ? null : { kind: reference.kind, id: reference.idOf(activity) },
+    reference:
+      reference === null
+        ? null
+        : {
+            kind: reference.kind,
+            id: reference.idOf(activity),
+            blockNumber: reference.blockNumberOf(activity),
+          },
   }))
 }
 

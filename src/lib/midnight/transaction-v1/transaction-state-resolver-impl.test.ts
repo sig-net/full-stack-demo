@@ -152,9 +152,14 @@ const cases: Case[] = [
     name: 'AwaitingInclusion - succeeded on the ledger',
     stored: TRANSACTION_IN_STATE.AwaitingInclusion,
     ledger: {
-      status: async (): Promise<MidnightLedgerTransactionStatus> => ({ outcome: 'succeeded' }),
+      status: async (): Promise<MidnightLedgerTransactionStatus> => ({
+        outcome: 'succeeded',
+        blockHeight: 42,
+      }),
     },
-    expectTransitions: [{ method: 'recordSuccess', args: { name: TRANSACTION_NAME } }],
+    expectTransitions: [
+      { method: 'recordSuccess', args: { name: TRANSACTION_NAME, blockHeight: 42 } },
+    ],
   },
   {
     name: 'AwaitingInclusion - failed on the ledger',
@@ -164,12 +169,18 @@ const cases: Case[] = [
         outcome: 'failed',
         failure: 'FailEntirely',
         error: 'rejected',
+        blockHeight: 42,
       }),
     },
     expectTransitions: [
       {
         method: 'recordLedgerFailure',
-        args: { name: TRANSACTION_NAME, failure: 'FailEntirely', error: 'rejected' },
+        args: {
+          name: TRANSACTION_NAME,
+          failure: 'FailEntirely',
+          error: 'rejected',
+          blockHeight: 42,
+        },
       },
     ],
   },
@@ -268,10 +279,13 @@ const sweepCases: SweepCase[] = [
         { ...TRANSACTION_IN_STATE.AwaitingInclusion, name: SECOND_NAME },
       ],
     },
-    statuses: [{ outcome: 'succeeded' }, { outcome: 'succeeded' }],
+    statuses: [
+      { outcome: 'succeeded', blockHeight: 42 },
+      { outcome: 'succeeded', blockHeight: 43 },
+    ],
     expectTransitions: [
-      { method: 'recordSuccess', args: { name: TRANSACTION_NAME } },
-      { method: 'recordSuccess', args: { name: SECOND_NAME } },
+      { method: 'recordSuccess', args: { name: TRANSACTION_NAME, blockHeight: 42 } },
+      { method: 'recordSuccess', args: { name: SECOND_NAME, blockHeight: 43 } },
     ],
     expectLogged: 0,
   },
@@ -290,8 +304,8 @@ const sweepCases: SweepCase[] = [
         { ...TRANSACTION_IN_STATE.AwaitingInclusion, name: SECOND_NAME },
       ],
     },
-    statuses: [new Error('indexer unreachable'), { outcome: 'succeeded' }],
-    expectTransitions: [{ method: 'recordSuccess', args: { name: SECOND_NAME } }],
+    statuses: [new Error('indexer unreachable'), { outcome: 'succeeded', blockHeight: 43 }],
+    expectTransitions: [{ method: 'recordSuccess', args: { name: SECOND_NAME, blockHeight: 43 } }],
     expectLogged: 1,
   },
   {

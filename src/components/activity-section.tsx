@@ -19,6 +19,7 @@ import { completeApproval } from '@/server/actions/approval-actions'
 import { listActivities } from '@/server/actions/activity-actions'
 import { completeDeposit } from '@/server/actions/deposit-actions'
 import { completeSwap } from '@/server/actions/swap-actions'
+import { completeWithdraw } from '@/server/actions/withdraw-actions'
 
 /** A pending row changes on every sweep, so the list is read often while one exists and rarely otherwise. */
 const PENDING_REFETCH_INTERVAL_MS = 5_000
@@ -102,6 +103,7 @@ const COMPLETE_BY_TYPE: Record<
   ) => Promise<{ ok: true } | { ok: false; error: string }>
 > = {
   Deposit: completeDeposit,
+  Withdraw: completeWithdraw,
   Swap: completeSwap,
   Approval: completeApproval,
 }

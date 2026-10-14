@@ -93,29 +93,35 @@ export class MidnightTransactionLedgerImpl implements MidnightTransactionLedger 
         `The indexer refused the query: ${parsed.data.errors.map((error) => error.message).join(', ')}`,
       )
     }
-    const result = parsed.data.data.transactions.find(
+    const recorded = parsed.data.data.transactions.find(
       (transaction) => transaction.transactionResult !== undefined,
-    )?.transactionResult
+    )
     // A transaction the ledger has not recorded, including one whose guaranteed section failed
     // and so never reaches a block, stays pending until its TTL expires it.
-    if (result === undefined) return { outcome: 'pending' }
-    switch (result.status) {
+    if (recorded?.transactionResult === undefined) return { outcome: 'pending' }
+    if (recorded.block === undefined) {
+      throw new Error("The indexer's answer is malformed: a recorded transaction names no block")
+    }
+    const blockHeight = recorded.block.height
+    switch (recorded.transactionResult.status) {
       case 'SUCCESS':
-        return { outcome: 'succeeded' }
+        return { outcome: 'succeeded', blockHeight }
       case 'PARTIAL_SUCCESS':
         return {
           outcome: 'failed',
           failure: 'FailFallible',
           error: 'The fallible section did not apply, and the fee was paid',
+          blockHeight,
         }
       case 'FAILURE':
         return {
           outcome: 'failed',
           failure: 'FailEntirely',
           error: 'The ledger rejected the transaction',
+          blockHeight,
         }
       default: {
-        const unhandled: never = result.status
+        const unhandled: never = recorded.transactionResult.status
         throw new Error(`Unhandled status ${JSON.stringify(unhandled)}`)
       }
     }
@@ -129,6 +135,9 @@ const TRANSACTION_STATUS_QUERY = `
         transactionResult {
           status
         }
+        block {
+          height
+        }
       }
     }
   }
@@ -137,10 +146,12 @@ const TRANSACTION_STATUS_QUERY = `
 const transactionStatusResponseSchema = z.object({
   data: z.object({
     transactions: z.array(
+      // A system transaction answers the fragment with nothing, a regular one with both fields.
       z.object({
         transactionResult: z
           .object({ status: z.enum(['SUCCESS', 'PARTIAL_SUCCESS', 'FAILURE']) })
           .optional(),
+        block: z.object({ height: z.number().int().nonnegative() }).optional(),
       }),
     ),
   }),

@@ -614,5 +614,5 @@ describe('VaultRequestStateResolverImpl sweeps', () => {
 
 /** The same double behind every action: the fixture request is a deposit, so only that entry is read. */
 function perAction<Double>(double: Double): Readonly<Record<VaultAction, Double>> {
-  return { deposit: double, swap: double, approve: double }
+  return { deposit: double, withdraw: double, swap: double, approve: double }
 }

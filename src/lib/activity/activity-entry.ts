@@ -23,11 +23,12 @@ export interface ActivityEntry {
   readonly error: string | null
 }
 
-export type ActivityKind = 'deposit' | 'swap' | 'approval'
+export type ActivityKind = 'deposit' | 'send' | 'swap' | 'approval'
 
-/** The kind as the table and its dialog name it. */
+/** The kind as the table and its dialog name it: a withdrawal is a Send, since it pays an address on the foreign chain. */
 export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   deposit: 'Deposit',
+  send: 'Send',
   swap: 'Swap',
   approval: 'Approval',
 }

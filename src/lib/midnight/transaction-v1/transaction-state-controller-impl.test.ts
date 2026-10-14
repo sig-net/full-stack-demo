@@ -89,6 +89,7 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
           unboundTx: null,
           finalizedTx: null,
           txId: null,
+          blockHeight: null,
           expireTime: new Date(stored.createTime.getTime() + 3_600_000),
           failure: null,
           error: null,
@@ -185,16 +186,17 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
           name: TRANSACTION_NAME,
           failure: 'FailEntirely',
           error: 'rejected',
+          blockHeight: 42,
         }),
       to: 'Failed',
-      patch: { failure: 'FailEntirely', error: 'rejected' },
+      patch: { failure: 'FailEntirely', error: 'rejected', blockHeight: 42 },
     },
     {
       name: 'recordSuccess',
       from: TRANSACTION_IN_STATE.AwaitingInclusion,
-      transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME }),
+      transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME, blockHeight: 42 }),
       to: 'Succeeded',
-      patch: {},
+      patch: { blockHeight: 42 },
     },
     {
       name: 'expireTransaction from AwaitingProof',
@@ -249,7 +251,7 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
     {
       name: 'recordSuccess on a terminal transaction',
       from: TRANSACTION_IN_STATE.Succeeded,
-      transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME }),
+      transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME, blockHeight: 42 }),
     },
     {
       name: 'expireTransaction on a terminal transaction',
@@ -273,7 +275,7 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
   test('a transition on a missing transaction throws', async () => {
     const calls = emptyCalls()
     await expect(
-      controllerOver(undefined, calls).recordSuccess({ name: TRANSACTION_NAME }),
+      controllerOver(undefined, calls).recordSuccess({ name: TRANSACTION_NAME, blockHeight: 42 }),
     ).rejects.toThrow(`${TRANSACTION_NAME} does not exist`)
   })
 })

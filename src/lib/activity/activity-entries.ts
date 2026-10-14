@@ -23,8 +23,8 @@ import type { TokenInfoRegistry } from '@/lib/tokens/token-info-registry'
 /**
  * The row of an activity, with each token named and scaled by the registry, or by its address
  * in raw base units when the registry lacks it. A deposit moves the ERC20 from Ethereum to its
- * vault token, a swap trades one vault token for another, and an approval grants a spender on
- * Ethereum.
+ * vault token, a send moves a vault token to an address on Ethereum, a swap trades one vault
+ * token for another, and an approval grants a spender on Ethereum.
  */
 export function activityEntryOf(activity: Activity, registry: TokenInfoRegistry): ActivityEntry {
   const { from, to, description } = sidesOf(activity, registry)
@@ -53,6 +53,15 @@ function sidesOf(
         from,
         to: { kind: 'asset', asset: { ...from, ...MIDNIGHT } },
         description: `deposit of ${labelOf(from)}`,
+      }
+    }
+    case 'Withdraw': {
+      const from = assetAmount(registry, activity.erc20Address, activity.amount, MIDNIGHT)
+      const addressLabel = abbreviateHex(activity.destination)
+      return {
+        from,
+        to: { kind: 'wallet', addressLabel },
+        description: `send of ${labelOf(from)} to ${addressLabel}`,
       }
     }
     case 'Swap': {
@@ -121,6 +130,7 @@ const MIDNIGHT: Pick<AssetAmount, 'networkName' | 'networkIcon'> = {
 
 const ACTIVITY_KIND_BY_TYPE: Record<ActivityType, ActivityKind> = {
   Deposit: 'deposit',
+  Withdraw: 'send',
   Swap: 'swap',
   Approval: 'approval',
 }

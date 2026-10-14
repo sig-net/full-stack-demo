@@ -17,11 +17,13 @@ export interface MidnightTransactionLedger {
   status(txId: string): Promise<MidnightLedgerTransactionStatus>
 }
 
+/** A recorded verdict names the block that holds it, so a reader can find the transaction there. */
 export type MidnightLedgerTransactionStatus =
   | { readonly outcome: 'pending' }
-  | { readonly outcome: 'succeeded' }
+  | { readonly outcome: 'succeeded'; readonly blockHeight: number }
   | {
       readonly outcome: 'failed'
       readonly failure: Extract<MidnightTransactionFailure, 'FailEntirely' | 'FailFallible'>
       readonly error: string
+      readonly blockHeight: number
     }

@@ -11,7 +11,7 @@ import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { ReadinessChecklist } from '@/components/readiness-checklist'
-import { SwapAmountField } from '@/components/swap-amount-field'
+import { TokenAmountField } from '@/components/token-amount-field'
 import { Button } from '@/components/ui/button'
 import { useDebouncedValue } from '@/components/use-debounced-value'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
@@ -153,7 +153,7 @@ export function SwapPanel(): ReactNode {
             <SlidersHorizontal aria-hidden="true" strokeWidth={1.5} className="size-8" />
           </Button>
         </div>
-        <SwapAmountField
+        <TokenAmountField
           label="From"
           amount={fromAmount}
           onAmountChange={(amount) => {
@@ -168,7 +168,7 @@ export function SwapPanel(): ReactNode {
           disabled={busy}
         />
         <ArrowDown aria-hidden="true" className="size-5 shrink-0 text-swap-panel-icon" />
-        <SwapAmountField
+        <TokenAmountField
           label="To"
           amount={toAmount}
           tokens={destinations}

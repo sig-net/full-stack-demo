@@ -44,6 +44,7 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
       unboundTx: null,
       finalizedTx: null,
       txId: null,
+      blockHeight: null,
       expireTime: new Date(now.getTime() + TRANSACTION_TTL_MS),
       failure: null,
       error: null,
@@ -87,12 +88,13 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
     name,
     failure,
     error,
+    blockHeight,
   }: RecordLedgerFailureArgs): Promise<MidnightTransaction> {
-    return this.transition(name, 'recordLedgerFailure', { failure, error })
+    return this.transition(name, 'recordLedgerFailure', { failure, error, blockHeight })
   }
 
-  recordSuccess({ name }: RecordSuccessArgs): Promise<MidnightTransaction> {
-    return this.transition(name, 'recordSuccess', {})
+  recordSuccess({ name, blockHeight }: RecordSuccessArgs): Promise<MidnightTransaction> {
+    return this.transition(name, 'recordSuccess', { blockHeight })
   }
 
   expireTransaction({ name }: ExpireTransactionArgs): Promise<MidnightTransaction> {

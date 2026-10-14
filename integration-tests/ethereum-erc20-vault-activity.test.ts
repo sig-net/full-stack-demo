@@ -7,6 +7,7 @@ import type { Approval } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/a
 import type { Deposit } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import type { Swap } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
+import type { Withdraw } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw'
 import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
 import type { Backend } from '@/server/backend'
 
@@ -38,6 +39,22 @@ describe('The activity view over Postgres', () => {
     error: null,
     createTime: at(0),
     updateTime: at(0),
+    ...overrides,
+  })
+
+  const withdraw = (overrides: Partial<Withdraw> = {}): Withdraw => ({
+    name: `${caller}/ethereum-erc20-vault-withdraws/${randomUUID()}`,
+    erc20Address: `0x${'ab'.repeat(20)}`,
+    amount: 7n,
+    destEvmAddress: `0x${'d1'.repeat(20)}`,
+    state: 'AwaitingStartTransaction',
+    inIndex: 4n,
+    vaultAccount: `0x${'cc'.repeat(20)}`,
+    outcome: null,
+    failure: null,
+    error: null,
+    createTime: at(15),
+    updateTime: at(15),
     ...overrides,
   })
 
@@ -90,6 +107,7 @@ describe('The activity view over Postgres', () => {
     finalizedTx: null,
     expireTime: null,
     txId: null,
+    blockHeight: null,
     failure: null,
     error: null,
     createTime: at(1),
@@ -147,6 +165,7 @@ describe('The activity view over Postgres', () => {
     for (const table of [
       'midnight_ethereum_erc20_vault_requests_v1',
       'midnight_ethereum_erc20_vault_deposits_v1',
+      'midnight_ethereum_erc20_vault_withdraws_v1',
       'midnight_ethereum_erc20_vault_swaps_v1',
       'midnight_ethereum_erc20_vault_approvals_v1',
     ]) {
@@ -174,6 +193,7 @@ describe('The activity view over Postgres', () => {
         unboundTx: 'bb',
         finalizedTx: 'cc',
         txId: 'start-2',
+        blockHeight: 120,
         createTime: at(2),
         updateTime: at(2),
       }),
@@ -216,20 +236,28 @@ describe('The activity view over Postgres', () => {
       erc20AddressOut: null,
       amountOut: null,
       spender: null,
+      destination: null,
       outcome: null,
       error: null,
       resourceState: 'AwaitingCompleteTransaction',
       vaultRequestState: 'AwaitingAttestation',
       vaultRequestId: '22'.repeat(32),
       walletTransaction: null,
-      startTransaction: { hash: 'start-2', state: 'Succeeded', lifecycleState: 'Succeeded' },
+      startTransaction: {
+        hash: 'start-2',
+        blockNumber: 120,
+        state: 'Succeeded',
+        lifecycleState: 'Succeeded',
+      },
       foreignChainTransaction: {
         hash: `0x${'33'.repeat(32)}`,
+        blockNumber: 7,
         state: 'Succeeded',
         lifecycleState: 'Succeeded',
       },
       completeTransaction: {
         hash: 'complete-1',
+        blockNumber: null,
         state: 'Pending',
         lifecycleState: 'AwaitingInclusion',
       },
@@ -270,9 +298,10 @@ describe('The activity view over Postgres', () => {
     expect(listed).toHaveLength(3)
   })
 
-  test('a swap and an approval project their own sides, and the start call of either approval circuit', async () => {
+  test('a withdrawal, a swap and an approval project their own sides, and the start call of either approval circuit', async () => {
     const { midnight } = backend
-    const { swapV1, approvalV1, activityV1 } = midnight.ethereumErc20Vault
+    const { withdrawV1, swapV1, approvalV1, activityV1 } = midnight.ethereumErc20Vault
+    const sent = await withdrawV1.repository.create(withdraw())
     const traded = await swapV1.repository.create(swap())
     const granted = await approvalV1.repository.create(approval())
     await midnight.transactionV1.repository.create(
@@ -286,6 +315,17 @@ describe('The activity view over Postgres', () => {
       }),
     )
 
+    expect(await activityV1.repository.get(sent.name)).toMatchObject({
+      type: 'Withdraw',
+      state: 'Pending',
+      erc20Address: sent.erc20Address,
+      amount: 7n,
+      erc20AddressOut: null,
+      amountOut: null,
+      spender: null,
+      destination: sent.destEvmAddress,
+      resourceState: 'AwaitingStartTransaction',
+    })
     expect(await activityV1.repository.get(traded.name)).toMatchObject({
       type: 'Swap',
       state: 'Pending',
@@ -304,12 +344,21 @@ describe('The activity view over Postgres', () => {
       amount: null,
       spender: granted.spender,
       walletTransaction: { circuit: 'startApproveStata', expireTime: at(40) },
-      startTransaction: { hash: null, state: 'Pending', lifecycleState: 'AwaitingWallet' },
+      startTransaction: {
+        hash: null,
+        blockNumber: null,
+        state: 'Pending',
+        lifecycleState: 'AwaitingWallet',
+      },
     })
     const listed = await activityV1.repository.search({
       criteria: [{ type: 'prefix-text', field: 'name', prefix: `${caller}/` }],
       order: { field: 'createTime', direction: 'desc' },
     })
-    expect(listed.slice(0, 2).map((activity) => activity.type)).toEqual(['Approval', 'Swap'])
+    expect(listed.slice(0, 3).map((activity) => activity.type)).toEqual([
+      'Approval',
+      'Swap',
+      'Withdraw',
+    ])
   })
 })

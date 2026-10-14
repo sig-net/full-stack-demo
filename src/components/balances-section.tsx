@@ -6,7 +6,9 @@ import { type ReactNode, useState } from 'react'
 import { BalanceBox } from '@/components/balance-box'
 import { useCaller } from '@/components/contexts/CallerContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
+import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { DepositDialog } from '@/components/deposit-dialog'
+import { SendDialog } from '@/components/send-dialog'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
@@ -16,7 +18,9 @@ import { walletConnectionStatus } from '@/lib/midnight/wallet/connection-status'
 export function BalancesSection(): ReactNode {
   const connection = useMidnightWallet()
   const { callerSecret, depositAccount } = useCaller()
+  const registry = useTokenInfoRegistry()
   const [depositOpen, setDepositOpen] = useState(false)
+  const [sendTokenType, setSendTokenType] = useState<string | null>(null)
   const { wallet } = connection
   const status = walletConnectionStatus(connection)
   const missing = missingDepositPrerequisites({
@@ -68,6 +72,15 @@ export function BalancesSection(): ReactNode {
       {depositOpen && depositAccount !== null && (
         <DepositDialog open onOpenChange={setDepositOpen} address={depositAccount} />
       )}
+      {sendTokenType !== null && (
+        <SendDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setSendTokenType(null)
+          }}
+          tokenType={sendTokenType}
+        />
+      )}
       {wallet === null ? (
         <p role="status" className="text-muted-foreground">
           {status === 'not connected'
@@ -91,7 +104,19 @@ export function BalancesSection(): ReactNode {
         <ul className="grid grid-cols-1 md:gap-y-4.5 @min-[862px]:grid-cols-2 @min-[862px]:gap-x-10.5">
           {balances.data.map((balance) => (
             <li key={`${balance.networkName}:${balance.tokenType}`}>
-              <BalanceBox balance={balance} />
+              <BalanceBox
+                balance={balance}
+                onSend={
+                  // A send needs the identity secret and a token the vault admits.
+                  callerSecret !== null &&
+                  registry.get({ ledger: 'shielded', tokenType: balance.tokenType })?.supported ===
+                    true
+                    ? () => {
+                        setSendTokenType(balance.tokenType)
+                      }
+                    : undefined
+                }
+              />
             </li>
           ))}
         </ul>

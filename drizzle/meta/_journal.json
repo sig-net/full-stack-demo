@@ -127,6 +127,20 @@
       "when": 1791975204173,
       "tag": "0017_activity_types",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791979457858,
+      "tag": "0018_withdraw",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791984806301,
+      "tag": "0019_midnight_block_height",
+      "breakpoints": true
     }
   ]
 }

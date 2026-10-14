@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 
 import { ACTIVITIES_QUERY_KEY } from '@/components/activity-section'
 import { useCaller } from '@/components/contexts/CallerContext'
+import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { CopyButton } from '@/components/copy-button'
@@ -36,6 +37,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { WalletSigningIcon } from '@/components/wallet-signing-icon'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
 import { formatTimestamp } from '@/lib/activity/activity-entries'
+import type { ClientConfig } from '@/lib/config/client-config'
+import { ethereumExplorerOf } from '@/lib/config/ethereum-explorer'
+import { midnightExplorerOf } from '@/lib/config/midnight-explorer'
 import {
   ACTIVITY_KIND_LABELS,
   type ActivityEntry,
@@ -206,6 +210,8 @@ function callLabel(transaction: ActivityWalletTransaction): string {
 const CIRCUIT_LABELS: Record<string, string> = {
   startDeposit: 'start',
   completeDeposit: 'completion',
+  startWithdraw: 'start',
+  completeWithdraw: 'completion',
   startSwap: 'start',
   completeSwap: 'completion',
   startApproveRouter: 'start',
@@ -257,7 +263,9 @@ function useWalletSigning(
  * explorer link, or the word pending until the step assigns it.
  */
 function ActivityReferenceLine({ reference }: { reference: ActivityReference }): ReactNode {
+  const config = useConfig()
   const item = REFERENCE_ITEMS[reference.kind]
+  const link = referenceLink(config, reference)
   return (
     <div className="flex items-center gap-1 pl-6 text-muted-foreground">
       <CornerDownRight aria-hidden className="size-3.5 shrink-0" />
@@ -287,23 +295,76 @@ function ActivityReferenceLine({ reference }: { reference: ActivityReference }):
             </TooltipTrigger>
             <TooltipContent>Copy the {item.name}</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger render={<span className="inline-flex" />}>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                disabled
-                aria-label={`Open the ${item.name} in ${item.explorer}`}
+          {link === null ? (
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex" />}>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled
+                  aria-label={`Open the ${item.name} in ${item.explorer}`}
+                >
+                  <SquareArrowOutUpRight />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open in {item.explorer}, not available yet</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    nativeButton={false}
+                    render={<a href={link.url} target="_blank" rel="noreferrer" />}
+                    aria-label={`Open the ${item.name} in ${link.name}`}
+                  />
+                }
               >
                 <SquareArrowOutUpRight />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Open in {item.explorer}, not available yet</TooltipContent>
-          </Tooltip>
+              </TooltipTrigger>
+              <TooltipContent>
+                {reference.kind === 'midnightTransaction'
+                  ? `Open its block in ${link.name}`
+                  : `Open in ${link.name}`}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </>
       )}
     </div>
   )
+}
+
+/**
+ * The explorer page a reference opens: an Ethereum transaction's own page, a Midnight
+ * transaction's block once the chain recorded it, and none for a Sig Network request or where
+ * no explorer serves the chain.
+ */
+function referenceLink(
+  config: ClientConfig,
+  reference: ActivityReference,
+): { name: string; url: string } | null {
+  switch (reference.kind) {
+    case 'ethereumTransaction': {
+      const explorer = ethereumExplorerOf(config)
+      return explorer === null || reference.id === null
+        ? null
+        : { name: explorer.name, url: explorer.transactionURL(reference.id) }
+    }
+    case 'midnightTransaction': {
+      if (reference.blockNumber === null) return null
+      const explorer = midnightExplorerOf(config)
+      return { name: explorer.name, url: explorer.blockURL(reference.blockNumber) }
+    }
+    case 'vaultRequest':
+      return null
+    default: {
+      const unhandled: never = reference.kind
+      throw new Error(`Unhandled reference ${JSON.stringify(unhandled)}`)
+    }
+  }
 }
 
 const REFERENCE_ITEMS: Record<

@@ -16,6 +16,10 @@ import {
 import { swapNameSchema, swapOutcomeSchema } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import { vaultRequestStateSchema } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import {
+  withdrawNameSchema,
+  withdrawOutcomeSchema,
+} from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw'
+import {
   midnightTransactionNameSchema,
   type MidnightTransactionSigner,
   type MidnightTransactionState,
@@ -39,7 +43,7 @@ export const ACTIVITY_STATE_BY_OPERATION_STATE: Partial<
 }
 
 /** The kinds of vault activity, one per caller operation the view reads. */
-export const ACTIVITY_TYPES = ['Deposit', 'Swap', 'Approval'] as const
+export const ACTIVITY_TYPES = ['Deposit', 'Withdraw', 'Swap', 'Approval'] as const
 
 export const activityTypeSchema = z.enum(ACTIVITY_TYPES)
 
@@ -61,6 +65,8 @@ export const ACTIVITY_TRANSACTION_STATE_BY_STATE: Partial<
 export const activityTransactionSchema = z.object({
   /** The chain's identifier, null until the transaction reached the node. */
   hash: z.string().nullable(),
+  /** The block holding the transaction, null until the chain recorded it. */
+  blockNumber: z.number().int().nonnegative().nullable(),
   state: activityTransactionStateSchema,
   /** The transaction's own state, which says what it waits for. */
   lifecycleState: z.union([midnightTransactionStateSchema, ethereumTransactionStateSchema]),
@@ -84,8 +90,9 @@ export type ActivityWalletTransaction = z.infer<typeof activityWalletTransaction
 
 /**
  * The fields every activity row carries: the projected operation with its newest children.
- * `erc20Address` and `amount` are what the operation surrenders or moves, the out side and the
- * spender belong to one type each, and each type keeps `outcome` to its own set.
+ * `erc20Address` and `amount` are what the operation surrenders or moves, the out side, the
+ * spender and the destination belong to one type each, and each type keeps `outcome` to its own
+ * set.
  */
 const activityFieldsSchema = z.object({
   state: activityStateSchema,
@@ -118,7 +125,20 @@ export const depositActivitySchema = activityFieldsSchema.extend({
   erc20AddressOut: z.null(),
   amountOut: z.null(),
   spender: z.null(),
+  destination: z.null(),
   outcome: depositOutcomeSchema.nullable(),
+})
+
+/** A withdrawal: `amount` of `erc20Address` sent from the vault account to `destination` on Ethereum. */
+export const withdrawActivitySchema = activityFieldsSchema.extend({
+  name: withdrawNameSchema,
+  type: z.literal('Withdraw'),
+  amount: amountSchema,
+  erc20AddressOut: z.null(),
+  amountOut: z.null(),
+  spender: z.null(),
+  destination: evmAddressSchema,
+  outcome: withdrawOutcomeSchema.nullable(),
 })
 
 /** A swap: up to `amount` of `erc20Address` sold for exactly `amountOut` of `erc20AddressOut`. */
@@ -129,6 +149,7 @@ export const swapActivitySchema = activityFieldsSchema.extend({
   erc20AddressOut: evmAddressSchema,
   amountOut: amountSchema,
   spender: z.null(),
+  destination: z.null(),
   outcome: swapOutcomeSchema.nullable(),
 })
 
@@ -140,6 +161,7 @@ export const approvalActivitySchema = activityFieldsSchema.extend({
   erc20AddressOut: z.null(),
   amountOut: z.null(),
   spender: evmAddressSchema,
+  destination: z.null(),
   outcome: approvalOutcomeSchema.nullable(),
 })
 
@@ -150,6 +172,7 @@ export const approvalActivitySchema = activityFieldsSchema.extend({
  */
 export const activitySchema = z.discriminatedUnion('type', [
   depositActivitySchema,
+  withdrawActivitySchema,
   swapActivitySchema,
   approvalActivitySchema,
 ])
@@ -157,8 +180,14 @@ export const activitySchema = z.discriminatedUnion('type', [
 export type Activity = z.infer<typeof activitySchema>
 
 export type DepositActivity = z.infer<typeof depositActivitySchema>
+export type WithdrawActivity = z.infer<typeof withdrawActivitySchema>
 export type SwapActivity = z.infer<typeof swapActivitySchema>
 export type ApprovalActivity = z.infer<typeof approvalActivitySchema>
 
-/** The name of the resource an activity projects, in any of the three forms. */
-export const activityNameSchema = z.union([depositNameSchema, swapNameSchema, approvalNameSchema])
+/** The name of the resource an activity projects, in any of the four forms. */
+export const activityNameSchema = z.union([
+  depositNameSchema,
+  withdrawNameSchema,
+  swapNameSchema,
+  approvalNameSchema,
+])

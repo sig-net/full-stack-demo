@@ -302,6 +302,8 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     switch (action) {
       case 'deposit':
         return this.circuits.sendDeposit({ outIndex })
+      case 'withdraw':
+        return this.circuits.sendWithdraw({ outIndex })
       case 'swap':
         return this.circuits.sendSwap({ outIndex })
       case 'approve':

@@ -15,6 +15,10 @@ export interface VaultCircuits {
   startDeposit(args: StartDepositCircuitArgs): Promise<string>
   completeDeposit(args: CompleteDepositCircuitArgs): Promise<string>
   sendDeposit(args: SendRequestCircuitArgs): Promise<string>
+  /** Surrenders a fresh coin of the token worth exactly `amount`, which the caller's wallet funds when it balances the call. */
+  startWithdraw(args: StartWithdrawCircuitArgs): Promise<string>
+  completeWithdraw(args: CompleteWithdrawCircuitArgs): Promise<string>
+  sendWithdraw(args: SendRequestCircuitArgs): Promise<string>
   /** Surrenders a fresh coin of the sold token worth `amountInMaximum`, which the caller's wallet funds when it balances the call. */
   startSwap(args: StartSwapCircuitArgs): Promise<string>
   completeSwap(args: CompleteSwapCircuitArgs): Promise<string>
@@ -54,6 +58,24 @@ export interface StartDepositCircuitArgs extends CallerCircuitArgs {
 export interface CompleteDepositCircuitArgs extends CallerCircuitArgs {
   readonly requestId: Uint8Array
   /** One byte: the attested transfer result for an executed sweep, ignored for the other verdicts. */
+  readonly serializedOutput: Uint8Array
+  /** 32 random bytes, fresh per call. */
+  readonly mintNonce: Uint8Array
+}
+
+export interface StartWithdrawCircuitArgs extends CallerCircuitArgs {
+  readonly inIndex: bigint
+  /** `0x` plus 40 hex characters, both of them. */
+  readonly erc20Address: string
+  readonly destEvmAddress: string
+  readonly amount: bigint
+  /** The shielded token type of the sent ERC20's vault coin, in hex. */
+  readonly coinType: string
+}
+
+export interface CompleteWithdrawCircuitArgs extends CallerCircuitArgs {
+  readonly requestId: Uint8Array
+  /** One byte: the attested transfer result for an executed withdrawal, ignored for the other verdicts. */
   readonly serializedOutput: Uint8Array
   /** 32 random bytes, fresh per call. */
   readonly mintNonce: Uint8Array
@@ -110,6 +132,7 @@ export interface QueueAttestationCircuitArgs {
 /** The circuit that sends each action's flushed request to the MPC. */
 export const SEND_CIRCUIT_BY_ACTION: Readonly<Record<VaultAction, VaultCircuitId>> = {
   deposit: 'sendDeposit',
+  withdraw: 'sendWithdraw',
   swap: 'sendSwap',
   approve: 'sendApprove',
 }

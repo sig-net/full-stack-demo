@@ -73,6 +73,7 @@ type StepField =
   | 'finalizedTx'
   | 'expireTime'
   | 'txId'
+  | 'blockHeight'
   | 'failure'
   | 'error'
 
@@ -87,20 +88,20 @@ const FIELDS_BY_STATE: Record<
 > = {
   AwaitingProof: {
     set: ['unprovenTx', 'expireTime'],
-    unset: ['unboundTx', 'finalizedTx', 'txId', 'failure', 'error'],
+    unset: ['unboundTx', 'finalizedTx', 'txId', 'blockHeight', 'failure', 'error'],
   },
   AwaitingWallet: {
     set: ['unboundTx', 'expireTime'],
-    unset: ['unprovenTx', 'finalizedTx', 'txId', 'failure', 'error'],
+    unset: ['unprovenTx', 'finalizedTx', 'txId', 'blockHeight', 'failure', 'error'],
   },
   AwaitingSubmission: {
     set: ['unboundTx', 'finalizedTx', 'expireTime'],
-    unset: ['unprovenTx', 'txId', 'failure', 'error'],
+    unset: ['unprovenTx', 'txId', 'blockHeight', 'failure', 'error'],
   },
   AwaitingInclusion: {
     set: ['unboundTx', 'finalizedTx', 'expireTime', 'txId'],
-    unset: ['unprovenTx', 'failure', 'error'],
+    unset: ['unprovenTx', 'blockHeight', 'failure', 'error'],
   },
-  Succeeded: { set: ['txId'], unset: ['unprovenTx', 'failure', 'error'] },
+  Succeeded: { set: ['txId', 'blockHeight'], unset: ['unprovenTx', 'failure', 'error'] },
   Failed: { set: ['failure'], unset: ['unprovenTx'] },
 }

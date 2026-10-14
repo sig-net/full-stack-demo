@@ -2,7 +2,10 @@ import { describe, expect, test } from 'vitest'
 
 import { activityEntryOf, formatTimestamp } from '@/lib/activity/activity-entries'
 import { NO_ICON } from '@/lib/icon-source'
-import { activityFixture } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
+import {
+  activityFixture,
+  withdrawActivityFixture,
+} from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
 import { ERC20_ADDRESS } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-fixtures'
 import { BUNDLED_NETWORK_ICONS } from '@/lib/tokens/bundled-icons'
 import type { TokenInfo } from '@/lib/tokens/token-info'
@@ -40,6 +43,16 @@ describe('activityEntryOf', () => {
       error: null,
     })
     expect(entry.steps).toHaveLength(10)
+  })
+
+  test('a withdrawal is a send from the vault token on Midnight to the destination address', () => {
+    const entry = activityEntryOf(withdrawActivityFixture(), new TokenInfoRegistry([USDC]))
+    expect(entry).toMatchObject({
+      kind: 'send',
+      description: 'send of 1 USDC to 0xd1d1…d1d1',
+      from: { assetSymbol: 'USDC', networkName: 'Midnight', amount: '1' },
+      to: { kind: 'wallet', addressLabel: '0xd1d1…d1d1' },
+    })
   })
 
   test('falls back to the address and raw base units for an unregistered token', () => {

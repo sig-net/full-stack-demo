@@ -48,6 +48,27 @@ services:
       timeout: 10s
       retries: 20
 
+  # Otterscan, a block explorer for the local EVM node. The container serves a static page: the
+  # browser runs it and reads the chain itself through ERIGON_URL, so that URL is the node as
+  # the browser reaches it, and anvil answers its ots_ calls with open CORS.
+  otterscan:
+    image: otterscan/otterscan:v2.11.0
+    environment:
+      ERIGON_URL: http://127.0.0.1:8545
+    ports:
+      - '127.0.0.1:5100:80'
+
+  # Polkadot.js Apps, a block explorer for the local Midnight node, which is Substrate based.
+  # The page runs in the browser and reads the chain through WS_URL, the node as the browser
+  # reaches it. The image publishes only its latest tag and only for amd64.
+  polkadot-js-apps:
+    image: jacogr/polkadot-js-apps:latest
+    platform: linux/amd64
+    environment:
+      WS_URL: ws://127.0.0.1:9944
+    ports:
+      - '127.0.0.1:5300:80'
+
 volumes:
   postgres-data:
   kafka-data:

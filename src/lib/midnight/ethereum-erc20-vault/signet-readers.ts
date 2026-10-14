@@ -4,6 +4,7 @@ import {
   VAULT_APPROVE_REQUESTS_PATH,
   VAULT_DEPOSIT_REQUESTS_PATH,
   VAULT_SWAP_REQUESTS_PATH,
+  VAULT_WITHDRAW_REQUESTS_PATH,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
@@ -34,6 +35,7 @@ export function signetReaders(config: SignetReadersConfig): SignetReaders {
     })
   return {
     deposit: reader(VAULT_DEPOSIT_REQUESTS_PATH),
+    withdraw: reader(VAULT_WITHDRAW_REQUESTS_PATH),
     swap: reader(VAULT_SWAP_REQUESTS_PATH),
     approve: reader(VAULT_APPROVE_REQUESTS_PATH),
   }

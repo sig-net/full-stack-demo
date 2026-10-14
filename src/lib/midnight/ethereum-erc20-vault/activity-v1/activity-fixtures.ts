@@ -2,6 +2,7 @@ import type {
   ApprovalActivity,
   DepositActivity,
   SwapActivity,
+  WithdrawActivity,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import {
   APPROVAL_NAME,
@@ -15,6 +16,10 @@ import {
   ERC20_ADDRESS_OUT,
   SWAP_NAME,
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-fixtures'
+import {
+  DESTINATION,
+  WITHDRAW_NAME,
+} from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-fixtures'
 
 /** A pending deposit's activity with its start call submitted, for tests that read the view. */
 export function activityFixture(overrides: Partial<DepositActivity> = {}): DepositActivity {
@@ -27,6 +32,7 @@ export function activityFixture(overrides: Partial<DepositActivity> = {}): Depos
     erc20AddressOut: null,
     amountOut: null,
     spender: null,
+    destination: null,
     outcome: null,
     error: null,
     resourceState: 'AwaitingStartTransaction',
@@ -35,6 +41,7 @@ export function activityFixture(overrides: Partial<DepositActivity> = {}): Depos
     walletTransaction: null,
     startTransaction: {
       hash: START_TX_HASH,
+      blockNumber: null,
       state: 'Pending',
       lifecycleState: 'AwaitingInclusion',
     },
@@ -42,6 +49,20 @@ export function activityFixture(overrides: Partial<DepositActivity> = {}): Depos
     completeTransaction: null,
     createTime: new Date('2026-01-01T00:00:00Z'),
     updateTime: new Date('2026-01-01T00:01:00Z'),
+    ...overrides,
+  }
+}
+
+/** A pending withdrawal's activity, sending 1 of the token to the fixture destination. */
+export function withdrawActivityFixture(
+  overrides: Partial<WithdrawActivity> = {},
+): WithdrawActivity {
+  return {
+    ...activityFixture(),
+    name: WITHDRAW_NAME,
+    type: 'Withdraw',
+    destination: DESTINATION,
+    outcome: null,
     ...overrides,
   }
 }

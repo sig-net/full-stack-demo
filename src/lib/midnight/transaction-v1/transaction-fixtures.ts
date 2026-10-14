@@ -15,6 +15,7 @@ export function transactionFixture(
     finalizedTx: null,
     expireTime: new Date('2100-01-01T00:00:00Z'),
     txId: null,
+    blockHeight: null,
     failure: null,
     error: null,
     createTime: new Date('2026-01-01T00:00:00Z'),
@@ -26,6 +27,7 @@ export function transactionFixture(
 export const CALLER_NAME = `callers/${'ab'.repeat(32)}`
 export const DEPOSIT_NAME = `${CALLER_NAME}/ethereum-erc20-vault-deposits/1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b`
 export const TRANSACTION_NAME = `${CALLER_NAME}/midnight-transactions/0d8c7d10-6a3e-4d7e-9f1c-2b7a1c3d4e5f`
+export const BLOCK_HEIGHT = 8562
 
 /** The row each state leaves behind, consistent with the state machine's field table. */
 export const TRANSACTION_IN_STATE: Record<MidnightTransaction['state'], MidnightTransaction> = {
@@ -54,6 +56,7 @@ export const TRANSACTION_IN_STATE: Record<MidnightTransaction['state'], Midnight
     unboundTx: 'unbound',
     finalizedTx: 'finalized',
     txId: 'tx-1',
+    blockHeight: BLOCK_HEIGHT,
   }),
   Failed: transactionFixture({
     state: 'Failed',

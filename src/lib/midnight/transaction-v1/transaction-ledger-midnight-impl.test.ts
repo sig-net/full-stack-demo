@@ -69,31 +69,43 @@ describe('MidnightTransactionLedgerImpl.status', () => {
     return { requests }
   }
 
+  /** A regular transaction as the indexer answers it: its verdict and the block holding it. */
+  const recorded = (status: string): unknown => ({
+    transactionResult: { status },
+    block: { height: 8562 },
+  })
+
   const cases: ReadonlyArray<[string, unknown, MidnightLedgerTransactionStatus]> = [
     ['no transaction yet', { data: { transactions: [] } }, { outcome: 'pending' }],
     [
       'SUCCESS',
-      { data: { transactions: [{ transactionResult: { status: 'SUCCESS' } }] } },
-      { outcome: 'succeeded' },
+      { data: { transactions: [recorded('SUCCESS')] } },
+      { outcome: 'succeeded', blockHeight: 8562 },
     ],
     [
       'FAILURE',
-      { data: { transactions: [{ transactionResult: { status: 'FAILURE' } }] } },
-      { outcome: 'failed', failure: 'FailEntirely', error: 'The ledger rejected the transaction' },
+      { data: { transactions: [recorded('FAILURE')] } },
+      {
+        outcome: 'failed',
+        failure: 'FailEntirely',
+        error: 'The ledger rejected the transaction',
+        blockHeight: 8562,
+      },
     ],
     [
       'PARTIAL_SUCCESS',
-      { data: { transactions: [{ transactionResult: { status: 'PARTIAL_SUCCESS' } }] } },
+      { data: { transactions: [recorded('PARTIAL_SUCCESS')] } },
       {
         outcome: 'failed',
         failure: 'FailFallible',
         error: 'The fallible section did not apply, and the fee was paid',
+        blockHeight: 8562,
       },
     ],
     [
       'a system transaction beside the regular one',
-      { data: { transactions: [{}, { transactionResult: { status: 'SUCCESS' } }] } },
-      { outcome: 'succeeded' },
+      { data: { transactions: [{}, recorded('SUCCESS')] } },
+      { outcome: 'succeeded', blockHeight: 8562 },
     ],
   ]
 
@@ -109,7 +121,7 @@ describe('MidnightTransactionLedgerImpl.status', () => {
   })
 
   test('a malformed answer is an error, not a status', async () => {
-    indexerAnswers({ data: { transactions: [{ transactionResult: { status: 'MAYBE' } }] } })
+    indexerAnswers({ data: { transactions: [recorded('MAYBE')] } })
     await expect(ledgerWith().status('abcd')).rejects.toThrow('malformed')
   })
 

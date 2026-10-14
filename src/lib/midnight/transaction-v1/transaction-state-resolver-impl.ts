@@ -150,13 +150,16 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
       case 'pending':
         return
       case 'succeeded':
-        return this.write(() => this.stateController.recordSuccess({ name }))
+        return this.write(() =>
+          this.stateController.recordSuccess({ name, blockHeight: status.blockHeight }),
+        )
       case 'failed':
         return this.write(() =>
           this.stateController.recordLedgerFailure({
             name,
             failure: status.failure,
             error: status.error,
+            blockHeight: status.blockHeight,
           }),
         )
       default: {

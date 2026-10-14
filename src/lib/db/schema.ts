@@ -50,6 +50,11 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import { VAULT_ACTIONS } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 import {
+  WITHDRAW_FAILURES,
+  WITHDRAW_OUTCOMES,
+  WITHDRAW_STATES,
+} from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw'
+import {
   ATTESTATION_OUTPUT_KINDS,
   VAULT_REQUEST_STATES,
   VAULT_REQUEST_TERMINAL_STATES,
@@ -81,6 +86,7 @@ export const midnightTransactionsV1 = pgTable(
     finalizedTx: text('finalized_tx'),
     expireTime: timestamp('expire_time', { withTimezone: true }),
     txId: text('tx_id'),
+    blockHeight: bigint('block_height', { mode: 'number' }),
     failure: text('failure', { enum: MIDNIGHT_TRANSACTION_FAILURES }),
     error: text('error'),
     createTime: timestamp('create_time', { withTimezone: true }).notNull(),
@@ -146,6 +152,28 @@ export const midnightEthereumErc20VaultDepositsV1 = pgTable(
   (table) => [
     index('midnight_ethereum_erc20_vault_deposits_v1_deposit_account').on(table.depositAccount),
   ],
+)
+
+/**
+ * One row per ERC-20 vault withdraw resource, keyed by its resource name: an ERC20 transfer from
+ * the vault account to a destination on Ethereum paid from a surrendered vault coin.
+ */
+export const midnightEthereumErc20VaultWithdrawsV1 = pgTable(
+  'midnight_ethereum_erc20_vault_withdraws_v1',
+  {
+    name: text('name').primaryKey(),
+    erc20Address: text('erc20_address').notNull(),
+    amount: contractInteger('amount').notNull(),
+    destEvmAddress: text('dest_evm_address').notNull(),
+    state: text('state', { enum: WITHDRAW_STATES }).notNull(),
+    inIndex: contractInteger('in_index').notNull(),
+    vaultAccount: text('vault_account').notNull(),
+    outcome: text('outcome', { enum: WITHDRAW_OUTCOMES }),
+    failure: text('failure', { enum: WITHDRAW_FAILURES }),
+    error: text('error'),
+    createTime: timestamp('create_time', { withTimezone: true }).notNull(),
+    updateTime: timestamp('update_time', { withTimezone: true }).notNull(),
+  },
 )
 
 /**
@@ -223,8 +251,8 @@ export const midnightEthereumErc20VaultRequestsV1 = pgTable(
 )
 
 /**
- * One row per vault activity, derived from the lifecycle tables: each deposit, swap and
- * approval with its newest start and complete calls, its newest vault request and that
+ * One row per vault activity, derived from the lifecycle tables: each deposit, withdrawal, swap
+ * and approval with its newest start and complete calls, its newest vault request and that
  * request's newest foreign chain transaction. The states are aggregated here, so nothing above
  * a repository derives them.
  */
@@ -239,6 +267,7 @@ export const midnightEthereumErc20VaultActivityV1 = pgView(
     erc20AddressOut: text('erc20_address_out'),
     amountOut: contractInteger('amount_out'),
     spender: text('spender'),
+    destination: text('destination'),
     outcome: text('outcome'),
     error: text('error'),
     resourceState: text('resource_state', { enum: CALLER_OPERATION_STATES }).notNull(),
@@ -254,9 +283,14 @@ export const midnightEthereumErc20VaultActivityV1 = pgView(
   },
 ).as(activityViewQuery())
 
-/** One branch of the view per caller operation, joined with `UNION ALL`. */
+/**
+ * One branch of the view per caller operation, joined with `UNION ALL`. A column a branch
+ * lacks is a typed `NULL`: the union resolves its types pairwise from the left, so two bare
+ * nulls in a row would fix the column as text before a later branch's numeric joins.
+ */
 function activityViewQuery(): SQL {
   const deposits = midnightEthereumErc20VaultDepositsV1
+  const withdraws = midnightEthereumErc20VaultWithdrawsV1
   const swaps = midnightEthereumErc20VaultSwapsV1
   const approvals = midnightEthereumErc20VaultApprovalsV1
   return sql.raw(
@@ -266,33 +300,48 @@ function activityViewQuery(): SQL {
         table: deposits,
         startCircuits: ['startDeposit'],
         completeCircuit: 'completeDeposit',
-        erc20Address: deposits.erc20Address.name,
-        amount: deposits.amount.name,
-        erc20AddressOut: 'NULL',
-        amountOut: 'NULL',
-        spender: 'NULL',
+        erc20Address: deposits.erc20Address,
+        amount: deposits.amount,
+        erc20AddressOut: null,
+        amountOut: null,
+        spender: null,
+        destination: null,
+      }),
+      activityBranch({
+        type: 'Withdraw',
+        table: withdraws,
+        startCircuits: ['startWithdraw'],
+        completeCircuit: 'completeWithdraw',
+        erc20Address: withdraws.erc20Address,
+        amount: withdraws.amount,
+        erc20AddressOut: null,
+        amountOut: null,
+        spender: null,
+        destination: withdraws.destEvmAddress,
       }),
       activityBranch({
         type: 'Swap',
         table: swaps,
         startCircuits: ['startSwap'],
         completeCircuit: 'completeSwap',
-        erc20Address: swaps.erc20AddressIn.name,
-        amount: swaps.amountInMaximum.name,
-        erc20AddressOut: `d.${swaps.erc20AddressOut.name}`,
-        amountOut: `d.${swaps.amountOut.name}`,
-        spender: 'NULL',
+        erc20Address: swaps.erc20AddressIn,
+        amount: swaps.amountInMaximum,
+        erc20AddressOut: swaps.erc20AddressOut,
+        amountOut: swaps.amountOut,
+        spender: null,
+        destination: null,
       }),
       activityBranch({
         type: 'Approval',
         table: approvals,
         startCircuits: ['startApproveRouter', 'startApproveStata'],
         completeCircuit: 'completeApprove',
-        erc20Address: approvals.erc20Address.name,
-        amount: 'NULL',
-        erc20AddressOut: 'NULL',
-        amountOut: 'NULL',
-        spender: `d.${approvals.spender.name}`,
+        erc20Address: approvals.erc20Address,
+        amount: null,
+        erc20AddressOut: null,
+        amountOut: null,
+        spender: approvals.spender,
+        destination: null,
       }),
     ].join('\n    UNION ALL\n'),
   )
@@ -304,12 +353,13 @@ interface ActivityBranch {
   readonly startCircuits: readonly string[]
   readonly completeCircuit: string
   /** The column of the operation's own table holding the token it surrenders or moves. */
-  readonly erc20Address: string
-  /** SQL expressions over the alias `d`, or a column name of `d` for `amount`. */
-  readonly amount: string
-  readonly erc20AddressOut: string
-  readonly amountOut: string
-  readonly spender: string
+  readonly erc20Address: PgColumn
+  /** The operation's own columns behind the typed fields, null where the type has none. */
+  readonly amount: PgColumn | null
+  readonly erc20AddressOut: PgColumn | null
+  readonly amountOut: PgColumn | null
+  readonly spender: PgColumn | null
+  readonly destination: PgColumn | null
 }
 
 /**
@@ -322,33 +372,37 @@ function activityBranch(branch: ActivityBranch): string {
   const e = ethereumTransactionsV1
   const newest = (table: PgTable, alias: string, where: string): string =>
     `LEFT JOIN LATERAL (SELECT * FROM "${getTableName(table)}" x WHERE ${where} ORDER BY x.create_time DESC, x.name LIMIT 1) ${alias} ON TRUE`
-  const transaction = (alias: string, hash: PgColumn): string =>
-    `CASE WHEN ${alias}.name IS NULL THEN NULL ELSE jsonb_build_object('hash', ${alias}.${hash.name}, 'state', ${caseOver(`${alias}.state`, ACTIVITY_TRANSACTION_STATE_BY_STATE, 'Pending')}, 'lifecycleState', ${alias}.state) END`
+  const transaction = (alias: string, hash: PgColumn, block: PgColumn): string =>
+    `CASE WHEN ${alias}.name IS NULL THEN NULL ELSE jsonb_build_object('hash', ${alias}.${hash.name}, 'blockNumber', ${alias}.${block.name}, 'state', ${caseOver(`${alias}.state`, ACTIVITY_TRANSACTION_STATE_BY_STATE, 'Pending')}, 'lifecycleState', ${alias}.state) END`
   const waitingForWallet = (alias: string): string =>
     `${alias}.${t.state.name} = '${ACTIVITY_WALLET_TRANSACTION_STATE}' AND ${alias}.${t.signer.name} = '${ACTIVITY_WALLET_TRANSACTION_SIGNER}'`
   const walletTransaction = (alias: string): string =>
     `jsonb_build_object('name', ${alias}.name, 'circuit', ${alias}.${t.circuit.name}, 'expireTime', ${alias}.${t.expireTime.name})`
   const circuits = (names: readonly string[]): string => names.map((name) => `'${name}'`).join(', ')
-  const amount = branch.amount === 'NULL' ? 'NULL' : `d.${branch.amount}`
+  const amountType = midnightEthereumErc20VaultSwapsV1.amountOut.getSQLType()
+  const addressType = midnightEthereumErc20VaultSwapsV1.erc20AddressOut.getSQLType()
+  const field = (column: PgColumn | null, sqlType: string): string =>
+    column === null ? `NULL::${sqlType}` : `d.${column.name}`
   return `
     SELECT
       d.name AS name,
       '${branch.type}' AS type,
       ${caseOver('d.state', ACTIVITY_STATE_BY_OPERATION_STATE, 'Pending')} AS state,
-      d.${branch.erc20Address} AS erc20_address,
-      ${amount} AS amount,
-      ${branch.erc20AddressOut} AS erc20_address_out,
-      ${branch.amountOut} AS amount_out,
-      ${branch.spender} AS spender,
+      d.${branch.erc20Address.name} AS erc20_address,
+      ${field(branch.amount, amountType)} AS amount,
+      ${field(branch.erc20AddressOut, addressType)} AS erc20_address_out,
+      ${field(branch.amountOut, amountType)} AS amount_out,
+      ${field(branch.spender, addressType)} AS spender,
+      ${field(branch.destination, addressType)} AS destination,
       d.outcome AS outcome,
       d.error AS error,
       d.state AS resource_state,
       r.${r.state.name} AS vault_request_state,
       r.${r.requestId.name} AS vault_request_id,
       CASE WHEN ${waitingForWallet('c')} THEN ${walletTransaction('c')} WHEN ${waitingForWallet('s')} THEN ${walletTransaction('s')} ELSE NULL END AS wallet_transaction,
-      ${transaction('s', t.txId)} AS start_transaction,
-      ${transaction('e', e.txHash)} AS foreign_chain_transaction,
-      ${transaction('c', t.txId)} AS complete_transaction,
+      ${transaction('s', t.txId, t.blockHeight)} AS start_transaction,
+      ${transaction('e', e.txHash, e.blockNumber)} AS foreign_chain_transaction,
+      ${transaction('c', t.txId, t.blockHeight)} AS complete_transaction,
       d.create_time AS create_time,
       GREATEST(d.update_time, s.update_time, r.update_time, e.update_time, c.update_time) AS update_time
     FROM "${getTableName(branch.table)}" d

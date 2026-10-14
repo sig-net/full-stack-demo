@@ -51,6 +51,7 @@ const cases: Case[] = [
     expected: [
       {
         tokenType: USDC_TYPE,
+        baseUnits: 1_500_000n,
         assetSymbol: 'USDC',
         networkName: 'Ethereum',
         amount: '1.5',
@@ -66,6 +67,7 @@ const cases: Case[] = [
     expected: [
       {
         tokenType: UNKNOWN_TYPE,
+        baseUnits: 1234567890123456789n,
         assetSymbol: '0000',
         networkName: MIDNIGHT_NETWORK_NAME,
         amount: '1234567890123456789',
@@ -81,6 +83,7 @@ const cases: Case[] = [
     expected: [
       {
         tokenType: UNKNOWN_TYPE,
+        baseUnits: 4n,
         assetSymbol: '0000',
         networkName: MIDNIGHT_NETWORK_NAME,
         amount: '4',
@@ -90,6 +93,7 @@ const cases: Case[] = [
       },
       {
         tokenType: USDC_TYPE,
+        baseUnits: 2_000_000n,
         assetSymbol: 'USDC',
         networkName: 'Ethereum',
         amount: '2',
@@ -99,6 +103,7 @@ const cases: Case[] = [
       },
       {
         tokenType: OTHER_UNKNOWN_TYPE,
+        baseUnits: 3n,
         assetSymbol: '0000',
         networkName: MIDNIGHT_NETWORK_NAME,
         amount: '3',

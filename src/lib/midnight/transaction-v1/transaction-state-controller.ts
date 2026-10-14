@@ -50,6 +50,7 @@ export interface CommitTransactionArgs extends Omit<
   | 'unboundTx'
   | 'finalizedTx'
   | 'txId'
+  | 'blockHeight'
   | 'expireTime'
   | 'failure'
   | 'error'
@@ -84,14 +85,17 @@ export interface RecordRejectionArgs {
   error: string
 }
 
+/** A ledger failure is still a recorded transaction, so the block that holds the verdict is known. */
 export interface RecordLedgerFailureArgs {
   name: string
   failure: Extract<MidnightTransactionFailure, 'FailEntirely' | 'FailFallible'>
   error: string
+  blockHeight: number
 }
 
 export interface RecordSuccessArgs {
   name: string
+  blockHeight: number
 }
 
 export interface ExpireTransactionArgs {

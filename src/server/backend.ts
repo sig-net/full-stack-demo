@@ -105,6 +105,16 @@ import type { SwapStateController } from '@/lib/midnight/ethereum-erc20-vault/sw
 import { SwapStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-state-controller-impl'
 import type { SwapStateResolver } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-state-resolver'
 import { SwapStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-state-resolver-impl'
+import { WithdrawEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-event-consumer'
+import type { WithdrawRepository } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-repository'
+import { WithdrawRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-repository-sql-impl'
+import type { WithdrawService } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service'
+import { WithdrawServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service-adaptor'
+import { WithdrawServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service-impl'
+import type { WithdrawStateController } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-state-controller'
+import { WithdrawStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-state-controller-impl'
+import type { WithdrawStateResolver } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-state-resolver'
+import { WithdrawStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-state-resolver-impl'
 import { UniswapQuoterEthersImpl } from '@/lib/ethereum/uniswap-quoter-ethers-impl'
 import { FlushEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/flush-event-consumer'
 import type { Flusher } from '@/lib/midnight/ethereum-erc20-vault/flusher'
@@ -265,6 +275,15 @@ export interface MidnightBackend {
       readonly service: DepositService
       readonly adaptor: DepositServiceAdaptor
     }
+    /** The caller's withdrawals: a vault coin burnt for an ERC20 transfer the vault account signs to a destination. */
+    readonly withdrawV1: {
+      readonly repository: WithdrawRepository
+      readonly stateController: WithdrawStateController
+      readonly stateResolver: WithdrawStateResolver
+      readonly eventConsumer: WithdrawEventConsumer
+      readonly service: WithdrawService
+      readonly adaptor: WithdrawServiceAdaptor
+    }
     readonly swapV1: {
       readonly repository: SwapRepository
       readonly stateController: SwapStateController
@@ -341,6 +360,7 @@ function createLifecycle(backend: BackendPackages): Pick<Backend, 'start' | 'sto
       ethereum.transactionV1.eventConsumer,
       midnight.ethereumErc20Vault.vaultRequestV1.eventConsumer,
       midnight.ethereumErc20Vault.depositV1.eventConsumer,
+      midnight.ethereumErc20Vault.withdrawV1.eventConsumer,
       midnight.ethereumErc20Vault.swapV1.eventConsumer,
       midnight.ethereumErc20Vault.approvalV1.eventConsumer,
       midnight.ethereumErc20Vault.flushEventConsumer,
@@ -370,7 +390,8 @@ function createLifecycle(backend: BackendPackages): Pick<Backend, 'start' | 'sto
 
 /** Every resolver's sweep, then the flusher, so a request a sweep moved into a flush state is flushed at once. */
 function sweepTasks(ethereum: EthereumBackend, midnight: MidnightBackend): SweepTask[] {
-  const { vaultRequestV1, depositV1, swapV1, approvalV1, flusher } = midnight.ethereumErc20Vault
+  const { vaultRequestV1, depositV1, withdrawV1, swapV1, approvalV1, flusher } =
+    midnight.ethereumErc20Vault
   return [
     {
       name: 'Midnight transactions',
@@ -382,6 +403,7 @@ function sweepTasks(ethereum: EthereumBackend, midnight: MidnightBackend): Sweep
     },
     { name: 'vault requests', run: () => vaultRequestV1.stateResolver.resolvePending() },
     { name: 'deposits', run: () => depositV1.stateResolver.resolvePending() },
+    { name: 'withdrawals', run: () => withdrawV1.stateResolver.resolvePending() },
     { name: 'swaps', run: () => swapV1.stateResolver.resolvePending() },
     { name: 'approvals', run: () => approvalV1.stateResolver.resolvePending() },
     // The flusher coalesces and logs its own failures, and a flush that proves runs for minutes,
@@ -633,6 +655,14 @@ function createMidnightEthereumErc20Vault(
       vaultRequestV1,
       { circuits, ledger },
     ),
+    withdrawV1: createMidnightEthereumErc20VaultWithdrawV1(
+      db,
+      event,
+      config,
+      transactionV1,
+      vaultRequestV1,
+      { circuits, ledger },
+    ),
     swapV1: createMidnightEthereumErc20VaultSwapV1(
       db,
       event,
@@ -680,6 +710,48 @@ function createMidnightEthereumErc20VaultReadinessV1(
     config.client.midnightEthereumErc20Vault,
   )
   return { accountReader, service, adaptor: new ReadinessServiceAdaptor(service) }
+}
+
+function createMidnightEthereumErc20VaultWithdrawV1(
+  db: DbBackend,
+  event: EventBackend,
+  config: ServerConfig,
+  transactionV1: MidnightBackend['transactionV1'],
+  vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+): MidnightBackend['ethereumErc20Vault']['withdrawV1'] {
+  const repository = new WithdrawRepositorySQLImpl(db.database)
+  const stateController = new WithdrawStateControllerImpl(
+    repository,
+    event.publisher,
+    transactionV1.stateController,
+    vaultRequestV1.stateController,
+  )
+  const stateResolver = new WithdrawStateResolverImpl(
+    repository,
+    stateController,
+    transactionV1.repository,
+    vaultRequestV1.repository,
+    vault.ledger,
+    db.unitOfWork,
+  )
+  const service = new WithdrawServiceImpl(
+    repository,
+    stateController,
+    vaultRequestV1.repository,
+    vault.circuits,
+    db.unitOfWork,
+    config.client.midnightSignet,
+    config.client.midnightEthereumErc20Vault,
+  )
+  return {
+    repository,
+    stateController,
+    stateResolver,
+    eventConsumer: new WithdrawEventConsumer(stateResolver),
+    service,
+    adaptor: new WithdrawServiceAdaptor(service),
+  }
 }
 
 function createMidnightEthereumErc20VaultSwapV1(
@@ -849,7 +921,12 @@ function createRespondOutcomeSources(
       }
     }
   }
-  return { deposit: source('deposit'), swap: source('swap'), approve: source('approve') }
+  return {
+    deposit: source('deposit'),
+    withdraw: source('withdraw'),
+    swap: source('swap'),
+    approve: source('approve'),
+  }
 }
 
 function createMidnightEthereumErc20VaultRequestV1(

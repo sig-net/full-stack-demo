@@ -92,6 +92,8 @@ export const midnightTransactionSchema = z.object({
   expireTime: z.date().nullable(),
   /** The id the node returned on acceptance, what the indexer is watched by. */
   txId: z.string().nullable(),
+  /** The height of the block the ledger recorded the transaction in, set with the ledger's verdict. */
+  blockHeight: z.number().int().nonnegative().nullable(),
   /** Set with `Failed`. */
   failure: midnightTransactionFailureSchema.nullable(),
   /** The external system's message behind a failure, where there was one. */

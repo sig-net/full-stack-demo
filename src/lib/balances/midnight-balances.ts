@@ -5,9 +5,10 @@ import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { ORIGIN_NETWORKS } from '@/lib/tokens/token-info'
 import type { TokenInfoRegistry } from '@/lib/tokens/token-info-registry'
 
-/** A balance with the token type that identifies it, since several token types share a symbol. */
+/** A balance with the token type that identifies it, since several token types share a symbol, and its exact base units. */
 export interface MidnightBalanceAmount extends AssetAmount {
   readonly tokenType: string
+  readonly baseUnits: bigint
 }
 
 /**
@@ -28,6 +29,7 @@ export async function readMidnightBalanceAmounts(
       if (info === undefined) {
         return {
           tokenType,
+          baseUnits: amount,
           assetSymbol: tokenType.slice(0, UNREGISTERED_TOKEN_CODE_LENGTH),
           networkName: MIDNIGHT_NETWORK_NAME,
           amount: amount.toString(),
@@ -39,6 +41,7 @@ export async function readMidnightBalanceAmounts(
       const network = ORIGIN_NETWORKS[info.origin.kind]
       return {
         tokenType,
+        baseUnits: amount,
         assetSymbol: info.symbol,
         networkName: network.name,
         amount: formatTokenAmount(amount, info.decimals),
