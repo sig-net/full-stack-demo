@@ -895,7 +895,7 @@ A row carries the projected resource's own `name`, `type`, `state`, `depositAcco
 filter), `erc20Address`, `amount`, `outcome`, `error`, three nullable `{ hash, state }` objects
 (`startTransaction`, `foreignChainTransaction`, `completeTransaction`, stored as `jsonb` and
 parsed by the resource schema), `createTime` and `updateTime` (the newest update across the
-joined rows). `latestTransactionOf()` picks the furthest step's transaction for a listing.
+joined rows).
 
 The repository is the reading half of the repository contract: `ReadRepository` (`get` and
 `search` without a lock) over `SQLReadRepository`, which selects from a table or a view and which
@@ -915,19 +915,33 @@ newest vault request's state, each child transaction's own state as `lifecycleSt
 `walletTransaction`, the newest caller-signed Midnight transaction in `AwaitingWallet` with its
 circuit and deadline. `activityActionOf()` and `activityStepsOf()`
 (`src/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress.ts`) derive from those
-the user's next step (`balance`, `complete` or `none`) and the ten-step progress the row's info
-popover shows.
+the user's next step (`balance`, `complete` or `none`) and the ten-step progress, each step
+flagged `walletTurn` when only the wallet can take it and carrying the `reference` it leaves
+behind: the start and completion calls' Midnight transaction ids, the vault request's Sig
+Network request id (projected by the view as `vaultRequestId`) and the sweep's Ethereum
+transaction hash, each null until its step assigns it.
 
 `ActivitySection` reads `listActivities` through React Query, every five seconds while a row
 is pending and every thirty otherwise, and maps each row with `activityEntryOf()`
-(`src/lib/activity/activity-entries.ts`). A row with a next step shows a button, "Balance with
-wallet" or "Complete deposit", which opens `DepositActionDialog`
-(`src/components/deposit-action-dialog.tsx`). Balancing reads the transaction afresh through
-`listTransactions`, has the wallet balance, sign and finalise its `unboundTx` with
-`Wallet.finalize()`, and hands the result to `submitTransaction`. Completing calls
-`completeDeposit` as the dialog opens, polls the deposit's calls until the completion call is
-proved, and then offers the same balance step for it. Success and failure surface as toasts
-from the shadcn `sonner` toaster mounted in the root layout.
+(`src/lib/activity/activity-entries.ts`). Beside its status badge every row has one icon button
+into `ActivityFlowDialog` (`src/components/activity-flow-dialog.tsx`): a wallet with a bolt
+(`WalletSigningIcon`, tooltip "Action required") while a call waits in `AwaitingWallet`, an eye
+(tooltip "View details") otherwise. The dialog says where the activity stands and whether the
+user must act, keeps the ten steps behind a "See more details" pane that opens closed, where a
+step's reference shows abbreviated with its meaning in a tip, a copy button and a block
+explorer button that is disabled until an explorer is wired, and has
+a footer only while it is the wallet's turn: its "Sign with wallet" button reads the
+transaction afresh through `listTransactions`, has the wallet balance, sign and finalise its
+`unboundTx` with `Wallet.finalize()`, and hands the result to `submitTransaction`. The
+completion needs no click: the completion circuit proves the caller's secret as its witness,
+and the browser is the one place that holds it, so `ActivitySection` calls `completeDeposit`
+for every deposit the view shows in `AwaitingCompletion`, with the connected wallet's keys,
+once per row per thirty seconds (`depositsDueForCompletion()` in
+`src/lib/activity/completions-due.ts`). A refusal
+means another tab got there first and is left to the next window. Success and failure surface
+as toasts from the shadcn `sonner` toaster mounted in the root layout, and the Next dev
+server's server function invocation log is switched off in `next.config.ts`, since every action
+carries the caller secret as its first argument.
 
 The deposit itself starts from the deposit dialog: each fund line's control calls
 `startDeposit` for the whole fund with the wallet's public keys, with the dialog inert until the
@@ -1007,8 +1021,8 @@ under Styling and theme.
 - `ActivitySection` (`src/components/activity-section.tsx`) reads the caller's activity through
   `listActivities` and renders `ActivityTable`. Each entry is a collapsible table body: from the
   `md` breakpoint up every column shows, below it a chevron expands the timestamp and block
-  explorer details. The Status cell holds the badge, or the user's next step while it is their
-  turn, and the progress info. The entry types live in `src/lib/activity/activity-entry.ts` and
+  explorer details. The Status cell holds the badge, or the Balance button while a call waits
+  for the wallet, and the progress info. The entry types live in `src/lib/activity/activity-entry.ts` and
   the mapping from the resource in `src/lib/activity/activity-entries.ts`.
 - `SwapPanel` (`src/components/swap-panel.tsx`) holds the local form state for two
   `SwapAmountField`s and the disabled Swap call to action. The token list comes from

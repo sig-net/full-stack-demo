@@ -36,7 +36,6 @@ describe('activityEntryOf', () => {
         kind: 'asset',
         asset: { assetSymbol: 'USDC', networkName: 'Midnight', networkIcon: NO_ICON },
       },
-      transactionHashLabel: '111111…1111',
       action: { kind: 'none' },
       error: null,
     })
@@ -60,16 +59,6 @@ describe('activityEntryOf', () => {
     expect(activityEntryOf(activityFixture({ state }), new TokenInfoRegistry([])).status).toBe(
       status,
     )
-  })
-
-  test('reads pending for a hash the chain has not assigned', () => {
-    const entry = activityEntryOf(
-      activityFixture({
-        startTransaction: { hash: null, state: 'Pending', lifecycleState: 'AwaitingProof' },
-      }),
-      new TokenInfoRegistry([]),
-    )
-    expect(entry.transactionHashLabel).toBe('pending')
   })
 })
 

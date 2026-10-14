@@ -180,6 +180,7 @@ describe('The activity view over Postgres', () => {
       error: null,
       depositState: 'AwaitingCompleteTransaction',
       vaultRequestState: 'AwaitingAttestation',
+      vaultRequestId: '22'.repeat(32),
       walletTransaction: null,
       startTransaction: { hash: 'start-2', state: 'Succeeded', lifecycleState: 'Succeeded' },
       foreignChainTransaction: {

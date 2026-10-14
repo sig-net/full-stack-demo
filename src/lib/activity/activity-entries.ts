@@ -2,10 +2,9 @@ import { abbreviateHex } from '@/lib/abbreviate-hex'
 import type { ActivityEntry, ActivityStatus } from '@/lib/activity/activity-entry'
 import type { AssetAmount } from '@/lib/asset-amount'
 import { NO_ICON } from '@/lib/icon-source'
-import {
-  type Activity,
-  type ActivityState,
-  latestTransactionOf,
+import type {
+  Activity,
+  ActivityState,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import {
   activityActionOf,
@@ -32,7 +31,6 @@ export function activityEntryOf(activity: Activity, registry: TokenInfoRegistry)
     icon: info?.icon ?? NO_ICON,
     networkIcon: BUNDLED_NETWORK_ICONS.ethereum,
   }
-  const hash = latestTransactionOf(activity)?.hash ?? null
   return {
     name: activity.name,
     kind: 'deposit',
@@ -40,7 +38,6 @@ export function activityEntryOf(activity: Activity, registry: TokenInfoRegistry)
     to: { kind: 'asset', asset: { ...from, networkName: 'Midnight', networkIcon: NO_ICON } },
     timestampLabel: formatTimestamp(activity.createTime),
     status: ACTIVITY_STATUS_BY_STATE[activity.state],
-    transactionHashLabel: hash === null ? 'pending' : abbreviateHex(hash),
     action: activityActionOf(activity),
     steps: activityStepsOf(activity),
     error: activity.error,

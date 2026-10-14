@@ -14,7 +14,7 @@ import {
   type MidnightTransactionState,
   midnightTransactionStateSchema,
 } from '@/lib/midnight/transaction-v1/transaction'
-import { amountSchema, evmAddressSchema } from '@/lib/value-schemas'
+import { amountSchema, evmAddressSchema, hex32BytesSchema } from '@/lib/value-schemas'
 
 /** Where an activity stands, aggregated from its lifecycle row by the view. */
 export const ACTIVITY_STATES = ['Pending', 'Complete', 'Failed'] as const
@@ -95,6 +95,8 @@ export const activitySchema = z.object({
   depositState: depositStateSchema,
   /** The newest vault request's own state, null before the request exists. */
   vaultRequestState: vaultRequestStateSchema.nullable(),
+  /** The id the MPC recorded the newest vault request under, null until the request is sent. */
+  vaultRequestId: hex32BytesSchema.nullable(),
   /** The newest caller transaction the wallet must balance now, null when none waits. */
   walletTransaction: activityWalletTransactionSchema.nullable(),
   /** The caller's call that put the request on the vault. */
@@ -109,10 +111,3 @@ export const activitySchema = z.object({
 })
 
 export type Activity = z.infer<typeof activitySchema>
-
-/** The transaction of the furthest step reached, which a listing shows for the activity. */
-export function latestTransactionOf(activity: Activity): ActivityTransaction | null {
-  return (
-    activity.completeTransaction ?? activity.foreignChainTransaction ?? activity.startTransaction
-  )
-}

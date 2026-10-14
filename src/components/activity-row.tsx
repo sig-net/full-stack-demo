@@ -1,22 +1,21 @@
 'use client'
 
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Eye } from 'lucide-react'
 import { type ComponentProps, type ReactNode, useState } from 'react'
 
-import { ActivityExplorer } from '@/components/activity-explorer'
-import { ActivityProgressPopover } from '@/components/activity-progress-popover'
+import { ActivityFlowDialog } from '@/components/activity-flow-dialog'
 import { ActivityTransfer } from '@/components/activity-transfer'
-import { DepositActionDialog } from '@/components/deposit-action-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { TableBody, TableCell, TableRow } from '@/components/ui/table'
-import type { ActivityEntry, ActivityKind, ActivityStatus } from '@/lib/activity/activity-entry'
-import type { ActivityAction } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress'
-
-const KIND_LABELS: Record<ActivityKind, string> = {
-  deposit: 'Deposit',
-}
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { WalletSigningIcon } from '@/components/wallet-signing-icon'
+import {
+  ACTIVITY_KIND_LABELS,
+  type ActivityEntry,
+  type ActivityStatus,
+} from '@/lib/activity/activity-entry'
 
 const STATUS_BADGES: Record<
   ActivityStatus,
@@ -25,13 +24,6 @@ const STATUS_BADGES: Record<
   pending: { label: 'Pending', variant: 'warning' },
   complete: { label: 'Complete', variant: 'success' },
   failed: { label: 'Failed', variant: 'destructive' },
-}
-
-/** The user's next step as the Status cell's button, which replaces the Pending badge while it is the user's turn. */
-const ACTION_ITEMS: Record<ActivityAction['kind'], { label: string; name: string } | null> = {
-  balance: { label: 'Balance', name: 'Balance with wallet' },
-  complete: { label: 'Complete', name: 'Complete deposit' },
-  none: null,
 }
 
 /** Four columns show below `md`: the expanded row's single cell spans them. */
@@ -52,15 +44,16 @@ interface ActivityRowProps {
 }
 
 /**
- * One activity as its own `tbody`, the collapsible's root. Below `md` the Timestamp and Block
- * Explorer cells are hidden and the chevron expands a second row holding them.
+ * One activity as its own `tbody`, the collapsible's root. Below `md` the Timestamp cell is
+ * hidden and the chevron expands a second row holding it.
  */
 export function ActivityRow({ entry }: ActivityRowProps): ReactNode {
-  const { kind, from, to, timestampLabel, status, transactionHashLabel } = entry
-  const kindLabel = KIND_LABELS[kind]
+  const { kind, from, to, timestampLabel, status } = entry
+  const kindLabel = ACTIVITY_KIND_LABELS[kind]
   const badge = STATUS_BADGES[status]
-  const [actionOpen, setActionOpen] = useState(false)
-  const action = ACTION_ITEMS[entry.action.kind]
+  const [flowOpen, setFlowOpen] = useState(false)
+  const walletTurn = entry.action.kind === 'balance'
+  const flowLabel = walletTurn ? 'Action required' : 'View details'
   return (
     <Collapsible render={<TableBody />}>
       <TableRow className="hover:bg-transparent has-aria-expanded:bg-transparent">
@@ -76,29 +69,32 @@ export function ActivityRow({ entry }: ActivityRowProps): ReactNode {
           {timestampLabel}
         </TableCell>
         <TableCell className={CELL_CLASS}>
-          {/* The status column holds the badge, or the user's next step while it is their turn, and the progress info. */}
-          <div className="flex items-center gap-1">
-            {action === null ? (
-              <Badge variant={badge.variant} className="flex">
-                {badge.label}
-              </Badge>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                aria-label={action.name}
-                onClick={() => {
-                  setActionOpen(true)
-                }}
-              >
-                {action.label}
-              </Button>
-            )}
-            <ActivityProgressPopover entry={entry} />
+          {/* The badge and the flow dialog's button stack below `md`, where the Status column is too narrow for both in a row. */}
+          <div className="flex flex-col items-start gap-1 md:flex-row md:items-center">
+            <Badge variant={badge.variant} className="flex">
+              {badge.label}
+            </Badge>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className={walletTurn ? 'text-foreground' : 'text-subtle-foreground'}
+                      aria-label={`${flowLabel}: ${kindLabel} ${from.amount} ${from.assetSymbol}`}
+                      onClick={() => {
+                        setFlowOpen(true)
+                      }}
+                    />
+                  }
+                >
+                  {walletTurn ? <WalletSigningIcon /> : <Eye className="size-5" aria-hidden />}
+                </TooltipTrigger>
+                <TooltipContent>{flowLabel}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
-        </TableCell>
-        <TableCell className={`hidden ${CELL_CLASS} md:table-cell`}>
-          <ActivityExplorer transactionHashLabel={transactionHashLabel} />
         </TableCell>
         <TableCell className={`${CELL_CLASS} md:hidden`}>
           <CollapsibleTrigger
@@ -127,15 +123,11 @@ export function ActivityRow({ entry }: ActivityRowProps): ReactNode {
             <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 pb-4">
               <dt className={DETAIL_LABEL_CLASS}>Timestamp</dt>
               <dd className="text-sm/5 font-medium text-secondary-foreground">{timestampLabel}</dd>
-              <dt className={DETAIL_LABEL_CLASS}>Block Explorer</dt>
-              <dd>
-                <ActivityExplorer transactionHashLabel={transactionHashLabel} />
-              </dd>
             </dl>
           </CollapsibleContent>
         </TableCell>
       </TableRow>
-      {actionOpen && <DepositActionDialog entry={entry} onOpenChange={setActionOpen} />}
+      {flowOpen && <ActivityFlowDialog entry={entry} onOpenChange={setFlowOpen} />}
     </Collapsible>
   )
 }

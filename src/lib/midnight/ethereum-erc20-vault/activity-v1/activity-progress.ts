@@ -26,30 +26,79 @@ export function activityActionOf(activity: Activity): ActivityAction {
 /** One step of an activity's flow, in order, with where the activity stands against it. */
 export interface ActivityStep {
   readonly label: string
+  /** True for a step only the caller's wallet can take, by balancing and signing a call. */
+  readonly walletTurn: boolean
   readonly status: ActivityStepStatus
+  /** The identifier the step leaves on a chain or at the MPC, for a step that leaves one. */
+  readonly reference: ActivityReference | null
 }
 
 export type ActivityStepStatus = 'done' | 'current' | 'pending' | 'failed'
 
+/** An identifier a step leaves behind, with `id` null until the step assigns it. */
+export interface ActivityReference {
+  readonly kind: ActivityReferenceKind
+  readonly id: string | null
+}
+
+export type ActivityReferenceKind = 'midnightTransaction' | 'vaultRequest' | 'ethereumTransaction'
+
+/** A step as the list declares it, with the reference's reader when the step leaves one. */
+export interface ActivityStepDefinition {
+  readonly label: string
+  readonly walletTurn: boolean
+  readonly reference: {
+    readonly kind: ActivityReferenceKind
+    readonly idOf: (activity: Activity) => string | null
+  } | null
+}
+
 /** The deposit's steps in order; a second activity type brings its own list. */
-export const DEPOSIT_STEPS = [
-  'Start call signed by your wallet',
-  'Start call included on Midnight',
-  'Request flushed to the vault queue',
-  'Request sent to the MPC',
-  'Sweep signed by the MPC',
-  'Funds swept on Ethereum',
-  'Sweep attested by the MPC',
-  'Attestation flushed to the vault',
-  'Completion signed by your wallet',
-  'Completion included on Midnight',
-] as const
+export const DEPOSIT_STEPS: readonly ActivityStepDefinition[] = [
+  { label: 'Start call signed by your wallet', walletTurn: true, reference: null },
+  {
+    label: 'Start call included on Midnight',
+    walletTurn: false,
+    reference: {
+      kind: 'midnightTransaction',
+      idOf: (activity) => activity.startTransaction?.hash ?? null,
+    },
+  },
+  { label: 'Request flushed to the vault queue', walletTurn: false, reference: null },
+  {
+    label: 'Request sent to the MPC',
+    walletTurn: false,
+    reference: { kind: 'vaultRequest', idOf: (activity) => activity.vaultRequestId },
+  },
+  { label: 'Sweep signed by the MPC', walletTurn: false, reference: null },
+  {
+    label: 'Funds swept on Ethereum',
+    walletTurn: false,
+    reference: {
+      kind: 'ethereumTransaction',
+      idOf: (activity) => activity.foreignChainTransaction?.hash ?? null,
+    },
+  },
+  { label: 'Sweep attested by the MPC', walletTurn: false, reference: null },
+  { label: 'Attestation flushed to the vault', walletTurn: false, reference: null },
+  { label: 'Completion signed by your wallet', walletTurn: true, reference: null },
+  {
+    label: 'Completion included on Midnight',
+    walletTurn: false,
+    reference: {
+      kind: 'midnightTransaction',
+      idOf: (activity) => activity.completeTransaction?.hash ?? null,
+    },
+  },
+]
 
 export function activityStepsOf(activity: Activity): ActivityStep[] {
   const { current, failed } = depositProgress(activity)
-  return DEPOSIT_STEPS.map((label, index) => ({
+  return DEPOSIT_STEPS.map(({ label, walletTurn, reference }, index) => ({
     label,
+    walletTurn,
     status: index < current ? 'done' : index > current ? 'pending' : failed ? 'failed' : 'current',
+    reference: reference === null ? null : { kind: reference.kind, id: reference.idOf(activity) },
   }))
 }
 

@@ -14,8 +14,6 @@ export interface ActivityEntry {
   /** Formatted by the source, such as `July 8, 2025 07:18 PM`. */
   readonly timestampLabel: string
   readonly status: ActivityStatus
-  /** Abbreviated by the source, such as `0x10B4…6dFa`, or `pending` before any hash exists. */
-  readonly transactionHashLabel: string
   /** What the user must do next, if anything. */
   readonly action: ActivityAction
   readonly steps: readonly ActivityStep[]
@@ -24,6 +22,11 @@ export interface ActivityEntry {
 }
 
 export type ActivityKind = 'deposit'
+
+/** The kind as the table and its dialog name it. */
+export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
+  deposit: 'Deposit',
+}
 
 export type ActivityStatus = 'pending' | 'complete' | 'failed'
 

@@ -170,7 +170,7 @@ function DepositAccountFunds({
           ? deposit.amount.toString()
           : `${formatTokenAmount(deposit.amount, info.decimals)} ${info.symbol}`
       toast.success(
-        `Deposit of ${amount} started. Balance its start call from the Activity row once it is proved.`,
+        `Deposit of ${amount} started. Sign its start call from the Activity row once it is proved.`,
       )
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
       onBusyChange(false)

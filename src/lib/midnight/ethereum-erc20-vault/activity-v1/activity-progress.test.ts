@@ -4,7 +4,10 @@ import type {
   Activity,
   ActivityTransaction,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
-import { activityFixture } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
+import {
+  activityFixture,
+  START_TX_HASH,
+} from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
 import {
   type ActivityAction,
   activityActionOf,
@@ -156,7 +159,35 @@ describe('activityStepsOf', () => {
   ]
   test.each(cases)('$name', ({ activity, expected }) => {
     const steps = activityStepsOf(activityFixture(activity))
-    expect(steps.map((step) => step.label)).toEqual([...DEPOSIT_STEPS])
+    expect(steps.map(({ label, walletTurn }) => ({ label, walletTurn }))).toEqual(
+      DEPOSIT_STEPS.map(({ label, walletTurn }) => ({ label, walletTurn })),
+    )
     expect(steps.map((step) => letters[step.status]).join('')).toBe(expected)
+  })
+
+  test('reads each reference from the row, null while the step has not assigned it', () => {
+    const steps = activityStepsOf(
+      activityFixture({
+        vaultRequestId: '22'.repeat(32),
+        foreignChainTransaction: {
+          hash: null,
+          state: 'Pending',
+          lifecycleState: 'AwaitingSubmission',
+        },
+        completeTransaction: null,
+      }),
+    )
+    expect(steps.map((step) => step.reference)).toEqual([
+      null,
+      { kind: 'midnightTransaction', id: START_TX_HASH },
+      null,
+      { kind: 'vaultRequest', id: '22'.repeat(32) },
+      null,
+      { kind: 'ethereumTransaction', id: null },
+      null,
+      null,
+      null,
+      { kind: 'midnightTransaction', id: null },
+    ])
   })
 })

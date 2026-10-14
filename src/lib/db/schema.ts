@@ -184,6 +184,7 @@ export const midnightEthereumErc20VaultActivityV1 = pgView(
     error: text('error'),
     depositState: text('deposit_state', { enum: DEPOSIT_STATES }).notNull(),
     vaultRequestState: text('vault_request_state', { enum: VAULT_REQUEST_STATES }),
+    vaultRequestId: text('vault_request_id'),
     // The repository parses every row with the resource schema, which checks the shape claimed here.
     walletTransaction: jsonb('wallet_transaction').$type<ActivityWalletTransaction | null>(),
     startTransaction: jsonb('start_transaction').$type<ActivityTransaction | null>(),
@@ -220,6 +221,7 @@ function activityViewQuery(): SQL {
       d.${d.error.name} AS error,
       d.${d.state.name} AS deposit_state,
       r.${r.state.name} AS vault_request_state,
+      r.${r.requestId.name} AS vault_request_id,
       CASE WHEN ${waitingForWallet('c')} THEN ${walletTransaction('c')} WHEN ${waitingForWallet('s')} THEN ${walletTransaction('s')} ELSE NULL END AS wallet_transaction,
       ${transaction('s', t.txId)} AS start_transaction,
       ${transaction('e', e.txHash)} AS foreign_chain_transaction,

@@ -18,6 +18,7 @@ export function activityFixture(overrides: Partial<Activity> = {}): Activity {
     error: null,
     depositState: 'AwaitingStartTransaction',
     vaultRequestState: null,
+    vaultRequestId: null,
     walletTransaction: null,
     startTransaction: {
       hash: START_TX_HASH,
@@ -33,5 +34,3 @@ export function activityFixture(overrides: Partial<Activity> = {}): Activity {
 }
 
 export const START_TX_HASH = '11'.repeat(32)
-export const FOREIGN_TX_HASH = `0x${'22'.repeat(32)}`
-export const COMPLETE_TX_HASH = '33'.repeat(32)
