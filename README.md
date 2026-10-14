@@ -21,7 +21,7 @@ cp .env.example .env.local
 ```
 
 ```bash
-docker compose up -d --wait
+docker compose --env-file .env.local up -d --wait
 ```
 
 ```bash
@@ -206,6 +206,12 @@ application uses, and the block explorer of the local EVM node:
   Midnight transaction by its id, so a link opens the block that holds the transaction, where
   it is the `midnight.sendMnTransaction` extrinsic. The image is published for amd64 only, so
   it runs under emulation on Apple silicon.
+- The sig.network explorer (`ghcr.io/sig-net/explorer`) on `127.0.0.1:5400`, whose page the
+  browser runs against the local indexer, node and EVM fork. It is where the Activity dialog's
+  Sig Network request links open on the local stack, on the request's lifecycle. The local
+  stack generates its own Signet contract and MPC root key, so the service reads
+  `MIDNIGHT_SIGNET_CONTRACT_ADDRESS` and `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY` from `.env.local`,
+  which is why the services start with `--env-file .env.local`.
 
 `DB_CONNECTION_STRING` and `KAFKA_BROKERS` in `.env.example` point at the first two. Their data
 lives in the `full-stack-demo_postgres-data` and `full-stack-demo_kafka-data` Docker volumes and
@@ -214,7 +220,7 @@ survives a restart of the containers.
 Start them and wait until they accept connections:
 
 ```bash
-docker compose up -d --wait
+docker compose --env-file .env.local up -d --wait
 ```
 
 Stop them and keep the data:
@@ -1016,8 +1022,10 @@ on the local stack, which `isLocalEnvironment()` recognises by its undeployed Mi
 and loopback EVM node, Etherscan on Sepolia or mainnet), a Midnight transaction opens the block
 that holds it in Polkadot.js Apps once the ledger has recorded it (`midnightExplorerOf()` in
 `src/lib/config/midnight-explorer.ts`: the copy from `compose.yaml` on the local stack, the
-public site over the configured node elsewhere), while the Sig Network reference keeps a
-disabled button until its explorer is wired, and has
+public site over the configured node elsewhere), and a Sig Network request opens its lifecycle
+in the sig.network explorer (`signetExplorerOf()` in `src/lib/config/signet-explorer.ts`: the
+copy from `compose.yaml` on the local stack, <https://sig-net.github.io/explorer/> elsewhere,
+the network named in the URL), and has
 a footer only while it is the wallet's turn: its "Sign with wallet" button reads the
 transaction afresh through `listTransactions`, has the wallet balance, sign and finalise its
 `unboundTx` with `Wallet.finalize()`, and hands the result to `submitTransaction`. The

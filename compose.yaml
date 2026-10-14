@@ -69,6 +69,21 @@ services:
     ports:
       - '127.0.0.1:5300:80'
 
+  # The sig.network explorer, where a Sig Network request id opens on its lifecycle. The page
+  # runs in the browser against the local indexer and node, so the stack's Signet contract
+  # address and MPC root key reach it from .env.local through the interpolation below, which is
+  # why the services start with `docker compose --env-file .env.local up -d --wait`.
+  signet-explorer:
+    image: ghcr.io/sig-net/explorer:latest
+    environment:
+      VITE_MIDNIGHT_DEFAULT_NETWORK: undeployed
+      VITE_MIDNIGHT_UNDEPLOYED_SIGNET_CONTRACT_ADDRESS: ${MIDNIGHT_SIGNET_CONTRACT_ADDRESS:-}
+      VITE_MIDNIGHT_UNDEPLOYED_MPC_ROOT_PUBLIC_KEY: ${MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY:-}
+      # The local EVM node is a Sepolia fork, so it answers for Sepolia.
+      VITE_MIDNIGHT_ETHEREUM_SEPOLIA_RPC_URL: http://127.0.0.1:8545
+    ports:
+      - '127.0.0.1:5400:8080'
+
 volumes:
   postgres-data:
   kafka-data:

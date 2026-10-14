@@ -40,6 +40,7 @@ import { formatTimestamp } from '@/lib/activity/activity-entries'
 import type { ClientConfig } from '@/lib/config/client-config'
 import { ethereumExplorerOf } from '@/lib/config/ethereum-explorer'
 import { midnightExplorerOf } from '@/lib/config/midnight-explorer'
+import { signetExplorerOf } from '@/lib/config/signet-explorer'
 import {
   ACTIVITY_KIND_LABELS,
   type ActivityEntry,
@@ -339,8 +340,8 @@ function ActivityReferenceLine({ reference }: { reference: ActivityReference }):
 
 /**
  * The explorer page a reference opens: an Ethereum transaction's own page, a Midnight
- * transaction's block once the chain recorded it, and none for a Sig Network request or where
- * no explorer serves the chain.
+ * transaction's block once the chain recorded it, a Sig Network request's lifecycle, and none
+ * where no explorer serves the chain.
  */
 function referenceLink(
   config: ClientConfig,
@@ -358,8 +359,11 @@ function referenceLink(
       const explorer = midnightExplorerOf(config)
       return { name: explorer.name, url: explorer.blockURL(reference.blockNumber) }
     }
-    case 'vaultRequest':
-      return null
+    case 'vaultRequest': {
+      if (reference.id === null) return null
+      const explorer = signetExplorerOf(config)
+      return { name: explorer.name, url: explorer.requestURL(reference.id) }
+    }
     default: {
       const unhandled: never = reference.kind
       throw new Error(`Unhandled reference ${JSON.stringify(unhandled)}`)
