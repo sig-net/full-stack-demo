@@ -14,6 +14,7 @@ import {
   type WithdrawStateController,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-state-controller'
 import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import type { Logger } from '@/lib/logging/logger'
 
 export class WithdrawStateControllerImpl
   extends CallerOperationStateControllerImpl<Withdraw>
@@ -24,6 +25,7 @@ export class WithdrawStateControllerImpl
     eventPublisher: EventPublisher,
     midnightTransactionStateController: MidnightTransactionStateController,
     vaultRequestStateController: VaultRequestStateController,
+    logger: Logger,
   ) {
     super(
       {
@@ -37,6 +39,7 @@ export class WithdrawStateControllerImpl
       eventPublisher,
       midnightTransactionStateController,
       vaultRequestStateController,
+      logger,
     )
   }
 

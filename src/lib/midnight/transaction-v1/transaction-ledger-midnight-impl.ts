@@ -22,7 +22,7 @@ import { Cause, Effect, Exit, Option } from 'effect'
 import { bytesToHex, hexToBytes } from '@sig-net/midnight'
 import { z } from 'zod'
 
-import { messageOf } from '@/lib/message-of'
+import { caughtError, type Logger } from '@/lib/logging/logger'
 import type {
   MidnightLedgerTransactionStatus,
   MidnightTransactionLedger,
@@ -37,16 +37,19 @@ export class MidnightTransactionLedgerImpl implements MidnightTransactionLedger 
   private readonly proofProvider: () => Promise<ProofProvider>
   private readonly indexerQueryURL: string
   private readonly nodeURL: string
+  private readonly logger: Logger
 
   /** The proof provider is reached through a function so that its key registry loads on first use. */
   constructor(
     proofProvider: () => Promise<ProofProvider>,
     indexerQueryURL: string,
     nodeURL: string,
+    logger: Logger,
   ) {
     this.proofProvider = proofProvider
     this.indexerQueryURL = indexerQueryURL
     this.nodeURL = nodeURL
+    this.logger = logger
   }
 
   async prove(unprovenTx: string): Promise<string> {
@@ -56,7 +59,9 @@ export class MidnightTransactionLedgerImpl implements MidnightTransactionLedger 
       'pre-binding',
       hexToBytes(unprovenTx),
     )
+    const started = Date.now()
     const unbound = await (await this.proofProvider()).proveTx(unproven)
+    this.logger.debug('transaction proved', { durationMs: Date.now() - started })
     return bytesToHex(unbound.serialize())
   }
 
@@ -71,11 +76,24 @@ export class MidnightTransactionLedgerImpl implements MidnightTransactionLedger 
     if (txId === undefined) {
       throw new Error('The transaction carries no identifier')
     }
-    await submitToNode(this.nodeURL, finalized)
+    const started = Date.now()
+    await submitToNode(this.nodeURL, finalized, this.logger)
+    this.logger.debug('transaction submitted', { txId, durationMs: Date.now() - started })
     return txId
   }
 
   async status(txId: string): Promise<MidnightLedgerTransactionStatus> {
+    const started = Date.now()
+    const status = await this.readStatus(txId)
+    this.logger.debug('transaction status read', {
+      txId,
+      outcome: status.outcome,
+      durationMs: Date.now() - started,
+    })
+    return status
+  }
+
+  private async readStatus(txId: string): Promise<MidnightLedgerTransactionStatus> {
     const response = await fetch(this.indexerQueryURL, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -167,7 +185,11 @@ const NODE_CONNECT_TIMEOUT_MS = 30_000
  * Sends the bytes over one node connection that lives for this submission alone. The node
  * answers over WebSocket, so http(s) becomes ws(s).
  */
-async function submitToNode(nodeURL: string, transaction: FinalizedTransaction): Promise<void> {
+async function submitToNode(
+  nodeURL: string,
+  transaction: FinalizedTransaction,
+  logger: Logger,
+): Promise<void> {
   const relayURL = new URL(nodeURL.replace(/^http/, 'ws'))
   const provider = new WsProvider(relayURL.toString(), false)
   const api = new ApiPromise({ provider, noInitWarn: true, throwOnConnect: true })
@@ -184,7 +206,11 @@ async function submitToNode(nodeURL: string, transaction: FinalizedTransaction):
       { signal: abort.signal },
     )
     clearTimeout(timer)
-    await submitThrough(new PolkadotNodeClient(makeConfig({ nodeURL: relayURL }), api), transaction)
+    await submitThrough(
+      new PolkadotNodeClient(makeConfig({ nodeURL: relayURL }), api),
+      transaction,
+      logger,
+    )
   } catch (error: unknown) {
     if (abort.signal.aborted) {
       throw new Error(`Connecting to the Midnight node at ${nodeURL} timed out`, { cause: error })
@@ -204,6 +230,7 @@ async function submitToNode(nodeURL: string, transaction: FinalizedTransaction):
 export async function submitThrough(
   client: NodeClient.Service,
   transaction: FinalizedTransaction,
+  logger: Logger,
 ): Promise<void> {
   const submission = NodeClient.sendMidnightTransactionAndWait(
     SerializedTransaction.from(transaction),
@@ -224,9 +251,9 @@ export async function submitThrough(
     case 'held':
       return
     case 'acknowledgementLost':
-      console.warn(
-        `The Midnight node's acknowledgement was lost after the send, the ledger decides: ${messageOf(failure.value)}`,
-      )
+      logger.warn('node acknowledgement lost after the send, the ledger decides', {
+        err: caughtError(failure.value),
+      })
       return
     case 'refused':
       throw new Error('The Midnight node refused the transaction', { cause: failure.value })

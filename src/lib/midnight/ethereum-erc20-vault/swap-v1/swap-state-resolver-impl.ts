@@ -13,6 +13,7 @@ import type { RequestLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-le
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
+import type { Logger } from '@/lib/logging/logger'
 
 export class SwapStateResolverImpl
   extends CallerOperationStateResolverImpl<Swap>
@@ -25,10 +26,10 @@ export class SwapStateResolverImpl
     vaultRequestRepository: VaultRequestRepository,
     requestLedger: RequestLedger,
     unitOfWork: UnitOfWork,
+    logger: Logger,
   ) {
     super(
       {
-        label: 'swap',
         action: 'swap',
         startCircuits: ['startSwap'],
         completeCircuit: 'completeSwap',
@@ -40,6 +41,7 @@ export class SwapStateResolverImpl
       vaultRequestRepository,
       requestLedger,
       unitOfWork,
+      logger,
     )
   }
 

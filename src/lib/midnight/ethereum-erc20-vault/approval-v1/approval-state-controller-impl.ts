@@ -17,6 +17,7 @@ import { CallerOperationStateControllerImpl } from '@/lib/midnight/ethereum-erc2
 import { INITIAL_STATE } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
 import type { VaultRequestStateController } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-controller'
 import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import type { Logger } from '@/lib/logging/logger'
 
 /** The start circuit each kind of approval calls. */
 export const APPROVAL_START_CIRCUIT_BY_KIND = {
@@ -33,6 +34,7 @@ export class ApprovalStateControllerImpl
     eventPublisher: EventPublisher,
     midnightTransactionStateController: MidnightTransactionStateController,
     vaultRequestStateController: VaultRequestStateController,
+    logger: Logger,
   ) {
     super(
       {
@@ -46,6 +48,7 @@ export class ApprovalStateControllerImpl
       eventPublisher,
       midnightTransactionStateController,
       vaultRequestStateController,
+      logger,
     )
   }
 

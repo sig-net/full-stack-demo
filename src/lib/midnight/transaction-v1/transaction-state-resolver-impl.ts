@@ -18,6 +18,7 @@ import type {
   MidnightTransactionStateResolver,
 } from '@/lib/midnight/transaction-v1/transaction-state-resolver'
 import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
+import { caughtError, type Logger } from '@/lib/logging/logger'
 
 export class MidnightTransactionStateResolverImpl implements MidnightTransactionStateResolver {
   private readonly transactionRepository: MidnightTransactionRepository
@@ -25,6 +26,7 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
   private readonly ledger: MidnightTransactionLedger
   private readonly relayerWallet: RelayerWallet
   private readonly unitOfWork: UnitOfWork
+  private readonly logger: Logger
 
   constructor(
     transactionRepository: MidnightTransactionRepository,
@@ -32,12 +34,14 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
     ledger: MidnightTransactionLedger,
     relayerWallet: RelayerWallet,
     unitOfWork: UnitOfWork,
+    logger: Logger,
   ) {
     this.transactionRepository = transactionRepository
     this.stateController = stateController
     this.ledger = ledger
     this.relayerWallet = relayerWallet
     this.unitOfWork = unitOfWork
+    this.logger = logger
   }
 
   /** Reads outside any transaction: the controller re-reads under lock before it writes. */
@@ -58,13 +62,18 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
         try {
           await this.resolve(transaction)
         } catch (error: unknown) {
-          console.error(`Resolving Midnight transaction ${transaction.name} failed`, error)
+          this.logger.error('resolve failed', {
+            resource: transaction.name,
+            state: transaction.state,
+            err: caughtError(error),
+          })
         }
       }
     }
   }
 
   private resolve(transaction: MidnightTransaction): Promise<void> {
+    this.logger.debug('resolving', { resource: transaction.name, state: transaction.state })
     const { name } = transaction
     if (
       EXPIRABLE_STATES.includes(transaction.state) &&
@@ -175,6 +184,11 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
       await this.unitOfWork.runInTransaction(transition)
     } catch (error: unknown) {
       if (!(error instanceof MidnightTransactionStateConflict)) throw error
+      this.logger.debug('state conflict swallowed', {
+        resource: error.resource,
+        state: error.state,
+        action: error.action,
+      })
     }
   }
 }

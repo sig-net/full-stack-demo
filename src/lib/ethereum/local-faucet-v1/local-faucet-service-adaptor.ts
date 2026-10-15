@@ -11,16 +11,20 @@ import {
   fundErc20ArgsSchema,
   type LocalFaucetService,
 } from '@/lib/ethereum/local-faucet-v1/local-faucet-service'
+import type { Logger } from '@/lib/logging/logger'
 
 /** Adapts the local faucet to the wire. Built without a service outside the local stack, where every call is refused. */
 export class LocalFaucetServiceAdaptor {
   private readonly localFaucetService: LocalFaucetService | null
+  private readonly logger: Logger
 
-  constructor(localFaucetService: LocalFaucetService | null) {
+  constructor(localFaucetService: LocalFaucetService | null, logger: Logger) {
     this.localFaucetService = localFaucetService
+    this.logger = logger
   }
 
   async fundAccount(args: unknown): Promise<AccountFundingResult> {
+    this.logger.debug('method called', { method: 'fundAccount' })
     if (this.localFaucetService === null) return { ok: false, error: NOT_LOCAL }
     const parsed = fundAccountArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -30,6 +34,7 @@ export class LocalFaucetServiceAdaptor {
   }
 
   async fundErc20(args: unknown): Promise<Erc20FundingResult> {
+    this.logger.debug('method called', { method: 'fundErc20' })
     if (this.localFaucetService === null) return { ok: false, error: NOT_LOCAL }
     const parsed = fundErc20ArgsSchema.safeParse(args)
     if (!parsed.success) {

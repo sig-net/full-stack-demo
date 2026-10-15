@@ -13,6 +13,7 @@ import {
   startWithdrawArgsSchema,
   type WithdrawService,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service'
+import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Adapts the withdraw service to the wire: the caller secret stands in for the caller, the
@@ -21,13 +22,16 @@ import {
  */
 export class WithdrawServiceAdaptor {
   private readonly withdrawService: WithdrawService
+  private readonly logger: Logger
 
-  constructor(withdrawService: WithdrawService) {
+  constructor(withdrawService: WithdrawService, logger: Logger) {
     this.withdrawService = withdrawService
+    this.logger = logger
   }
 
   async startWithdraw(callerSecret: string, args: unknown): Promise<WithdrawResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'startWithdraw', caller: caller.name })
     const parsed = startWithdrawArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -37,6 +41,7 @@ export class WithdrawServiceAdaptor {
 
   async completeWithdraw(callerSecret: string, args: unknown): Promise<WithdrawResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'completeWithdraw', caller: caller.name })
     const parsed = completeWithdrawArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -46,6 +51,7 @@ export class WithdrawServiceAdaptor {
 
   async getWithdraw(callerSecret: string, args: unknown): Promise<WithdrawResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'getWithdraw', caller: caller.name })
     const parsed = getWithdrawArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -59,6 +65,7 @@ export class WithdrawServiceAdaptor {
 
   async listWithdraws(callerSecret: string, args: unknown): Promise<WithdrawListResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'listWithdraws', caller: caller.name })
     const parsed = listWithdrawsArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }

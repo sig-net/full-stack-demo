@@ -14,6 +14,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-state-controller'
 import type { VaultRequestStateController } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-controller'
 import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import type { Logger } from '@/lib/logging/logger'
 
 export class SwapStateControllerImpl
   extends CallerOperationStateControllerImpl<Swap>
@@ -24,6 +25,7 @@ export class SwapStateControllerImpl
     eventPublisher: EventPublisher,
     midnightTransactionStateController: MidnightTransactionStateController,
     vaultRequestStateController: VaultRequestStateController,
+    logger: Logger,
   ) {
     super(
       {
@@ -37,6 +39,7 @@ export class SwapStateControllerImpl
       eventPublisher,
       midnightTransactionStateController,
       vaultRequestStateController,
+      logger,
     )
   }
 

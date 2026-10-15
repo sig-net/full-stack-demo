@@ -19,6 +19,7 @@ import { EthereumTransactionStateControllerImpl } from '@/lib/ethereum/transacti
 import type { Event } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 interface Calls {
   created: EthereumTransaction[]
@@ -60,7 +61,11 @@ function controllerOver(
   locks: string[] = [],
 ) {
   const { transactionRepository, eventPublisher } = fields(stored, calls, locks)
-  return new EthereumTransactionStateControllerImpl(transactionRepository, eventPublisher)
+  return new EthereumTransactionStateControllerImpl(
+    transactionRepository,
+    eventPublisher,
+    new RecordingLogger(),
+  )
 }
 
 function emptyCalls(): Calls {
@@ -137,6 +142,7 @@ describe('EthereumTransactionStateControllerImpl.commitTransaction', () => {
         ? transactionRepository
         : mock<EthereumTransactionRepository>('EthereumTransactionRepository', { create }),
       eventPublisher,
+      new RecordingLogger(),
     )
     const before = Date.now()
     await check(controller.commitTransaction(commitArgs), calls, before)

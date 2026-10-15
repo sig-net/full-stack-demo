@@ -12,6 +12,7 @@ import { VAULT_REQUEST_EVENT_BY_STATE } from '@/lib/midnight/ethereum-erc20-vaul
 import type { VaultRequestStateResolver } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-resolver'
 import { MIDNIGHT_TRANSACTION_EVENT_BY_STATE } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const MIDNIGHT_CHILD = `${CALLER_NAME}/midnight-transactions/0d8c7d10-6a3e-4d7e-9f1c-2b7a1c3d4e5f`
 const ETHEREUM_CHILD = `${CALLER_NAME}/ethereum-transactions/0d8c7d10-6a3e-4d7e-9f1c-2b7a1c3d4e5f`
@@ -24,6 +25,7 @@ describe('VaultRequestEventConsumer', () => {
           resolved.push(name)
         },
       }),
+      new RecordingLogger(),
     )
   }
 

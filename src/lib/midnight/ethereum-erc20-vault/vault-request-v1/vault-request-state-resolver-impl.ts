@@ -44,6 +44,7 @@ import type {
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-resolver'
 import { isTerminalMidnightTransactionState } from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
+import { caughtError, type Logger } from '@/lib/logging/logger'
 
 /** One outcome source per vault action, over that action's reader. */
 export type RespondOutcomeSources = Readonly<Record<VaultAction, RespondOutcomeSource>>
@@ -58,6 +59,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
   private readonly midnightTransactionRepository: MidnightTransactionRepository
   private readonly ethereumTransactionRepository: EthereumTransactionRepository
   private readonly unitOfWork: UnitOfWork
+  private readonly logger: Logger
 
   constructor(
     requestRepository: VaultRequestRepository,
@@ -69,6 +71,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     midnightTransactionRepository: MidnightTransactionRepository,
     ethereumTransactionRepository: EthereumTransactionRepository,
     unitOfWork: UnitOfWork,
+    logger: Logger,
   ) {
     this.requestRepository = requestRepository
     this.stateController = stateController
@@ -79,6 +82,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     this.midnightTransactionRepository = midnightTransactionRepository
     this.ethereumTransactionRepository = ethereumTransactionRepository
     this.unitOfWork = unitOfWork
+    this.logger = logger
   }
 
   /** Reads outside any transaction: the controller re-reads under lock before it writes. */
@@ -113,12 +117,17 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
       try {
         await this.resolve(request, ledger)
       } catch (error: unknown) {
-        console.error(`Resolving vault request ${request.name} failed`, error)
+        this.logger.error('resolve failed', {
+          resource: request.name,
+          state: request.state,
+          err: caughtError(error),
+        })
       }
     }
   }
 
   private resolve(request: VaultRequest, ledger: RequestLedgerState): Promise<void> {
+    this.logger.debug('resolving', { resource: request.name, state: request.state })
     const stage = requestStage(ledger, request.action, request.inIndex, {
       requestId: request.requestId === null ? null : hexToBytes(request.requestId),
     })
@@ -152,7 +161,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
       case 'queued':
         return Promise.resolve()
       case 'settled':
-        return settledEarly(name, state)
+        return this.settledEarly(name, state)
       case 'flushed':
       case 'sent':
       case 'attestationQueued':
@@ -173,7 +182,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
       case 'queued':
         return
       case 'settled':
-        return settledEarly(name, state)
+        return this.settledEarly(name, state)
       case 'sent':
       case 'attestationQueued':
       case 'attestationFlushed':
@@ -195,7 +204,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     { name, state, action, requestId, signerAccount }: VaultRequest,
     stage: RequestStage,
   ): Promise<void> {
-    if (stage.stage === 'settled') return settledEarly(name, state)
+    if (stage.stage === 'settled') return this.settledEarly(name, state)
     if (requestId === null) throw new Error(`${name} in ${state} holds no requestId`)
     const signed = await this.signetReaders[action].getSignedEvmTransaction(
       parseRequestIdHex(requestId),
@@ -216,7 +225,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     { name, state }: VaultRequest,
     stage: RequestStage,
   ): Promise<void> {
-    if (stage.stage === 'settled') return settledEarly(name, state)
+    if (stage.stage === 'settled') return this.settledEarly(name, state)
     const child = await this.latestEthereumChild(name)
     if (child === undefined || leftNothingOnChain(child)) {
       return this.write(() => this.stateController.startBroadcast({ name }))
@@ -231,7 +240,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     stage: RequestStage,
     ledger: RequestLedgerState,
   ): Promise<void> {
-    if (stage.stage === 'settled') return settledEarly(name, state)
+    if (stage.stage === 'settled') return this.settledEarly(name, state)
     if (requestId === null) throw new Error(`${name} in ${state} holds no requestId`)
     const outcome = await this.respondOutcomeSources[action].attestedOutcome({
       requestId: hexToBytes(requestId),
@@ -253,7 +262,7 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
       case 'flushed':
         return
       case 'settled':
-        return settledEarly(name, state)
+        return this.settledEarly(name, state)
       case 'attestationQueued':
       case 'attestationFlushed':
         return this.write(() => this.stateController.recordAttestationQueued({ name }))
@@ -264,9 +273,12 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
         if (attestationBlockHeight <= stage.lastSeen) {
           // Only a nonce consumed before the start reaches here, which the deposit service's
           // nonce assignment and the flush's vault nonce prevent, so the row is left for the sweep to re-check.
-          console.error(
-            `vault request ${name} attested at ${attestationBlockHeight.toString()}, at or below the entry's lastSeen ${stage.lastSeen.toString()}: nonce reuse at start`,
-          )
+          this.logger.error('attestation at or below the entry lastSeen, nonce reused at start', {
+            resource: name,
+            state,
+            blockHeight: attestationBlockHeight,
+            lastSeen: stage.lastSeen,
+          })
           return
         }
         if (await this.liveMidnightChild(name, 'queueAttestation')) return
@@ -336,20 +348,28 @@ export class VaultRequestStateResolverImpl implements VaultRequestStateResolver 
     return latest
   }
 
+  /** Only the complete circuit removes a request's arguments, and it needs the request attested first. */
+  private settledEarly(name: string, state: VaultRequestState): Promise<void> {
+    this.logger.error('request settled on the ledger before it was attested', {
+      resource: name,
+      state,
+    })
+    return Promise.resolve()
+  }
+
   /** One transition per resolve. A conflict means another resolver applied it first. */
   private async write<Result>(transition: () => Promise<Result>): Promise<void> {
     try {
       await this.unitOfWork.runInTransaction(transition)
     } catch (error: unknown) {
       if (!(error instanceof VaultRequestStateConflict)) throw error
+      this.logger.debug('state conflict swallowed', {
+        resource: error.resource,
+        state: error.state,
+        action: error.action,
+      })
     }
   }
-}
-
-/** Only the complete circuit removes a request's arguments, and it needs the request attested first. */
-function settledEarly(name: string, state: VaultRequestState): Promise<void> {
-  console.error(`vault request ${name} in ${state} is settled on the ledger`)
-  return Promise.resolve()
 }
 
 function unhandledStage(stage: never): never {

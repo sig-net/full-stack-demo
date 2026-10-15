@@ -28,14 +28,13 @@ import {
 } from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import type { Repository } from '@/lib/repository/repository'
+import { caughtError, type Logger } from '@/lib/logging/logger'
 
 /** What the resolver reads of a kind beyond the controller's needs: the start circuits and the complete's verdict. */
 export interface CallerOperationResolution<Resource extends CallerOperation> extends Pick<
   CallerOperationKind<Resource>,
   'action' | 'completeCircuit'
 > {
-  /** Names the operation in a log line. */
-  readonly label: string
   /** The circuits a start call may carry: one for most operations, both approval starts for an approval. */
   readonly startCircuits: readonly VaultCircuitId[]
   /** What the complete call did, read from the attested request it settled. */
@@ -55,6 +54,7 @@ export abstract class CallerOperationStateResolverImpl<Resource extends CallerOp
   private readonly vaultRequestRepository: VaultRequestRepository
   private readonly requestLedger: RequestLedger
   private readonly unitOfWork: UnitOfWork
+  private readonly logger: Logger
 
   protected constructor(
     kind: CallerOperationResolution<Resource>,
@@ -64,6 +64,7 @@ export abstract class CallerOperationStateResolverImpl<Resource extends CallerOp
     vaultRequestRepository: VaultRequestRepository,
     requestLedger: RequestLedger,
     unitOfWork: UnitOfWork,
+    logger: Logger,
   ) {
     this.kind = kind
     this.repository = repository
@@ -72,6 +73,7 @@ export abstract class CallerOperationStateResolverImpl<Resource extends CallerOp
     this.vaultRequestRepository = vaultRequestRepository
     this.requestLedger = requestLedger
     this.unitOfWork = unitOfWork
+    this.logger = logger
   }
 
   /** Reads outside any transaction: the controller re-reads under lock before it writes. */
@@ -96,13 +98,18 @@ export abstract class CallerOperationStateResolverImpl<Resource extends CallerOp
         try {
           await this.resolve(operation, ledger)
         } catch (error: unknown) {
-          console.error(`Resolving ${this.kind.label} ${operation.name} failed`, error)
+          this.logger.error('resolve failed', {
+            resource: operation.name,
+            state: operation.state,
+            err: caughtError(error),
+          })
         }
       }
     }
   }
 
   private resolve(operation: Resource, ledger: LedgerRead): Promise<void> {
+    this.logger.debug('resolving', { resource: operation.name, state: operation.state })
     switch (operation.state) {
       case 'AwaitingStartTransaction':
         return this.resolveAwaitingStartTransaction(operation, ledger)
@@ -245,6 +252,11 @@ export abstract class CallerOperationStateResolverImpl<Resource extends CallerOp
       await this.unitOfWork.runInTransaction(transition)
     } catch (error: unknown) {
       if (!(error instanceof CallerOperationStateConflict)) throw error
+      this.logger.debug('state conflict swallowed', {
+        resource: error.resource,
+        state: error.state,
+        action: error.action,
+      })
     }
   }
 }

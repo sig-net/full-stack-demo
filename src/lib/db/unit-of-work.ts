@@ -5,13 +5,16 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
 
 import type { DatabaseExecutor } from '@/lib/db/database'
+import { caughtError, type Logger } from '@/lib/logging/logger'
 
 /** Opens database transactions that every repository call on the same async chain joins. */
 export class UnitOfWork {
   private readonly database: NodePgDatabase
+  private readonly logger: Logger
 
-  constructor(database: NodePgDatabase) {
+  constructor(database: NodePgDatabase, logger: Logger) {
     this.database = database
+    this.logger = logger
   }
 
   /**
@@ -19,9 +22,23 @@ export class UnitOfWork {
    * rather than nesting. Work that detaches from the chain (an un-awaited promise, a timer
    * callback) runs outside it.
    */
-  runInTransaction<T>(work: () => Promise<T>): Promise<T> {
+  async runInTransaction<T>(work: () => Promise<T>): Promise<T> {
     if (transactions.getStore() !== undefined) return work()
-    return this.database.transaction((transaction) => transactions.run(transaction, work))
+    const started = Date.now()
+    this.logger.debug('transaction opened')
+    try {
+      const result = await this.database.transaction((transaction) =>
+        transactions.run(transaction, work),
+      )
+      this.logger.debug('transaction committed', { durationMs: Date.now() - started })
+      return result
+    } catch (error: unknown) {
+      this.logger.debug('transaction rolled back', {
+        durationMs: Date.now() - started,
+        err: caughtError(error),
+      })
+      throw error
+    }
   }
 }
 

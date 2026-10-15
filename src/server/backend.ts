@@ -2,6 +2,7 @@ import 'server-only'
 
 import { setNetworkId } from '@midnight-ntwrk/midnight-js/network-id'
 import type {
+  LoggerProvider,
   ProofProvider,
   PublicDataProvider,
   ZKConfigProvider,
@@ -68,6 +69,8 @@ import {
   type StringProducer,
 } from '@/lib/kafka/clients'
 import { lazySingleton } from '@/lib/lazy-singleton'
+import { caughtError, type Logger } from '@/lib/logging/logger'
+import { createPinoLogger } from '@/lib/logging/logger-pino-impl'
 import type { ActivityRepository } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-repository'
 import { ActivityRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-repository-sql-impl'
 import type { ActivityService } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service'
@@ -201,6 +204,7 @@ import { sweep, type SweepTask } from '@/lib/sweep'
  */
 export interface Backend {
   readonly config: ServerConfig
+  readonly logging: LoggingBackend
   readonly db: DbBackend
   readonly kafka: KafkaBackend
   readonly event: EventBackend
@@ -225,6 +229,13 @@ export interface Backend {
 
 /** The packages alone, which the lifecycle is built over. */
 type BackendPackages = Omit<Backend, 'start' | 'stop'>
+
+export interface LoggingBackend {
+  /** The root logger, which every component writes through as a child naming it. */
+  readonly logger: Logger
+  /** The midnight-js SDK's own lines, tagged `component: 'midnight-js'`. */
+  readonly midnightJsLoggerProvider: LoggerProvider
+}
 
 export interface DbBackend {
   readonly pool: Pool
@@ -388,20 +399,56 @@ export const getBackend: () => Promise<Backend> = lazySingleton(async () =>
 export function createBackend(config: ServerConfig): Backend {
   // midnight-js reads the network id from process state when it builds a call.
   setNetworkId(config.client.midnightNetwork.networkId)
-  const db = createDb(config)
-  const kafka = createKafka(config)
-  const event = createEvent(db, kafka)
-  const ethereum = createEthereum(db, event, config)
-  const midnight = createMidnight(db, event, ethereum, config)
-  const pricing = createPricing(ethereum)
-  const packages: BackendPackages = { config, db, kafka, event, ethereum, midnight, pricing }
+  const logging = createLogging(config)
+  const { logger } = logging
+  const db = createDb(config, logger)
+  const kafka = createKafka(config, logger)
+  const event = createEvent(db, kafka, logger)
+  const ethereum = createEthereum(db, event, config, logger)
+  const midnight = createMidnight(
+    db,
+    event,
+    ethereum,
+    config,
+    logging.midnightJsLoggerProvider,
+    logger,
+  )
+  const pricing = createPricing(ethereum, logger)
+  const packages: BackendPackages = {
+    config,
+    logging,
+    db,
+    kafka,
+    event,
+    ethereum,
+    midnight,
+    pricing,
+  }
   return { ...packages, ...createLifecycle(packages) }
 }
 
-function createPricing(ethereum: EthereumBackend): PricingBackend {
+function createLogging(config: ServerConfig): LoggingBackend {
+  const logger = createPinoLogger(config.serverOnly.logging)
+  return { logger, midnightJsLoggerProvider: logger.midnightJsLoggerProvider() }
+}
+
+function createPricing(ethereum: EthereumBackend, logger: Logger): PricingBackend {
   const source = new SpotPriceSourceCoinGeckoImpl()
-  const service = new SpotPriceServiceImpl(source, new Erc4626ReaderEthersImpl(ethereum.provider))
-  return { spotPriceV1: { source, service, adaptor: new SpotPriceServiceAdaptor(service) } }
+  const service = new SpotPriceServiceImpl(
+    source,
+    new Erc4626ReaderEthersImpl(ethereum.provider),
+    logger.child({ component: 'SpotPriceServiceImpl' }),
+  )
+  return {
+    spotPriceV1: {
+      source,
+      service,
+      adaptor: new SpotPriceServiceAdaptor(
+        service,
+        logger.child({ component: 'SpotPriceServiceAdaptor' }),
+      ),
+    },
+  }
 }
 
 /** The sweep's period, which bounds how long a lost event or an expiry goes unnoticed. */
@@ -411,11 +458,13 @@ const STOP_TIMEOUT_MS = 30_000
 
 /** One abort ends every loop, so a stop cannot leave one running. */
 function createLifecycle(backend: BackendPackages): Pick<Backend, 'start' | 'stop'> {
-  const { db, kafka, event, ethereum, midnight } = backend
+  const { config, logging, db, kafka, event, ethereum, midnight } = backend
+  const { logger } = logging
+  const lifecycleLogger = logger.child({ component: 'Backend' })
   const stopping = new AbortController()
   let loops: Promise<void>[] = []
   const start = lazySingleton(async () => {
-    startRelayerWallet(midnight.relayerWallet)
+    startRelayerWallet(midnight.relayerWallet, lifecycleLogger)
     const consumers: EventConsumer[] = [
       midnight.transactionV1.eventConsumer,
       ethereum.transactionV1.eventConsumer,
@@ -431,22 +480,43 @@ function createLifecycle(backend: BackendPackages): Pick<Backend, 'start' | 'sto
     for (const consumer of consumers) event.consumerHub.registerConsumer(consumer)
     const { signal } = stopping
     loops = [
-      runEventConsumerHub(event.consumerHub, () => kafka.createConsumer(EVENTS_GROUP_ID), signal),
-      runOutboxEntryProcessor(event.outboxEntryV1.processor, db.pool, signal),
-      sweep(sweepTasks(ethereum, midnight), SWEEP_INTERVAL_MS, signal),
+      runEventConsumerHub(
+        event.consumerHub,
+        () => kafka.createConsumer(EVENTS_GROUP_ID),
+        signal,
+        logger.child({ component: 'runEventConsumerHub' }),
+      ),
+      runOutboxEntryProcessor(
+        event.outboxEntryV1.processor,
+        db.pool,
+        signal,
+        logger.child({ component: 'runOutboxEntryProcessor' }),
+      ),
+      sweep(
+        sweepTasks(ethereum, midnight),
+        SWEEP_INTERVAL_MS,
+        signal,
+        logger.child({ component: 'sweep' }),
+      ),
     ]
-    console.log(
-      `Backend started: ${String(consumers.length)} consumers registered, sweep every ${String(SWEEP_INTERVAL_MS)} ms`,
-    )
+    lifecycleLogger.info('backend started', {
+      networkId: config.client.midnightNetwork.networkId,
+      chainId: config.client.ethereum.chainId,
+      logLevel: config.serverOnly.logging.level,
+      logFormat: config.serverOnly.logging.format,
+      count: consumers.length,
+      intervalMs: SWEEP_INTERVAL_MS,
+    })
   })
   const stop = async (): Promise<void> => {
     stopping.abort()
-    await endWithin(Promise.all(loops), STOP_TIMEOUT_MS, 'The backend loops')
+    await endWithin(Promise.all(loops), STOP_TIMEOUT_MS, lifecycleLogger)
     try {
       await kafka.producer.close()
     } catch (error: unknown) {
-      console.error('Closing the Kafka producer failed', error)
+      lifecycleLogger.error('closing the Kafka producer failed', { err: caughtError(error) })
     }
+    lifecycleLogger.info('backend stopped')
   }
   return { start, stop }
 }
@@ -483,12 +553,12 @@ function sweepTasks(ethereum: EthereumBackend, midnight: MidnightBackend): Sweep
 }
 
 /** Resolves when the work ends, or logs and resolves once the bound passes, holding no timer past either. */
-async function endWithin(work: Promise<unknown>, ms: number, what: string): Promise<void> {
+async function endWithin(work: Promise<unknown>, ms: number, logger: Logger): Promise<void> {
   const timer = new AbortController()
   const expired = delayUnlessAborted(ms, timer.signal).then(() => !timer.signal.aborted)
   const ended = work.then(() => false)
   if (await Promise.race([ended, expired])) {
-    console.error(`${what} are still running after ${String(ms)} ms`)
+    logger.error('loops still running at the stop timeout', { durationMs: ms })
   }
   timer.abort()
 }
@@ -497,59 +567,90 @@ async function endWithin(work: Promise<unknown>, ms: number, what: string): Prom
  * Begins the wallet's sync at once, since a sync can take minutes. The backend starts without
  * waiting, and a resolver that reaches the wallet before the sync ends waits on it.
  */
-function startRelayerWallet(relayerWallet: RelayerWallet): void {
+function startRelayerWallet(relayerWallet: RelayerWallet, logger: Logger): void {
   const started = Date.now()
   relayerWallet.start().then(
     () => {
-      console.log(`Relayer wallet synced in ${String(Date.now() - started)} ms`)
+      logger.info('relayer wallet synced', { durationMs: Date.now() - started })
     },
     (error: unknown) => {
-      console.error('Relayer wallet failed to start, the next relayer transaction retries', error)
+      logger.error('relayer wallet failed to start, the next relayer transaction retries', {
+        durationMs: Date.now() - started,
+        err: caughtError(error),
+      })
     },
   )
 }
 
-function createDb(config: ServerConfig): DbBackend {
+function createDb(config: ServerConfig, logger: Logger): DbBackend {
   const pool = createDatabasePool(config.serverOnly.dbConnectionString)
   const database = createDatabase(pool)
-  return { pool, database, unitOfWork: new UnitOfWork(database) }
+  return {
+    pool,
+    database,
+    unitOfWork: new UnitOfWork(database, logger.child({ component: 'UnitOfWork' })),
+  }
 }
 
-function createKafka(config: ServerConfig): KafkaBackend {
+function createKafka(config: ServerConfig, logger: Logger): KafkaBackend {
   const options = kafkaConnectionOptions(config.serverOnly.kafka.brokers)
   const producer = createProducer(options)
   return {
     createConsumer: (groupId) => createConsumer(options, groupId),
     producer,
-    publisher: new EventPublisherKafkaImpl(producer),
+    publisher: new EventPublisherKafkaImpl(
+      producer,
+      logger.child({ component: 'EventPublisherKafkaImpl' }),
+    ),
   }
 }
 
-function createEvent(db: DbBackend, kafka: KafkaBackend): EventBackend {
+function createEvent(db: DbBackend, kafka: KafkaBackend, logger: Logger): EventBackend {
   const repository = new OutboxEntryRepositorySQLImpl(db.database)
   return {
-    publisher: new EventPublisherOutboxImpl(repository),
-    consumerHub: new EventConsumerHubImpl(),
+    publisher: new EventPublisherOutboxImpl(
+      repository,
+      logger.child({ component: 'EventPublisherOutboxImpl' }),
+    ),
+    consumerHub: new EventConsumerHubImpl(logger.child({ component: 'EventConsumerHubImpl' })),
     outboxEntryV1: {
       repository,
-      processor: new OutboxEntryProcessorImpl(repository, kafka.publisher, db.unitOfWork),
+      processor: new OutboxEntryProcessorImpl(
+        repository,
+        kafka.publisher,
+        db.unitOfWork,
+        logger.child({ component: 'OutboxEntryProcessorImpl' }),
+      ),
     },
   }
 }
 
-function createEthereum(db: DbBackend, event: EventBackend, config: ServerConfig): EthereumBackend {
+function createEthereum(
+  db: DbBackend,
+  event: EventBackend,
+  config: ServerConfig,
+  logger: Logger,
+): EthereumBackend {
   const repository = new EthereumTransactionRepositorySQLImpl(db.database)
-  const stateController = new EthereumTransactionStateControllerImpl(repository, event.publisher)
+  const stateController = new EthereumTransactionStateControllerImpl(
+    repository,
+    event.publisher,
+    logger.child({ component: 'EthereumTransactionStateControllerImpl' }),
+  )
   // The ledger decides a consumed nonce by a receipt read, which a cached earlier null would spoil.
   const provider = new JsonRpcProvider(config.client.ethereum.rpcURL, undefined, {
     cacheTimeout: -1,
   })
-  const ledger = new EthereumTransactionLedgerEthersImpl(provider)
+  const ledger = new EthereumTransactionLedgerEthersImpl(
+    provider,
+    logger.child({ component: 'EthereumTransactionLedgerEthersImpl' }),
+  )
   const stateResolver = new EthereumTransactionStateResolverImpl(
     repository,
     stateController,
     ledger,
     db.unitOfWork,
+    logger.child({ component: 'EthereumTransactionStateResolverImpl' }),
   )
   const localFaucetService = isLocalEnvironment(config.client)
     ? new LocalFaucetServiceAnvilImpl(provider)
@@ -558,14 +659,20 @@ function createEthereum(db: DbBackend, event: EventBackend, config: ServerConfig
     provider,
     localFaucetV1: {
       service: localFaucetService,
-      adaptor: new LocalFaucetServiceAdaptor(localFaucetService),
+      adaptor: new LocalFaucetServiceAdaptor(
+        localFaucetService,
+        logger.child({ component: 'LocalFaucetServiceAdaptor' }),
+      ),
     },
     transactionV1: {
       repository,
       stateController,
       ledger,
       stateResolver,
-      eventConsumer: new EthereumTransactionEventConsumer(stateResolver),
+      eventConsumer: new EthereumTransactionEventConsumer(
+        stateResolver,
+        logger.child({ component: 'EthereumTransactionEventConsumer' }),
+      ),
     },
   }
 }
@@ -575,6 +682,8 @@ function createMidnight(
   event: EventBackend,
   ethereum: EthereumBackend,
   config: ServerConfig,
+  midnightJsLoggerProvider: LoggerProvider,
+  logger: Logger,
 ): MidnightBackend {
   const { midnightNetwork } = config.client
   const relayerWallet = new RelayerWalletSeedImpl(
@@ -594,7 +703,14 @@ function createMidnight(
       timeout: PROOF_TIMEOUT_MS,
     }),
   )
-  const transactionV1 = createMidnightTransactionV1(db, event, config, relayerWallet, proofProvider)
+  const transactionV1 = createMidnightTransactionV1(
+    db,
+    event,
+    config,
+    relayerWallet,
+    proofProvider,
+    logger,
+  )
   return {
     relayerWallet,
     publicDataProvider,
@@ -608,6 +724,8 @@ function createMidnight(
       proofProvider,
       relayerWallet,
       transactionV1,
+      midnightJsLoggerProvider,
+      logger,
     ),
   }
 }
@@ -621,14 +739,20 @@ function createMidnightTransactionV1(
   config: ServerConfig,
   relayerWallet: RelayerWallet,
   proofProvider: () => Promise<ProofProvider>,
+  logger: Logger,
 ): MidnightBackend['transactionV1'] {
   const { midnightNetwork } = config.client
   const repository = new MidnightTransactionRepositorySQLImpl(db.database)
-  const stateController = new MidnightTransactionStateControllerImpl(repository, event.publisher)
+  const stateController = new MidnightTransactionStateControllerImpl(
+    repository,
+    event.publisher,
+    logger.child({ component: 'MidnightTransactionStateControllerImpl' }),
+  )
   const ledger = new MidnightTransactionLedgerImpl(
     proofProvider,
     midnightNetwork.indexerURL,
     midnightNetwork.nodeURL,
+    logger.child({ component: 'MidnightTransactionLedgerImpl' }),
   )
   const stateResolver = new MidnightTransactionStateResolverImpl(
     repository,
@@ -636,6 +760,7 @@ function createMidnightTransactionV1(
     ledger,
     relayerWallet,
     db.unitOfWork,
+    logger.child({ component: 'MidnightTransactionStateResolverImpl' }),
   )
   const service = new TransactionServiceImpl(repository, stateController)
   return {
@@ -643,9 +768,16 @@ function createMidnightTransactionV1(
     stateController,
     ledger,
     stateResolver,
-    eventConsumer: new MidnightTransactionEventConsumer(stateResolver),
+    eventConsumer: new MidnightTransactionEventConsumer(
+      stateResolver,
+      logger.child({ component: 'MidnightTransactionEventConsumer' }),
+    ),
     service,
-    adaptor: new TransactionServiceAdaptor(service, db.unitOfWork),
+    adaptor: new TransactionServiceAdaptor(
+      service,
+      db.unitOfWork,
+      logger.child({ component: 'TransactionServiceAdaptor' }),
+    ),
   }
 }
 
@@ -661,6 +793,8 @@ function createMidnightEthereumErc20Vault(
   proofProvider: () => Promise<ProofProvider>,
   relayerWallet: RelayerWallet,
   transactionV1: MidnightBackend['transactionV1'],
+  midnightJsLoggerProvider: LoggerProvider,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault'] {
   const { midnightNetwork, midnightSignet } = config.client
   const vaultAddress = config.client.midnightEthereumErc20Vault.contractAddress
@@ -676,6 +810,7 @@ function createMidnightEthereumErc20Vault(
     compiledContract,
     vaultAddress,
     relayerWallet.publicKeys(),
+    logger.child({ component: 'VaultCircuitsMidnightJsImpl' }),
   )
   const ledger = new VaultLedgerIndexerImpl(publicDataProvider, vaultAddress)
   const readers = signetReaders({
@@ -684,13 +819,14 @@ function createMidnightEthereumErc20Vault(
     publicDataProvider,
     indexerURL: midnightNetwork.indexerURL,
   })
-  const respondOutcomeSources = createRespondOutcomeSources(ethereum, config, readers)
+  const respondOutcomeSources = createRespondOutcomeSources(ethereum, config, readers, logger)
   const vaultRequestV1 = createMidnightEthereumErc20VaultRequestV1(
     db,
     event,
     ethereum,
     transactionV1,
     { circuits, ledger, signetReaders: readers, respondOutcomeSources },
+    logger,
   )
   const providers = createVaultProviders(
     vaultAddress,
@@ -698,10 +834,12 @@ function createMidnightEthereumErc20Vault(
     zkConfigProvider,
     proofProvider,
     relayerWallet,
+    midnightJsLoggerProvider,
   )
   const flusher = new FlusherImpl(
     async () => flushPending(await providers(), compiledContract, vaultAddress),
     () => vaultRequestV1.stateResolver.resolveWaitingFlushes(),
+    logger.child({ component: 'FlusherImpl' }),
   )
   return {
     circuits,
@@ -709,7 +847,10 @@ function createMidnightEthereumErc20Vault(
     signetReaders: readers,
     respondOutcomeSources,
     flusher,
-    flushEventConsumer: new FlushEventConsumer(flusher),
+    flushEventConsumer: new FlushEventConsumer(
+      flusher,
+      logger.child({ component: 'FlushEventConsumer' }),
+    ),
     vaultRequestV1,
     depositV1: createMidnightEthereumErc20VaultDepositV1(
       db,
@@ -719,6 +860,7 @@ function createMidnightEthereumErc20Vault(
       transactionV1,
       vaultRequestV1,
       { circuits, ledger },
+      logger,
     ),
     withdrawV1: createMidnightEthereumErc20VaultWithdrawV1(
       db,
@@ -727,6 +869,7 @@ function createMidnightEthereumErc20Vault(
       transactionV1,
       vaultRequestV1,
       { circuits, ledger },
+      logger,
     ),
     swapV1: createMidnightEthereumErc20VaultSwapV1(
       db,
@@ -739,6 +882,7 @@ function createMidnightEthereumErc20Vault(
         circuits,
         ledger,
       },
+      logger,
     ),
     supplyV1: createMidnightEthereumErc20VaultSupplyV1(
       db,
@@ -748,6 +892,7 @@ function createMidnightEthereumErc20Vault(
       transactionV1,
       vaultRequestV1,
       { circuits, ledger },
+      logger,
     ),
     redeemV1: createMidnightEthereumErc20VaultRedeemV1(
       db,
@@ -759,6 +904,7 @@ function createMidnightEthereumErc20Vault(
         circuits,
         ledger,
       },
+      logger,
     ),
     approvalV1: createMidnightEthereumErc20VaultApprovalV1(
       db,
@@ -768,14 +914,21 @@ function createMidnightEthereumErc20Vault(
       transactionV1,
       vaultRequestV1,
       { circuits, ledger },
+      logger,
     ),
-    activityV1: createMidnightEthereumErc20VaultActivityV1(db),
-    supportedTokenV1: createMidnightEthereumErc20VaultSupportedTokenV1(ethereum, config, ledger),
+    activityV1: createMidnightEthereumErc20VaultActivityV1(db, logger),
+    supportedTokenV1: createMidnightEthereumErc20VaultSupportedTokenV1(
+      ethereum,
+      config,
+      ledger,
+      logger,
+    ),
     readinessV1: createMidnightEthereumErc20VaultReadinessV1(
       ethereum,
       config,
       ledger,
       relayerWallet,
+      logger,
     ),
   }
 }
@@ -785,6 +938,7 @@ function createMidnightEthereumErc20VaultReadinessV1(
   config: ServerConfig,
   ledger: VaultLedger,
   relayerWallet: RelayerWallet,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['readinessV1'] {
   const accountReader = new EthereumAccountReaderEthersImpl(ethereum.provider)
   const service = new ReadinessServiceImpl(
@@ -794,7 +948,14 @@ function createMidnightEthereumErc20VaultReadinessV1(
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
   )
-  return { accountReader, service, adaptor: new ReadinessServiceAdaptor(service) }
+  return {
+    accountReader,
+    service,
+    adaptor: new ReadinessServiceAdaptor(
+      service,
+      logger.child({ component: 'ReadinessServiceAdaptor' }),
+    ),
+  }
 }
 
 function createMidnightEthereumErc20VaultWithdrawV1(
@@ -804,6 +965,7 @@ function createMidnightEthereumErc20VaultWithdrawV1(
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['withdrawV1'] {
   const repository = new WithdrawRepositorySQLImpl(db.database)
   const stateController = new WithdrawStateControllerImpl(
@@ -811,6 +973,7 @@ function createMidnightEthereumErc20VaultWithdrawV1(
     event.publisher,
     transactionV1.stateController,
     vaultRequestV1.stateController,
+    logger.child({ component: 'WithdrawStateControllerImpl' }),
   )
   const stateResolver = new WithdrawStateResolverImpl(
     repository,
@@ -819,6 +982,7 @@ function createMidnightEthereumErc20VaultWithdrawV1(
     vaultRequestV1.repository,
     vault.ledger,
     db.unitOfWork,
+    logger.child({ component: 'WithdrawStateResolverImpl' }),
   )
   const service = new WithdrawServiceImpl(
     repository,
@@ -833,9 +997,15 @@ function createMidnightEthereumErc20VaultWithdrawV1(
     repository,
     stateController,
     stateResolver,
-    eventConsumer: new WithdrawEventConsumer(stateResolver),
+    eventConsumer: new WithdrawEventConsumer(
+      stateResolver,
+      logger.child({ component: 'WithdrawEventConsumer' }),
+    ),
     service,
-    adaptor: new WithdrawServiceAdaptor(service),
+    adaptor: new WithdrawServiceAdaptor(
+      service,
+      logger.child({ component: 'WithdrawServiceAdaptor' }),
+    ),
   }
 }
 
@@ -847,6 +1017,7 @@ function createMidnightEthereumErc20VaultSupplyV1(
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['supplyV1'] {
   const repository = new SupplyRepositorySQLImpl(db.database)
   const stateController = new SupplyStateControllerImpl(
@@ -854,6 +1025,7 @@ function createMidnightEthereumErc20VaultSupplyV1(
     event.publisher,
     transactionV1.stateController,
     vaultRequestV1.stateController,
+    logger.child({ component: 'SupplyStateControllerImpl' }),
   )
   const stateResolver = new SupplyStateResolverImpl(
     repository,
@@ -862,6 +1034,7 @@ function createMidnightEthereumErc20VaultSupplyV1(
     vaultRequestV1.repository,
     vault.ledger,
     db.unitOfWork,
+    logger.child({ component: 'SupplyStateResolverImpl' }),
   )
   const service = new SupplyServiceImpl(
     repository,
@@ -878,9 +1051,12 @@ function createMidnightEthereumErc20VaultSupplyV1(
     repository,
     stateController,
     stateResolver,
-    eventConsumer: new SupplyEventConsumer(stateResolver),
+    eventConsumer: new SupplyEventConsumer(
+      stateResolver,
+      logger.child({ component: 'SupplyEventConsumer' }),
+    ),
     service,
-    adaptor: new SupplyServiceAdaptor(service),
+    adaptor: new SupplyServiceAdaptor(service, logger.child({ component: 'SupplyServiceAdaptor' })),
   }
 }
 
@@ -891,6 +1067,7 @@ function createMidnightEthereumErc20VaultRedeemV1(
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['redeemV1'] {
   const repository = new RedeemRepositorySQLImpl(db.database)
   const stateController = new RedeemStateControllerImpl(
@@ -898,6 +1075,7 @@ function createMidnightEthereumErc20VaultRedeemV1(
     event.publisher,
     transactionV1.stateController,
     vaultRequestV1.stateController,
+    logger.child({ component: 'RedeemStateControllerImpl' }),
   )
   const stateResolver = new RedeemStateResolverImpl(
     repository,
@@ -906,6 +1084,7 @@ function createMidnightEthereumErc20VaultRedeemV1(
     vaultRequestV1.repository,
     vault.ledger,
     db.unitOfWork,
+    logger.child({ component: 'RedeemStateResolverImpl' }),
   )
   const service = new RedeemServiceImpl(
     repository,
@@ -921,9 +1100,12 @@ function createMidnightEthereumErc20VaultRedeemV1(
     repository,
     stateController,
     stateResolver,
-    eventConsumer: new RedeemEventConsumer(stateResolver),
+    eventConsumer: new RedeemEventConsumer(
+      stateResolver,
+      logger.child({ component: 'RedeemEventConsumer' }),
+    ),
     service,
-    adaptor: new RedeemServiceAdaptor(service),
+    adaptor: new RedeemServiceAdaptor(service, logger.child({ component: 'RedeemServiceAdaptor' })),
   }
 }
 
@@ -935,6 +1117,7 @@ function createMidnightEthereumErc20VaultSwapV1(
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['swapV1'] {
   const repository = new SwapRepositorySQLImpl(db.database)
   const stateController = new SwapStateControllerImpl(
@@ -942,6 +1125,7 @@ function createMidnightEthereumErc20VaultSwapV1(
     event.publisher,
     transactionV1.stateController,
     vaultRequestV1.stateController,
+    logger.child({ component: 'SwapStateControllerImpl' }),
   )
   const stateResolver = new SwapStateResolverImpl(
     repository,
@@ -950,6 +1134,7 @@ function createMidnightEthereumErc20VaultSwapV1(
     vaultRequestV1.repository,
     vault.ledger,
     db.unitOfWork,
+    logger.child({ component: 'SwapStateResolverImpl' }),
   )
   const service = new SwapServiceImpl(
     repository,
@@ -965,9 +1150,12 @@ function createMidnightEthereumErc20VaultSwapV1(
     repository,
     stateController,
     stateResolver,
-    eventConsumer: new SwapEventConsumer(stateResolver),
+    eventConsumer: new SwapEventConsumer(
+      stateResolver,
+      logger.child({ component: 'SwapEventConsumer' }),
+    ),
     service,
-    adaptor: new SwapServiceAdaptor(service),
+    adaptor: new SwapServiceAdaptor(service, logger.child({ component: 'SwapServiceAdaptor' })),
   }
 }
 
@@ -979,6 +1167,7 @@ function createMidnightEthereumErc20VaultApprovalV1(
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['approvalV1'] {
   const repository = new ApprovalRepositorySQLImpl(db.database)
   const stateController = new ApprovalStateControllerImpl(
@@ -986,6 +1175,7 @@ function createMidnightEthereumErc20VaultApprovalV1(
     event.publisher,
     transactionV1.stateController,
     vaultRequestV1.stateController,
+    logger.child({ component: 'ApprovalStateControllerImpl' }),
   )
   const stateResolver = new ApprovalStateResolverImpl(
     repository,
@@ -994,6 +1184,7 @@ function createMidnightEthereumErc20VaultApprovalV1(
     vaultRequestV1.repository,
     vault.ledger,
     db.unitOfWork,
+    logger.child({ component: 'ApprovalStateResolverImpl' }),
   )
   const service = new ApprovalServiceImpl(
     repository,
@@ -1010,9 +1201,15 @@ function createMidnightEthereumErc20VaultApprovalV1(
     repository,
     stateController,
     stateResolver,
-    eventConsumer: new ApprovalEventConsumer(stateResolver),
+    eventConsumer: new ApprovalEventConsumer(
+      stateResolver,
+      logger.child({ component: 'ApprovalEventConsumer' }),
+    ),
     service,
-    adaptor: new ApprovalServiceAdaptor(service),
+    adaptor: new ApprovalServiceAdaptor(
+      service,
+      logger.child({ component: 'ApprovalServiceAdaptor' }),
+    ),
   }
 }
 
@@ -1020,6 +1217,7 @@ function createMidnightEthereumErc20VaultSupportedTokenV1(
   ethereum: EthereumBackend,
   config: ServerConfig,
   ledger: VaultLedger,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['supportedTokenV1'] {
   const erc20Reader = new Erc20ReaderEthersImpl(ethereum.provider)
   const service = new SupportedTokenServiceImpl(
@@ -1028,15 +1226,30 @@ function createMidnightEthereumErc20VaultSupportedTokenV1(
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
   )
-  return { erc20Reader, service, adaptor: new SupportedTokenServiceAdaptor(service) }
+  return {
+    erc20Reader,
+    service,
+    adaptor: new SupportedTokenServiceAdaptor(
+      service,
+      logger.child({ component: 'SupportedTokenServiceAdaptor' }),
+    ),
+  }
 }
 
 function createMidnightEthereumErc20VaultActivityV1(
   db: DbBackend,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['activityV1'] {
   const repository = new ActivityRepositorySQLImpl(db.database)
   const service = new ActivityServiceImpl(repository)
-  return { repository, service, adaptor: new ActivityServiceAdaptor(service) }
+  return {
+    repository,
+    service,
+    adaptor: new ActivityServiceAdaptor(
+      service,
+      logger.child({ component: 'ActivityServiceAdaptor' }),
+    ),
+  }
 }
 
 /**
@@ -1049,6 +1262,7 @@ function createVaultProviders(
   zkConfigProvider: ZKConfigProvider<VaultCircuitId>,
   proofProvider: () => Promise<ProofProvider>,
   relayerWallet: RelayerWallet,
+  loggerProvider: LoggerProvider,
 ): () => Promise<VaultProviders> {
   return lazySingleton(async (): Promise<VaultProviders> => {
     const privateStateProvider = await PrivateStateProviderMemoryImpl.holding(
@@ -1064,6 +1278,7 @@ function createVaultProviders(
       proofProvider: await proofProvider(),
       walletProvider: wallet,
       midnightProvider: wallet,
+      loggerProvider,
     }
   })
 }
@@ -1073,12 +1288,17 @@ function createRespondOutcomeSources(
   ethereum: EthereumBackend,
   config: ServerConfig,
   readers: SignetReaders,
+  logger: Logger,
 ): RespondOutcomeSources {
   const respondOutput = config.serverOnly.midnightRespondOutput
   const source = (action: VaultAction): RespondOutcomeSource => {
     switch (respondOutput.source) {
       case 'evm-node':
-        return new RespondOutcomeSourceEvmNodeImpl(readers[action], ethereum.provider)
+        return new RespondOutcomeSourceEvmNodeImpl(
+          readers[action],
+          ethereum.provider,
+          logger.child({ component: 'RespondOutcomeSourceEvmNodeImpl' }),
+        )
       case 'mpc-cache':
         return new RespondOutcomeSourceMpcCacheImpl(
           readers[action],
@@ -1113,6 +1333,7 @@ function createMidnightEthereumErc20VaultRequestV1(
     MidnightBackend['ethereumErc20Vault'],
     'circuits' | 'ledger' | 'signetReaders' | 'respondOutcomeSources'
   >,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['vaultRequestV1'] {
   const repository = new VaultRequestRepositorySQLImpl(db.database)
   const stateController = new VaultRequestStateControllerImpl(
@@ -1122,6 +1343,7 @@ function createMidnightEthereumErc20VaultRequestV1(
     transactionV1.stateController,
     ethereum.transactionV1.repository,
     ethereum.transactionV1.stateController,
+    logger.child({ component: 'VaultRequestStateControllerImpl' }),
   )
   const stateResolver = new VaultRequestStateResolverImpl(
     repository,
@@ -1133,12 +1355,16 @@ function createMidnightEthereumErc20VaultRequestV1(
     transactionV1.repository,
     ethereum.transactionV1.repository,
     db.unitOfWork,
+    logger.child({ component: 'VaultRequestStateResolverImpl' }),
   )
   return {
     repository,
     stateController,
     stateResolver,
-    eventConsumer: new VaultRequestEventConsumer(stateResolver),
+    eventConsumer: new VaultRequestEventConsumer(
+      stateResolver,
+      logger.child({ component: 'VaultRequestEventConsumer' }),
+    ),
   }
 }
 
@@ -1150,6 +1376,7 @@ function createMidnightEthereumErc20VaultDepositV1(
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['depositV1'] {
   const repository = new DepositRepositorySQLImpl(db.database)
   const stateController = new DepositStateControllerImpl(
@@ -1157,6 +1384,7 @@ function createMidnightEthereumErc20VaultDepositV1(
     event.publisher,
     transactionV1.stateController,
     vaultRequestV1.stateController,
+    logger.child({ component: 'DepositStateControllerImpl' }),
   )
   const stateResolver = new DepositStateResolverImpl(
     repository,
@@ -1165,6 +1393,7 @@ function createMidnightEthereumErc20VaultDepositV1(
     vaultRequestV1.repository,
     vault.ledger,
     db.unitOfWork,
+    logger.child({ component: 'DepositStateResolverImpl' }),
   )
   const service = new DepositServiceImpl(
     repository,
@@ -1181,8 +1410,14 @@ function createMidnightEthereumErc20VaultDepositV1(
     repository,
     stateController,
     stateResolver,
-    eventConsumer: new DepositEventConsumer(stateResolver),
+    eventConsumer: new DepositEventConsumer(
+      stateResolver,
+      logger.child({ component: 'DepositEventConsumer' }),
+    ),
     service,
-    adaptor: new DepositServiceAdaptor(service),
+    adaptor: new DepositServiceAdaptor(
+      service,
+      logger.child({ component: 'DepositServiceAdaptor' }),
+    ),
   }
 }

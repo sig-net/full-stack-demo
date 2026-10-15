@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { Event, EventDefinition } from '@/lib/event/event'
 import type { EventConsumer } from '@/lib/event/event-consumer'
+import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Adapts the event bus to a resolver: the resource's own lifecycle events nudge the resource
@@ -19,20 +20,26 @@ export class LifecycleEventConsumer implements EventConsumer {
   }
 
   async handleEvent(event: Event): Promise<void> {
+    const resource = this.resourceNamed(event)
+    this.config.logger.debug('handling event', { event: event.type, eventId: event.id, resource })
+    await this.config.resolve(resource)
+  }
+
+  /** The resource the event nudges: the one it names, or the parent a child's event serves. */
+  private resourceNamed(event: Event): string {
     const own = this.ownEvent(event)
     if (own !== undefined) {
       const parsed = own.parse(event)
       if (!parsed.success) {
         throw new Error(`${event.type} ${event.id} is malformed: ${z.prettifyError(parsed.error)}`)
       }
-      await this.config.resolve(parsed.data.name)
-      return
+      return parsed.data.name
     }
     const parent = this.childParent(event)
     if (parent === undefined) {
       throw new Error(`${event.type} ${event.id} does not name a ${this.config.resource}`)
     }
-    await this.config.resolve(parent)
+    return parent
   }
 
   private ownEvent(event: Event): EventDefinition<{ name: string }> | undefined {
@@ -65,4 +72,5 @@ export interface LifecycleEventConsumerConfig {
     readonly parentNameSchema: z.ZodType<string>
   }
   readonly resolve: (name: string) => Promise<void>
+  readonly logger: Logger
 }

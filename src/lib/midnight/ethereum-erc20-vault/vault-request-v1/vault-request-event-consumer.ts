@@ -13,6 +13,7 @@ import {
   type MidnightTransactionState,
 } from '@/lib/midnight/transaction-v1/transaction'
 import { MIDNIGHT_TRANSACTION_EVENT_BY_STATE } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Every vault request lifecycle event is a nudge to resolve the request it names, and every
@@ -20,8 +21,9 @@ import { MIDNIGHT_TRANSACTION_EVENT_BY_STATE } from '@/lib/midnight/transaction-
  * reaches the resolver through `resolveWaitingFlushes`, not through an event.
  */
 export class VaultRequestEventConsumer extends LifecycleEventConsumer {
-  constructor(stateResolver: VaultRequestStateResolver) {
+  constructor(stateResolver: VaultRequestStateResolver, logger: Logger) {
     super({
+      logger,
       resource: 'vault request',
       ownEvents: VAULT_REQUEST_EVENTS,
       children: { terminalEvents: CHILD_TERMINAL_EVENTS, parentNameSchema: vaultRequestNameSchema },

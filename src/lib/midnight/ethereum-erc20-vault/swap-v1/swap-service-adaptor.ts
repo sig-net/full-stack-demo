@@ -15,6 +15,7 @@ import {
   type SwapService,
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service'
 import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Adapts the swap service to the wire: the caller secret stands in for the caller, the
@@ -23,13 +24,16 @@ import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-
  */
 export class SwapServiceAdaptor {
   private readonly swapService: SwapService
+  private readonly logger: Logger
 
-  constructor(swapService: SwapService) {
+  constructor(swapService: SwapService, logger: Logger) {
     this.swapService = swapService
+    this.logger = logger
   }
 
   async quoteSwap(callerSecret: string, args: unknown): Promise<SwapQuoteResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'quoteSwap', caller: caller.name })
     const parsed = quoteSwapArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -43,6 +47,7 @@ export class SwapServiceAdaptor {
 
   async startSwap(callerSecret: string, args: unknown): Promise<SwapResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'startSwap', caller: caller.name })
     const parsed = startSwapArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -52,6 +57,7 @@ export class SwapServiceAdaptor {
 
   async completeSwap(callerSecret: string, args: unknown): Promise<SwapResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'completeSwap', caller: caller.name })
     const parsed = completeSwapArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -61,6 +67,7 @@ export class SwapServiceAdaptor {
 
   async getSwap(callerSecret: string, args: unknown): Promise<SwapResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'getSwap', caller: caller.name })
     const parsed = getSwapArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -74,6 +81,7 @@ export class SwapServiceAdaptor {
 
   async listSwaps(callerSecret: string, args: unknown): Promise<SwapListResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'listSwaps', caller: caller.name })
     const parsed = listSwapsArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }

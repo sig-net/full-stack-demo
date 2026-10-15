@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
+import { resolveCaller } from '@/lib/caller/resolve-caller'
 import {
   DEPOSIT_NAME,
   depositFixture,
@@ -9,6 +10,7 @@ import type { DepositService } from '@/lib/midnight/ethereum-erc20-vault/deposit
 import { DepositServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-adaptor'
 import { DepositStateConflict } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const CALLER_SECRET = 'ab'.repeat(32)
 const WALLET = { coinPublicKey: `0x${'AA'.repeat(32)}`, encryptionPublicKey: 'bb'.repeat(32) }
@@ -30,6 +32,7 @@ function adaptorOver(service: Partial<DepositService>, received: object[] = []) 
       listDeposits: recording([deposit]),
       ...service,
     }),
+    new RecordingLogger(),
   )
 }
 
@@ -163,4 +166,40 @@ describe('DepositServiceAdaptor outcomes', () => {
       else expect(await acting).toEqual({ ok: false, error: expectMessage })
     }
   })
+})
+
+describe('DepositServiceAdaptor logging', () => {
+  const cases: ReadonlyArray<{
+    method: string
+    call: (adaptor: DepositServiceAdaptor) => Promise<unknown>
+  }> = [
+    { method: 'startDeposit', call: (a) => a.startDeposit(CALLER_SECRET, {}) },
+    { method: 'completeDeposit', call: (a) => a.completeDeposit(CALLER_SECRET, {}) },
+    { method: 'getDeposit', call: (a) => a.getDeposit(CALLER_SECRET, { name: DEPOSIT_NAME }) },
+    { method: 'listDeposits', call: (a) => a.listDeposits(CALLER_SECRET, {}) },
+  ]
+
+  test.each(cases)(
+    '$method logs one line naming the method and the derived caller, never the secret',
+    async ({ method, call }) => {
+      const logger = new RecordingLogger()
+      await call(
+        new DepositServiceAdaptor(
+          mock<DepositService>('DepositService', {
+            getDeposit: async () => deposit,
+            listDeposits: async () => [deposit],
+          }),
+          logger,
+        ),
+      )
+      expect(logger.lines).toEqual([
+        {
+          level: 'debug',
+          message: 'method called',
+          fields: { method, caller: resolveCaller(CALLER_SECRET).name },
+        },
+      ])
+      expect(JSON.stringify(logger.lines)).not.toContain(CALLER_SECRET)
+    },
+  )
 })

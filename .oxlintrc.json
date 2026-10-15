@@ -16,9 +16,16 @@
       {
         "allowConstantExport": true
       }
-    ]
+    ],
+    "no-console": "error"
   },
   "overrides": [
+    {
+      "files": ["scripts/**", "integration-tests/**", "src/server/console-bridge.test.ts"],
+      "rules": {
+        "no-console": "off"
+      }
+    },
     {
       "files": ["src/app/**/*.tsx"],
       "rules": {

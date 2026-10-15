@@ -34,6 +34,7 @@ import {
   REQUEST_ID_HEX,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 /** A transfer request whose output schema is the vault's single bool, as the send circuit records it. */
 const REQUEST: SignBidirectionalEvent = {
@@ -228,6 +229,7 @@ describe('RespondOutcomeSourceEvmNodeImpl.attestedOutcome', () => {
         ...reader,
       }),
       mock<JsonRpcApiProvider>('JsonRpcApiProvider', provider),
+      new RecordingLogger(),
     )
     expect(
       await source.attestedOutcome({ requestId: REQUEST_ID, mpcResponseKey: MPC_RESPONSE_KEY }),
@@ -240,6 +242,7 @@ describe('RespondOutcomeSourceEvmNodeImpl.attestedOutcome', () => {
         getRespondBidirectionalEvents: async () => [FAILED_ATTESTATION],
       }),
       mock<JsonRpcApiProvider>('JsonRpcApiProvider'),
+      new RecordingLogger(),
     )
     expect(
       await source.attestedOutcome({

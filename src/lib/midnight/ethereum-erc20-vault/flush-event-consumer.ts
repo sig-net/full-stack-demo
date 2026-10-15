@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { Event } from '@/lib/event/event'
 import type { EventConsumer } from '@/lib/event/event-consumer'
+import { caughtError, type Logger } from '@/lib/logging/logger'
 import type { Flusher } from '@/lib/midnight/ethereum-erc20-vault/flusher'
 import {
   VAULT_REQUEST_EVENT_BY_STATE,
@@ -15,9 +16,11 @@ import {
  */
 export class FlushEventConsumer implements EventConsumer {
   private readonly flusher: Flusher
+  private readonly logger: Logger
 
-  constructor(flusher: Flusher) {
+  constructor(flusher: Flusher, logger: Logger) {
     this.flusher = flusher
+    this.logger = logger
   }
 
   wantsEvent(event: Event): boolean {
@@ -29,8 +32,17 @@ export class FlushEventConsumer implements EventConsumer {
     if (!parsed.success) {
       throw new Error(`${event.type} ${event.id} is malformed: ${z.prettifyError(parsed.error)}`)
     }
+    this.logger.debug('handling event', {
+      event: event.type,
+      eventId: event.id,
+      resource: parsed.data.name,
+    })
     this.flusher.flush().catch((error: unknown) => {
-      console.error(`Flush nudged by ${event.type} ${event.id} failed`, error)
+      this.logger.error('nudged flush failed', {
+        event: event.type,
+        eventId: event.id,
+        err: caughtError(error),
+      })
     })
   }
 }

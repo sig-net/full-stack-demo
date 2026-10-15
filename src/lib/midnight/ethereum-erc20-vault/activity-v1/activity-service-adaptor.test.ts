@@ -5,6 +5,7 @@ import type { ActivityService } from '@/lib/midnight/ethereum-erc20-vault/activi
 import { ActivityServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-adaptor'
 import { DEPOSIT_NAME } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-fixtures'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const CALLER_SECRET = 'ab'.repeat(32)
 const activity = activityFixture()
@@ -22,6 +23,7 @@ function adaptorOver(service: Partial<ActivityService>, received: object[] = [])
       listActivities: recording([activity]),
       ...service,
     }),
+    new RecordingLogger(),
   )
 }
 

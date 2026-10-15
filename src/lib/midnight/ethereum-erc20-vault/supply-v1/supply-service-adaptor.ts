@@ -14,6 +14,7 @@ import {
   type SupplyService,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service'
 import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Adapts the supply service to the wire: the caller secret stands in for the caller, the
@@ -22,13 +23,16 @@ import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-
  */
 export class SupplyServiceAdaptor {
   private readonly supplyService: SupplyService
+  private readonly logger: Logger
 
-  constructor(supplyService: SupplyService) {
+  constructor(supplyService: SupplyService, logger: Logger) {
     this.supplyService = supplyService
+    this.logger = logger
   }
 
   async getSupplyTarget(callerSecret: string, args: unknown): Promise<SupplyTargetResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'getSupplyTarget', caller: caller.name })
     const parsed = getSupplyTargetArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -38,6 +42,7 @@ export class SupplyServiceAdaptor {
 
   async startSupply(callerSecret: string, args: unknown): Promise<SupplyResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'startSupply', caller: caller.name })
     const parsed = startSupplyArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -47,6 +52,7 @@ export class SupplyServiceAdaptor {
 
   async completeSupply(callerSecret: string, args: unknown): Promise<SupplyResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'completeSupply', caller: caller.name })
     const parsed = completeSupplyArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -56,6 +62,7 @@ export class SupplyServiceAdaptor {
 
   async getSupply(callerSecret: string, args: unknown): Promise<SupplyResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'getSupply', caller: caller.name })
     const parsed = getSupplyArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -69,6 +76,7 @@ export class SupplyServiceAdaptor {
 
   async listSupplies(callerSecret: string, args: unknown): Promise<SupplyListResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'listSupplies', caller: caller.name })
     const parsed = listSuppliesArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }

@@ -17,11 +17,13 @@ import {
 } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { MidnightTransactionStateControllerImpl } from '@/lib/midnight/transaction-v1/transaction-state-controller-impl'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 interface Calls {
   created: MidnightTransaction[]
   updated: MidnightTransaction[]
   published: Event[]
+  logger: RecordingLogger
 }
 
 /** A repository holding one row, and a publisher that records. Reads report the lock they took. */
@@ -58,11 +60,15 @@ function controllerOver(
   locks: string[] = [],
 ) {
   const { transactionRepository, eventPublisher } = fields(stored, calls, locks)
-  return new MidnightTransactionStateControllerImpl(transactionRepository, eventPublisher)
+  return new MidnightTransactionStateControllerImpl(
+    transactionRepository,
+    eventPublisher,
+    calls.logger,
+  )
 }
 
 function emptyCalls(): Calls {
-  return { created: [], updated: [], published: [] }
+  return { created: [], updated: [], published: [], logger: new RecordingLogger() }
 }
 
 describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
@@ -104,16 +110,24 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
           key: TRANSACTION_NAME,
           data: { name: TRANSACTION_NAME, parent: DEPOSIT_NAME },
         })
+        expect(calls.logger.lines).toEqual([
+          {
+            level: 'info',
+            message: 'resource created',
+            fields: { resource: TRANSACTION_NAME, parent: DEPOSIT_NAME, toState: 'AwaitingProof' },
+          },
+        ])
       },
     },
     {
-      name: 'failure - the repository refuses the row, so nothing is published',
+      name: 'failure - the repository refuses the row, so nothing is published or logged',
       create: async () => {
         throw new Error(`${TRANSACTION_NAME} already exists`)
       },
       check: async (result, calls) => {
         await expect(result).rejects.toThrow('already exists')
         expect(calls.published).toHaveLength(0)
+        expect(calls.logger.lines).toEqual([])
       },
     },
   ]
@@ -126,6 +140,7 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
         ? transactionRepository
         : mock<MidnightTransactionRepository>('MidnightTransactionRepository', { create }),
       eventPublisher,
+      calls.logger,
     )
     const before = Date.now()
     await check(controller.commitTransaction(args), calls, before)
@@ -215,7 +230,7 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
   ]
 
   test.each(cases)(
-    '$name applies, locks the row and publishes the entered state',
+    '$name applies, locks the row, publishes the entered state and logs the transition',
     async ({ from, transition, to, patch }) => {
       const calls = emptyCalls()
       const locks: string[] = []
@@ -230,6 +245,19 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
         key: TRANSACTION_NAME,
         data: { name: TRANSACTION_NAME, parent: DEPOSIT_NAME },
       })
+      expect(calls.logger.lines).toEqual([
+        {
+          level: 'info',
+          message: 'transition applied',
+          fields: {
+            resource: TRANSACTION_NAME,
+            parent: DEPOSIT_NAME,
+            action: expect.any(String),
+            fromState: from.state,
+            toState: to,
+          },
+        },
+      ])
     },
   )
 
@@ -261,7 +289,7 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
   ]
 
   test.each(refused)(
-    '$name is a state conflict that writes and publishes nothing',
+    '$name is a state conflict that writes, publishes and logs nothing',
     async ({ from, transition }) => {
       const calls = emptyCalls()
       await expect(transition(controllerOver(from, calls))).rejects.toBeInstanceOf(
@@ -269,6 +297,7 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
       )
       expect(calls.updated).toHaveLength(0)
       expect(calls.published).toHaveLength(0)
+      expect(calls.logger.lines).toEqual([])
     },
   )
 

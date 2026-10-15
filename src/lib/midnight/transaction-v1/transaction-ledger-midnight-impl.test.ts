@@ -18,6 +18,7 @@ import {
   submitThrough,
 } from '@/lib/midnight/transaction-v1/transaction-ledger-midnight-impl'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const INDEXER = 'http://indexer.test/graphql'
 const NODE = 'http://node.test'
@@ -28,6 +29,7 @@ function ledgerWith(proofProvider: Partial<ProofProvider> = {}): MidnightTransac
     async () => mock<ProofProvider>('ProofProvider', proofProvider),
     INDEXER,
     NODE,
+    new RecordingLogger(),
   )
 }
 
@@ -252,30 +254,33 @@ describe('submitThrough', () => {
     const { client, sent } = clientAnswering(
       Stream.make(SubmissionEvent.Submitted({ tx: TX_DATA, txHash: '0xabcd' })),
     )
-    await submitThrough(client, transaction)
+    await submitThrough(client, transaction, new RecordingLogger())
     expect(sent).toEqual([Uint8Array.from([7, 8, 9])])
   })
 
   test('resolves and warns when the acknowledgement was lost after the send', async () => {
-    const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const logger = new RecordingLogger()
     const { client } = clientAnswering(Stream.fail(submissionError(NODE_CLOSED)))
-    await submitThrough(client, transaction)
-    expect(warned).toHaveBeenCalledTimes(1)
-    expect(warned.mock.calls[0]?.[0]).toBe(
-      "The Midnight node's acknowledgement was lost after the send, the ledger decides: Transaction submission failed: disconnected from ws://127.0.0.1:9944/: 1000:: Normal Closure",
+    await submitThrough(client, transaction, logger)
+    expect(logger.lines).toHaveLength(1)
+    expect(logger.at('warn')).toHaveLength(1)
+    const [warning] = logger.at('warn')
+    expect(warning?.message).toBe('node acknowledgement lost after the send, the ledger decides')
+    expect(messageOf(warning?.fields.err)).toBe(
+      'Transaction submission failed: disconnected from ws://127.0.0.1:9944/: 1000:: Normal Closure',
     )
   })
 
   test('resolves without a warning when the node already holds the bytes', async () => {
-    const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const logger = new RecordingLogger()
     const { client } = clientAnswering(Stream.fail(submissionError(NODE_HOLDS)))
-    await submitThrough(client, transaction)
-    expect(warned).not.toHaveBeenCalled()
+    await submitThrough(client, transaction, logger)
+    expect(logger.lines).toEqual([])
   })
 
   test("throws with the node's reason in the cause chain when it refused the bytes", async () => {
     const { client } = clientAnswering(Stream.fail(submissionError(NODE_REFUSED)))
-    const thrown = await submitThrough(client, transaction).then(
+    const thrown = await submitThrough(client, transaction, new RecordingLogger()).then(
       () => undefined,
       (error: unknown) => error,
     )
@@ -288,14 +293,14 @@ describe('submitThrough', () => {
     const { client } = clientAnswering(
       Stream.fail(new NodeClientError.ConnectionError({ message: 'Could not connect' })),
     )
-    await expect(submitThrough(client, transaction)).rejects.toThrow(
+    await expect(submitThrough(client, transaction, new RecordingLogger())).rejects.toThrow(
       'The transaction never reached the Midnight node',
     )
   })
 
   test('a defect outside the error channel surfaces with its cause', async () => {
     const { client } = clientAnswering(Stream.die(new Error('registry missing')))
-    const thrown = await submitThrough(client, transaction).then(
+    const thrown = await submitThrough(client, transaction, new RecordingLogger()).then(
       () => undefined,
       (error: unknown) => error,
     )

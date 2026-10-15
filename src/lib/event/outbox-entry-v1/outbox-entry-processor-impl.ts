@@ -9,6 +9,7 @@ import { eventSchema } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
 import type { OutboxEntryProcessor } from '@/lib/event/outbox-entry-v1/outbox-entry-processor'
 import type { OutboxEntryRepository } from '@/lib/event/outbox-entry-v1/outbox-entry-repository'
+import { caughtError, type Logger } from '@/lib/logging/logger'
 import { runUntilAborted } from '@/lib/run-until-aborted'
 
 const BATCH_SIZE = 100
@@ -17,6 +18,7 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
   private readonly outboxEntryRepository: OutboxEntryRepository
   private readonly kafkaEventPublisher: EventPublisher
   private readonly unitOfWork: UnitOfWork
+  private readonly logger: Logger
   private readonly runner: CoalescingRunner
 
   /** A full batch means more may wait, so the relay goes again at once. */
@@ -24,10 +26,12 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
     outboxEntryRepository: OutboxEntryRepository,
     kafkaEventPublisher: EventPublisher,
     unitOfWork: UnitOfWork,
+    logger: Logger,
   ) {
     this.outboxEntryRepository = outboxEntryRepository
     this.kafkaEventPublisher = kafkaEventPublisher
     this.unitOfWork = unitOfWork
+    this.logger = logger
     this.runner = new CoalescingRunner(async () => (await this.relayBatch()) === BATCH_SIZE)
   }
 
@@ -40,8 +44,8 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
    * transaction on purpose: an entry is marked sent only once the broker acknowledged it, so a
    * commit that fails afterwards relays the entry again and loses nothing.
    */
-  private relayBatch(): Promise<number> {
-    return this.unitOfWork.runInTransaction(async () => {
+  private async relayBatch(): Promise<number> {
+    const count = await this.unitOfWork.runInTransaction(async () => {
       const entries = await this.outboxEntryRepository.search({
         criteria: [{ type: 'bool', field: 'sent', bool: false }],
         order: { field: 'createdAt', direction: 'asc' },
@@ -56,6 +60,8 @@ export class OutboxEntryProcessorImpl implements OutboxEntryProcessor {
       }
       return entries.length
     })
+    if (count > 0) this.logger.debug('outbox batch relayed', { count })
+    return count
   }
 }
 
@@ -72,25 +78,23 @@ export function runOutboxEntryProcessor(
   processor: OutboxEntryProcessor,
   pool: Pool,
   signal: AbortSignal,
+  logger: Logger,
 ): Promise<void> {
-  return runUntilAborted(
-    'Outbox entry processor',
-    () => listenAndSweep(processor, pool, signal),
-    signal,
-  )
+  return runUntilAborted(() => listenAndSweep(processor, pool, signal, logger), signal, logger)
 }
 
 async function listenAndSweep(
   processor: OutboxEntryProcessor,
   pool: Pool,
   signal: AbortSignal,
+  logger: Logger,
 ): Promise<void> {
   const client = await pool.connect()
   let inFlight: Promise<void> = Promise.resolve()
   try {
     const run = (): void => {
       inFlight = processor.process().catch((error: unknown) => {
-        console.error('Outbox entry processing failed', error)
+        logger.error('outbox relay failed', { err: caughtError(error) })
       })
     }
     client.on('notification', run)

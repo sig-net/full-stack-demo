@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest'
 import type { SupportedTokenService } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service'
 import { SupportedTokenServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service-adaptor'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const CALLER_SECRET = 'ab'.repeat(32)
 const TOKEN = {
@@ -22,6 +23,7 @@ function adaptorOver(callers: string[] = []): SupportedTokenServiceAdaptor {
         return Promise.resolve([FUND])
       },
     }),
+    new RecordingLogger(),
   )
 }
 

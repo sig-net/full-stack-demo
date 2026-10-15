@@ -17,6 +17,7 @@ import type { RequestLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-le
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
+import type { Logger } from '@/lib/logging/logger'
 
 export class ApprovalStateResolverImpl
   extends CallerOperationStateResolverImpl<Approval>
@@ -29,10 +30,10 @@ export class ApprovalStateResolverImpl
     vaultRequestRepository: VaultRequestRepository,
     requestLedger: RequestLedger,
     unitOfWork: UnitOfWork,
+    logger: Logger,
   ) {
     super(
       {
-        label: 'approval',
         action: 'approve',
         startCircuits: Object.values(APPROVAL_START_CIRCUIT_BY_KIND),
         completeCircuit: 'completeApprove',
@@ -44,6 +45,7 @@ export class ApprovalStateResolverImpl
       vaultRequestRepository,
       requestLedger,
       unitOfWork,
+      logger,
     )
   }
 

@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import {
@@ -23,6 +23,7 @@ import {
 import { MidnightTransactionStateResolverImpl } from '@/lib/midnight/transaction-v1/transaction-state-resolver-impl'
 import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
 import { mock } from '@/lib/testing/mock'
+import { type RecordedLine, RecordingLogger } from '@/lib/testing/recording-logger'
 
 /** Which controller method a resolve ended in, with its args. */
 type Transition = { method: string; args: object }
@@ -36,6 +37,8 @@ interface Case {
   expectTransitions: Transition[]
   expectWrites?: number
   expectError?: string
+  /** The lines the resolve writes, `resolving` alone for a stored row by default. */
+  expectLines?: Pick<RecordedLine, 'message' | 'fields'>[]
 }
 
 const EXPIRED = new Date('2000-01-01T00:00:00Z')
@@ -86,6 +89,13 @@ const cases: Case[] = [
     }),
     expectTransitions: [],
     expectWrites: 1,
+    expectLines: [
+      { message: 'resolving', fields: { resource: TRANSACTION_NAME, state: 'AwaitingProof' } },
+      {
+        message: 'state conflict swallowed',
+        fields: { resource: TRANSACTION_NAME, state: 'AwaitingWallet', action: 'recordProof' },
+      },
+    ],
   },
   {
     name: 'AwaitingWallet - a caller transaction is left for the browser wallet',
@@ -215,7 +225,9 @@ describe('MidnightTransactionStateResolverImpl.resolveTransaction', () => {
       expectTransitions,
       expectWrites,
       expectError,
+      expectLines,
     }) => {
+      const logger = new RecordingLogger()
       const transitions: Transition[] = []
       let writes = 0
       const recording = (method: string) => async (args: object) => {
@@ -248,12 +260,19 @@ describe('MidnightTransactionStateResolverImpl.resolveTransaction', () => {
             return work()
           },
         }),
+        logger,
       )
       const resolving = resolver.resolveTransaction({ name: TRANSACTION_NAME })
       if (expectError === undefined) await resolving
       else await expect(resolving).rejects.toThrow(expectError)
       expect(transitions).toEqual(expectTransitions)
       expect(writes).toBe(expectWrites ?? expectTransitions.length)
+      expect(logger.lines.map(({ message, fields }) => ({ message, fields }))).toEqual(
+        expectLines ??
+          (stored === undefined
+            ? []
+            : [{ message: 'resolving', fields: { resource: stored.name, state: stored.state } }]),
+      )
     },
   )
 })
@@ -326,48 +345,46 @@ describe('MidnightTransactionStateResolverImpl.resolvePending', () => {
       transitions.push({ method, args })
       return transactionFixture()
     }
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    try {
-      const resolver = new MidnightTransactionStateResolverImpl(
-        mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
-          search: async (args) => {
-            const [criterion] = args.criteria
-            if (criterion?.type !== 'exact-text' || criterion.field !== 'state') {
-              throw new Error(`unexpected search ${JSON.stringify(args)}`)
-            }
-            searched.push(criterion.text)
-            expect(args.order).toEqual({ field: 'createTime', direction: 'asc' })
-            return rows[midnightTransactionStateSchema.parse(criterion.text)] ?? []
-          },
-        }),
-        mock<MidnightTransactionStateController>('MidnightTransactionStateController', {
-          recordSuccess: recording('recordSuccess'),
-          expireTransaction: recording('expireTransaction'),
-        }),
-        mock<MidnightTransactionLedger>('MidnightTransactionLedger', {
-          status: async () => {
-            const answer = scripted.shift()
-            if (answer === undefined)
-              throw new Error('the ledger was read more often than scripted')
-            if (answer instanceof Error) throw answer
-            return answer
-          },
-        }),
-        mock<RelayerWallet>('RelayerWallet'),
-        mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
-      )
-      await resolver.resolvePending()
-      expect(searched).toEqual([
-        'AwaitingProof',
-        'AwaitingWallet',
-        'AwaitingSubmission',
-        'AwaitingInclusion',
-      ])
-      expect(transitions).toEqual(expectTransitions)
-      expect(scripted).toEqual([])
-      expect(logged).toHaveBeenCalledTimes(expectLogged)
-    } finally {
-      logged.mockRestore()
-    }
+    const logger = new RecordingLogger()
+    const resolver = new MidnightTransactionStateResolverImpl(
+      mock<MidnightTransactionRepository>('MidnightTransactionRepository', {
+        search: async (args) => {
+          const [criterion] = args.criteria
+          if (criterion?.type !== 'exact-text' || criterion.field !== 'state') {
+            throw new Error(`unexpected search ${JSON.stringify(args)}`)
+          }
+          searched.push(criterion.text)
+          expect(args.order).toEqual({ field: 'createTime', direction: 'asc' })
+          return rows[midnightTransactionStateSchema.parse(criterion.text)] ?? []
+        },
+      }),
+      mock<MidnightTransactionStateController>('MidnightTransactionStateController', {
+        recordSuccess: recording('recordSuccess'),
+        expireTransaction: recording('expireTransaction'),
+      }),
+      mock<MidnightTransactionLedger>('MidnightTransactionLedger', {
+        status: async () => {
+          const answer = scripted.shift()
+          if (answer === undefined) throw new Error('the ledger was read more often than scripted')
+          if (answer instanceof Error) throw answer
+          return answer
+        },
+      }),
+      mock<RelayerWallet>('RelayerWallet'),
+      mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
+      logger,
+    )
+    await resolver.resolvePending()
+    expect(searched).toEqual([
+      'AwaitingProof',
+      'AwaitingWallet',
+      'AwaitingSubmission',
+      'AwaitingInclusion',
+    ])
+    expect(transitions).toEqual(expectTransitions)
+    expect(scripted).toEqual([])
+    expect(logger.at('error').map((line) => line.message)).toEqual(
+      Array.from({ length: expectLogged }, () => 'resolve failed'),
+    )
   })
 })

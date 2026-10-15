@@ -28,6 +28,7 @@ import type { VaultRequestStateController } from '@/lib/midnight/ethereum-erc20-
 import { midnightTransactionName } from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import type { Repository } from '@/lib/repository/repository'
+import type { Logger } from '@/lib/logging/logger'
 
 /** What tells one caller operation's controller and resolver apart from another's. */
 export interface CallerOperationKind<Resource extends CallerOperation> {
@@ -59,6 +60,7 @@ export abstract class CallerOperationStateControllerImpl<
   private readonly eventPublisher: EventPublisher
   private readonly midnightTransactionStateController: MidnightTransactionStateController
   private readonly vaultRequestStateController: VaultRequestStateController
+  private readonly logger: Logger
 
   protected constructor(
     kind: CallerOperationKind<Resource>,
@@ -66,12 +68,14 @@ export abstract class CallerOperationStateControllerImpl<
     eventPublisher: EventPublisher,
     midnightTransactionStateController: MidnightTransactionStateController,
     vaultRequestStateController: VaultRequestStateController,
+    logger: Logger,
   ) {
     this.kind = kind
     this.repository = repository
     this.eventPublisher = eventPublisher
     this.midnightTransactionStateController = midnightTransactionStateController
     this.vaultRequestStateController = vaultRequestStateController
+    this.logger = logger
   }
 
   async recordStarted({ name }: RecordStartedArgs): Promise<Resource> {
@@ -112,6 +116,7 @@ export abstract class CallerOperationStateControllerImpl<
     await this.eventPublisher.publishEvent(
       this.kind.events[stored.state].create(stored.name, { name: stored.name }),
     )
+    this.logger.info('resource created', { resource: stored.name, toState: stored.state })
     await this.midnightTransactionStateController.commitTransaction({
       name: midnightTransactionName(callerOf(stored.name), randomUUID()),
       parent: stored.name,
@@ -157,6 +162,12 @@ export abstract class CallerOperationStateControllerImpl<
     await this.eventPublisher.publishEvent(
       this.kind.events[stored.state].create(stored.name, { name: stored.name }),
     )
+    this.logger.info('transition applied', {
+      resource: stored.name,
+      action,
+      fromState: current.state,
+      toState: stored.state,
+    })
     return stored
   }
 }

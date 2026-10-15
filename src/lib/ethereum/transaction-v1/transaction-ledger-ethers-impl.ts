@@ -7,6 +7,7 @@ import type {
   EthereumTransactionLedger,
   LedgerStatusArgs,
 } from '@/lib/ethereum/transaction-v1/transaction-ledger'
+import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Reads must be fresh: a provider cache that answers the receipt read with an earlier null makes
@@ -14,9 +15,11 @@ import type {
  */
 export class EthereumTransactionLedgerEthersImpl implements EthereumTransactionLedger {
   private readonly provider: Provider
+  private readonly logger: Logger
 
-  constructor(provider: Provider) {
+  constructor(provider: Provider, logger: Logger) {
     this.provider = provider
+    this.logger = logger
   }
 
   async broadcast(signedTx: string): Promise<string> {
@@ -24,20 +27,39 @@ export class EthereumTransactionLedgerEthersImpl implements EthereumTransactionL
     if (hash === null) {
       throw new Error('The transaction bytes carry no signature')
     }
-    if ((await this.provider.getTransactionReceipt(hash)) !== null) return hash
+    const started = Date.now()
+    if ((await this.provider.getTransactionReceipt(hash)) !== null) {
+      this.logger.debug('transaction already mined', {
+        txId: hash,
+        durationMs: Date.now() - started,
+      })
+      return hash
+    }
     try {
       await this.provider.broadcastTransaction(signedTx)
     } catch (error: unknown) {
       if (!isAlreadySubmitted(error)) throw error
     }
+    this.logger.debug('transaction broadcast', { txId: hash, durationMs: Date.now() - started })
     return hash
+  }
+
+  async status(args: LedgerStatusArgs): Promise<EthereumLedgerTransactionStatus> {
+    const started = Date.now()
+    const status = await this.readStatus(args)
+    this.logger.debug('transaction status read', {
+      txId: args.txHash,
+      outcome: status.outcome,
+      durationMs: Date.now() - started,
+    })
+    return status
   }
 
   /**
    * The count is read first, so the receipt is read only once the chain holds a transaction at
    * that nonce: present means this one, absent means another took the slot.
    */
-  async status({
+  private async readStatus({
     txHash,
     from,
     nonce,

@@ -2,6 +2,7 @@ import type { z } from 'zod'
 
 import type { EventDefinition } from '@/lib/event/event'
 import { LifecycleEventConsumer } from '@/lib/event/lifecycle-event-consumer'
+import type { Logger } from '@/lib/logging/logger'
 import type { CallerOperationEvents } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
 import {
   VAULT_REQUEST_TERMINAL_STATES,
@@ -22,6 +23,7 @@ import { MIDNIGHT_TRANSACTION_EVENT_BY_STATE } from '@/lib/midnight/transaction-
 export class CallerOperationEventConsumer extends LifecycleEventConsumer {
   constructor(config: CallerOperationEventConsumerConfig) {
     super({
+      logger: config.logger,
       resource: config.resource,
       ownEvents: Object.values(config.events),
       children: { terminalEvents: CHILD_TERMINAL_EVENTS, parentNameSchema: config.nameSchema },
@@ -36,6 +38,7 @@ export interface CallerOperationEventConsumerConfig {
   readonly events: CallerOperationEvents
   readonly nameSchema: z.ZodType<string>
   readonly resolve: (name: string) => Promise<void>
+  readonly logger: Logger
 }
 
 const CHILD_TERMINAL_EVENTS: readonly EventDefinition<{ name: string; parent: string }>[] = [

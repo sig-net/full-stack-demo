@@ -23,17 +23,21 @@ import {
   nextState,
   type TransactionAction,
 } from '@/lib/midnight/transaction-v1/transaction-state-machine'
+import type { Logger } from '@/lib/logging/logger'
 
 export class MidnightTransactionStateControllerImpl implements MidnightTransactionStateController {
   private readonly transactionRepository: MidnightTransactionRepository
   private readonly eventPublisher: EventPublisher
+  private readonly logger: Logger
 
   constructor(
     transactionRepository: MidnightTransactionRepository,
     eventPublisher: EventPublisher,
+    logger: Logger,
   ) {
     this.transactionRepository = transactionRepository
     this.eventPublisher = eventPublisher
+    this.logger = logger
   }
 
   async commitTransaction(args: CommitTransactionArgs): Promise<MidnightTransaction> {
@@ -57,6 +61,11 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
         parent: stored.parent,
       }),
     )
+    this.logger.info('resource created', {
+      resource: stored.name,
+      parent: stored.parent,
+      toState: stored.state,
+    })
     return stored
   }
 
@@ -127,6 +136,13 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
         parent: stored.parent,
       }),
     )
+    this.logger.info('transition applied', {
+      resource: stored.name,
+      parent: stored.parent,
+      action,
+      fromState: current.state,
+      toState: stored.state,
+    })
     return stored
   }
 }

@@ -10,16 +10,20 @@ import {
   listSupportedTokensArgsSchema,
   type SupportedTokenService,
 } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service'
+import type { Logger } from '@/lib/logging/logger'
 
 /** Adapts the supported token service to the wire: untrusted arguments are parsed, and the funds read takes the caller secret. */
 export class SupportedTokenServiceAdaptor {
   private readonly supportedTokenService: SupportedTokenService
+  private readonly logger: Logger
 
-  constructor(supportedTokenService: SupportedTokenService) {
+  constructor(supportedTokenService: SupportedTokenService, logger: Logger) {
     this.supportedTokenService = supportedTokenService
+    this.logger = logger
   }
 
   async listSupportedTokens(args: unknown): Promise<SupportedTokenListResult> {
+    this.logger.debug('method called', { method: 'listSupportedTokens' })
     const parsed = listSupportedTokensArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -32,6 +36,7 @@ export class SupportedTokenServiceAdaptor {
     args: unknown,
   ): Promise<DepositAccountFundListResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'listDepositAccountFunds', caller: caller.name })
     const parsed = listDepositAccountFundsArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }

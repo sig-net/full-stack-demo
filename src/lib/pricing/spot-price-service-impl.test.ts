@@ -10,6 +10,7 @@ import {
 } from '@/lib/pricing/spot-price-service-impl'
 import type { SpotPriceSource } from '@/lib/pricing/spot-price-source'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const USDC: PriceRequest = { kind: 'coin', coinId: 'usd-coin' }
 const ETH: PriceRequest = { kind: 'coin', coinId: 'ethereum' }
@@ -52,6 +53,7 @@ function harness(): Harness {
         return { assets: 3_072_600n, assetDecimals: 6 }
       },
     }),
+    new RecordingLogger(),
     () => new Date(time),
   )
   return {

@@ -26,6 +26,7 @@ import {
   witnesses,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
+import type { Logger } from '@/lib/logging/logger'
 import {
   type CompleteApproveCircuitArgs,
   type CompleteDepositCircuitArgs,
@@ -55,6 +56,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
   private readonly compiledContract: VaultCompiledContract
   private readonly vaultAddress: string
   private readonly relayerWallet: WalletPublicKeys
+  private readonly logger: Logger
 
   /** The relayer's keys go into every permissionless call, since its wallet balances them. */
   constructor(
@@ -63,12 +65,14 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     compiledContract: VaultCompiledContract,
     vaultAddress: string,
     relayerWallet: WalletPublicKeys,
+    logger: Logger,
   ) {
     this.publicDataProvider = publicDataProvider
     this.zkConfigProvider = zkConfigProvider
     this.compiledContract = compiledContract
     this.vaultAddress = vaultAddress
     this.relayerWallet = relayerWallet
+    this.logger = logger
   }
 
   startDeposit(args: StartDepositCircuitArgs): Promise<string> {
@@ -317,6 +321,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
       VAULT_PRIVATE_STATE_ID,
       privateState,
     )
+    const started = Date.now()
     const call = await createUnprovenCallTx(
       {
         publicDataProvider: this.publicDataProvider,
@@ -326,6 +331,10 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
       },
       { ...options, privateStateId: VAULT_PRIVATE_STATE_ID },
     )
+    this.logger.debug('circuit call built', {
+      circuit: options.circuitId,
+      durationMs: Date.now() - started,
+    })
     return bytesToHex(call.private.unprovenTx.serialize())
   }
 }
