@@ -17,6 +17,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service'
 import { CallerOperationStateConflict } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
 import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Adapts the approval service to the wire: the caller secret stands in for the caller, the
@@ -25,9 +26,11 @@ import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-
  */
 export class ApprovalServiceAdaptor {
   private readonly approvalService: ApprovalService
+  private readonly logger: Logger
 
-  constructor(approvalService: ApprovalService) {
+  constructor(approvalService: ApprovalService, logger: Logger) {
     this.approvalService = approvalService
+    this.logger = logger
   }
 
   async listApprovalTargets(
@@ -35,6 +38,7 @@ export class ApprovalServiceAdaptor {
     args: unknown,
   ): Promise<ApprovalTargetListResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'listApprovalTargets', caller: caller.name })
     const parsed = listApprovalTargetsArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -47,6 +51,7 @@ export class ApprovalServiceAdaptor {
 
   async startApproval(callerSecret: string, args: unknown): Promise<ApprovalResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'startApproval', caller: caller.name })
     const parsed = startApprovalArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -56,6 +61,7 @@ export class ApprovalServiceAdaptor {
 
   async completeApproval(callerSecret: string, args: unknown): Promise<ApprovalResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'completeApproval', caller: caller.name })
     const parsed = completeApprovalArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -65,6 +71,7 @@ export class ApprovalServiceAdaptor {
 
   async getApproval(callerSecret: string, args: unknown): Promise<ApprovalResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'getApproval', caller: caller.name })
     const parsed = getApprovalArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -78,6 +85,7 @@ export class ApprovalServiceAdaptor {
 
   async listApprovals(callerSecret: string, args: unknown): Promise<ApprovalListResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'listApprovals', caller: caller.name })
     const parsed = listApprovalsArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }

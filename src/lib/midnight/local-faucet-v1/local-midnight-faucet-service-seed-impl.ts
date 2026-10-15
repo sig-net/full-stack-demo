@@ -9,6 +9,7 @@ import {
   NIGHT_FAUCET_AMOUNT,
 } from '@/lib/midnight/local-faucet-v1/local-midnight-faucet-service'
 import type { NightFunding } from '@/lib/midnight/local-faucet-v1/night-funding'
+import type { Logger } from '@/lib/logging/logger'
 import { registerNightForDust } from '@/lib/midnight/wallet/register-night-for-dust'
 import {
   type AccountKeys,
@@ -25,12 +26,14 @@ import { transferNight } from '@/lib/midnight/wallet/transfer-night'
 export class LocalMidnightFaucetServiceSeedImpl implements LocalMidnightFaucetService {
   private readonly config: MidnightNetworkConfig
   private readonly keys: AccountKeys
+  private readonly logger: Logger
   private starting: Promise<WalletFacade> | undefined
   private queue: Promise<unknown> = Promise.resolve()
 
-  constructor(config: MidnightNetworkConfig, seed: string) {
+  constructor(config: MidnightNetworkConfig, seed: string, logger: Logger) {
     this.config = config
     this.keys = deriveAccountKeys(seed, config.networkId)
+    this.logger = logger
   }
 
   fundNight(args: FundNightArgs): Promise<NightFunding> {
@@ -43,10 +46,12 @@ export class LocalMidnightFaucetServiceSeedImpl implements LocalMidnightFaucetSe
     unshieldedAddress,
     amount = NIGHT_FAUCET_AMOUNT,
   }: FundNightArgs): Promise<NightFunding> {
+    const started = Date.now()
     const facade = await this.started()
     const state = await facade.waitForSyncedState()
     if (state.dust.balance(new Date()) < FUNDER_DUST_MINIMUM) {
       await registerNightForDust(facade, this.keys, state)
+      this.logger.info('funder night registered for dust')
     }
     const transactionId = await transferNight(
       facade,
@@ -55,6 +60,7 @@ export class LocalMidnightFaucetServiceSeedImpl implements LocalMidnightFaucetSe
       unshieldedAddress,
       amount,
     )
+    this.logger.info('night funded', { txId: transactionId, durationMs: Date.now() - started })
     return { unshieldedAddress, amount, transactionId }
   }
 

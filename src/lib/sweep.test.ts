@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 
 import { sweep, type SweepTask } from '@/lib/sweep'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 /** A sweep over two tasks that record their runs, ended by the abort the case scripts. */
 interface Case {
@@ -68,29 +69,60 @@ describe('sweep', () => {
           if (step === 'abort') controller.abort()
         },
       })
-      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-      const announced = vi.spyOn(console, 'log').mockImplementation(() => undefined)
-      try {
-        const sweeping = sweep(
-          [scripted('first', [...first]), scripted('second', [...second])],
-          intervalMs,
-          controller.signal,
-        )
-        if (abortAfterFirstPass) {
-          await vi.waitFor(() => {
-            expect(runs).toEqual(expectRuns)
-          })
-          controller.abort()
-        }
-        await sweeping
-        expect(runs).toEqual(expectRuns)
-        expect(logged).toHaveBeenCalledTimes(expectLogged)
-      } finally {
-        logged.mockRestore()
-        announced.mockRestore()
+      const logger = new RecordingLogger()
+      const sweeping = sweep(
+        [scripted('first', [...first]), scripted('second', [...second])],
+        intervalMs,
+        controller.signal,
+        logger,
+      )
+      if (abortAfterFirstPass) {
+        await vi.waitFor(() => {
+          expect(runs).toEqual(expectRuns)
+        })
+        controller.abort()
+      }
+      await sweeping
+      expect(runs).toEqual(expectRuns)
+      expect(logger.at('error')).toHaveLength(expectLogged)
+      for (const line of logger.at('error')) {
+        expect(line).toMatchObject({
+          message: 'sweep task failed',
+          fields: { task: 'first', err: { message: 'first broke' } },
+        })
       }
     },
   )
+
+  test('every task run is a debug line, and only the first pass announces the sweep at info', async () => {
+    const controller = new AbortController()
+    let passes = 0
+    const logger = new RecordingLogger()
+    await sweep(
+      [
+        {
+          name: 'deposits',
+          run: async () => {
+            passes += 1
+            if (passes === 2) controller.abort()
+          },
+        },
+      ],
+      1,
+      controller.signal,
+      logger,
+    )
+    expect(logger.lines.map(({ level, message, fields }) => [level, message, fields.task])).toEqual(
+      [
+        ['debug', 'sweep task ran', 'deposits'],
+        ['debug', 'sweep pass ended', undefined],
+        ['info', 'sweep running', undefined],
+        ['debug', 'sweep task ran', 'deposits'],
+        ['debug', 'sweep pass ended', undefined],
+      ],
+    )
+    expect(logger.at('info')[0]?.fields.intervalMs).toBe(1)
+  })
 
   test('an aborted signal runs nothing', async () => {
     const controller = new AbortController()
@@ -107,6 +139,7 @@ describe('sweep', () => {
       ],
       1,
       controller.signal,
+      new RecordingLogger(),
     )
     expect(ran).toBe(0)
   })

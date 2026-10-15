@@ -9,6 +9,7 @@ import { ETHEREUM_TRANSACTION_EVENT_BY_STATE } from '@/lib/ethereum/transaction-
 import type { EthereumTransactionStateResolver } from '@/lib/ethereum/transaction-v1/transaction-state-resolver'
 import { newEvent } from '@/lib/event/event'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 describe('EthereumTransactionEventConsumer', () => {
   function consumer(resolved: string[]) {
@@ -18,6 +19,7 @@ describe('EthereumTransactionEventConsumer', () => {
           resolved.push(name)
         },
       }),
+      new RecordingLogger(),
     )
   }
 

@@ -6,15 +6,17 @@ import { MidnightTransactionEventConsumer } from '@/lib/midnight/transaction-v1/
 import { MIDNIGHT_TRANSACTION_EVENT_BY_STATE } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import type { MidnightTransactionStateResolver } from '@/lib/midnight/transaction-v1/transaction-state-resolver'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 describe('MidnightTransactionEventConsumer', () => {
-  function consumer(resolved: string[]) {
+  function consumer(resolved: string[], logger = new RecordingLogger()) {
     return new MidnightTransactionEventConsumer(
       mock<MidnightTransactionStateResolver>('MidnightTransactionStateResolver', {
         resolveTransaction: async ({ name }) => {
           resolved.push(name)
         },
       }),
+      logger,
     )
   }
 
@@ -30,15 +32,22 @@ describe('MidnightTransactionEventConsumer', () => {
     expect(subject.wantsEvent(newEvent('deposit.something', 'k', {}))).toBe(false)
   })
 
-  test('hands the named transaction to the resolver', async () => {
+  test('hands the named transaction to the resolver and logs the event it handles', async () => {
     const resolved: string[] = []
-    await consumer(resolved).handleEvent(
-      MIDNIGHT_TRANSACTION_EVENT_BY_STATE.AwaitingProof.create(TRANSACTION_NAME, {
-        name: TRANSACTION_NAME,
-        parent: DEPOSIT_NAME,
-      }),
-    )
+    const logger = new RecordingLogger()
+    const event = MIDNIGHT_TRANSACTION_EVENT_BY_STATE.AwaitingProof.create(TRANSACTION_NAME, {
+      name: TRANSACTION_NAME,
+      parent: DEPOSIT_NAME,
+    })
+    await consumer(resolved, logger).handleEvent(event)
     expect(resolved).toEqual([TRANSACTION_NAME])
+    expect(logger.lines).toEqual([
+      {
+        level: 'debug',
+        message: 'handling event',
+        fields: { event: event.type, eventId: event.id, resource: TRANSACTION_NAME },
+      },
+    ])
   })
 
   test('refuses malformed event data before touching the resolver', async () => {

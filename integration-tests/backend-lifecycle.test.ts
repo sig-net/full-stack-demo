@@ -22,7 +22,9 @@ describe('The backend lifecycle over Kafka, Postgres and the relayer wallet', ()
   })
 
   test('start runs once, syncs the wallet and sweeps, and stop ends every loop', async () => {
-    const logged = vi.spyOn(console, 'log')
+    const { approvalV1, flusher } = backend.midnight.ethereumErc20Vault
+    const approvalsSwept = vi.spyOn(approvalV1.stateResolver, 'resolvePending')
+    const flushed = vi.spyOn(flusher, 'flush')
     try {
       const { pool } = backend.db
       const started = Date.now()
@@ -33,10 +35,12 @@ describe('The backend lifecycle over Kafka, Postgres and the relayer wallet', ()
       await backend.midnight.relayerWallet.provider()
       console.log(`relayer wallet synced ${String(Date.now() - started)} ms after start`)
 
-      // The sweep's first pass ends with a flush, which waits for the wallet and the prover keys.
+      // The sweep's first pass ends with the approvals and then a flush, which waits for the
+      // wallet and the prover keys.
       await vi.waitFor(
         () => {
-          expect(logged).toHaveBeenCalledWith(expect.stringMatching(/^Sweep ran its first pass/))
+          expect(approvalsSwept).toHaveBeenCalled()
+          expect(flushed).toHaveBeenCalled()
         },
         { timeout: 90_000, interval: 250 },
       )
@@ -51,7 +55,8 @@ describe('The backend lifecycle over Kafka, Postgres and the relayer wallet', ()
       // A second stop has nothing left to end.
       await backend.stop()
     } finally {
-      logged.mockRestore()
+      approvalsSwept.mockRestore()
+      flushed.mockRestore()
     }
   })
 })

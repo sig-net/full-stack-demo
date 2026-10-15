@@ -41,6 +41,7 @@ import type {
 } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { mock } from '@/lib/testing/mock'
 import { UUID } from '@/lib/value-schemas'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 interface Calls {
   created: VaultRequest[]
@@ -125,6 +126,7 @@ function controllerOver(
         return ethereumTransactionFixture(args)
       },
     }),
+    new RecordingLogger(),
   )
 }
 

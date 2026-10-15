@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import {
@@ -26,6 +26,7 @@ import {
 } from '@/lib/ethereum/transaction-v1/transaction-state-controller'
 import { EthereumTransactionStateResolverImpl } from '@/lib/ethereum/transaction-v1/transaction-state-resolver-impl'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 /** Which controller method a resolve ended in, with its args. */
 type Transition = { method: string; args: object }
@@ -202,6 +203,7 @@ describe('EthereumTransactionStateResolverImpl.resolveTransaction', () => {
             return work()
           },
         }),
+        new RecordingLogger(),
       )
       const resolving = resolver.resolveTransaction({ name: TRANSACTION_NAME })
       if (expectError === undefined) await resolving
@@ -282,41 +284,40 @@ describe('EthereumTransactionStateResolverImpl.resolvePending', () => {
       transitions.push({ method, args })
       return transactionFixture()
     }
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    try {
-      const resolver = new EthereumTransactionStateResolverImpl(
-        mock<EthereumTransactionRepository>('EthereumTransactionRepository', {
-          search: async (args) => {
-            const [criterion] = args.criteria
-            if (criterion?.type !== 'exact-text' || criterion.field !== 'state') {
-              throw new Error(`unexpected search ${JSON.stringify(args)}`)
-            }
-            searched.push(criterion.text)
-            expect(args.order).toEqual({ field: 'createTime', direction: 'asc' })
-            return rows[ethereumTransactionStateSchema.parse(criterion.text)] ?? []
-          },
-        }),
-        mock<EthereumTransactionStateController>('EthereumTransactionStateController', {
-          recordSuccess: recording('recordSuccess'),
-          expireTransaction: recording('expireTransaction'),
-        }),
-        mock<EthereumTransactionLedger>('EthereumTransactionLedger', {
-          status: async () => {
-            const answer = scripted.shift()
-            if (answer === undefined) throw new Error('the chain was read more often than scripted')
-            if (answer instanceof Error) throw answer
-            return answer
-          },
-        }),
-        mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
-      )
-      await resolver.resolvePending()
-      expect(searched).toEqual(['AwaitingSubmission', 'AwaitingInclusion'])
-      expect(transitions).toEqual(expectTransitions)
-      expect(scripted).toEqual([])
-      expect(logged).toHaveBeenCalledTimes(expectLogged)
-    } finally {
-      logged.mockRestore()
-    }
+    const logger = new RecordingLogger()
+    const resolver = new EthereumTransactionStateResolverImpl(
+      mock<EthereumTransactionRepository>('EthereumTransactionRepository', {
+        search: async (args) => {
+          const [criterion] = args.criteria
+          if (criterion?.type !== 'exact-text' || criterion.field !== 'state') {
+            throw new Error(`unexpected search ${JSON.stringify(args)}`)
+          }
+          searched.push(criterion.text)
+          expect(args.order).toEqual({ field: 'createTime', direction: 'asc' })
+          return rows[ethereumTransactionStateSchema.parse(criterion.text)] ?? []
+        },
+      }),
+      mock<EthereumTransactionStateController>('EthereumTransactionStateController', {
+        recordSuccess: recording('recordSuccess'),
+        expireTransaction: recording('expireTransaction'),
+      }),
+      mock<EthereumTransactionLedger>('EthereumTransactionLedger', {
+        status: async () => {
+          const answer = scripted.shift()
+          if (answer === undefined) throw new Error('the chain was read more often than scripted')
+          if (answer instanceof Error) throw answer
+          return answer
+        },
+      }),
+      mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
+      logger,
+    )
+    await resolver.resolvePending()
+    expect(searched).toEqual(['AwaitingSubmission', 'AwaitingInclusion'])
+    expect(transitions).toEqual(expectTransitions)
+    expect(scripted).toEqual([])
+    expect(logger.at('error').map((line) => line.message)).toEqual(
+      Array.from({ length: expectLogged }, () => 'resolve failed'),
+    )
   })
 })

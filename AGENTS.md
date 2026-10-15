@@ -212,6 +212,31 @@ Keep setup instructions and application reference material in README.md and docs
   declared as a plain `as const` array in such a file (`vault-action.ts` is the model), named
   as the SDK names its members.
 
+## Logging
+
+- Server code logs through the `Logger` port (`src/lib/logging/logger.ts`), received as a
+  constructor or function argument: `createBackend()` hands each component
+  `logger.child({ component: '<ClassName>' })`. Nothing under `src` calls `console`, and
+  `no-console` fails lint. The console bridge (`src/server/console-bridge.ts`) exists for code
+  the repository does not own and is installed by the start-up in json format only.
+- Four levels and no others. `error`: work was lost or an invariant broke and a person must look,
+  always with `err`. `warn`: degraded but handled. `info`: the process lifecycle and every
+  resource created and state transition. `debug`: the mechanics.
+- A line is written once, where the decision is made, never at the caller: the state
+  controller's create methods and `transition()` own `resource created` and `transition
+  applied`, `UnitOfWork` the transaction lines (a joined call logs nothing), the outbox
+  publisher `event queued`, the Kafka publisher `event sent`, the hub `event received` and
+  `event dispatched`, `LifecycleEventConsumer` `handling event`, each resolver `resolving` and
+  the swallowed conflict, each ledger and circuits implementation its external calls with
+  `durationMs`, the flusher its runs, the sweep its passes, each adaptor `method called`.
+- The message is a constant lower-case fact (`transition applied`), and every identity goes in
+  a `LogFields` field. A new field is added to `LogFields` with its doc comment and to the
+  README's field table in the same change, never as a nested object.
+- Never log a resource object, service arguments, a `Caller`, the caller secret, a seed, a
+  secret key or a transaction body. `caller` is the derived `callers/{caller}` name.
+- Unit tests hand the subject a `RecordingLogger` (`src/lib/testing/recording-logger.ts`), and a
+  test that covers a logged decision asserts on its line.
+
 ## State and asynchronous work
 
 - Use React Query for remote reads, mutations and application data caching. Do not fetch remote

@@ -6,6 +6,11 @@ import type { ClientConfig } from '@/lib/config/client-config'
 import { ethereumConfigFromEnv, ethereumEnvSchema } from '@/lib/config/ethereum-config'
 import { type KafkaConfig, kafkaConfigFromEnv, kafkaEnvSchema } from '@/lib/config/kafka-config'
 import {
+  type LoggingConfig,
+  loggingConfigFromEnv,
+  loggingEnvSchema,
+} from '@/lib/config/logging-config'
+import {
   midnightNetworkConfigFromEnv,
   midnightNetworkEnvSchema,
 } from '@/lib/config/midnight-network-config'
@@ -36,6 +41,7 @@ import {
 export interface ServerOnlyConfig {
   readonly dbConnectionString: string
   readonly kafka: KafkaConfig
+  readonly logging: LoggingConfig
   readonly midnightProver: MidnightProverConfig
   readonly midnightRelayer: MidnightRelayerConfig
   readonly midnightRespondOutput: MidnightRespondOutputConfig
@@ -49,6 +55,7 @@ export interface ServerConfig {
 const envSchema = z.object({
   DB_CONNECTION_STRING: z.string().min(1),
   ...kafkaEnvSchema.shape,
+  ...loggingEnvSchema.shape,
   ...midnightProverEnvSchema.shape,
   ...midnightRelayerEnvSchema.shape,
   ...midnightRespondOutputEnvSchema.shape,
@@ -69,6 +76,7 @@ async function loadServerConfig(): Promise<ServerConfig> {
     serverOnly: {
       dbConnectionString: env.DB_CONNECTION_STRING,
       kafka: kafkaConfigFromEnv(env),
+      logging: loggingConfigFromEnv(env),
       midnightProver: midnightProverConfigFromEnv(env),
       midnightRelayer: midnightRelayerConfigFromEnv(env),
       midnightRespondOutput: midnightRespondOutputConfigFromEnv(env),

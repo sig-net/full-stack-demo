@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 
 import { runUntilAborted } from '@/lib/run-until-aborted'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 interface Case {
   name: string
@@ -36,27 +37,29 @@ describe('runUntilAborted', () => {
     const controller = new AbortController()
     const scripted = [...runs]
     let ran = 0
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    try {
-      await runUntilAborted(
-        'The loop',
-        async () => {
-          ran += 1
-          const step = scripted.shift()
-          if (step === undefined) throw new Error('the work ran more often than the test scripted')
-          if (step === 'abort') {
-            controller.abort()
-            throw new Error('ended by the abort')
-          }
-          if (step === 'throw') throw new Error('broke')
-        },
-        controller.signal,
-        1,
-      )
-      expect(ran).toBe(expectRuns)
-      expect(logged).toHaveBeenCalledTimes(expectLogged)
-    } finally {
-      logged.mockRestore()
+    const logger = new RecordingLogger()
+    await runUntilAborted(
+      async () => {
+        ran += 1
+        const step = scripted.shift()
+        if (step === undefined) throw new Error('the work ran more often than the test scripted')
+        if (step === 'abort') {
+          controller.abort()
+          throw new Error('ended by the abort')
+        }
+        if (step === 'throw') throw new Error('broke')
+      },
+      controller.signal,
+      logger,
+      1,
+    )
+    expect(ran).toBe(expectRuns)
+    expect(logger.at('error')).toHaveLength(expectLogged)
+    for (const line of logger.at('error')) {
+      expect(line).toMatchObject({
+        message: 'loop failed, restarting',
+        fields: { err: { message: 'broke' } },
+      })
     }
   })
 
@@ -64,11 +67,11 @@ describe('runUntilAborted', () => {
     const controller = new AbortController()
     let ran = 0
     const looping = runUntilAborted(
-      'The loop',
       async () => {
         ran += 1
       },
       controller.signal,
+      new RecordingLogger(),
       60_000,
     )
     await vi.waitFor(() => {
@@ -84,11 +87,11 @@ describe('runUntilAborted', () => {
     controller.abort()
     let ran = 0
     await runUntilAborted(
-      'The loop',
       async () => {
         ran += 1
       },
       controller.signal,
+      new RecordingLogger(),
       1,
     )
     expect(ran).toBe(0)

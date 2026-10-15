@@ -10,6 +10,7 @@ import {
 import type { WithdrawService } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service'
 import { WithdrawServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service-adaptor'
 import { WithdrawStateConflict } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-state-controller'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const CALLER_SECRET = 'ab'.repeat(32)
 const WALLET = { coinPublicKey: `0x${'AA'.repeat(32)}`, encryptionPublicKey: 'bb'.repeat(32) }
@@ -32,6 +33,7 @@ function adaptorOver(service: Partial<WithdrawService>, received: object[] = [])
       listWithdraws: recording([withdraw]),
       ...service,
     }),
+    new RecordingLogger(),
   )
 }
 

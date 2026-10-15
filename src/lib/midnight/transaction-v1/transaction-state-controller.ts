@@ -106,8 +106,16 @@ export interface ExpireTransactionArgs {
 export class MidnightTransactionStateConflict extends Error {
   readonly name = 'MidnightTransactionStateConflict'
 
-  constructor(transactionName: string, state: MidnightTransactionState, action: string) {
-    super(`${transactionName} is ${state}, which does not allow ${action}`)
+  /** The name of the resource whose state refused the action. */
+  readonly resource: string
+  readonly state: MidnightTransactionState
+  readonly action: string
+
+  constructor(resource: string, state: MidnightTransactionState, action: string) {
+    super(`${resource} is ${state}, which does not allow ${action}`)
+    this.resource = resource
+    this.state = state
+    this.action = action
   }
 }
 

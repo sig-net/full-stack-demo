@@ -14,6 +14,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 import { DepositStateConflict } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
 import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Adapts the deposit service to the wire: the caller secret stands in for the caller, the
@@ -22,13 +23,16 @@ import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-
  */
 export class DepositServiceAdaptor {
   private readonly depositService: DepositService
+  private readonly logger: Logger
 
-  constructor(depositService: DepositService) {
+  constructor(depositService: DepositService, logger: Logger) {
     this.depositService = depositService
+    this.logger = logger
   }
 
   async startDeposit(callerSecret: string, args: unknown): Promise<DepositResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'startDeposit', caller: caller.name })
     const parsed = startDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -38,6 +42,7 @@ export class DepositServiceAdaptor {
 
   async completeDeposit(callerSecret: string, args: unknown): Promise<DepositResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'completeDeposit', caller: caller.name })
     const parsed = completeDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -47,6 +52,7 @@ export class DepositServiceAdaptor {
 
   async getDeposit(callerSecret: string, args: unknown): Promise<DepositResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'getDeposit', caller: caller.name })
     const parsed = getDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -60,6 +66,7 @@ export class DepositServiceAdaptor {
 
   async listDeposits(callerSecret: string, args: unknown): Promise<DepositListResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'listDeposits', caller: caller.name })
     const parsed = listDepositsArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }

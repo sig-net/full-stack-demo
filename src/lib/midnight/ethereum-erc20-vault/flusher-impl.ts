@@ -4,6 +4,7 @@ import { CallTxFailedError } from '@midnight-ntwrk/midnight-js/contracts'
 import { FailFallible } from '@midnight-ntwrk/midnight-js/types'
 
 import { CoalescingRunner } from '@/lib/coalescing-runner'
+import { caughtError, type Logger } from '@/lib/logging/logger'
 import type { Flusher } from '@/lib/midnight/ethereum-erc20-vault/flusher'
 import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 
@@ -16,18 +17,28 @@ export class FlusherImpl implements Flusher {
   private readonly runner: CoalescingRunner
 
   /** A lost race runs again at once, and any other failure is logged and ends the run until the next nudge or sweep. */
-  constructor(runFlush: () => Promise<number>, onFlushed: () => Promise<void>) {
+  constructor(runFlush: () => Promise<number>, onFlushed: () => Promise<void>, logger: Logger) {
     this.runner = new CoalescingRunner(async () => {
+      const started = Date.now()
+      logger.debug('flush started')
       let filled: number
       try {
         filled = await runFlush()
       } catch (error: unknown) {
-        if (isLostRace(error)) return true
-        console.error('Flush failed', error)
+        const fields = { durationMs: Date.now() - started, err: caughtError(error) }
+        if (isLostRace(error)) {
+          logger.debug('flush lost a race, running again', fields)
+          return true
+        }
+        logger.error('flush failed', fields)
         return false
       }
+      if (filled === 0) {
+        logger.debug('nothing to flush', { durationMs: Date.now() - started })
+        return false
+      }
+      logger.debug('flush landed', { count: filled, durationMs: Date.now() - started })
       // A flush carries at most the width, so more may wait behind a flush that landed.
-      if (filled === 0) return false
       await onFlushed()
       return true
     })

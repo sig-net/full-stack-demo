@@ -74,9 +74,10 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/config`                                           | Server configuration loading and the client configuration type.                                                                                                                                               |
 | `src/lib/db`                                               | The Drizzle schema and the Postgres connection pool.                                                                                                                                                          |
 | `src/lib/kafka`                                            | The Kafka producer and consumer factories and the connection options.                                                                                                                                         |
+| `src/lib/logging`                                          | The `Logger` port with its field vocabulary, and its pino implementation (see [Logging](#logging)).                                                                                                           |
 | `src/lib/event`                                            | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.                                                                                                              |
 | `src/lib/repository`                                       | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.                                                                                                |
-| `src/lib/testing`                                          | Test helpers: the `mock()` double for any interface.                                                                                                                                                          |
+| `src/lib/testing`                                          | Test helpers: the `mock()` double for any interface and the `RecordingLogger`.                                                                                                                                |
 | `src/lib/ethereum/transaction-v1`                          | The Ethereum transaction resource, its repository, state machine, state controller, ledger, resolver and event consumer.                                                                                      |
 | `src/lib/ethereum`                                         | The Ethereum modules the domains share: the account, ERC20 and ERC-4626 readers and the Uniswap quoter.                                                                                                       |
 | `src/lib/midnight/ethereum-erc20-vault`                    | The ERC-20 vault: its action set, circuit and ledger ports, signet readers, respond outcome sources, the flusher, and one folder per resource version.                                                        |
@@ -94,7 +95,7 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/midnight/wallet`                                  | The wallet layer: the `Wallet` interface, the seed wallet and its facade, the stored seed, and the backend's relayer wallet.                                                                                  |
 | `src/lib/pricing`                                          | Spot prices for display: the price request and price resources, the market source port with its CoinGecko implementation, the cached service and its adaptor.                                                 |
 | `src/lib/midnight`                                         | The Midnight modules every domain shares: the address abbreviation, the browser `Buffer` shim and the in-memory private state provider.                                                                       |
-| `src/server`                                               | The code that runs: the composition root, the server action files and the start-up.                                                                                                                           |
+| `src/server`                                               | The code that runs: the composition root, the server action files, the start-up and the console bridge.                                                                                                       |
 | `src/instrumentation.ts`                                   | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                                                                                                                     |
 | `integration-tests`                                        | The integration tests and their helpers, run with `yarn test:integration` (see [Testing](#testing)).                                                                                                          |
 | `scripts`                                                  | The boundary guard (`yarn boundaries`) and the diagram library generator (`yarn diagram-library`).                                                                                                            |
@@ -131,6 +132,8 @@ in at build time, so one build serves every environment. `.env.example` lists th
 | `RESPOND_OUTPUT_SOURCE`                          | No     | Where the backend obtains the bytes an MPC attestation is verified over: `evm-node` (default, traces the mined transaction on `EVM_RPC_URL`) or `mpc-cache`. Server-only. |
 | `MPC_OUTPUT_CACHE_URL`                           | No     | The MPC output cache, required by the `mpc-cache` source. Server-only.                                                                                                    |
 | `MIDNIGHT_USER_SEED`                             | Yes    | Tests only: the funded Midnight wallet the integration tests play the user with. The application never reads it.                                                          |
+| `LOG_LEVEL`                                      | No     | The least severe server log level written: `debug`, `info` (default), `warn` or `error` (see [Logging](#logging)). Server-only.                                           |
+| `LOG_FORMAT`                                     | No     | `json` (default when `NODE_ENV` is `production`), one Cloud Logging shaped object per line, or `pretty` (default otherwise), coloured text. Server-only.                  |
 
 Each section of the client configuration is owned by one module under `src/lib/config`
 (`midnight-network-config.ts`, `midnight-signet-config.ts`, `midnight-ethereum-erc20-vault-config.ts`,
@@ -335,7 +338,10 @@ the ledger implementations' classification of what the node answered.
 `mock<Interface>(name, methods)` in `src/lib/testing/mock.ts` builds a double that answers with
 the methods a case supplies and throws on any other call, so a dependency the case did not script
 cannot be used unnoticed. `MemoryRepository` in `src/lib/repository/repository-memory-impl.ts` is
-a working in-memory repository for flow tests. `vitest.config.ts` resolves the `@/` alias and
+a working in-memory repository for flow tests. `RecordingLogger` in
+`src/lib/testing/recording-logger.ts` is the logger every unit test hands its subject: it keeps
+each line with its level, message and fields (children's bindings merged), so a case asserts on
+what was logged. `vitest.config.ts` resolves the `@/` alias and
 resolves `server-only` to its empty module under the `react-server` condition, as Next.js's
 server graph does, so server modules load in the runner.
 
@@ -637,7 +643,7 @@ ledger before it believes a failed start or complete (see
 `finalize` balances, signs and finalises an unbound transaction with it. One instance syncs per
 process: the backend's `start()` starts it the moment the server starts, since a sync can take
 minutes on a long chain (the local stack's short chain syncs in a second or two, which the
-`Relayer wallet synced in N ms` log line reports), a `finalize` that arrives mid-sync waits on
+`relayer wallet synced` line reports in its `durationMs`), a `finalize` that arrives mid-sync waits on
 that start, and an instance that was never started refuses to finalise. Next.js evaluates the
 request graph separately, and its backend never starts the wallet, so the one started from
 instrumentation is the one the process uses.
@@ -834,6 +840,142 @@ abort ends the pass after the task that is running. The flush consumer does not 
 flush it nudges, since a run proves and lands over tens of seconds and the hub holds every
 consumer behind a handler: the flusher coalesces nudges and the sweep flushes again, so a dropped
 run costs at most one interval.
+
+## Logging
+
+The server writes structured lines through one port, `Logger` in `src/lib/logging/logger.ts`.
+`debug`, `info`, `warn` and `error` each take a constant message and a flat record of fields, and
+`child(fields)` returns a logger that writes those fields on every line. `createBackend()` builds
+the root logger first, with pino (`src/lib/logging/logger-pino-impl.ts`) from `LOG_LEVEL` and
+`LOG_FORMAT`, and hands every component a child that names it in `component`: the class name, or
+`sweep`, `runEventConsumerHub`, `runOutboxEntryProcessor` and `Backend` for the loops and the
+lifecycle. Each module graph builds its own backend, so each has its own logger from the same
+configuration. The browser does not log through it.
+
+### Levels
+
+| Level   | What a line at this level reports                                                                                                                                                           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `error` | Work was lost or an invariant broke, and a person must look. The line carries `err`.                                                                                                        |
+| `warn`  | Degraded but handled: cached spot prices served after a failed refresh, a lost node acknowledgement left to the ledger, a traced output that does not decode.                               |
+| `info`  | What a deployed instance says at the default level: the process lifecycle (`backend started`, `relayer wallet synced`, `sweep running`, `backend stopped`) and every create and transition. |
+| `debug` | The mechanics: adaptor calls, database transactions, events on their way through the outbox and Kafka, resolves, ledger and circuit calls, flushes and sweep passes, with durations.        |
+
+Each line is written once, by the component that made the decision it reports, never by its
+caller:
+
+| Message                                                                                                                        | Level        | Written by                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------- |
+| `method called`                                                                                                                | debug        | Every adaptor method, with `method` and, for a caller's call, `caller`.                |
+| `transaction opened`, `transaction committed`, `transaction rolled back`                                                       | debug        | `UnitOfWork`, with `durationMs`. A call that joins an open transaction writes nothing. |
+| `resource created`, `transition applied`                                                                                       | info         | The state controllers' create methods and `transition()`.                              |
+| `event queued`                                                                                                                 | debug        | The outbox publisher, with `event`, `eventId` and `key`.                               |
+| `outbox batch relayed`                                                                                                         | debug        | The outbox processor, with `count`, when a batch held entries.                         |
+| `event sent`                                                                                                                   | debug        | The Kafka publisher.                                                                   |
+| `event received`, `event dispatched`                                                                                           | debug        | The consumer hub, with `partition` and `offset`, then the `count` of consumers.        |
+| `handling event`                                                                                                               | debug        | `LifecycleEventConsumer` and the flush consumer, with the `resource` the event nudges. |
+| `resolving`, `state conflict swallowed`, `resolve failed`                                                                      | debug, error | The resolvers. A failed resolve in a sweep is an error, a swallowed conflict is debug. |
+| `transaction proved`, `transaction submitted`, `transaction broadcast`, `transaction already mined`, `transaction status read` | debug        | The Midnight and Ethereum ledgers, with `txId` and `durationMs`.                       |
+| `circuit call built`                                                                                                           | debug        | The vault circuits, with `circuit` and `durationMs`.                                   |
+| `flush started`, `flush landed`, `nothing to flush`, `flush lost a race, running again`, `flush failed`                        | debug, error | The flusher. Only a failed flush is an error.                                          |
+| `sweep task ran`, `sweep pass ended`, `sweep task failed`                                                                      | debug, error | The sweep, with `task` and `durationMs`.                                               |
+
+A `transition applied` line is written inside the database transaction that holds the write, so a
+transition whose transaction then rolls back is followed by `transaction rolled back`.
+
+### Fields
+
+The message is a constant lower-case fact, so lines group by it, and everything a line is about
+goes in a field. `LogFields` is the vocabulary, and a field literal with any other key does not
+compile:
+
+| Field                                           | Value                                                                                                   |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `component`                                     | The class or loop that wrote the line.                                                                  |
+| `resource`                                      | A resource name, such as `callers/{caller}/deposits/{deposit}`.                                         |
+| `parent`                                        | The resource a child resource serves, on a Midnight transaction, Ethereum transaction or vault request. |
+| `state`, `fromState`, `toState`                 | A resource's state when the line was written, and a transition's two ends.                              |
+| `action`                                        | The state machine action a transition applied or a conflict refused.                                    |
+| `event`, `eventId`, `key`                       | An event's type, id and Kafka key. The key is the name of the resource the event is about.              |
+| `partition`, `offset`                           | Where a consumed event sat on the topic.                                                                |
+| `caller`                                        | The caller's derived name, `callers/{caller}`.                                                          |
+| `method`                                        | The adaptor method a server action reached.                                                             |
+| `task`                                          | A sweep task.                                                                                           |
+| `circuit`, `txId`, `requestId`                  | A vault circuit, a Midnight transaction id or Ethereum hash, a signet request id.                       |
+| `outcome`, `blockHeight`, `lastSeen`            | What a ledger read reported, and the block heights a vault queue check compared.                        |
+| `count`, `durationMs`, `intervalMs`             | How many, how long, and how often.                                                                      |
+| `networkId`, `chainId`, `logLevel`, `logFormat` | The configuration summary on `backend started`.                                                         |
+| `err`                                           | The error the line reports.                                                                             |
+
+A line never carries a resource object, service arguments, a `Caller`, the caller secret, a seed,
+a secret key or a transaction body. The flat field types keep objects out, and `caller` is
+always the derived name.
+
+### Formats
+
+`pretty`, the default outside production, writes coloured text through pino-pretty in the
+server process itself, with no worker thread. `json`, the default when `NODE_ENV` is
+`production`, writes one object per line in the shape Cloud Logging reads from a container's
+stdout:
+
+```json
+{
+  "severity": "INFO",
+  "timestamp": "2026-10-15T08:12:12.516Z",
+  "component": "Backend",
+  "networkId": "stagenet",
+  "chainId": 11155111,
+  "logLevel": "debug",
+  "logFormat": "json",
+  "count": 10,
+  "intervalMs": 30000,
+  "message": "backend started"
+}
+```
+
+- `severity` is `DEBUG`, `INFO`, `WARNING` or `ERROR` (`CRITICAL` for an SDK `fatal`),
+  `message` is the line's summary, and `timestamp` is RFC 3339 in UTC with milliseconds.
+- `err` holds the error's `type`, its `message` with every cause's message appended, and its
+  `stack` with every cause's stack. An error line also carries the stack in `stack_trace`, the
+  field Error Reporting reads.
+- A bigint field is written as its decimal string.
+- Fields named `callerSecret`, `secret`, `secretKey` or `seed`, at the top level or one level
+  down, are written as `[redacted]`. Application code cannot name them, so this guards what the
+  SDKs log.
+- The midnight-js SDK writes through the vault providers' `loggerProvider`, a child tagged
+  `component: 'midnight-js'`.
+- In json format the start-up routes `console.debug`, `log`, `info`, `warn` and `error` through a
+  `component: 'console'` child (`src/server/console-bridge.ts`), so the output of Next.js and the
+  SDKs in the server process is one json line per call with a severity. The message is the
+  arguments as the console formats them, and the first Error among them is `err`. Application
+  code never calls the console: lint fails a `console` call under `src`. Under `next dev` the
+  CLI's banner and request lines stay plain text.
+
+In the Logs Explorer each field sits under `jsonPayload`, so `jsonPayload.message="transition
+applied" AND jsonPayload.toState="Failed"` lists every resource that failed, and
+`jsonPayload.component="FlusherImpl"` one component's story.
+
+### Reading one deposit's trail
+
+Run the server with `LOG_LEVEL=debug` and `LOG_FORMAT=json` and save its stdout to
+`server.log`. Every resource a caller owns is named under `callers/{caller}`, every child names
+the resource it serves in `parent`, and every event's key is the name of the resource it is
+about. `fromjson?` skips the plain-text lines. With the deposit's name in `NAME`, this shows the
+deposit's creation, each of its transitions and resolves, its events, and the creation and
+transitions of the Midnight transactions and the vault request it parents:
+
+```bash
+jq -cR --arg r "$NAME" 'fromjson? | select(.resource == $r or .parent == $r or .key == $r)' server.log
+```
+
+Running it again with the vault request's name in `NAME` shows the request's flush, send,
+signature, broadcast and attestation steps, with the relayer's Midnight transactions and the
+Ethereum broadcast it parents. With `callers/{caller}` in `CALLER`, this shows everything the
+caller did, from each `method called` to every resource's last transition:
+
+```bash
+jq -cR --arg c "$CALLER" 'fromjson? | select(.caller == $c or ((.resource // "") | startswith($c + "/")))' server.log
+```
 
 ## ERC-20 vault deposit API
 

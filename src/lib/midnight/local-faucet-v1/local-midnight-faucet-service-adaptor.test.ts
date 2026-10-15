@@ -6,6 +6,7 @@ import {
   NIGHT_FAUCET_AMOUNT,
 } from '@/lib/midnight/local-faucet-v1/local-midnight-faucet-service'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const ADDRESS =
   'mn_addr_undeployed1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'
@@ -22,6 +23,7 @@ function adaptorOver(error?: Error): LocalMidnightFaucetServiceAdaptor {
             })
           : Promise.reject(error),
     }),
+    new RecordingLogger(),
   )
 }
 
@@ -56,7 +58,9 @@ describe('LocalMidnightFaucetServiceAdaptor.fundNight', () => {
 
   test('refuses every call outside the local stack', async () => {
     await expect(
-      new LocalMidnightFaucetServiceAdaptor(null).fundNight({ unshieldedAddress: ADDRESS }),
+      new LocalMidnightFaucetServiceAdaptor(null, new RecordingLogger()).fundNight({
+        unshieldedAddress: ADDRESS,
+      }),
     ).resolves.toEqual({ ok: false, error: 'The faucet is available on the local stack only.' })
   })
 })

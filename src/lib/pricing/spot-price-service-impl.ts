@@ -2,7 +2,7 @@ import 'server-only'
 
 import { CoalescingRunner } from '@/lib/coalescing-runner'
 import type { Erc4626Reader } from '@/lib/ethereum/erc4626-reader'
-import { messageOf } from '@/lib/message-of'
+import { caughtError, type Logger } from '@/lib/logging/logger'
 import { type PriceRequest, priceRequestKey, type SpotPrice } from '@/lib/pricing/spot-price'
 import type { ListSpotPricesArgs, SpotPriceService } from '@/lib/pricing/spot-price-service'
 import type { SpotPriceSource } from '@/lib/pricing/spot-price-source'
@@ -23,6 +23,7 @@ export const REFRESH_RETRY_DELAY_MS = 30_000
 export class SpotPriceServiceImpl implements SpotPriceService {
   private readonly source: SpotPriceSource
   private readonly erc4626Reader: Erc4626Reader
+  private readonly logger: Logger
   private readonly now: () => Date
   private readonly cache = new Map<string, CacheEntry>()
   private readonly pending = new Set<string>()
@@ -32,10 +33,12 @@ export class SpotPriceServiceImpl implements SpotPriceService {
   constructor(
     source: SpotPriceSource,
     erc4626Reader: Erc4626Reader,
+    logger: Logger,
     now: () => Date = () => new Date(),
   ) {
     this.source = source
     this.erc4626Reader = erc4626Reader
+    this.logger = logger
     this.now = now
     this.refresher = new CoalescingRunner(() => this.refreshPending())
   }
@@ -91,7 +94,10 @@ export class SpotPriceServiceImpl implements SpotPriceService {
       }
     } catch (error: unknown) {
       this.lastFailedRefresh = this.now().getTime()
-      console.warn(`Refreshing spot prices failed, serving the cached ones: ${messageOf(error)}`)
+      this.logger.warn('spot price refresh failed, serving cached prices', {
+        count: requests.length,
+        err: caughtError(error),
+      })
     }
     return this.pending.size > 0
   }

@@ -6,10 +6,16 @@ import { type Event, eventSchema, EVENTS_TOPIC } from '@/lib/event/event'
 import type { EventConsumer } from '@/lib/event/event-consumer'
 import type { EventConsumerHub } from '@/lib/event/event-consumer-hub'
 import type { StringConsumer } from '@/lib/kafka/clients'
+import { caughtError, type Logger } from '@/lib/logging/logger'
 import { runUntilAborted } from '@/lib/run-until-aborted'
 
 export class EventConsumerHubImpl implements EventConsumerHub {
   private readonly consumers: EventConsumer[] = []
+  private readonly logger: Logger
+
+  constructor(logger: Logger) {
+    this.logger = logger
+  }
 
   registerConsumer(consumer: EventConsumer): void {
     this.consumers.push(consumer)
@@ -17,9 +23,19 @@ export class EventConsumerHubImpl implements EventConsumerHub {
 
   /** Handlers run outside any transaction: the resolver behind each one opens its own writes. */
   async dispatchEvent(event: Event): Promise<void> {
+    const started = Date.now()
+    let count = 0
     for (const consumer of this.consumers) {
-      if (consumer.wantsEvent(event)) await consumer.handleEvent(event)
+      if (!consumer.wantsEvent(event)) continue
+      count += 1
+      await consumer.handleEvent(event)
     }
+    this.logger.debug('event dispatched', {
+      event: event.type,
+      eventId: event.id,
+      count,
+      durationMs: Date.now() - started,
+    })
   }
 }
 
@@ -35,12 +51,9 @@ export function runEventConsumerHub(
   hub: EventConsumerHub,
   createConsumer: () => StringConsumer,
   signal: AbortSignal,
+  logger: Logger,
 ): Promise<void> {
-  return runUntilAborted(
-    'Event consumer hub',
-    () => consumeEvents(hub, createConsumer(), signal),
-    signal,
-  )
+  return runUntilAborted(() => consumeEvents(hub, createConsumer(), signal, logger), signal, logger)
 }
 
 /** Closing the consumer ends the stream, which ends the loop once the record in hand is handled. */
@@ -48,12 +61,13 @@ async function consumeEvents(
   hub: EventConsumerHub,
   consumer: StringConsumer,
   signal: AbortSignal,
+  logger: Logger,
 ): Promise<void> {
   let closing: Promise<void> | undefined
   const close = (): Promise<void> => (closing ??= consumer.close(true))
   const onAbort = (): void => {
     close().catch((error: unknown) => {
-      console.error('Closing the event consumer failed', error)
+      logger.error('closing the event consumer failed', { err: caughtError(error) })
     })
   }
   signal.addEventListener('abort', onAbort, { once: true })
@@ -66,14 +80,20 @@ async function consumeEvents(
     })
     for await (const record of stream) {
       const parsed = eventSchema.safeParse(JSON.parse(record.value))
+      const position = { partition: record.partition, offset: record.offset }
       if (parsed.success) {
+        const event = parsed.data
+        logger.debug('event received', {
+          event: event.type,
+          eventId: event.id,
+          key: event.key,
+          ...position,
+        })
         // A failing handler leaves the offset uncommitted, so the record is redelivered after
         // the restart delay and handlers must be idempotent.
-        await hub.dispatchEvent(parsed.data)
+        await hub.dispatchEvent(event)
       } else {
-        console.error(
-          `Event at ${record.partition}:${record.offset.toString()} is malformed and was skipped`,
-        )
+        logger.error('malformed event skipped', position)
       }
       if (signal.aborted) break
       await record.commit()

@@ -73,8 +73,16 @@ export interface ExpireTransactionArgs {
 export class EthereumTransactionStateConflict extends Error {
   readonly name = 'EthereumTransactionStateConflict'
 
-  constructor(transactionName: string, state: EthereumTransactionState, action: string) {
-    super(`${transactionName} is ${state}, which does not allow ${action}`)
+  /** The name of the resource whose state refused the action. */
+  readonly resource: string
+  readonly state: EthereumTransactionState
+  readonly action: string
+
+  constructor(resource: string, state: EthereumTransactionState, action: string) {
+    super(`${resource} is ${state}, which does not allow ${action}`)
+    this.resource = resource
+    this.state = state
+    this.action = action
   }
 }
 

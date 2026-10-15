@@ -13,6 +13,7 @@ import {
   type RedeemService,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service'
 import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Adapts the redeem service to the wire: the caller secret stands in for the caller, the
@@ -21,13 +22,16 @@ import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-
  */
 export class RedeemServiceAdaptor {
   private readonly redeemService: RedeemService
+  private readonly logger: Logger
 
-  constructor(redeemService: RedeemService) {
+  constructor(redeemService: RedeemService, logger: Logger) {
     this.redeemService = redeemService
+    this.logger = logger
   }
 
   async startRedeem(callerSecret: string, args: unknown): Promise<RedeemResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'startRedeem', caller: caller.name })
     const parsed = startRedeemArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -37,6 +41,7 @@ export class RedeemServiceAdaptor {
 
   async completeRedeem(callerSecret: string, args: unknown): Promise<RedeemResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'completeRedeem', caller: caller.name })
     const parsed = completeRedeemArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -46,6 +51,7 @@ export class RedeemServiceAdaptor {
 
   async getRedeem(callerSecret: string, args: unknown): Promise<RedeemResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'getRedeem', caller: caller.name })
     const parsed = getRedeemArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -59,6 +65,7 @@ export class RedeemServiceAdaptor {
 
   async listRedeems(callerSecret: string, args: unknown): Promise<RedeemListResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'listRedeems', caller: caller.name })
     const parsed = listRedeemsArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }

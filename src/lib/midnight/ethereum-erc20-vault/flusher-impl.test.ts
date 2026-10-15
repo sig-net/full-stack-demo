@@ -1,9 +1,10 @@
 import { CallTxFailedError } from '@midnight-ntwrk/midnight-js/contracts'
 import { FailEntirely, FailFallible, type FinalizedTxData } from '@midnight-ntwrk/midnight-js/types'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { FlusherImpl } from '@/lib/midnight/ethereum-erc20-vault/flusher-impl'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 interface Case {
   name: string
@@ -96,28 +97,32 @@ describe('FlusherImpl', () => {
     const scripted = [...runs]
     let ran = 0
     let nudged = 0
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    try {
-      const flusher = new FlusherImpl(
-        async () => {
-          ran += 1
-          const answer = scripted.shift()
-          if (answer === undefined)
-            throw new Error('the flush ran more often than the test scripted')
-          if (answer instanceof Error) throw answer
-          return answer
-        },
-        async () => {
-          nudged += 1
-        },
-      )
-      await flusher.flush()
-      expect(ran).toBe(expectRuns)
-      expect(nudged).toBe(expectNudges)
-      expect(logged).toHaveBeenCalledTimes(expectLogged ? 1 : 0)
-    } finally {
-      logged.mockRestore()
-    }
+    const logger = new RecordingLogger()
+    const flusher = new FlusherImpl(
+      async () => {
+        ran += 1
+        const answer = scripted.shift()
+        if (answer === undefined) throw new Error('the flush ran more often than the test scripted')
+        if (answer instanceof Error) throw answer
+        return answer
+      },
+      async () => {
+        nudged += 1
+      },
+      logger,
+    )
+    await flusher.flush()
+    expect(ran).toBe(expectRuns)
+    expect(nudged).toBe(expectNudges)
+    expect(logger.at('error').map((line) => line.message)).toEqual(
+      expectLogged ? ['flush failed'] : [],
+    )
+    expect(
+      logger.lines
+        .filter((line) => line.message === 'flush landed')
+        .map((line) => line.fields.count),
+    ).toEqual(runs.filter((run) => typeof run === 'number' && run > 0))
+    expect(logger.lines.filter((line) => line.message === 'flush started')).toHaveLength(expectRuns)
   })
 
   test('a call during a run shares the promise and makes the run go once more', async () => {
@@ -130,6 +135,7 @@ describe('FlusherImpl', () => {
         return 0
       },
       () => Promise.reject(new Error('nothing landed, so nothing is nudged')),
+      new RecordingLogger(),
     )
     const first = flusher.flush()
     const second = flusher.flush()
@@ -151,6 +157,7 @@ describe('FlusherImpl', () => {
         return 1
       },
       () => Promise.reject(new Error('database unreachable')),
+      new RecordingLogger(),
     )
     await expect(flusher.flush()).rejects.toThrow('database unreachable')
     expect(ran).toBe(1)

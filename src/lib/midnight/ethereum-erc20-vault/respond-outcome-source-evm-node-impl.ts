@@ -17,6 +17,7 @@ import {
 import type { JsonRpcApiProvider, Transaction, TransactionReceipt } from 'ethers'
 import { z } from 'zod'
 
+import { caughtError, type Logger } from '@/lib/logging/logger'
 import {
   type AttestedOutcomeArgs,
   firstVerifiedOutcome,
@@ -33,10 +34,12 @@ import {
 export class RespondOutcomeSourceEvmNodeImpl implements RespondOutcomeSource {
   private readonly reader: SignetRequestResponseReader
   private readonly provider: JsonRpcApiProvider
+  private readonly logger: Logger
 
-  constructor(reader: SignetRequestResponseReader, provider: JsonRpcApiProvider) {
+  constructor(reader: SignetRequestResponseReader, provider: JsonRpcApiProvider, logger: Logger) {
     this.reader = reader
     this.provider = provider
+    this.logger = logger
   }
 
   async attestedOutcome({
@@ -72,7 +75,10 @@ export class RespondOutcomeSourceEvmNodeImpl implements RespondOutcomeSource {
     try {
       return executedEvmRespondOutput(request.outputDeserializationSchema, isContractCall, trace)
     } catch (error: unknown) {
-      console.warn(`The traced output of request ${id} does not decode under its schema`, error)
+      this.logger.warn('traced output does not decode under the request schema', {
+        requestId: id,
+        err: caughtError(error),
+      })
       return undefined
     }
   }

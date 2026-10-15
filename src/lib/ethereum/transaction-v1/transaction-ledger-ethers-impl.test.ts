@@ -9,12 +9,16 @@ import {
 import type { EthereumLedgerTransactionStatus } from '@/lib/ethereum/transaction-v1/transaction-ledger'
 import { EthereumTransactionLedgerEthersImpl } from '@/lib/ethereum/transaction-v1/transaction-ledger-ethers-impl'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const SENDER = SIGNED_TRANSACTION.from ?? ''
 const NONCE = SIGNED_TRANSACTION.nonce
 
 function ledgerWith(provider: Partial<Provider>): EthereumTransactionLedgerEthersImpl {
-  return new EthereumTransactionLedgerEthersImpl(mock<Provider>('Provider', provider))
+  return new EthereumTransactionLedgerEthersImpl(
+    mock<Provider>('Provider', provider),
+    new RecordingLogger(),
+  )
 }
 
 /** A receipt for the fixture transaction with the given status, as the node would return it. */

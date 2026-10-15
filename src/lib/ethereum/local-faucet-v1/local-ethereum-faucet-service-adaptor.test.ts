@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest'
 import { LocalEthereumFaucetServiceAdaptor } from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service-adaptor'
 import type { LocalEthereumFaucetService } from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const ACCOUNT = `0x${'ab'.repeat(20)}`
 const TOKEN = `0x${'cd'.repeat(20)}`
@@ -22,6 +23,7 @@ function adaptorOver(
           ? Promise.resolve({ account, erc20Address, balance: amount })
           : Promise.reject(erc20Error),
     }),
+    new RecordingLogger(),
   )
 }
 
@@ -54,7 +56,9 @@ describe('LocalEthereumFaucetServiceAdaptor.fundAccount', () => {
 
   test('refuses every call outside the local stack', async () => {
     await expect(
-      new LocalEthereumFaucetServiceAdaptor(null).fundAccount({ account: ACCOUNT }),
+      new LocalEthereumFaucetServiceAdaptor(null, new RecordingLogger()).fundAccount({
+        account: ACCOUNT,
+      }),
     ).resolves.toEqual({
       ok: false,
       error: 'The faucet is available on the local stack only.',
@@ -92,7 +96,7 @@ describe('LocalEthereumFaucetServiceAdaptor.fundErc20', () => {
 
   test('refuses every call outside the local stack', async () => {
     await expect(
-      new LocalEthereumFaucetServiceAdaptor(null).fundErc20({
+      new LocalEthereumFaucetServiceAdaptor(null, new RecordingLogger()).fundErc20({
         account: ACCOUNT,
         erc20Address: TOKEN,
         amount: 1n,

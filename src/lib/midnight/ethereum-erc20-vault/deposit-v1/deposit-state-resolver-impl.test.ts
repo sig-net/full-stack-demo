@@ -29,6 +29,7 @@ import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transact
 import { transactionFixture } from '@/lib/midnight/transaction-v1/transaction-fixtures'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 /** Which controller method a resolve ended in, with its args. */
 type Transition = { method: string; args: object }
@@ -375,6 +376,7 @@ function resolverOver(doubles: Doubles): DepositStateResolverImpl {
         return work()
       },
     }),
+    new RecordingLogger(),
   )
 }
 
@@ -435,6 +437,7 @@ describe('DepositStateResolverImpl.resolvePending', () => {
       }),
       mock<RequestLedger>('RequestLedger'),
       mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
+      new RecordingLogger(),
     )
     await resolver.resolvePending()
     expect(searched).toEqual([
@@ -480,6 +483,7 @@ describe('DepositStateResolverImpl.resolvePending', () => {
         },
       }),
       mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
+      new RecordingLogger(),
     )
     await resolver.resolvePending()
     expect(ledgerReads).toBe(1)
@@ -516,6 +520,7 @@ describe('DepositStateResolverImpl.resolvePending', () => {
       mock<VaultRequestRepository>('VaultRequestRepository'),
       mock<RequestLedger>('RequestLedger'),
       mock<UnitOfWork>('UnitOfWork', { runInTransaction: (work) => work() }),
+      new RecordingLogger(),
     )
     await resolver.resolvePending()
     expect(transitions).toEqual([{ method: 'recordStarted', args: { name: second.name } }])

@@ -16,6 +16,7 @@ import type {
   WithdrawStateResolver,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-state-resolver'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
+import type { Logger } from '@/lib/logging/logger'
 
 export class WithdrawStateResolverImpl
   extends CallerOperationStateResolverImpl<Withdraw>
@@ -28,10 +29,10 @@ export class WithdrawStateResolverImpl
     vaultRequestRepository: VaultRequestRepository,
     requestLedger: RequestLedger,
     unitOfWork: UnitOfWork,
+    logger: Logger,
   ) {
     super(
       {
-        label: 'withdraw',
         action: 'withdraw',
         startCircuits: ['startWithdraw'],
         completeCircuit: 'completeWithdraw',
@@ -43,6 +44,7 @@ export class WithdrawStateResolverImpl
       vaultRequestRepository,
       requestLedger,
       unitOfWork,
+      logger,
     )
   }
 

@@ -20,17 +20,21 @@ import {
   type TransactionAction,
 } from '@/lib/ethereum/transaction-v1/transaction-state-machine'
 import type { EventPublisher } from '@/lib/event/event-publisher'
+import type { Logger } from '@/lib/logging/logger'
 
 export class EthereumTransactionStateControllerImpl implements EthereumTransactionStateController {
   private readonly transactionRepository: EthereumTransactionRepository
   private readonly eventPublisher: EventPublisher
+  private readonly logger: Logger
 
   constructor(
     transactionRepository: EthereumTransactionRepository,
     eventPublisher: EventPublisher,
+    logger: Logger,
   ) {
     this.transactionRepository = transactionRepository
     this.eventPublisher = eventPublisher
+    this.logger = logger
   }
 
   async commitTransaction(args: CommitTransactionArgs): Promise<EthereumTransaction> {
@@ -51,6 +55,11 @@ export class EthereumTransactionStateControllerImpl implements EthereumTransacti
         parent: stored.parent,
       }),
     )
+    this.logger.info('resource created', {
+      resource: stored.name,
+      parent: stored.parent,
+      toState: stored.state,
+    })
     return stored
   }
 
@@ -104,6 +113,13 @@ export class EthereumTransactionStateControllerImpl implements EthereumTransacti
         parent: stored.parent,
       }),
     )
+    this.logger.info('transition applied', {
+      resource: stored.name,
+      parent: stored.parent,
+      action,
+      fromState: current.state,
+      toState: stored.state,
+    })
     return stored
   }
 }

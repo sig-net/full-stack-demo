@@ -15,6 +15,7 @@ import {
 import { VAULT_REQUEST_EVENT_BY_STATE } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-controller'
 import { MIDNIGHT_TRANSACTION_EVENT_BY_STATE } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const WANTED_STATES: readonly VaultRequestState[] = ['AwaitingFlush', 'AwaitingAttestationFlush']
 
@@ -26,6 +27,7 @@ describe('FlushEventConsumer', () => {
           flushes.count += 1
         },
       }),
+      new RecordingLogger(),
     )
   }
 
@@ -84,25 +86,32 @@ describe('FlushEventConsumer', () => {
           return flushing
         },
       }),
+      new RecordingLogger(),
     )
     await detached.handleEvent(wantedEvent)
     expect(flushes.count).toBe(1)
     endFlush()
   })
 
-  test('a flush that fails is logged and the handler still resolved', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    try {
-      const failing = new FlushEventConsumer(
-        mock<Flusher>('Flusher', { flush: () => Promise.reject(new Error('wallet gone')) }),
-      )
-      await failing.handleEvent(wantedEvent)
-      await vi.waitFor(() => {
-        expect(logged).toHaveBeenCalledTimes(1)
-      })
-    } finally {
-      logged.mockRestore()
-    }
+  test('a flush that fails is logged with the event that nudged it, and the handler still resolved', async () => {
+    const logger = new RecordingLogger()
+    const failing = new FlushEventConsumer(
+      mock<Flusher>('Flusher', { flush: () => Promise.reject(new Error('wallet gone')) }),
+      logger,
+    )
+    await failing.handleEvent(wantedEvent)
+    await vi.waitFor(() => {
+      expect(logger.at('error')).toMatchObject([
+        {
+          message: 'nudged flush failed',
+          fields: {
+            event: wantedEvent.type,
+            eventId: wantedEvent.id,
+            err: { message: 'wallet gone' },
+          },
+        },
+      ])
+    })
   })
 
   test('refuses malformed event data before touching the flusher', async () => {

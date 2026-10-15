@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest'
 import { MAX_PRICE_REQUESTS, type SpotPriceService } from '@/lib/pricing/spot-price-service'
 import { SpotPriceServiceAdaptor } from '@/lib/pricing/spot-price-service-adaptor'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const PRICE = {
   key: 'coin:usd-coin',
@@ -18,6 +19,7 @@ function adaptorOver(received: object[] = []) {
         return [PRICE]
       },
     }),
+    new RecordingLogger(),
   )
 }
 

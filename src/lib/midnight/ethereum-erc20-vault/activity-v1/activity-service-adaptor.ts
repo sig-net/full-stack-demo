@@ -9,17 +9,21 @@ import {
   getActivityArgsSchema,
   listActivitiesArgsSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service'
+import type { Logger } from '@/lib/logging/logger'
 
 /** Adapts the activity service to the wire: the caller secret stands in for the caller, and the arguments are untrusted until parsed. */
 export class ActivityServiceAdaptor {
   private readonly activityService: ActivityService
+  private readonly logger: Logger
 
-  constructor(activityService: ActivityService) {
+  constructor(activityService: ActivityService, logger: Logger) {
     this.activityService = activityService
+    this.logger = logger
   }
 
   async getActivity(callerSecret: string, args: unknown): Promise<ActivityResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'getActivity', caller: caller.name })
     const parsed = getActivityArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -33,6 +37,7 @@ export class ActivityServiceAdaptor {
 
   async listActivities(callerSecret: string, args: unknown): Promise<ActivityListResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'listActivities', caller: caller.name })
     const parsed = listActivitiesArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }

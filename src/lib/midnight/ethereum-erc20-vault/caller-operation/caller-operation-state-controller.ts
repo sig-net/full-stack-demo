@@ -54,8 +54,16 @@ export interface CompleteOperationArgs {
 
 /** The operation is not in a state the action applies to, so another actor got there first. */
 export class CallerOperationStateConflict extends Error {
-  constructor(operationName: string, state: CallerOperationState, action: string) {
-    super(`${operationName} is ${state}, which does not allow ${action}`)
+  /** The name of the resource whose state refused the action. */
+  readonly resource: string
+  readonly state: CallerOperationState
+  readonly action: string
+
+  constructor(resource: string, state: CallerOperationState, action: string) {
+    super(`${resource} is ${state}, which does not allow ${action}`)
+    this.resource = resource
+    this.state = state
+    this.action = action
   }
 }
 

@@ -8,6 +8,7 @@ import {
 import type { ApprovalService } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service'
 import { ApprovalServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service-adaptor'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const CALLER_SECRET = 'ab'.repeat(32)
 const WALLET = { coinPublicKey: `0x${'AA'.repeat(32)}`, encryptionPublicKey: 'bb'.repeat(32) }
@@ -30,6 +31,7 @@ function adaptorOver(service: Partial<ApprovalService>, received: object[] = [])
       listApprovals: recording([approval]),
       ...service,
     }),
+    new RecordingLogger(),
   )
 }
 

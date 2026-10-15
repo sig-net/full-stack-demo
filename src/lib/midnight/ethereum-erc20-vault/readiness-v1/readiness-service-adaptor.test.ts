@@ -4,6 +4,7 @@ import type { ReadinessService } from '@/lib/midnight/ethereum-erc20-vault/readi
 import { ReadinessServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/readiness-service-adaptor'
 import type { VaultReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const CALLER_SECRET = 'ab'.repeat(32)
 const READINESS: VaultReadiness = {
@@ -26,6 +27,7 @@ function adaptorOver(callers: string[] = []): ReadinessServiceAdaptor {
         return Promise.resolve(READINESS)
       },
     }),
+    new RecordingLogger(),
   )
 }
 

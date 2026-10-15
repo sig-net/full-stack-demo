@@ -111,8 +111,16 @@ export interface StartAttestationQueueArgs {
 export class VaultRequestStateConflict extends Error {
   readonly name = 'VaultRequestStateConflict'
 
-  constructor(requestName: string, state: VaultRequestState, action: string) {
-    super(`${requestName} is ${state}, which does not allow ${action}`)
+  /** The name of the resource whose state refused the action. */
+  readonly resource: string
+  readonly state: VaultRequestState
+  readonly action: string
+
+  constructor(resource: string, state: VaultRequestState, action: string) {
+    super(`${resource} is ${state}, which does not allow ${action}`)
+    this.resource = resource
+    this.state = state
+    this.action = action
   }
 }
 

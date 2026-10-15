@@ -46,6 +46,7 @@ import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transact
 import { transactionFixture as midnightTransactionFixture } from '@/lib/midnight/transaction-v1/transaction-fixtures'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 /** Which controller method a resolve ended in, with its args. */
 type Transition = { method: string; args: object }
@@ -487,6 +488,7 @@ function resolverOver(doubles: Doubles): VaultRequestStateResolverImpl {
         return work()
       },
     }),
+    new RecordingLogger(),
   )
 }
 

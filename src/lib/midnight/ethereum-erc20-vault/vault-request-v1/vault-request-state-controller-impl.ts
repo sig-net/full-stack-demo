@@ -44,6 +44,7 @@ import {
 } from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
 import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import type { Logger } from '@/lib/logging/logger'
 
 export class VaultRequestStateControllerImpl implements VaultRequestStateController {
   private readonly requestRepository: VaultRequestRepository
@@ -52,6 +53,7 @@ export class VaultRequestStateControllerImpl implements VaultRequestStateControl
   private readonly midnightTransactionStateController: MidnightTransactionStateController
   private readonly ethereumTransactionRepository: EthereumTransactionRepository
   private readonly ethereumTransactionStateController: EthereumTransactionStateController
+  private readonly logger: Logger
 
   constructor(
     requestRepository: VaultRequestRepository,
@@ -60,6 +62,7 @@ export class VaultRequestStateControllerImpl implements VaultRequestStateControl
     midnightTransactionStateController: MidnightTransactionStateController,
     ethereumTransactionRepository: EthereumTransactionRepository,
     ethereumTransactionStateController: EthereumTransactionStateController,
+    logger: Logger,
   ) {
     this.requestRepository = requestRepository
     this.eventPublisher = eventPublisher
@@ -67,6 +70,7 @@ export class VaultRequestStateControllerImpl implements VaultRequestStateControl
     this.midnightTransactionStateController = midnightTransactionStateController
     this.ethereumTransactionRepository = ethereumTransactionRepository
     this.ethereumTransactionStateController = ethereumTransactionStateController
+    this.logger = logger
   }
 
   async queueRequest(args: QueueRequestArgs): Promise<VaultRequest> {
@@ -91,6 +95,11 @@ export class VaultRequestStateControllerImpl implements VaultRequestStateControl
         parent: stored.parent,
       }),
     )
+    this.logger.info('resource created', {
+      resource: stored.name,
+      parent: stored.parent,
+      toState: stored.state,
+    })
     return stored
   }
 
@@ -185,6 +194,13 @@ export class VaultRequestStateControllerImpl implements VaultRequestStateControl
         parent: stored.parent,
       }),
     )
+    this.logger.info('transition applied', {
+      resource: stored.name,
+      parent: stored.parent,
+      action,
+      fromState: current.state,
+      toState: stored.state,
+    })
     return stored
   }
 

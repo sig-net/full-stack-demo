@@ -10,16 +10,20 @@ import {
   type LocalMidnightFaucetService,
 } from '@/lib/midnight/local-faucet-v1/local-midnight-faucet-service'
 import type { NightFunding } from '@/lib/midnight/local-faucet-v1/night-funding'
+import type { Logger } from '@/lib/logging/logger'
 
 /** Adapts the local NIGHT faucet to the wire. Built without a service outside the local stack, where every call is refused. */
 export class LocalMidnightFaucetServiceAdaptor {
   private readonly localMidnightFaucetService: LocalMidnightFaucetService | null
+  private readonly logger: Logger
 
-  constructor(localMidnightFaucetService: LocalMidnightFaucetService | null) {
+  constructor(localMidnightFaucetService: LocalMidnightFaucetService | null, logger: Logger) {
     this.localMidnightFaucetService = localMidnightFaucetService
+    this.logger = logger
   }
 
   async fundNight(args: unknown): Promise<NightFundingResult> {
+    this.logger.debug('method called', { method: 'fundNight' })
     if (this.localMidnightFaucetService === null) return { ok: false, error: NOT_LOCAL }
     const parsed = fundNightArgsSchema.safeParse(args)
     if (!parsed.success) {

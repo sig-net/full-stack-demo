@@ -8,6 +8,7 @@ import type { RedeemService } from '@/lib/midnight/ethereum-erc20-vault/redeem-v
 import { RedeemServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service-adaptor'
 import { RedeemStateConflict } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-controller'
 import { mock } from '@/lib/testing/mock'
+import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const CALLER_SECRET = 'ab'.repeat(32)
 const WALLET = { coinPublicKey: `0x${'AA'.repeat(32)}`, encryptionPublicKey: 'bb'.repeat(32) }
@@ -30,6 +31,7 @@ function adaptorOver(service: Partial<RedeemService>, received: object[] = []) {
       listRedeems: recording([redeem]),
       ...service,
     }),
+    new RecordingLogger(),
   )
 }
 

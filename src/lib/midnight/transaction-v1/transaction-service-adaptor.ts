@@ -12,18 +12,22 @@ import {
   type TransactionService,
 } from '@/lib/midnight/transaction-v1/transaction-service'
 import { MidnightTransactionStateConflict } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import type { Logger } from '@/lib/logging/logger'
 
 export class TransactionServiceAdaptor {
   private readonly transactionService: TransactionService
   private readonly unitOfWork: UnitOfWork
+  private readonly logger: Logger
 
-  constructor(transactionService: TransactionService, unitOfWork: UnitOfWork) {
+  constructor(transactionService: TransactionService, unitOfWork: UnitOfWork, logger: Logger) {
     this.transactionService = transactionService
     this.unitOfWork = unitOfWork
+    this.logger = logger
   }
 
   async getTransaction(callerSecret: string, args: unknown): Promise<TransactionResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'getTransaction', caller: caller.name })
     const parsed = getTransactionArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -37,6 +41,7 @@ export class TransactionServiceAdaptor {
 
   async listTransactions(callerSecret: string, args: unknown): Promise<TransactionListResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'listTransactions', caller: caller.name })
     const parsed = listTransactionsArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
@@ -50,6 +55,7 @@ export class TransactionServiceAdaptor {
   /** A write boundary: the transition runs inside one database transaction. */
   async submitTransaction(callerSecret: string, args: unknown): Promise<TransactionResult> {
     const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'submitTransaction', caller: caller.name })
     const parsed = submitTransactionArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
