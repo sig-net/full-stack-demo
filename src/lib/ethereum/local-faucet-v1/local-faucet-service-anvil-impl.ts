@@ -19,9 +19,9 @@ export class LocalFaucetServiceAnvilImpl implements LocalFaucetService {
     this.provider = provider
   }
 
-  async fundAccount({ account }: FundAccountArgs): Promise<AccountFunding> {
+  async fundAccount({ account, amount = FAUCET_AMOUNT }: FundAccountArgs): Promise<AccountFunding> {
     const before = await this.provider.getBalance(account)
-    await this.provider.send('anvil_setBalance', [account, toBeHex(before + FAUCET_AMOUNT)])
+    await this.provider.send('anvil_setBalance', [account, toBeHex(before + amount)])
     return { account, balance: await this.provider.getBalance(account) }
   }
 

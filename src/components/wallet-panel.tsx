@@ -7,7 +7,12 @@ import { AddressIdentifier } from '@/components/address-identifier'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { SeedWalletDialog } from '@/components/seed-wallet-dialog'
 import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
+import { useNativeBalances } from '@/components/use-native-balances'
 import { walletConnectionStatus } from '@/lib/midnight/wallet/connection-status'
+import { NIGHT_DECIMALS } from '@/lib/midnight/wallet/native-balances'
+import { READINESS_ASSET_DECIMALS } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
+import { formatTokenAmountTruncated } from '@/lib/tokens/format-token-amount'
 
 function AddressRow({ label, value }: { label: string; value: string | undefined }): ReactNode {
   return (
@@ -19,6 +24,39 @@ function AddressRow({ label, value }: { label: string; value: string | undefined
         <AddressIdentifier label={`${label} address`} address={value} />
       )}
     </div>
+  )
+}
+
+/** Fraction digits the two balances show, the rest cut. */
+const NATIVE_BALANCE_PLACES = 2
+
+/** The wallet's NIGHT and DUST, one line each, under the addresses. */
+function NativeBalanceRows(): ReactNode {
+  const balances = useNativeBalances()
+  return (
+    <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1">
+      <dt className="text-muted-foreground">NIGHT</dt>
+      <dd className="font-mono text-sm">
+        {balances.data === undefined
+          ? '…'
+          : formatTokenAmountTruncated(balances.data.night, NIGHT_DECIMALS, NATIVE_BALANCE_PLACES)}
+      </dd>
+      <dt className="text-muted-foreground">DUST</dt>
+      <dd className="font-mono text-sm">
+        {balances.data === undefined
+          ? '…'
+          : formatTokenAmountTruncated(
+              balances.data.dust,
+              READINESS_ASSET_DECIMALS.DUST,
+              NATIVE_BALANCE_PLACES,
+            )}
+      </dd>
+      {balances.isError && (
+        <dd role="alert" className="col-span-2 text-destructive">
+          {balances.error.message}
+        </dd>
+      )}
+    </dl>
   )
 }
 
@@ -47,6 +85,12 @@ export function WalletPanel(): ReactNode {
           <AddressRow label="Unshielded" value={addresses?.unshieldedAddress} />
           <AddressRow label="DUST" value={addresses?.dustAddress} />
         </div>
+      )}
+      {wallet !== null && (
+        <>
+          <Separator />
+          <NativeBalanceRows />
+        </>
       )}
       <div className="flex flex-col gap-1">
         {wallet === null && !connecting && !restoring && (

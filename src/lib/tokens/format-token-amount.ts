@@ -9,3 +9,17 @@ export function formatTokenAmount(baseUnits: bigint, decimals: number): string {
   const fraction = digits.slice(digits.length - decimals).replace(/0+$/, '')
   return fraction === '' ? `${sign}${whole}` : `${sign}${whole}.${fraction}`
 }
+
+/** `formatTokenAmount` cut to at most `places` fraction digits, the digits past them dropped. */
+export function formatTokenAmountTruncated(
+  baseUnits: bigint,
+  decimals: number,
+  places: number,
+): string {
+  if (!Number.isInteger(places) || places < 0) {
+    throw new Error(`Places must be a non-negative integer, got ${places}.`)
+  }
+  if (places >= decimals) return formatTokenAmount(baseUnits, decimals)
+  const dropped = 10n ** BigInt(decimals - places)
+  return formatTokenAmount(baseUnits / dropped, places)
+}

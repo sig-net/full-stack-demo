@@ -55,6 +55,9 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `yarn check`                 | Run the type check, the linter, the format check, the boundary check, the diagram library check and the unit tests in sequence. |
 | `yarn db:generate`           | Write a SQL migration for the changes made to the schema.                                                                       |
 | `yarn db:migrate`            | Apply the migrations that the database has not yet run.                                                                         |
+| `yarn stack:up`              | Start the compose services (Postgres, Kafka and the explorers) with `.env.local` and wait until they are healthy.               |
+| `yarn stack:down`            | Stop the compose services and delete their volumes, so the database and the broker start empty next time.                       |
+| `yarn stack:restart`         | `stack:down`, `stack:up`, then `db:migrate`: a fresh database with the schema applied and an empty history.                     |
 | `yarn zk-assets`             | Build the prover keys and ZKIR of the vault and signet contracts under `zk-assets/` (see [Proving keys](#proving-keys)).        |
 
 ## Layout
@@ -224,7 +227,7 @@ survives a restart of the containers.
 Start them and wait until they accept connections:
 
 ```bash
-docker compose --env-file .env.local up -d --wait
+yarn stack:up
 ```
 
 Stop them and keep the data:
@@ -236,7 +239,15 @@ docker compose down
 Stop them and delete the data, so the next start begins with an empty database and broker:
 
 ```bash
-docker compose down --volumes
+yarn stack:down
+```
+
+Reset them in one go, bringing the services back up and applying the migrations to the empty
+database. The Midnight chain, the fork and the vault belong to the other stack and are not
+touched, so the wallet keeps its coins while the Activity table starts empty:
+
+```bash
+yarn stack:restart
 ```
 
 ## Database
@@ -1073,6 +1084,11 @@ as toasts from the shadcn `sonner` toaster mounted in the root layout, and the N
 server's server function invocation log is switched off in `next.config.ts`, since every action
 carries the caller secret as its first argument.
 
+The same Ethereum explorer opens an account's page from an `EthereumAccountLink`
+(`src/components/ethereum-account-link.tsx`) wherever the UI names one: the deposit account in
+the identity popover and the Deposit dialog, and the deposit and vault accounts in the readiness
+checklist, beside the faucet wand.
+
 The deposit itself starts from the deposit dialog: each fund line's control calls
 `startDeposit` for the whole fund with the wallet's public keys, with the dialog inert until the
 server answers, and closes on success with a toast. From then on the Activity table is the only
@@ -1109,6 +1125,10 @@ wallet components read its types and the connection status label.
   connection status, the addresses once known, the seed dialog and disconnect. From the `md`
   breakpoint up, `WalletPopover` shows it from the app bar button that carries the status dot.
   Below it, the `MobileMenu` sheet shows it under a collapsible Wallet item.
+  Under the addresses of a connected wallet, past a rule, the panel lists the wallet's NIGHT and
+  DUST (`useNativeBalances()` in `src/components/use-native-balances.ts` over
+  `readNativeBalances()` in `src/lib/midnight/wallet/native-balances.ts`: the unshielded balance
+  under the ledger's native token type, and the spendable DUST now), read every ten seconds.
 
 One shim exists for the wallet SDK in the browser: `src/lib/midnight/buffer-shim.ts` installs a
 global `Buffer` and binds `fetch` before the SDK modules load.
@@ -1309,7 +1329,7 @@ and funds a deposit account to flip its check.
 
 A failing check is red, listed as a bullet under the heading, and on the local stack an ETH line
 carries a wand that funds the account with one ETH and rechecks. The wand is the local faucet:
-`LocalFaucetService.fundAccount({ account })` (`src/lib/ethereum/local-faucet-v1`, over anvil's
+`LocalFaucetService.fundAccount({ account, amount })` (`src/lib/ethereum/local-faucet-v1`, over anvil's
 `anvil_setBalance` in `local-faucet-service-anvil-impl.ts`) behind the `fundAccount` action in
 `src/server/actions/local-faucet-actions.ts`. The backend builds the service only where
 `isLocalEnvironment()` (`src/lib/config/local-environment.ts`) holds, an undeployed Midnight
@@ -1326,6 +1346,10 @@ the vault's supported tokens and an amount in whole tokens (100 by default), par
 the token has. `integration-tests/ethereum-local-faucet.test.ts` funds a fresh account with ETH
 and with USDC through the faucet, and the end-to-end deposit test funds its deposit account the
 same way.
+The admin page carries the same faucet as a form (`LocalFaucetPanel`,
+`src/components/local-faucet-panel.tsx`): any account, starting on the caller's deposit
+account, ETH or any token the vault admits, and any amount, behind a wand. ETH funding takes an
+optional `amount` in wei, one ETH when unset. The panel renders on the local stack only.
 
 ## Spot prices
 

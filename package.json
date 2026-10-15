@@ -19,6 +19,9 @@
     "check": "yarn typecheck && yarn lint && yarn format:check && yarn boundaries && yarn diagram-library:check && yarn test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "stack:up": "docker compose --env-file .env.local up -d --wait",
+    "stack:down": "docker compose --env-file .env.local down --volumes",
+    "stack:restart": "yarn stack:down && yarn stack:up && yarn db:migrate",
     "zk-assets": "erc20-vault-zk-assets zk-assets/ethereum-erc20-vault --vault-only && erc20-vault-zk-assets zk-assets --signet-only"
   },
   "dependencies": {

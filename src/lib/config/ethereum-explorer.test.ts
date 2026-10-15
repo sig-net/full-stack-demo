@@ -63,4 +63,18 @@ describe('ethereumExplorerOf', () => {
       explorer === null ? null : { name: explorer.name, url: explorer.transactionURL(HASH) },
     ).toEqual(expected)
   })
+
+  test("an account links to the explorer's address page", () => {
+    const account = `0x${'cd'.repeat(20)}`
+    expect(
+      ethereumExplorerOf(
+        configOf(MidnightNetwork.Undeployed, 11155111, 'http://127.0.0.1:8545'),
+      )?.addressURL(account),
+    ).toBe(`http://localhost:5100/address/${account}`)
+    expect(
+      ethereumExplorerOf(configOf(MidnightNetwork.Stagenet, 1, 'https://rpc.example'))?.addressURL(
+        account,
+      ),
+    ).toBe(`https://etherscan.io/address/${account}`)
+  })
 })

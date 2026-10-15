@@ -5,6 +5,7 @@ import { Info } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
+import { EthereumAccountLink } from '@/components/ethereum-account-link'
 import { LocalFaucetButton } from '@/components/local-faucet-button'
 import { StatusDot } from '@/components/status-dot'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -19,7 +20,8 @@ import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 
 /**
  * One bullet per check: its outcome in words, red unless it passes, an info tip naming the payer,
- * the amounts and the account, and on the local stack a faucet wand for an ETH account.
+ * the amounts and the account, a link to an ETH account on the chain's explorer, and on the
+ * local stack a faucet wand for it.
  */
 export function ReadinessChecklist({
   checkIds,
@@ -55,7 +57,13 @@ export function ReadinessChecklist({
                 </TooltipContent>
               </Tooltip>
               {check.asset === 'ETH' && check.account !== '' && (
-                <LocalFaucetButton account={check.account} />
+                <>
+                  <EthereumAccountLink
+                    account={check.account}
+                    label={READINESS_ITEMS[id].subject}
+                  />
+                  <LocalFaucetButton account={check.account} />
+                </>
               )}
             </li>
           )

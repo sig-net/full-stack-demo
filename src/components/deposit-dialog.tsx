@@ -22,6 +22,7 @@ import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { CopyButton } from '@/components/copy-button'
+import { EthereumAccountLink } from '@/components/ethereum-account-link'
 import { LocalErc20FaucetPopover } from '@/components/local-erc20-faucet-popover'
 import { QrCode } from '@/components/qr-code'
 import { ReadinessChecklist } from '@/components/readiness-checklist'
@@ -105,6 +106,7 @@ export function DepositDialog({ open, onOpenChange, address }: DepositDialogProp
               {abbreviateHex(checksummed)}
             </span>
             <CopyButton label="deposit address" value={checksummed} />
+            <EthereumAccountLink account={checksummed} label="deposit address" />
           </span>
         </div>
         <DialogDescription className="flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground">

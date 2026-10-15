@@ -5,6 +5,7 @@ import { isLocalEnvironment } from '@/lib/config/local-environment'
 export interface EthereumExplorer {
   readonly name: string
   transactionURL(hash: string): string
+  addressURL(address: string): string
 }
 
 /**
@@ -29,7 +30,11 @@ export const ETHERSCAN_URLS: Readonly<Record<number, string>> = {
   11155111: 'https://sepolia.etherscan.io',
 }
 
-/** Otterscan and Etherscan share the `/tx/{hash}` path. */
+/** Otterscan and Etherscan share the `/tx/{hash}` and `/address/{address}` paths. */
 function explorer(name: string, baseURL: string): EthereumExplorer {
-  return { name, transactionURL: (hash) => `${baseURL}/tx/${hash}` }
+  return {
+    name,
+    transactionURL: (hash) => `${baseURL}/tx/${hash}`,
+    addressURL: (address) => `${baseURL}/address/${address}`,
+  }
 }

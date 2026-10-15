@@ -37,9 +37,16 @@ describe('LocalFaucetServiceAdaptor.fundAccount', () => {
   test.each([
     { name: 'a missing account', args: {} },
     { name: 'a non-address account', args: { account: 'nope' } },
+    { name: 'a zero amount', args: { account: ACCOUNT, amount: '0' } },
     { name: 'arguments that are not an object', args: 'no' },
   ])('refuses $name', async ({ args }) => {
     await expect(adaptorOver().fundAccount(args)).resolves.toMatchObject({ ok: false })
+  })
+
+  test('carries a wei amount past Uint<64> as a bigint', async () => {
+    await expect(
+      adaptorOver().fundAccount({ account: ACCOUNT, amount: '20000000000000000000' }),
+    ).resolves.toMatchObject({ ok: true })
   })
 
   test('refuses every call outside the local stack', async () => {

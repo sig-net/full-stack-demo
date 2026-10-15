@@ -5,6 +5,7 @@ import { useState, type ReactNode } from 'react'
 import { CallerLoginDialog } from '@/components/caller-login-dialog'
 import { useCaller } from '@/components/contexts/CallerContext'
 import { CopyButton } from '@/components/copy-button'
+import { EthereumAccountLink } from '@/components/ethereum-account-link'
 import { Button } from '@/components/ui/button'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
 
@@ -42,6 +43,7 @@ export function CallerPanel(): ReactNode {
             <span className="text-sm text-muted-foreground">Deposit account</span>
             <span className="flex items-center gap-1">
               <CopyButton label="deposit account" value={depositAccount} />
+              <EthereumAccountLink account={depositAccount} label="deposit account" />
               <span className="font-mono text-sm" title={depositAccount}>
                 {abbreviateHex(depositAccount)}
               </span>
