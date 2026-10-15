@@ -11,6 +11,7 @@ import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { ReadinessChecklist } from '@/components/readiness-checklist'
+import { useApprovalTargets } from '@/components/use-approval-targets'
 import { TokenAmountField } from '@/components/token-amount-field'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -21,6 +22,7 @@ import { useDebouncedValue } from '@/components/use-debounced-value'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import { supportedBalancesOf } from '@/lib/balances/supported-balances'
+import { routerAllowanceOf } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { SWAP_MAX_SLIPPAGE_BPS } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-quote'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
@@ -86,6 +88,10 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   const fromSource =
     sources.find(({ token }) => token.origin.erc20Address === fromErc20Address) ?? null
   const fromToken = fromSource?.token ?? null
+  // The router pulls the sold token from the vault account, so a trade without its allowance reverts and refunds.
+  const targets = useApprovalTargets()
+  const routerAllowance =
+    fromToken === null ? null : routerAllowanceOf(targets.data, fromToken.origin.erc20Address)
   const destinations = registry
     .supported()
     .filter((info) => info.origin.erc20Address !== fromToken?.origin.erc20Address)
@@ -171,9 +177,19 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
         ? 'Connect a Midnight wallet to swap.'
         : sources.length === 0 && balances.isSuccess
           ? 'Deposit a token first: the wallet holds nothing the vault admits.'
-          : (slippage.error ?? amountIn.error)
+          : fromToken !== null && targets.isError
+            ? targets.error.message
+            : routerAllowance === 0n
+              ? `The vault has not approved the Uniswap router to spend its ${fromToken?.symbol ?? ''}: approve the router from the admin page first.`
+              : (slippage.error ?? amountIn.error)
   const busy = swapping.isPending
-  const ready = blocker === null && missing.length === 0 && quoteCurrent && fromSource !== null
+  const ready =
+    blocker === null &&
+    missing.length === 0 &&
+    quoteCurrent &&
+    fromSource !== null &&
+    routerAllowance !== null &&
+    routerAllowance > 0n
 
   return (
     <section aria-labelledby="swap-title" className="flex min-h-0 flex-1 flex-col">

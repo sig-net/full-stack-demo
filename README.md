@@ -1109,7 +1109,11 @@ the exact-input price on every fee tier and answers with the tier that pays most
 and that less the slippage allowance, which a swap started from the quote asks for. The
 allowance is the caller's `slippageBps`, ten percent (`SWAP_SLIPPAGE_BPS` in `swap-quote.ts`)
 when unset and at most half the output (`SWAP_MAX_SLIPPAGE_BPS`). A pair no pool prices is a
-result, not a failure.
+result, not a failure. The router pulls the sold token from the vault account under the
+allowance `startApproveRouter` grants, so the Swap panel reads the vault's approval targets
+(`useApprovalTargets()` in `src/components/use-approval-targets.ts`, the list the admin page
+shows, and `routerAllowanceOf()` beside the target schema) and keeps Swap disabled, naming the
+admin page, while the router's allowance for the sold token is zero or unread: a trade started without it reverts on Ethereum and refunds.
 
 A supply (`src/lib/midnight/ethereum-erc20-vault/supply-v1`) is the contract's deposit into
 Aave's static wrapper, the pair the deployer pinned at initialisation (`stataUnderlying` and

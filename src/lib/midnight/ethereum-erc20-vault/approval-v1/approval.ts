@@ -106,6 +106,19 @@ export const approvalTargetSchema = z.object({
 
 export type ApprovalTarget = z.infer<typeof approvalTargetSchema>
 
+/** The allowance the vault account holds for the Uniswap router on the token, or null while the targets are unread or name no such router entry. */
+export function routerAllowanceOf(
+  targets: readonly ApprovalTarget[] | undefined,
+  erc20Address: string,
+): bigint | null {
+  const target = targets?.find(
+    (candidate) =>
+      candidate.kind === 'router' &&
+      candidate.erc20Address.toLowerCase() === erc20Address.toLowerCase(),
+  )
+  return target === undefined ? null : target.allowance
+}
+
 export function approvalName(parent: string, id: string): string {
   return `${parent}/${APPROVAL_COLLECTION}/${id}`
 }

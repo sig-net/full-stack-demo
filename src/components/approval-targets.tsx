@@ -1,6 +1,6 @@
 'use client'
 
-import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { toast } from 'sonner'
@@ -12,6 +12,7 @@ import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryCon
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { ReadinessChecklist } from '@/components/readiness-checklist'
 import { ReadinessRecheckButton } from '@/components/readiness-recheck-button'
+import { useApprovalTargets } from '@/components/use-approval-targets'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,9 +30,7 @@ import type {
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { tokenLabel } from '@/lib/tokens/token-label'
-import { listApprovalTargets, startApproval } from '@/server/actions/approval-actions'
-
-const TARGETS_REFETCH_INTERVAL_MS = 15_000
+import { startApproval } from '@/server/actions/approval-actions'
 
 const KIND_LABELS: Record<ApprovalKind, string> = {
   router: 'Uniswap router',
@@ -44,24 +43,12 @@ const KIND_LABELS: Record<ApprovalKind, string> = {
  * an approval in flight shows in the Approvals list below until the chain reflects it.
  */
 export function ApprovalTargets(): ReactNode {
-  const { callerSecret, callerName } = useCaller()
+  const { callerSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const registry = useTokenInfoRegistry()
   const { checks } = useVaultReadiness()
   const queryClient = useQueryClient()
-  const targets = useQuery({
-    queryKey: ['approval-targets', callerName],
-    queryFn:
-      callerSecret === null
-        ? skipToken
-        : async () => {
-            const result = await listApprovalTargets(callerSecret, {})
-            if (!result.ok) throw new Error(result.error)
-            return result.targets
-          },
-    // The chain's allowance moves only when an approval lands, so the list follows at the sweep's pace.
-    refetchInterval: TARGETS_REFETCH_INTERVAL_MS,
-  })
+  const targets = useApprovalTargets()
   const approving = useMutation({
     mutationFn: async (target: ApprovalTarget) => {
       if (callerSecret === null) throw new Error('The identity secret is not set.')
