@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { ActivitySection } from '@/components/activity-section'
 import { ApprovalTargets } from '@/components/approval-targets'
 import { useCaller } from '@/components/contexts/CallerContext'
-import { LocalFaucetPanel } from '@/components/local-faucet-panel'
+import { LocalEthereumFaucetPanel } from '@/components/local-ethereum-faucet-panel'
 
 /**
  * The vault's administration: the deployer's approvals of the vault's spenders. Everything
@@ -34,7 +34,7 @@ export function AdminPage(): ReactNode {
         </p>
       </div>
       <ApprovalTargets />
-      <LocalFaucetPanel />
+      <LocalEthereumFaucetPanel />
       <ActivitySection types={['Approval']} title="Approvals" />
     </main>
   )

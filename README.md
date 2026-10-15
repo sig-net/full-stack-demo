@@ -375,6 +375,8 @@ relay would compete with the test's.
 | `ethereum-erc20-vault-redeem.test.ts`        | the whole local stack                             | A deposit and a supply, then a redeem of the minted shares, the underlying paid out read back on the fork.                                         |
 | `ethereum-erc20-vault-deposit-start.test.ts` | Postgres, the indexer, the proof server, the fork | `startDeposit` stores the deposit and its start call, the call proves, listing and the early complete refusal, a refused token.                    |
 | `ethereum-erc20-vault-activity.test.ts`      | Postgres                                          | The activity view's projection of the newest children and its aggregated states.                                                                   |
+| `ethereum-local-faucet.test.ts`              | the anvil fork                                    | The Ethereum faucet: a fresh account holds the ETH and the USDC it is given, twice over on a second call.                                          |
+| `midnight-local-faucet.test.ts`              | the Midnight stack                                | The NIGHT faucet: a fresh wallet holds the NIGHT the genesis wallet sends it, and a shielded address is refused.                                   |
 | `ethereum-erc20-vault-deposit.test.ts`       | the whole stack                                   | The end-to-end deposit below.                                                                                                                      |
 
 The whole suite takes four and a half to five minutes, of which the end-to-end deposit is four
@@ -1128,7 +1130,18 @@ wallet components read its types and the connection status label.
   Under the addresses of a connected wallet, past a rule, the panel lists the wallet's NIGHT and
   DUST (`useNativeBalances()` in `src/components/use-native-balances.ts` over
   `readNativeBalances()` in `src/lib/midnight/wallet/native-balances.ts`: the unshielded balance
-  under the ledger's native token type, and the spendable DUST now), read every ten seconds.
+  under the ledger's native token type, the spendable DUST now, and the NIGHT not yet registered
+  for DUST generation), read every ten seconds. The NIGHT line carries two controls. On the local
+  stack a wand (`LocalNightFaucetButton`, `src/components/local-night-faucet-button.tsx`) sends
+  the wallet NIGHT from the [local NIGHT faucet](#vault-readiness). A tick
+  (`RegisterNightButton`, `src/components/register-night-button.tsx`) registers the wallet's
+  unregistered NIGHT for DUST generation through the wallet's own `registerNightForDust()`,
+  which `SeedWallet` runs over `registerNightForDust()` in
+  `src/lib/midnight/wallet/register-night-for-dust.ts`: the unregistered coins are registered in
+  one transaction, signed with the unshielded keystore, after the SDK has waited for those coins'
+  projected DUST to cover the registration's own fee. Once every coin is registered the tick
+  turns into a mark, and without NIGHT there is no tick. Both controls read the balances and the
+  readiness again when they are done.
 
 One shim exists for the wallet SDK in the browser: `src/lib/midnight/buffer-shim.ts` installs a
 global `Buffer` and binds `fetch` before the SDK modules load.
@@ -1329,9 +1342,9 @@ and funds a deposit account to flip its check.
 
 A failing check is red, listed as a bullet under the heading, and on the local stack an ETH line
 carries a wand that funds the account with one ETH and rechecks. The wand is the local faucet:
-`LocalFaucetService.fundAccount({ account, amount })` (`src/lib/ethereum/local-faucet-v1`, over anvil's
-`anvil_setBalance` in `local-faucet-service-anvil-impl.ts`) behind the `fundAccount` action in
-`src/server/actions/local-faucet-actions.ts`. The backend builds the service only where
+`LocalEthereumFaucetService.fundAccount({ account, amount })` (`src/lib/ethereum/local-faucet-v1`, over anvil's
+`anvil_setBalance` in `local-ethereum-faucet-service-anvil-impl.ts`) behind the `fundAccount` action in
+`src/server/actions/local-ethereum-faucet-actions.ts`. The backend builds the service only where
 `isLocalEnvironment()` (`src/lib/config/local-environment.ts`) holds, an undeployed Midnight
 network with the EVM RPC on a loopback host, since the fork reports Sepolia's chain id; anywhere
 else the adaptor is built without a service and refuses every call, and the browser, reading the
@@ -1346,10 +1359,33 @@ the vault's supported tokens and an amount in whole tokens (100 by default), par
 the token has. `integration-tests/ethereum-local-faucet.test.ts` funds a fresh account with ETH
 and with USDC through the faucet, and the end-to-end deposit test funds its deposit account the
 same way.
-The admin page carries the same faucet as a form (`LocalFaucetPanel`,
-`src/components/local-faucet-panel.tsx`): any account, starting on the caller's deposit
+The admin page carries the same faucet as a form (`LocalEthereumFaucetPanel`,
+`src/components/local-ethereum-faucet-panel.tsx`): any account, starting on the caller's deposit
 account, ETH or any token the vault admits, and any amount, behind a wand. ETH funding takes an
 optional `amount` in wei, one ETH when unset. The panel renders on the local stack only.
+
+NIGHT lives on the Midnight chain, where no balance slot can be written, so the local NIGHT
+faucet is a real transfer: `LocalMidnightFaucetService.fundNight({ unshieldedAddress, amount })`
+(`src/lib/midnight/local-faucet-v1`) sends the amount in STAR, one million NIGHT when unset,
+from the undeployed network's genesis mint wallet, whose seed is the public
+`GENESIS_MINT_WALLET_SEED`. `LocalMidnightFaucetServiceSeedImpl` derives that wallet's keys as
+the seed wallet does, starts and syncs its facade on the first funding and keeps it for the
+process, runs one funding at a time since two transfers built from one state would reserve the
+same coins, registers the wallet's NIGHT for DUST when its spendable DUST is below one, and
+then runs `transferNight()` (`src/lib/midnight/wallet/transfer-night.ts`): one unshielded
+output under the native token type, balanced in DUST only, signed with the unshielded keystore,
+proved and submitted, with the reserved coins released when a step before the submission fails.
+The result carries the transaction's identifier, and the receiving wallet shows the NIGHT once
+its own sync reaches the block. The `fundNight` action in
+`src/server/actions/local-midnight-faucet-actions.ts` reaches the adaptor, which is built
+without a service outside the local stack and refuses every call there, exactly like the
+Ethereum faucet's. `integration-tests/midnight-local-faucet.test.ts` funds a fresh wallet and
+syncs it until the NIGHT shows. A transfer the node refuses reaches the wand with the node's
+reason, since the facade module unwraps the SDK's fibre failure to the error it carries, and
+`explainDustSpendRejection()` (`src/lib/midnight/wallet/dust-spend-rejection.ts`) adds what
+the node's error 170 means: it could not verify the DUST spend proof against its own DUST
+state, and a wallet synced moments before the build that still gets it needs the local
+Midnight stack reset and redeployed.
 
 ## Spot prices
 

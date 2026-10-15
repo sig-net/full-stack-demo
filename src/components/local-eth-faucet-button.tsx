@@ -9,13 +9,13 @@ import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { isLocalEnvironment } from '@/lib/config/local-environment'
-import { fundAccount } from '@/server/actions/local-faucet-actions'
+import { fundAccount } from '@/server/actions/local-ethereum-faucet-actions'
 
 /**
  * The wand that gives an account one ETH from the local faucet and reads readiness again. It
  * renders on the local stack only, where the faucet exists; a host must provide the tooltip.
  */
-export function LocalFaucetButton({ account }: { account: string }): ReactNode {
+export function LocalEthFaucetButton({ account }: { account: string }): ReactNode {
   const config = useConfig()
   const { recheck } = useVaultReadiness()
   const funding = useMutation({

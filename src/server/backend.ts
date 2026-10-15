@@ -30,9 +30,9 @@ import { createDatabase, createDatabasePool } from '@/lib/db/database'
 import { UnitOfWork } from '@/lib/db/unit-of-work'
 import type { EthereumAccountReader } from '@/lib/ethereum/account-reader'
 import { EthereumAccountReaderEthersImpl } from '@/lib/ethereum/account-reader-ethers-impl'
-import type { LocalFaucetService } from '@/lib/ethereum/local-faucet-v1/local-faucet-service'
-import { LocalFaucetServiceAdaptor } from '@/lib/ethereum/local-faucet-v1/local-faucet-service-adaptor'
-import { LocalFaucetServiceAnvilImpl } from '@/lib/ethereum/local-faucet-v1/local-faucet-service-anvil-impl'
+import type { LocalEthereumFaucetService } from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service'
+import { LocalEthereumFaucetServiceAdaptor } from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service-adaptor'
+import { LocalEthereumFaucetServiceAnvilImpl } from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service-anvil-impl'
 import { EthereumTransactionEventConsumer } from '@/lib/ethereum/transaction-v1/transaction-event-consumer'
 import type { EthereumTransactionLedger } from '@/lib/ethereum/transaction-v1/transaction-ledger'
 import { EthereumTransactionLedgerEthersImpl } from '@/lib/ethereum/transaction-v1/transaction-ledger-ethers-impl'
@@ -190,6 +190,12 @@ import { SpotPriceServiceImpl } from '@/lib/pricing/spot-price-service-impl'
 import type { SpotPriceSource } from '@/lib/pricing/spot-price-source'
 import { SpotPriceSourceCoinGeckoImpl } from '@/lib/pricing/spot-price-source-coingecko-impl'
 import { PrivateStateProviderMemoryImpl } from '@/lib/midnight/private-state-provider-memory-impl'
+import {
+  GENESIS_MINT_WALLET_SEED,
+  type LocalMidnightFaucetService,
+} from '@/lib/midnight/local-faucet-v1/local-midnight-faucet-service'
+import { LocalMidnightFaucetServiceAdaptor } from '@/lib/midnight/local-faucet-v1/local-midnight-faucet-service-adaptor'
+import { LocalMidnightFaucetServiceSeedImpl } from '@/lib/midnight/local-faucet-v1/local-midnight-faucet-service-seed-impl'
 import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
 import { RelayerWalletSeedImpl } from '@/lib/midnight/wallet/relayer-wallet-seed-impl'
 import { sweep, type SweepTask } from '@/lib/sweep'
@@ -263,8 +269,8 @@ export interface EthereumBackend {
   readonly provider: JsonRpcProvider
   /** Free ETH for test accounts. The service exists on the local stack only, and the adaptor refuses everywhere else. */
   readonly localFaucetV1: {
-    readonly service: LocalFaucetService | null
-    readonly adaptor: LocalFaucetServiceAdaptor
+    readonly service: LocalEthereumFaucetService | null
+    readonly adaptor: LocalEthereumFaucetServiceAdaptor
   }
   readonly transactionV1: {
     readonly repository: EthereumTransactionRepository
@@ -280,6 +286,11 @@ export interface MidnightBackend {
   readonly relayerWallet: RelayerWallet
   /** The indexer, as midnight-js reads contract state through it. */
   readonly publicDataProvider: PublicDataProvider
+  /** Free NIGHT for any wallet. The service exists on the local stack only, and the adaptor refuses everywhere else. */
+  readonly localFaucetV1: {
+    readonly service: LocalMidnightFaucetService | null
+    readonly adaptor: LocalMidnightFaucetServiceAdaptor
+  }
   readonly transactionV1: {
     readonly repository: MidnightTransactionRepository
     readonly stateController: MidnightTransactionStateController
@@ -551,14 +562,14 @@ function createEthereum(db: DbBackend, event: EventBackend, config: ServerConfig
     ledger,
     db.unitOfWork,
   )
-  const localFaucetService = isLocalEnvironment(config.client)
-    ? new LocalFaucetServiceAnvilImpl(provider)
+  const localEthereumFaucetService = isLocalEnvironment(config.client)
+    ? new LocalEthereumFaucetServiceAnvilImpl(provider)
     : null
   return {
     provider,
     localFaucetV1: {
-      service: localFaucetService,
-      adaptor: new LocalFaucetServiceAdaptor(localFaucetService),
+      service: localEthereumFaucetService,
+      adaptor: new LocalEthereumFaucetServiceAdaptor(localEthereumFaucetService),
     },
     transactionV1: {
       repository,
@@ -595,9 +606,16 @@ function createMidnight(
     }),
   )
   const transactionV1 = createMidnightTransactionV1(db, event, config, relayerWallet, proofProvider)
+  const localMidnightFaucetService = isLocalEnvironment(config.client)
+    ? new LocalMidnightFaucetServiceSeedImpl(midnightNetwork, GENESIS_MINT_WALLET_SEED)
+    : null
   return {
     relayerWallet,
     publicDataProvider,
+    localFaucetV1: {
+      service: localMidnightFaucetService,
+      adaptor: new LocalMidnightFaucetServiceAdaptor(localMidnightFaucetService),
+    },
     transactionV1,
     ethereumErc20Vault: createMidnightEthereumErc20Vault(
       db,

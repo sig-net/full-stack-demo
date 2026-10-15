@@ -1,15 +1,18 @@
 import { describe, expect, test } from 'vitest'
 
-import { LocalFaucetServiceAdaptor } from '@/lib/ethereum/local-faucet-v1/local-faucet-service-adaptor'
-import type { LocalFaucetService } from '@/lib/ethereum/local-faucet-v1/local-faucet-service'
+import { LocalEthereumFaucetServiceAdaptor } from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service-adaptor'
+import type { LocalEthereumFaucetService } from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service'
 import { mock } from '@/lib/testing/mock'
 
 const ACCOUNT = `0x${'ab'.repeat(20)}`
 const TOKEN = `0x${'cd'.repeat(20)}`
 
-function adaptorOver(accounts: string[] = [], erc20Error?: Error): LocalFaucetServiceAdaptor {
-  return new LocalFaucetServiceAdaptor(
-    mock<LocalFaucetService>('LocalFaucetService', {
+function adaptorOver(
+  accounts: string[] = [],
+  erc20Error?: Error,
+): LocalEthereumFaucetServiceAdaptor {
+  return new LocalEthereumFaucetServiceAdaptor(
+    mock<LocalEthereumFaucetService>('LocalEthereumFaucetService', {
       fundAccount: ({ account }) => {
         accounts.push(account)
         return Promise.resolve({ account, balance: 7n })
@@ -22,7 +25,7 @@ function adaptorOver(accounts: string[] = [], erc20Error?: Error): LocalFaucetSe
   )
 }
 
-describe('LocalFaucetServiceAdaptor.fundAccount', () => {
+describe('LocalEthereumFaucetServiceAdaptor.fundAccount', () => {
   test('lower-cases the account and answers the funding', async () => {
     const accounts: string[] = []
     await expect(
@@ -51,7 +54,7 @@ describe('LocalFaucetServiceAdaptor.fundAccount', () => {
 
   test('refuses every call outside the local stack', async () => {
     await expect(
-      new LocalFaucetServiceAdaptor(null).fundAccount({ account: ACCOUNT }),
+      new LocalEthereumFaucetServiceAdaptor(null).fundAccount({ account: ACCOUNT }),
     ).resolves.toEqual({
       ok: false,
       error: 'The faucet is available on the local stack only.',
@@ -59,7 +62,7 @@ describe('LocalFaucetServiceAdaptor.fundAccount', () => {
   })
 })
 
-describe('LocalFaucetServiceAdaptor.fundErc20', () => {
+describe('LocalEthereumFaucetServiceAdaptor.fundErc20', () => {
   test('answers the funding with the amount as a bigint or a decimal string', async () => {
     await expect(
       adaptorOver().fundErc20({ account: ACCOUNT, erc20Address: TOKEN, amount: '5' }),
@@ -89,7 +92,7 @@ describe('LocalFaucetServiceAdaptor.fundErc20', () => {
 
   test('refuses every call outside the local stack', async () => {
     await expect(
-      new LocalFaucetServiceAdaptor(null).fundErc20({
+      new LocalEthereumFaucetServiceAdaptor(null).fundErc20({
         account: ACCOUNT,
         erc20Address: TOKEN,
         amount: 1n,

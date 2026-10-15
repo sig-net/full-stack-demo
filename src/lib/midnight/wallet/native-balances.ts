@@ -8,6 +8,8 @@ export interface NativeBalances {
   readonly night: bigint
   /** Spendable DUST now, in SPECK. */
   readonly dust: bigint
+  /** NIGHT not registered for DUST generation, in STAR, or null when the wallet cannot observe registration. */
+  readonly unregisteredNight: bigint | null
 }
 
 /** One whole NIGHT is ten to this power STAR. */
@@ -15,9 +17,10 @@ export const NIGHT_DECIMALS = 6
 
 /** NIGHT is the unshielded balance under the ledger's native token type, zero when the wallet lists none. */
 export async function readNativeBalances(wallet: Wallet): Promise<NativeBalances> {
-  const [unshielded, dust] = await Promise.all([
+  const [unshielded, dust, unregisteredNight] = await Promise.all([
     wallet.getUnshieldedBalances(),
     wallet.getDustBalance(),
+    wallet.getUnregisteredNightBalance?.() ?? null,
   ])
-  return { night: unshielded[nativeToken().raw] ?? 0n, dust }
+  return { night: unshielded[nativeToken().raw] ?? 0n, dust, unregisteredNight }
 }

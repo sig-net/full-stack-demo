@@ -3,11 +3,11 @@
 import type {
   AccountFundingResult,
   Erc20FundingResult,
-} from '@/lib/ethereum/local-faucet-v1/local-faucet-service-adaptor'
+} from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service-adaptor'
 import type {
   FundAccountArgs,
   FundErc20Args,
-} from '@/lib/ethereum/local-faucet-v1/local-faucet-service'
+} from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service'
 import { getBackend } from '@/server/backend'
 
 export async function fundAccount(args: FundAccountArgs): Promise<AccountFundingResult> {

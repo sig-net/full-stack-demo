@@ -5,6 +5,8 @@ import { useState, type ReactNode } from 'react'
 
 import { AddressIdentifier } from '@/components/address-identifier'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
+import { LocalNightFaucetButton } from '@/components/local-night-faucet-button'
+import { RegisterNightButton } from '@/components/register-night-button'
 import { SeedWalletDialog } from '@/components/seed-wallet-dialog'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -30,16 +32,24 @@ function AddressRow({ label, value }: { label: string; value: string | undefined
 /** Fraction digits the two balances show, the rest cut. */
 const NATIVE_BALANCE_PLACES = 2
 
-/** The wallet's NIGHT and DUST, one line each, under the addresses. */
+/** The wallet's NIGHT and DUST, one line each, under the addresses, the NIGHT line carrying the faucet wand and the registration tick. */
 function NativeBalanceRows(): ReactNode {
   const balances = useNativeBalances()
   return (
     <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1">
       <dt className="text-muted-foreground">NIGHT</dt>
-      <dd className="font-mono text-sm">
-        {balances.data === undefined
-          ? '…'
-          : formatTokenAmountTruncated(balances.data.night, NIGHT_DECIMALS, NATIVE_BALANCE_PLACES)}
+      <dd className="flex items-center gap-1 font-mono text-sm">
+        <span>
+          {balances.data === undefined
+            ? '…'
+            : formatTokenAmountTruncated(
+                balances.data.night,
+                NIGHT_DECIMALS,
+                NATIVE_BALANCE_PLACES,
+              )}
+        </span>
+        <LocalNightFaucetButton />
+        <RegisterNightButton />
       </dd>
       <dt className="text-muted-foreground">DUST</dt>
       <dd className="font-mono text-sm">

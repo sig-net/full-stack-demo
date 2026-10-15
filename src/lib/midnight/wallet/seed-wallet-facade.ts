@@ -30,7 +30,7 @@ import {
   UnshieldedWallet,
 } from '@midnightntwrk/wallet-sdk-unshielded-wallet'
 import { ApiPromise, WsProvider } from '@polkadot/api'
-import { Effect } from 'effect'
+import { Cause, Effect, Runtime } from 'effect'
 
 import type { MidnightNetworkConfig, MidnightNetworkId } from '@/lib/config/midnight-network-config'
 
@@ -183,7 +183,7 @@ export function initialiseWalletFacade(
               { cause: error },
             )
           }
-          throw error
+          throw unwrapFiberFailure(error)
         } finally {
           clearTimeout(timer)
           await disconnect()
@@ -215,6 +215,25 @@ export function initialiseWalletFacade(
         ledger.LedgerParameters.initialParameters().dust,
       ),
   })
+}
+
+/** Starts a facade over the keys and resolves once it has synced with the chain, which can take minutes on a long chain. */
+export async function startSyncedSeedFacade(
+  keys: AccountKeys,
+  config: MidnightNetworkConfig,
+): Promise<WalletFacade> {
+  const facade = await initialiseWalletFacade(keys, config)
+  await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey)
+  await facade.waitForSyncedState()
+  return facade
+}
+
+/**
+ * The failure an Effect fibre failure wraps, whose own cause chain carries the node's reason
+ * for a rejection, or the error itself when it is not a fibre failure.
+ */
+function unwrapFiberFailure(error: unknown): unknown {
+  return Runtime.isFiberFailure(error) ? Cause.squash(error[Runtime.FiberFailureCauseId]) : error
 }
 
 // Balancing recipes expire 30 minutes out.

@@ -2,6 +2,7 @@ import { setNetworkId } from '@midnight-ntwrk/midnight-js/network-id'
 import { DustAddress, MidnightBech32m } from '@midnightntwrk/wallet-sdk-address-format'
 
 import type { MidnightNetworkConfig } from '@/lib/config/midnight-network-config'
+import { registerNightForDust } from '@/lib/midnight/wallet/register-night-for-dust'
 import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
 import {
   type AccountKeys,
@@ -25,7 +26,7 @@ type StateSubscription = ReturnType<ReturnType<WalletFacade['state']>['subscribe
 const DISCONNECTED = 'Wallet disconnected.'
 const SYNCHRONISING = 'Wallet is still synchronising.'
 
-/** Owns seed-derived keys, synchronisation and registration for one disposable wallet session. */
+/** Owns seed-derived keys, synchronisation and DUST registration for one disposable wallet session. */
 export class SeedWallet implements Wallet {
   readonly kind = 'seed'
   readonly name = 'Seed wallet'
@@ -52,7 +53,8 @@ export class SeedWallet implements Wallet {
   private unshielded = ''
   private dust = ''
   private keys?: AccountKeys
-  private funding?: Promise<void>
+  /** The registration in flight, so a second click joins it. */
+  private registration?: Promise<bigint>
   readonly configuration: MidnightNetworkConfig
   /** Cleared after derivation or disconnect. */
   private seed: string
@@ -249,47 +251,19 @@ export class SeedWallet implements Wallet {
     return this.keys.unshieldedKeystore.getPublicKey()
   }
 
-  registerNightForDust(minimumDust: bigint): Promise<void> {
+  registerNightForDust(): Promise<bigint> {
     this.assertActive()
-    this.funding ??= this.registerAndWait(minimumDust).finally(() => {
-      this.funding = undefined
+    this.registration ??= this.register().finally(() => {
+      this.registration = undefined
     })
-    return this.funding
+    return this.registration
   }
 
-  private async registerAndWait(minimumDust: bigint): Promise<void> {
+  private async register(): Promise<bigint> {
     const facade = this.facade
     const keys = this.keys
     if (!facade || !keys) throw new Error(SYNCHRONISING)
-    const deadline = Date.now() + 10 * 60_000
-    let registered = false
-    while (Date.now() < deadline) {
-      this.assertActive()
-      const state = this.state()
-      const coins = state.unshielded.availableCoins.filter(
-        (coin) => !coin.meta.registeredForDustGeneration,
-      )
-      if (coins.length && !registered) {
-        const estimate = await facade.estimateRegistration(coins)
-        this.assertActive()
-        await facade.waitForGeneratedDust(coins, estimate.fee, { timeoutMs: 300_000 })
-        this.assertActive()
-        const recipe = await facade.registerNightUtxosForDustGeneration(
-          coins,
-          keys.unshieldedKeystore.getPublicKey(),
-          keys.unshieldedKeystore.signDataAsync,
-        )
-        this.assertActive()
-        const transaction = await facade.finalizeRecipe(recipe)
-        this.assertActive()
-        await facade.submitTransaction(transaction)
-        registered = true
-        this.assertActive()
-      }
-      if (state.dust.balance(new Date()) >= minimumDust) return
-      await new Promise((resolve) => setTimeout(resolve, 3_000))
-    }
-    throw new Error('DUST is still below the transaction threshold. Retry readiness.')
+    return registerNightForDust(facade, keys, this.state())
   }
 
   getShieldedBalances(): Promise<Record<string, bigint>> {

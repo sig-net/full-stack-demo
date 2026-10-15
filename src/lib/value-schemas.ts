@@ -33,6 +33,11 @@ export const shieldedAddressSchema = z
   .string()
   .regex(/^mn_shield-addr(_[a-z0-9]+)?1[02-9ac-hj-np-z]+$/, 'expected a shielded address')
 
+/** A bech32m Midnight unshielded (NIGHT) address, the network named in the prefix as in the shielded form. */
+export const unshieldedAddressSchema = z
+  .string()
+  .regex(/^mn_addr(_[a-z0-9]+)?1[02-9ac-hj-np-z]+$/, 'expected an unshielded address')
+
 export const UINT64_MAX = 2n ** 64n - 1n
 export const UINT128_MAX = 2n ** 128n - 1n
 

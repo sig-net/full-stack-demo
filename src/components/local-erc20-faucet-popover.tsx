@@ -24,7 +24,7 @@ import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
 import type { TokenInfo } from '@/lib/tokens/token-info'
 import { tokenLabel } from '@/lib/tokens/token-label'
-import { fundErc20 } from '@/server/actions/local-faucet-actions'
+import { fundErc20 } from '@/server/actions/local-ethereum-faucet-actions'
 
 interface LocalErc20FaucetPopoverProps {
   /** The deposit account to fund, in any letter case. */

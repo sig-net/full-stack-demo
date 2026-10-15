@@ -8,11 +8,11 @@ import {
   FAUCET_AMOUNT,
   type FundAccountArgs,
   type FundErc20Args,
-  type LocalFaucetService,
-} from '@/lib/ethereum/local-faucet-v1/local-faucet-service'
+  type LocalEthereumFaucetService,
+} from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service'
 
 /** The faucet over anvil's `anvil_setBalance` and `anvil_setStorageAt`, which no other node answers. */
-export class LocalFaucetServiceAnvilImpl implements LocalFaucetService {
+export class LocalEthereumFaucetServiceAnvilImpl implements LocalEthereumFaucetService {
   private readonly provider: JsonRpcApiProvider
 
   constructor(provider: JsonRpcApiProvider) {

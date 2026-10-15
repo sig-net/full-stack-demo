@@ -9,7 +9,7 @@ import { amountSchema, evmAddressSchema, uint128Schema } from '@/lib/value-schem
  * backend builds this service for the local stack only, so no caller is involved and no deployed
  * chain can be reached through it.
  */
-export interface LocalFaucetService {
+export interface LocalEthereumFaucetService {
   /** Adds `amount` wei, `FAUCET_AMOUNT` when unset, to the account's balance. */
   fundAccount(args: FundAccountArgs): Promise<AccountFunding>
   /** Adds the amount, in the token's base units, to the account's balance of the ERC20. */

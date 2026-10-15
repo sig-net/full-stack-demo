@@ -8,7 +8,7 @@ import {
   createWalletAndMidnightProvider,
   deriveAccountKeys,
   finalizeUnboundTransaction,
-  initialiseWalletFacade,
+  startSyncedSeedFacade,
   type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
@@ -65,9 +65,7 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
   }
 
   private async sync(): Promise<StartedWallet> {
-    const facade = await initialiseWalletFacade(this.keys, this.config)
-    await facade.start(this.keys.shieldedSecretKeys, this.keys.dustSecretKey)
-    await facade.waitForSyncedState()
+    const facade = await startSyncedSeedFacade(this.keys, this.config)
     return { facade, provider: createWalletAndMidnightProvider(facade, this.keys) }
   }
 }

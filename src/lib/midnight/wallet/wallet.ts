@@ -61,13 +61,13 @@ export interface Wallet extends WalletMetadata {
    */
   getUnregisteredNightBalance?(): Promise<bigint>
   /**
-   * Registers the connected wallet's eligible NIGHT for DUST generation and waits for fees.
+   * Registers every NIGHT coin the wallet holds unregistered for DUST generation and resolves
+   * with the NIGHT registered in STAR once the registration is in a block: zero when every coin
+   * already was.
    *
-   * @param minimumDust - Required DUST in ledger units.
-   * @returns Completion once the captured wallet reaches the threshold.
-   * @throws {Error} If readiness, registration or session ownership fails.
+   * @throws {Error} If registration or session ownership fails.
    */
-  registerNightForDust?(minimumDust: bigint): Promise<void>
+  registerNightForDust?(): Promise<bigint>
   /**
    * Reads shielded token balances for the active session.
    *

@@ -1,6 +1,7 @@
 import {
   DustSecretKey,
   LedgerParameters,
+  nativeToken,
   type PreBinding,
   type Proof,
   type SignatureEnabled,
@@ -29,6 +30,10 @@ import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 /** The user's wallet as the browser plays it: it balances, signs and finalises the caller's calls. */
 export interface UserWallet {
   readonly publicKeys: WalletPublicKeys
+  /** The bech32m address NIGHT is sent to. */
+  readonly unshieldedAddress: string
+  /** Unshielded NIGHT in STAR, from the synced state. */
+  nightBalance(): Promise<bigint>
   /** The finalized bytes in hex of the unbound bytes in hex, as `submitTransaction` takes them. */
   balance(unboundTx: string): Promise<string>
   stop(): Promise<void>
@@ -76,6 +81,11 @@ export async function startUserWallet(
     publicKeys: {
       coinPublicKey: keys.shieldedSecretKeys.coinPublicKey,
       encryptionPublicKey: keys.shieldedSecretKeys.encryptionPublicKey,
+    },
+    unshieldedAddress: keys.unshieldedKeystore.getBech32Address().toString(),
+    async nightBalance(): Promise<bigint> {
+      const state = await facade.waitForSyncedState()
+      return state.unshielded.balances[nativeToken().raw] ?? 0n
     },
     async balance(unboundTx: string): Promise<string> {
       const unbound = Transaction.deserialize<SignatureEnabled, Proof, PreBinding>(

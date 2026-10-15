@@ -25,7 +25,7 @@ import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
 import type { TokenInfo } from '@/lib/tokens/token-info'
 import { tokenLabel } from '@/lib/tokens/token-label'
-import { fundAccount, fundErc20 } from '@/server/actions/local-faucet-actions'
+import { fundAccount, fundErc20 } from '@/server/actions/local-ethereum-faucet-actions'
 
 /** The select's value for the chain's own coin, beside the ERC20s keyed by address. */
 const ETH = 'ETH'
@@ -39,7 +39,7 @@ const DEFAULT_AMOUNT = '1'
  * It renders on the local stack only, where the faucet exists, and starts on the caller's
  * deposit account since that is the account most often short.
  */
-export function LocalFaucetPanel(): ReactNode {
+export function LocalEthereumFaucetPanel(): ReactNode {
   const config = useConfig()
   const registry = useTokenInfoRegistry()
   const { depositAccount } = useCaller()

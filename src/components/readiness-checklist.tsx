@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { EthereumAccountLink } from '@/components/ethereum-account-link'
-import { LocalFaucetButton } from '@/components/local-faucet-button'
+import { LocalEthFaucetButton } from '@/components/local-eth-faucet-button'
 import { StatusDot } from '@/components/status-dot'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
@@ -62,7 +62,7 @@ export function ReadinessChecklist({
                     account={check.account}
                     label={READINESS_ITEMS[id].subject}
                   />
-                  <LocalFaucetButton account={check.account} />
+                  <LocalEthFaucetButton account={check.account} />
                 </>
               )}
             </li>

@@ -9,34 +9,34 @@ import type { Erc20Funding } from '@/lib/ethereum/local-faucet-v1/erc20-funding'
 import {
   fundAccountArgsSchema,
   fundErc20ArgsSchema,
-  type LocalFaucetService,
-} from '@/lib/ethereum/local-faucet-v1/local-faucet-service'
+  type LocalEthereumFaucetService,
+} from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service'
 
 /** Adapts the local faucet to the wire. Built without a service outside the local stack, where every call is refused. */
-export class LocalFaucetServiceAdaptor {
-  private readonly localFaucetService: LocalFaucetService | null
+export class LocalEthereumFaucetServiceAdaptor {
+  private readonly localEthereumFaucetService: LocalEthereumFaucetService | null
 
-  constructor(localFaucetService: LocalFaucetService | null) {
-    this.localFaucetService = localFaucetService
+  constructor(localEthereumFaucetService: LocalEthereumFaucetService | null) {
+    this.localEthereumFaucetService = localEthereumFaucetService
   }
 
   async fundAccount(args: unknown): Promise<AccountFundingResult> {
-    if (this.localFaucetService === null) return { ok: false, error: NOT_LOCAL }
+    if (this.localEthereumFaucetService === null) return { ok: false, error: NOT_LOCAL }
     const parsed = fundAccountArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
     }
-    return { ok: true, funding: await this.localFaucetService.fundAccount(parsed.data) }
+    return { ok: true, funding: await this.localEthereumFaucetService.fundAccount(parsed.data) }
   }
 
   async fundErc20(args: unknown): Promise<Erc20FundingResult> {
-    if (this.localFaucetService === null) return { ok: false, error: NOT_LOCAL }
+    if (this.localEthereumFaucetService === null) return { ok: false, error: NOT_LOCAL }
     const parsed = fundErc20ArgsSchema.safeParse(args)
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
     }
     try {
-      return { ok: true, funding: await this.localFaucetService.fundErc20(parsed.data) }
+      return { ok: true, funding: await this.localEthereumFaucetService.fundErc20(parsed.data) }
     } catch (error: unknown) {
       // A token the faucet cannot write is an expected outcome the dialog reports, not a bug.
       return { ok: false, error: messageOf(error) }

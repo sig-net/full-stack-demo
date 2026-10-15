@@ -1,8 +1,8 @@
 import { AbiCoder, Interface, type JsonRpcApiProvider, keccak256, toBeHex } from 'ethers'
 import { describe, expect, test } from 'vitest'
 
-import { LocalFaucetServiceAnvilImpl } from '@/lib/ethereum/local-faucet-v1/local-faucet-service-anvil-impl'
-import { FAUCET_AMOUNT } from '@/lib/ethereum/local-faucet-v1/local-faucet-service'
+import { LocalEthereumFaucetServiceAnvilImpl } from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service-anvil-impl'
+import { FAUCET_AMOUNT } from '@/lib/ethereum/local-faucet-v1/local-ethereum-faucet-service'
 import { mock } from '@/lib/testing/mock'
 
 const ACCOUNT = `0x${'ab'.repeat(20)}`
@@ -10,7 +10,7 @@ const TOKEN = `0x${'cd'.repeat(20)}`
 const ERC20 = new Interface(['function balanceOf(address) view returns (uint256)'])
 const ZERO_WORD = toBeHex(0n, 32)
 
-describe('LocalFaucetServiceAnvilImpl.fundAccount', () => {
+describe('LocalEthereumFaucetServiceAnvilImpl.fundAccount', () => {
   test.each([
     { name: 'an empty account ends with the faucet amount', before: 0n },
     { name: 'a funded account keeps what it had', before: 5n * 10n ** 18n },
@@ -26,7 +26,7 @@ describe('LocalFaucetServiceAnvilImpl.fundAccount', () => {
       },
     })
     await expect(
-      new LocalFaucetServiceAnvilImpl(provider).fundAccount({ account: ACCOUNT }),
+      new LocalEthereumFaucetServiceAnvilImpl(provider).fundAccount({ account: ACCOUNT }),
     ).resolves.toEqual({ account: ACCOUNT, balance: before + FAUCET_AMOUNT })
     expect(sent).toEqual([['anvil_setBalance', ACCOUNT, toBeHex(before + FAUCET_AMOUNT)]])
   })
@@ -63,7 +63,7 @@ function tokenOver(slot: number | null, layout: 'solidity' | 'vyper' = 'solidity
   return { provider, storage, balanceLocation }
 }
 
-describe('LocalFaucetServiceAnvilImpl.fundErc20', () => {
+describe('LocalEthereumFaucetServiceAnvilImpl.fundErc20', () => {
   test.each([
     { name: 'a Solidity mapping at slot 0', slot: 0, layout: 'solidity' as const, before: 0n },
     {
@@ -78,7 +78,7 @@ describe('LocalFaucetServiceAnvilImpl.fundErc20', () => {
     if (balanceLocation === null) throw new Error('unreachable')
     if (before > 0n) storage.set(balanceLocation, toBeHex(before, 32))
     await expect(
-      new LocalFaucetServiceAnvilImpl(provider).fundErc20({
+      new LocalEthereumFaucetServiceAnvilImpl(provider).fundErc20({
         account: ACCOUNT,
         erc20Address: TOKEN,
         amount: 5n,
@@ -90,7 +90,7 @@ describe('LocalFaucetServiceAnvilImpl.fundErc20', () => {
   test('refuses a token whose balance is not in a probed slot, leaving storage untouched', async () => {
     const { provider, storage } = tokenOver(null)
     await expect(
-      new LocalFaucetServiceAnvilImpl(provider).fundErc20({
+      new LocalEthereumFaucetServiceAnvilImpl(provider).fundErc20({
         account: ACCOUNT,
         erc20Address: TOKEN,
         amount: 5n,
