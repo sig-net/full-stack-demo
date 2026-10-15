@@ -80,8 +80,12 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
     depositAccountEth: backend.data?.depositAccountEth ?? unavailable('ETH', backendReason),
     vaultAccountEth: backend.data?.vaultAccountEth ?? unavailable('ETH', backendReason),
   }
+  // A query without its input is skipped, and refetching a skipped query is a reported error.
   const recheck = async (): Promise<void> => {
-    await Promise.all([callerDust.refetch(), backend.refetch()])
+    await Promise.all([
+      wallet === null ? undefined : callerDust.refetch(),
+      callerSecret === null ? undefined : backend.refetch(),
+    ])
   }
   return (
     <VaultReadinessContext
