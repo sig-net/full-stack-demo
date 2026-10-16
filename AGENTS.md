@@ -413,5 +413,6 @@ Keep setup instructions and application reference material in README.md and docs
   and the curated-layout mandate. Copy styled cells from `docs/diagram-palette.drawio` rather
   than authoring styles by hand, and run `drawio-cli lint` (which applies the vocabulary in
   `drawio.config.json`) and `drawio-cli check-pair` before finishing. Providers and entities
-  come from `docs/diagram-library.drawio`, which `yarn diagram-library` generates from the code
-  and `yarn diagram-library:check` gates, so it is never edited by hand.
+  come from the per-package files `docs/diagram-library/<package path>/diagram-library.drawio`,
+  which `yarn diagram-library` generates and renders from the code and
+  `yarn diagram-library:check` gates, so they are never edited by hand.

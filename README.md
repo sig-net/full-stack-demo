@@ -38,27 +38,27 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 
 ## Scripts
 
-| Script                       | Purpose                                                                                                                         |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `yarn dev`                   | Start the development server.                                                                                                   |
-| `yarn build`                 | Create a production build.                                                                                                      |
-| `yarn start`                 | Serve the production build.                                                                                                     |
-| `yarn typecheck`             | Generate the Next.js route types, then type check with `tsc`.                                                                   |
-| `yarn lint`                  | Lint with oxlint, including its type-aware rules.                                                                               |
-| `yarn format`                | Format with oxfmt.                                                                                                              |
-| `yarn format:check`          | Report files that are not formatted.                                                                                            |
-| `yarn test`                  | Run the unit tests once.                                                                                                        |
-| `yarn test:integration`      | Run the integration tests against the local services.                                                                           |
-| `yarn boundaries`            | Fail on a runtime import that crosses the backend boundary.                                                                     |
-| `yarn diagram-library`       | Regenerate `docs/diagram-library.drawio` from the code (see `docs/diagramming.md`).                                             |
-| `yarn diagram-library:check` | Fail when `docs/diagram-library.drawio` differs from a fresh generation.                                                        |
-| `yarn check`                 | Run the type check, the linter, the format check, the boundary check, the diagram library check and the unit tests in sequence. |
-| `yarn db:generate`           | Write a SQL migration for the changes made to the schema.                                                                       |
-| `yarn db:migrate`            | Apply the migrations that the database has not yet run.                                                                         |
-| `yarn stack:up`              | Start the compose services (Postgres, Kafka and the explorers) with `.env.local` and wait until they are healthy.               |
-| `yarn stack:down`            | Stop the compose services and delete their volumes, so the database and the broker start empty next time.                       |
-| `yarn stack:restart`         | `stack:down`, `stack:up`, then `db:migrate`: a fresh database with the schema applied and an empty history.                     |
-| `yarn zk-assets`             | Build the prover keys and ZKIR of the vault and signet contracts under `zk-assets/` (see [Proving keys](#proving-keys)).        |
+| Script                       | Purpose                                                                                                                                 |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `yarn dev`                   | Start the development server.                                                                                                           |
+| `yarn build`                 | Create a production build.                                                                                                              |
+| `yarn start`                 | Serve the production build.                                                                                                             |
+| `yarn typecheck`             | Generate the Next.js route types, then type check with `tsc`.                                                                           |
+| `yarn lint`                  | Lint with oxlint, including its type-aware rules.                                                                                       |
+| `yarn format`                | Format with oxfmt.                                                                                                                      |
+| `yarn format:check`          | Report files that are not formatted.                                                                                                    |
+| `yarn test`                  | Run the unit tests once.                                                                                                                |
+| `yarn test:integration`      | Run the integration tests against the local services.                                                                                   |
+| `yarn boundaries`            | Fail on a runtime import that crosses the backend boundary.                                                                             |
+| `yarn diagram-library`       | Regenerate the per-package diagram library under `docs/diagram-library/` from the code and render its PNGs (see `docs/diagramming.md`). |
+| `yarn diagram-library:check` | Fail when a file under `docs/diagram-library/` differs from a fresh generation, is missing or is not generated from the code.           |
+| `yarn check`                 | Run the type check, the linter, the format check, the boundary check, the diagram library check and the unit tests in sequence.         |
+| `yarn db:generate`           | Write a SQL migration for the changes made to the schema.                                                                               |
+| `yarn db:migrate`            | Apply the migrations that the database has not yet run.                                                                                 |
+| `yarn stack:up`              | Start the compose services (Postgres, Kafka and the explorers) with `.env.local` and wait until they are healthy.                       |
+| `yarn stack:down`            | Stop the compose services and delete their volumes, so the database and the broker start empty next time.                               |
+| `yarn stack:restart`         | `stack:down`, `stack:up`, then `db:migrate`: a fresh database with the schema applied and an empty history.                             |
+| `yarn zk-assets`             | Build the prover keys and ZKIR of the vault and signet contracts under `zk-assets/` (see [Proving keys](#proving-keys)).                |
 
 ## Layout
 

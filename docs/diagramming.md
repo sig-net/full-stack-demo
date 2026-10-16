@@ -178,19 +178,31 @@ introduces the stages, and the palette card carries their swatches:
 
 ### The diagram library
 
-[diagram-library.drawio](diagram-library.drawio) holds one provider container for every
-service provider `createBackend()` builds and one entity container for every resource a
-repository stores, plus the `Event` schema. `scripts/diagram-library.ts` generates it from the
-code through the TypeScript checker, so it is never edited by hand:
+The diagram library is one pair per package under `src/lib` that declares a provider
+interface or an entity, filed in
+[diagram-library/](diagram-library) at the package's path: the providers and entities of
+`src/lib/midnight/transaction-v1` are in
+[diagram-library/midnight/transaction-v1/diagram-library.drawio](diagram-library/midnight/transaction-v1/diagram-library.drawio).
+Each file holds a provider container for every service provider `createBackend()` builds
+whose interface the package declares, and an entity container for every resource a
+repository stores whose schema the package declares, plus the `Event` schema in `event`.
+`scripts/diagram-library.ts` generates them from the code through the TypeScript checker, so
+they are never edited by hand:
 
-- Regenerate it with `yarn diagram-library` and re-render its PNG whenever `src` changes an
-  interface, a provider the backend builds or a resource schema.
-- `yarn diagram-library:check`, part of `yarn check`, fails and names each differing cell when
-  the committed file no longer matches the code.
+- Regenerate them with `yarn diagram-library` whenever `src` changes an interface, a provider
+  the backend builds or a resource schema. It writes every file, renders the PNG of each file
+  whose pair `drawio-cli check-pair` finds stale, and deletes every pair under
+  `docs/diagram-library/` that the code does not generate.
+- `yarn diagram-library:check`, part of `yarn check`, fails and names the file and each
+  differing cell when a committed file does not match the code, when a file is missing,
+  and when `docs/diagram-library/` holds a file the code does not generate.
 - An action flow copies its providers and entities from the library with value and style
-  byte-identical, keeping only the method rows the action calls. The proof is
-  `drawio-cli diff-cells docs/diagram-library.drawio <flow>.drawio`: every shared id must
-  match.
+  byte-identical, keeping only the method rows the action calls. Every id but the title's is
+  unique across the whole library, so the proof is `drawio-cli diff-cells <library file> <flow>.drawio` for
+  each package the flow draws from, for example
+  `drawio-cli diff-cells docs/diagram-library/midnight/ethereum-erc20-vault/deposit-v1/diagram-library.drawio docs/ethereum-erc20-vault/deposit/deposit-v2.drawio`:
+  every shared id must match, so the output holds no `differs` line. Its `only in A` and
+  `only in B` lines list the cells the flow leaves out and adds, and make it exit 1.
 - A class the backend builds that implements no interface under `src/lib` (the service
   adaptors, `UnitOfWork`, library classes) has no container. When several classes implement
   one interface, each container id carries a qualifier taken from its class name
