@@ -179,13 +179,14 @@ introduces the stages, and the palette card carries their swatches:
 ### The diagram library
 
 The diagram library is one pair per package under `src/lib` that declares a provider
-interface or an entity, filed in
+class or an entity, filed in
 [diagram-library/](diagram-library) at the package's path: the providers and entities of
 `src/lib/midnight/transaction-v1` are in
 [diagram-library/midnight/transaction-v1/diagram-library.drawio](diagram-library/midnight/transaction-v1/diagram-library.drawio).
 Each file holds a provider container for every service provider `createBackend()` builds
-whose interface the package declares, and an entity container for every resource a
-repository stores whose schema the package declares, plus the `Event` schema in `event`.
+whose class the package declares, whichever package declares its interface, and an entity
+container for every resource a repository stores whose schema the package declares, plus
+the `Event` schema in `event`.
 `scripts/diagram-library.ts` generates them from the code through the TypeScript checker, so
 they are never edited by hand:
 
@@ -203,10 +204,16 @@ they are never edited by hand:
   `drawio-cli diff-cells docs/diagram-library/midnight/ethereum-erc20-vault/deposit-v1/diagram-library.drawio docs/ethereum-erc20-vault/deposit/deposit-v2.drawio`:
   every shared id must match, so the output holds no `differs` line. Its `only in A` and
   `only in B` lines list the cells the flow leaves out and adds, and make it exit 1.
-- A class the backend builds that implements no interface under `src/lib` (the service
-  adaptors, `UnitOfWork`, library classes) has no container. When several classes implement
-  one interface, each container id carries a qualifier taken from its class name
-  (`provider-event-publisher-kafka`, `provider-event-publisher-outbox`).
+- A class the backend builds counts as implementing an interface under `src/lib` when it or
+  any base class it extends implements one, so `MidnightTransactionEventConsumer` gets its
+  `EventConsumer` container from `LifecycleEventConsumer`. A base class the backend never
+  builds gets no container of its own, and an alias the class implements
+  (`DepositRepository`) stands for the generic interface its base class implements
+  (`Repository`). A class the backend builds that implements no interface under `src/lib`
+  (the service adaptors, `UnitOfWork`, library classes) has no container. When several
+  classes implement one interface, each container id carries a qualifier taken from its
+  class name less the interface name and `Impl` (`provider-event-publisher-kafka`,
+  `provider-event-consumer-midnight-transaction`).
 
 ## Iconography
 

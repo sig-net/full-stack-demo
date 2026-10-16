@@ -1,5 +1,5 @@
 // Generates docs/diagram-library/<package path>/diagram-library.drawio and its rendered PNG for
-// every package under src/lib that declares a provider interface or an entity: one provider
+// every package under src/lib that declares a provider class or an entity: one provider
 // container per service provider `createBackend()` builds and one entity container per repository
 // resource, read from the code through the TypeScript checker. `yarn diagram-library` writes them,
 // and `yarn diagram-library:check` (part of `yarn check`) exits 1 when a committed file differs
@@ -59,7 +59,9 @@ interface Provider {
   readonly id: string
   readonly className: string
   readonly interfaceName: string
+  /** The package declaring the class, whose file the container is drawn in. */
   readonly packagePath: string
+  readonly interfacePackagePath: string
   readonly methods: readonly ProviderMethod[]
 }
 
@@ -109,7 +111,7 @@ function readDiagramLibrary(project: Project): DiagramLibrary {
   const implementationCounts = new Map<string, number>()
   for (const found of implementations) {
     if ('reason' in found) continue
-    const key = `${found.packagePath}.${found.interfaceName}`
+    const key = `${found.interfacePackagePath}.${found.interfaceName}`
     const clash = interfaceKeys.get(found.interfaceName)
     if (clash !== undefined && clash !== key) {
       throw new Error(`Two interfaces named ${found.interfaceName}: ${clash} and ${key}`)
@@ -123,7 +125,7 @@ function readDiagramLibrary(project: Project): DiagramLibrary {
       continue
     }
     const shared =
-      (implementationCounts.get(`${found.packagePath}.${found.interfaceName}`) ?? 0) > 1
+      (implementationCounts.get(`${found.interfacePackagePath}.${found.interfaceName}`) ?? 0) > 1
     const key = shared
       ? `${kebab(found.interfaceName)}-${kebab(implementationQualifier(found))}`
       : kebab(found.interfaceName)
@@ -207,14 +209,21 @@ function implementation(
   if (!isUnder(file, LIB_DIRECTORY)) {
     return { className, reason: `declared outside src/lib, in ${displayPath(file)}` }
   }
-  const implemented = (declaration.heritageClauses ?? [])
-    .filter((clause) => clause.token === SyntaxKind.ImplementsKeyword)
-    .flatMap((clause) => [...clause.types])
-  const libInterfaces = implemented.filter((type) => {
+  const implemented = classChain(project, declaration).flatMap((member) =>
+    (member.heritageClauses ?? [])
+      .filter((clause) => clause.token === SyntaxKind.ImplementsKeyword)
+      .flatMap((clause) => [...clause.types]),
+  )
+  const libInterfaces = new Set<InterfaceDeclaration | TypeAliasDeclaration>()
+  for (const type of implemented) {
     const target = declarationOf(project.checker, type.expression)
-    return target !== undefined && isUnder(target.getSourceFile().fileName, LIB_DIRECTORY)
-  })
-  if (libInterfaces.length === 0) {
+    if (target === undefined || !isUnder(target.getSourceFile().fileName, LIB_DIRECTORY)) continue
+    if (!(isInterfaceDeclaration(target) || isTypeAliasDeclaration(target))) {
+      throw new Error(`${className} implements something that is neither an interface nor an alias`)
+    }
+    libInterfaces.add(target)
+  }
+  if (libInterfaces.size === 0) {
     const named = implemented.map((type) => type.expression.getText()).join(', ')
     return {
       className,
@@ -224,23 +233,64 @@ function implementation(
           : `implements only interfaces declared outside src/lib (${named})`,
     }
   }
-  if (libInterfaces.length > 1) {
+  const provided = [...libInterfaces].filter(
+    (target) => ![...libInterfaces].some((other) => interfacesBehind(project, other).has(target)),
+  )
+  if (provided.length !== 1) {
     throw new Error(
       `${className} implements several src/lib interfaces, which one container cannot show`,
     )
   }
-  const [implementedType] = libInterfaces
-  if (implementedType === undefined) throw new Error(`${className} lost its implements clause`)
-  const target = declarationOf(project.checker, implementedType.expression)
-  if (target === undefined || !(isInterfaceDeclaration(target) || isTypeAliasDeclaration(target))) {
-    throw new Error(`${className} implements something that is neither an interface nor an alias`)
-  }
+  const [target] = provided
+  if (target === undefined) throw new Error(`${className} lost its implements clause`)
   return {
     className,
     interfaceName: target.name.text,
-    packagePath: packagePathOf(target.getSourceFile().fileName),
+    packagePath: packagePathOf(declaration.getSourceFile().fileName),
+    interfacePackagePath: packagePathOf(target.getSourceFile().fileName),
     methods: interfaceMembers(project, target).map((member) => providerMethod(project, member)),
   }
+}
+
+/** The class, then each base class it extends, nearest first, up to the first base that is not a class declaration. */
+function classChain(project: Project, declaration: ClassDeclaration): ClassDeclaration[] {
+  const chain = [declaration]
+  for (let current = declaration; ;) {
+    const [base] = (current.heritageClauses ?? [])
+      .filter((clause) => clause.token === SyntaxKind.ExtendsKeyword)
+      .flatMap((clause) => [...clause.types])
+    const target = base === undefined ? undefined : declarationOf(project.checker, base.expression)
+    if (target === undefined || !isClassDeclaration(target)) return chain
+    chain.push(target)
+    current = target
+  }
+}
+
+/**
+ * Every interface the target aliases or extends, transitively, so an implemented alias
+ * (`DepositRepository`) subsumes the generic interface a base class implements (`Repository`).
+ */
+function interfacesBehind(
+  project: Project,
+  target: InterfaceDeclaration | TypeAliasDeclaration,
+): Set<Node> {
+  const behind = new Set<Node>()
+  const references = isTypeAliasDeclaration(target)
+    ? isTypeReferenceNode(target.type)
+      ? [target.type.typeName]
+      : []
+    : (target.heritageClauses ?? []).flatMap((clause) =>
+        [...clause.types].map((type) => type.expression),
+      )
+  for (const reference of references) {
+    const base = declarationOf(project.checker, reference)
+    if (base === undefined || !(isInterfaceDeclaration(base) || isTypeAliasDeclaration(base))) {
+      continue
+    }
+    behind.add(base)
+    for (const further of interfacesBehind(project, base)) behind.add(further)
+  }
+  return behind
 }
 
 /** A method declaration with the type parameter substitutions that hold where it is declared. */
@@ -698,7 +748,7 @@ const INDENT = '&nbsp; '
 function providerContainer(provider: Provider): Container {
   const header = [
     provider.className,
-    `&lt;${escapeHtml(provider.packagePath)}.`,
+    `&lt;${escapeHtml(provider.interfacePackagePath)}.`,
     `${escapeHtml(provider.interfaceName)}&gt;`,
   ]
   const rows = provider.methods.map((method) => {
@@ -1104,7 +1154,7 @@ if (check) {
 } else {
   for (const provider of library.providers) {
     console.log(
-      `provider ${provider.id}: ${provider.className} implements ${provider.packagePath}.${provider.interfaceName}, ${provider.methods.length.toString()} methods`,
+      `provider ${provider.id}: ${provider.packagePath}.${provider.className} implements ${provider.interfacePackagePath}.${provider.interfaceName}, ${provider.methods.length.toString()} methods`,
     )
   }
   for (const excluded of library.excludedClasses) {
