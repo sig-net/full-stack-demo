@@ -6,6 +6,7 @@ import { registerNightForDust } from '@/lib/midnight/wallet/register-night-for-d
 import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
 import {
   type AccountKeys,
+  bindWithoutFee,
   createWalletAndMidnightProvider,
   deriveAccountKeys,
   finalizeUnboundTransaction,
@@ -245,6 +246,18 @@ export class SeedWallet implements Wallet {
     return finalizeUnboundTransaction(this.requireProvider(), unboundTx)
   }
 
+  balanceWithoutFee(unboundTx: string): Promise<string> {
+    const { facade, keys } = this.requireKeys()
+    return bindWithoutFee(facade, keys, unboundTx)
+  }
+
+  private requireKeys(): { facade: WalletFacade; keys: AccountKeys } {
+    this.assertActive()
+    const { facade, keys } = this
+    if (!facade || !keys) throw new Error(SYNCHRONISING)
+    return { facade, keys }
+  }
+
   get unshieldedPublicKey(): ReturnType<AccountKeys['unshieldedKeystore']['getPublicKey']> {
     this.assertActive()
     if (!this.keys) throw new Error(SYNCHRONISING)
@@ -260,9 +273,7 @@ export class SeedWallet implements Wallet {
   }
 
   private async register(): Promise<bigint> {
-    const facade = this.facade
-    const keys = this.keys
-    if (!facade || !keys) throw new Error(SYNCHRONISING)
+    const { facade, keys } = this.requireKeys()
     return registerNightForDust(facade, keys, this.state())
   }
 

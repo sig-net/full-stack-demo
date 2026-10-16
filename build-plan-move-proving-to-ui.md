@@ -81,10 +81,10 @@ Facts the design relies on, read from the installed SDK:
 States name what the row waits for. A caller-built call waits for the relayer's fee. The row
 gains a `boundTx` field (hex, the user-bound bytes) and the state machine gains:
 
-| From | Action | To |
-|---|---|---|
-| `AwaitingFee` | `recordFee` (with `finalizedTx`) | `AwaitingSubmission` |
-| `AwaitingFee` | `expire` | `Failed` as `Expired` |
+| From          | Action                           | To                    |
+| ------------- | -------------------------------- | --------------------- |
+| `AwaitingFee` | `recordFee` (with `finalizedTx`) | `AwaitingSubmission`  |
+| `AwaitingFee` | `expire`                         | `Failed` as `Expired` |
 
 Field table: `AwaitingFee` holds `boundTx` and `expireTime` and nothing else. `unboundTx` stops
 being required from `AwaitingSubmission` on (it is free there: set on the backend-proved path,
@@ -228,8 +228,8 @@ Changes:
 
 - `src/lib/midnight/wallet/wallet.ts`: add `balanceWithoutFee`.
 - `src/lib/midnight/wallet/seed-wallet-facade.ts`: add `bindWithoutFee(facade, keys,
-  unboundTx)` (balance `['shielded', 'unshielded']`, sign, finalise) and `payFee(facade, keys,
-  boundTx)` (deserialise as `FinalizedTransaction`, `balanceFinalizedTransaction` with
+unboundTx)` (balance `['shielded', 'unshielded']`, sign, finalise) and `payFee(facade, keys,
+boundTx)` (deserialise as `FinalizedTransaction`, `balanceFinalizedTransaction` with
   `['dust']`, sign, finalise). Both return hex.
 - `src/lib/midnight/wallet/seed-wallet.ts`: `balanceWithoutFee` over `bindWithoutFee`.
 - `src/lib/midnight/wallet/relayer-wallet.ts` and `relayer-wallet-seed-impl.ts`: `payFee`,
@@ -258,7 +258,7 @@ Changes:
 
 - `src/lib/midnight/transaction-v1/transaction.ts`: `AwaitingFee` in
   `MIDNIGHT_TRANSACTION_STATES` between `AwaitingWallet` and `AwaitingSubmission`; `boundTx:
-  z.string().nullable()` after `unboundTx`, with its doc ("balanced and bound by the caller's
+z.string().nullable()` after `unboundTx`, with its doc ("balanced and bound by the caller's
   wallet without a fee, what the relayer pays for"). The `signer` doc changes to "whose wallet
   balances and signs the call, and the relayer pays the fee of a bound commit".
 - `transaction-state-machine.ts`: the transition row for `AwaitingFee`, `recordFee` in
@@ -269,7 +269,7 @@ Changes:
   `AwaitingFee` event.
 - `transaction-state-controller-impl.ts`: `commitTransaction` sets `state` from the call and
   fills the other bytes with null. `recordFee` is `transition(name, 'recordFee', {
-  finalizedTx })`.
+finalizedTx })`.
 - `transaction-state-resolver-impl.ts`: `resolveAwaitingFee` calls `relayerWallet.payFee`
   outside the transaction, then `write(() => recordFee(...))`. The `switch` gains the case.
 - `transaction-fixtures.ts`: `TRANSACTION_IN_STATE.AwaitingFee`, and the later states' rows
@@ -277,7 +277,7 @@ Changes:
   browser-proved shape (`boundTx` set, `unboundTx` null) for the controller test.
 - `transaction-repository-sql-impl.ts` and `src/lib/db/schema.ts`: the `bound_tx` text column.
   Migration `drizzle/0010_transaction_bound_tx.sql` from `yarn db:generate`, applied with `yarn
-  db:migrate`.
+db:migrate`.
 - `src/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress.ts`: `signingStep` is
   unchanged in behaviour (`AwaitingFee` falls after the signing step), and its comment says so.
 - README "Midnight transactions": the state list, the `boundTx` field, the fee step, the
@@ -312,7 +312,7 @@ without any service using the bound form yet.
 Changes:
 
 - `caller-operation-state-controller.ts`: `CompleteOperationArgs` becomes `{ name } &
-  CommittedCall`.
+CommittedCall`.
 - `caller-operation-state-controller-impl.ts`: `start(row, circuit, call: CommittedCall)` and
   `complete({ name, ...call })` spread the call into `commitTransaction`.
 - `deposit-state-controller.ts` and `deposit-state-controller-impl.ts`: `StartDepositArgs`
@@ -320,7 +320,7 @@ Changes:
   `Start<X>Args` do the same, so the base controller has one signature. Their services pass
   `call: { unprovenTx }`, a one-line change each, behaviour unchanged.
 - Unit tests of the five state controllers and of the five services: fixtures build `call: {
-  unprovenTx: '...' }`. The deposit controller test adds one case committing `{ boundTx }` and
+unprovenTx: '...' }`. The deposit controller test adds one case committing `{ boundTx }` and
   asserting the child is created in `AwaitingFee`.
 
 Gate: `yarn check`. The integration suite is unaffected in behaviour. Run the deposit-start
@@ -339,7 +339,7 @@ Changes:
 - New `src/lib/midnight/ethereum-erc20-vault/vault-call.ts` (isomorphic, no `server-only`):
   `buildVaultCall(providers, privateState, wallet, options)` (the body of today's `build`
   minus the logger line, which the caller keeps), `vaultCallOptions(compiledContract,
-  vaultAddress, circuit, args)`, `walletProviderOf`, `NO_RECIPIENT`,
+vaultAddress, circuit, args)`, `walletProviderOf`, `NO_RECIPIENT`,
   `permissionlessVaultPrivateState`, `circuitAssertMessage` (moved out of `vault-circuits.ts`,
   which is backend-owned), and the two option builders `startDepositCallOptions(args)` and
   `completeDepositCallOptions(args)`, with `StartDepositCircuitArgs` and
@@ -370,7 +370,7 @@ Changes:
   typing the browser factory below.
 - New `src/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-call-builder.ts`:
   `DepositCallBuilder` constructed from `{ publicDataProvider, zkConfigProvider, proofProvider,
-  compiledContract, vaultAddress }`, with `buildStart(args): Promise<string>` and
+compiledContract, vaultAddress }`, with `buildStart(args): Promise<string>` and
   `buildComplete(args): Promise<string>` returning unbound hex (execute through
   `buildVaultCall`, then prove through `proofProvider.proveTx`). The args are the circuit args
   of step 3 plus `secretKey: Uint8Array` and `wallet: WalletPublicKeys`. The complete arguments
@@ -382,7 +382,7 @@ Changes:
   `httpClientProofProvider` with the fifteen-minute timeout, and the compiled contract bound
   with `withCompiledFileAssets('/zk-assets/ethereum-erc20-vault')`. If typing shows the assets
   binding is not required by `createCallTxOptions` (its parameter is `CompiledContract<C,
-  any>`), drop the binding and say so in the module doc. The file is isomorphic in type but
+any>`), drop the binding and say so in the module doc. The file is isomorphic in type but
   reads `window.location.origin`, so it is imported only from components.
 - `package.json` script `zk-assets:public`: copies `zk-assets/ethereum-erc20-vault` to
   `public/zk-assets/ethereum-erc20-vault` with `rsync -a --delete`, run verbatim once before
@@ -423,7 +423,7 @@ Changes:
   with their types. Both are what a circuit takes, named as the deposit's inputs.
 - `deposit-service.ts`: the interface per the target flow. `startDepositArgsSchema` becomes
   `{ depositRequest, wallet, inIndex: uint64Schema, evmNonce: uint64Schema, boundTx:
-  hexBytesSchema }`, `completeDepositArgsSchema` becomes `{ name, wallet, boundTx }`,
+hexBytesSchema }`, `completeDepositArgsSchema` becomes `{ name, wallet, boundTx }`,
   `prepareStartDepositArgsSchema` is `{ depositRequest, wallet }` and
   `prepareCompleteDepositArgsSchema` is `{ name, wallet }`. `DepositNonceConflict` beside
   `DepositRecipientMismatch`.
@@ -541,16 +541,16 @@ changed across the steps.
 
 ## Risks and how each step contains them
 
-| Risk | Where it surfaces | Containment |
-|---|---|---|
-| The SDK sponsorship path fails with these circuits or this node | Step 0 | Nothing else is built until it passes. |
-| `balanceWithoutFee` throws on a call with nothing to balance | Step 0 | The unshielded wallet returns the transaction when balanced, read from the installed source. If it throws anyway, `bindWithoutFee` falls back to `Transaction.bind()` and the fallback is documented. |
-| `FetchZkConfigProvider` rejects the bundle's manifest | Step 6 | The bundle ships `compiler/contract-manifest.json`, which is the file the provider looks for. The provider's `verify: 'warn'` option is the escape hatch, documented as a local-only setting. |
-| The compiled contract needs the file-assets binding in the browser | Step 4 | Type the factory first. The binding is a string nothing reads, per the midnight-js source. |
-| Bundle size | Step 6 | Dynamic import of the builder, providers, contract and compact runtime, like the wallet SDK. |
-| The relayer's TTL versus the user's TTL | Step 1 | Both intents carry their own TTL, and the row's `expireTime` stays the server's one hour. A follow-up may read the TTL out of the bound bytes. |
-| A nonce race between two deposits of one caller | Step 5 | Refused at commit, the browser rebuilds once. |
-| The relayer pays for a failing call | Step 0 onward | Accepted, see D1. |
+| Risk                                                               | Where it surfaces | Containment                                                                                                                                                                                           |
+| ------------------------------------------------------------------ | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The SDK sponsorship path fails with these circuits or this node    | Step 0            | Nothing else is built until it passes.                                                                                                                                                                |
+| `balanceWithoutFee` throws on a call with nothing to balance       | Step 0            | The unshielded wallet returns the transaction when balanced, read from the installed source. If it throws anyway, `bindWithoutFee` falls back to `Transaction.bind()` and the fallback is documented. |
+| `FetchZkConfigProvider` rejects the bundle's manifest              | Step 6            | The bundle ships `compiler/contract-manifest.json`, which is the file the provider looks for. The provider's `verify: 'warn'` option is the escape hatch, documented as a local-only setting.         |
+| The compiled contract needs the file-assets binding in the browser | Step 4            | Type the factory first. The binding is a string nothing reads, per the midnight-js source.                                                                                                            |
+| Bundle size                                                        | Step 6            | Dynamic import of the builder, providers, contract and compact runtime, like the wallet SDK.                                                                                                          |
+| The relayer's TTL versus the user's TTL                            | Step 1            | Both intents carry their own TTL, and the row's `expireTime` stays the server's one hour. A follow-up may read the TTL out of the bound bytes.                                                        |
+| A nonce race between two deposits of one caller                    | Step 5            | Refused at commit, the browser rebuilds once.                                                                                                                                                         |
+| The relayer pays for a failing call                                | Step 0 onward     | Accepted, see D1.                                                                                                                                                                                     |
 
 ## What this plan does not decide
 

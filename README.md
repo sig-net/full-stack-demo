@@ -405,8 +405,9 @@ yarn vitest run --config vitest.integration.config.ts --reporter=verbose integra
 `startDeposit` to `Completed` against the whole local stack: Postgres, Kafka, the Midnight
 node, indexer and proof server, the fakenet MPC responder and the anvil Sepolia fork, with the
 relayer and user wallets of `.env.local` funded. The test starts the backend, plays the user's
-wallet (balancing and submitting the two caller calls), and funds the deposit account on the
-fork with anvil's cheatcodes, while the backend flushes, sends, polls the MPC, broadcasts the
+wallet (binding the two caller calls without a fee, having the relayer wallet pay it, and
+submitting them), and funds the deposit account on the fork with anvil's cheatcodes, while the
+backend flushes, sends, polls the MPC, broadcasts the
 sweep, and queues and flushes the attestation on its own, as [Deposit lifecycle](#deposit-lifecycle)
 describes. It then asserts the outcome `minted`, the request `Attested` with an `executed`
 attestation, the slot gone from the vault ledger, the sweep `Succeeded`, and the 23 lifecycle
@@ -606,6 +607,17 @@ owns, the browser wallet balances and signs its `unboundTx`, and
 the row from `AwaitingWallet` to `AwaitingSubmission`. The server actions in
 `src/server/actions/transaction-actions.ts` forward to `TransactionServiceAdaptor`.
 
+The fee of a caller transaction can be sponsored, so the user needs no DUST. The user's wallet
+balances its own shielded and unshielded coins, signs and binds the call without a fee
+(`Wallet.balanceWithoutFee`, the wallet SDK's `balanceUnboundTransaction` with
+`tokenKindsToBalance: ['shielded', 'unshielded']`, then `signRecipe` and `finalizeRecipe`), and
+the relayer wallet attaches its DUST fee to the bound bytes (`RelayerWallet.payFee`, the SDK's
+`balanceFinalizedTransaction` with `['dust']`, then `signRecipe` and `finalizeRecipe`), which
+merges a fee transaction with no contract interaction into the bound one. The fee is taken in the
+guaranteed phase, so the relayer pays for a sponsored call whose fallible phase fails. The
+end-to-end deposit test takes this path for both caller calls and hands the paid bytes to
+`submitTransaction`.
+
 `MidnightTransactionLedgerImpl` is the ledger behind the local or stagenet services: `prove`
 deserialises the unproven bytes and proves them through the proof server with the prover keys
 under `MIDNIGHT_ZK_ASSETS_ROOT`, `submit` sends the wallet's finalized bytes to the node
@@ -639,12 +651,14 @@ ledger before it believes a failed start or complete (see
 
 `RelayerWallet` (`src/lib/midnight/wallet/relayer-wallet.ts`) is the backend's own wallet, and
 `RelayerWalletSeedImpl` runs it over the same seed wallet facade the browser's seed wallet uses
-(`seed-wallet-facade.ts`): the keys derive from `MIDNIGHT_RELAYER_SEED` at construction, and
-`finalize` balances, signs and finalises an unbound transaction with it. One instance syncs per
+(`seed-wallet-facade.ts`): the keys derive from `MIDNIGHT_RELAYER_SEED` at construction,
+`finalize` balances, signs and finalises an unbound transaction with it, and `payFee` attaches
+its DUST fee to a transaction a caller's wallet bound without one (see
+[Midnight transactions](#midnight-transactions)). One instance syncs per
 process: the backend's `start()` starts it the moment the server starts, since a sync can take
 minutes on a long chain (the local stack's short chain syncs in a second or two, which the
-`relayer wallet synced` line reports in its `durationMs`), a `finalize` that arrives mid-sync waits on
-that start, and an instance that was never started refuses to finalise. Next.js evaluates the
+`relayer wallet synced` line reports in its `durationMs`), a `finalize` or `payFee` that arrives
+mid-sync waits on that start, and an instance that was never started refuses both. Next.js evaluates the
 request graph separately, and its backend never starts the wallet, so the one started from
 instrumentation is the one the process uses.
 `provider()` hands the synced wallet to the SDK as the wallet and midnight provider slots of a
@@ -1250,6 +1264,10 @@ wallet components read its types and the connection status label.
 - `wallet.ts` defines `WALLET_KINDS` (only `seed` today), `WalletMetadata`, the `Wallet`
   interface with its optional transaction, funding and recovery capabilities, and
   `WalletAddressSnapshot`, the public addresses a wallet publishes before it has synchronised.
+  A wallet signs a caller's call one of two ways: `finalize` balances it with the wallet's own
+  coins and DUST, signs and finalises it for `submitTransaction`, and `balanceWithoutFee`
+  balances it with the wallet's coins alone, signs and binds it, for the relayer wallet to pay
+  the fee (see [Midnight transactions](#midnight-transactions)).
 - `connection-status.ts` defines `WalletConnectionStatus`, the status label the wallet components
   show, and derives it from the provider's state.
 - `seed-wallet.ts` is the seed implementation: it derives account-zero keys from a hex seed,

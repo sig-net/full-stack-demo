@@ -24,7 +24,8 @@ const RETRY_AFTER_MS = 40_000
 /**
  * One deposit from `startDeposit` to `Completed` over the whole local stack: the backend proves,
  * flushes, sends, polls the MPC, broadcasts on the fork, queues and flushes the attestation on
- * its own, and this test plays the user's wallet and funds the deposit account on the fork.
+ * its own, and this test plays the user's wallet, which binds the two caller calls without a
+ * fee for the relayer wallet to pay, and funds the deposit account on the fork.
  */
 describe('ERC20 vault deposit round trip over the local stack', () => {
   let backend: Backend
@@ -101,15 +102,18 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
             continue
           }
           submitted.add(transaction.name)
-          const balancing = Date.now()
-          const finalizedTx = await user.balance(transaction.unboundTx)
+          const binding = Date.now()
+          const boundTx = await user.balanceWithoutFee(transaction.unboundTx)
+          const paying = Date.now()
+          const finalizedTx = await backend.midnight.relayerWallet.payFee(boundTx)
+          const paid = Date.now()
           const result = await transactions.submitTransaction(callerSecret, {
             name: transaction.name,
             finalizedTx,
           })
           if (!result.ok) throw new Error(result.error)
           log(
-            `balanced and submitted ${transaction.circuit} ${transaction.name} in ${String(Date.now() - balancing)} ms`,
+            `bound ${transaction.circuit} ${transaction.name} without a fee in ${String(paying - binding)} ms, the relayer paid the fee in ${String(paid - paying)} ms, submitted`,
           )
         }
       }

@@ -46,6 +46,11 @@ export interface Wallet extends WalletMetadata {
    * finalized bytes, both in hex as the transaction resource carries them.
    */
   finalize(unboundTx: string): Promise<string>
+  /**
+   * Balances the wallet's own coins into the unbound bytes of a proven call, signs and binds it
+   * without a DUST fee, resolving with the bound bytes in hex for the relayer wallet to pay.
+   */
+  balanceWithoutFee(unboundTx: string): Promise<string>
   readonly registrationUnavailable?: string
   readonly recoveryUnavailable?: string
   readonly reportedProofServerUrl?: string

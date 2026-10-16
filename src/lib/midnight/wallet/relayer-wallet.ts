@@ -3,8 +3,9 @@ import type { MidnightProvider, WalletProvider } from '@midnight-ntwrk/midnight-
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 
 /**
- * The backend's own Midnight wallet, which finalises and pays for relayer transactions. One
- * instance syncs per process: the start-up starts it once, and nothing finalises before then.
+ * The backend's own Midnight wallet, which finalises and pays for relayer transactions and pays
+ * the DUST fee of caller transactions bound without one. One instance syncs per process: the
+ * start-up starts it once, and nothing finalises or pays before then.
  */
 export interface RelayerWallet {
   /**
@@ -23,6 +24,12 @@ export interface RelayerWallet {
    * for a start in progress and rejects when the wallet was never started.
    */
   finalize(unboundTx: string): Promise<string>
+  /**
+   * Attaches the wallet's DUST fee to bound bytes a caller's wallet balanced and signed without
+   * one, resolving with the finalized bytes. Waits for a start in progress and rejects when the
+   * wallet was never started.
+   */
+  payFee(boundTx: string): Promise<string>
   /**
    * The wallet and midnight provider slots of a midnight-js provider set, once synced. Starts
    * the wallet when nothing has, and a failed start is dropped so the next call retries.
