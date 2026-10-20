@@ -17,18 +17,14 @@ import type {
   Activity,
   ActivityType,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
-import {
-  completesInPage,
-  type InPageType,
-} from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress'
-import type { Wallet, WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
+import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { NO_PRICES } from '@/lib/pricing/spot-price-table'
-import { completeApproval } from '@/server/actions/approval-actions'
+import { completeApproval, prepareCompleteApproval } from '@/server/actions/approval-actions'
 import { listActivities } from '@/server/actions/activity-actions'
 import { completeDeposit, prepareCompleteDeposit } from '@/server/actions/deposit-actions'
 import { completeRedeem, prepareCompleteRedeem } from '@/server/actions/redeem-actions'
 import { completeSupply, prepareCompleteSupply } from '@/server/actions/supply-actions'
-import { completeSwap } from '@/server/actions/swap-actions'
+import { completeSwap, prepareCompleteSwap } from '@/server/actions/swap-actions'
 import { completeWithdraw, prepareCompleteWithdraw } from '@/server/actions/withdraw-actions'
 
 /** A pending row changes on every sweep, so the list is read often while one exists and rarely otherwise. */
@@ -119,7 +115,7 @@ interface PageCompletionArgs {
  * The completion of each type the page runs, loading its module on first use so a visitor who
  * never completes one downloads neither the call builder nor the contract.
  */
-const PAGE_COMPLETE_BY_TYPE: Record<InPageType, (args: PageCompletionArgs) => Promise<void>> = {
+const PAGE_COMPLETE_BY_TYPE: Record<ActivityType, (args: PageCompletionArgs) => Promise<void>> = {
   Deposit: async ({ config, wallet, callerSecret, name }) => {
     const calls =
       await import('@/lib/midnight/ethereum-erc20-vault/deposit-v1/browser-deposit-calls')
@@ -162,25 +158,34 @@ const PAGE_COMPLETE_BY_TYPE: Record<InPageType, (args: PageCompletionArgs) => Pr
       name,
     })
   },
-}
-
-/** The completion action of each type whose call the server builds, all of one shape on the wire. */
-const SERVER_BUILT_COMPLETE_BY_TYPE: Record<
-  Exclude<ActivityType, InPageType>,
-  (
-    callerSecret: string,
-    args: { name: string; wallet: WalletPublicKeys },
-  ) => Promise<{ ok: true } | { ok: false; error: string }>
-> = {
-  Swap: completeSwap,
-  Approval: completeApproval,
+  Swap: async ({ config, wallet, callerSecret, name }) => {
+    const calls = await import('@/lib/midnight/ethereum-erc20-vault/swap-v1/browser-swap-calls')
+    await calls.completeSwapInBrowser({
+      actions: { prepareCompleteSwap, completeSwap },
+      builder: calls.browserSwapCallBuilder(config, window.location.origin),
+      wallet,
+      callerSecret,
+      name,
+    })
+  },
+  Approval: async ({ config, wallet, callerSecret, name }) => {
+    const calls =
+      await import('@/lib/midnight/ethereum-erc20-vault/approval-v1/browser-approval-calls')
+    await calls.completeApprovalInBrowser({
+      actions: { prepareCompleteApproval, completeApproval },
+      builder: calls.browserApprovalCallBuilder(config, window.location.origin),
+      wallet,
+      callerSecret,
+      name,
+    })
+  },
 }
 
 /**
  * Starts the completion of every activity that awaits it, once per row per retry window. The
- * page builds, proves and binds an in-page type's completion call, and the server builds every
- * other type's for the connected wallet's keys, so nothing runs without a wallet, and a refusal
- * (the row already completing elsewhere) is reported and left to the next window.
+ * page builds, proves and binds the completion call with the connected wallet, so nothing runs
+ * without one, and a refusal (the row already completing elsewhere) is reported and left to the
+ * next window.
  */
 function useAutoCompletion(activities: readonly Activity[] | undefined): void {
   const { callerSecret } = useCaller()
@@ -194,26 +199,15 @@ function useAutoCompletion(activities: readonly Activity[] | undefined): void {
     attemptedAt.current.set(activity.name, Date.now())
     const { description } = activityEntryOf(activity, registry, NO_PRICES)
     try {
-      if (completesInPage(activity.type)) {
-        await PAGE_COMPLETE_BY_TYPE[activity.type]({
-          config,
-          wallet,
-          callerSecret,
-          name: activity.name,
-        })
-        toast.success(
-          `Completing your ${description}: its completion call is proved and signed, and the backend is submitting it.`,
-        )
-      } else {
-        const result = await SERVER_BUILT_COMPLETE_BY_TYPE[activity.type](callerSecret, {
-          name: activity.name,
-          wallet: wallet.publicKeys,
-        })
-        if (!result.ok) throw new Error(result.error)
-        toast.success(
-          `Completing your ${description}: sign its completion call from the Activity row once it is proved.`,
-        )
-      }
+      await PAGE_COMPLETE_BY_TYPE[activity.type]({
+        config,
+        wallet,
+        callerSecret,
+        name: activity.name,
+      })
+      toast.success(
+        `Completing your ${description}: its completion call is proved and signed, and the backend is submitting it.`,
+      )
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
     } catch (error: unknown) {
       toast.error(

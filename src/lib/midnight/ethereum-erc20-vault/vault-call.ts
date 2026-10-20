@@ -285,6 +285,102 @@ export interface CompleteRedeemCircuitArgs extends CallerCircuitArgs {
   readonly mintNonce: Uint8Array
 }
 
+/** The surrendered coin is a fresh coin of the sold token's vault coin type worth exactly `amountInMaximum`, which the caller's wallet funds when it balances the call. */
+export function startSwapCallOptions(
+  providers: VaultCallProviders,
+  args: StartSwapCircuitArgs,
+): CallTxOptions<VaultContract, 'startSwap'> {
+  return vaultCallOptions(providers, 'startSwap', [
+    args.inIndex,
+    {
+      erc20AddressIn: evmAddressBytes(args.erc20AddressIn),
+      erc20AddressOut: evmAddressBytes(args.erc20AddressOut),
+      fee: args.fee,
+      amountOut: args.amountOut,
+      amountInMaximum: args.amountInMaximum,
+    },
+    {
+      nonce: crypto.getRandomValues(new Uint8Array(32)),
+      color: hexToBytes(vaultTokenType(args.erc20AddressIn, providers.vaultAddress)),
+      value: args.amountInMaximum,
+    },
+  ])
+}
+
+export interface StartSwapCircuitArgs extends CallerCircuitArgs {
+  readonly inIndex: bigint
+  /** `0x` plus 40 hex characters, both of them: the sold token's vault coin is the one surrendered. */
+  readonly erc20AddressIn: string
+  readonly erc20AddressOut: string
+  /** The Uniswap V3 pool fee tier, such as 500 or 3000. */
+  readonly fee: bigint
+  readonly amountOut: bigint
+  readonly amountInMaximum: bigint
+}
+
+export function completeSwapCallOptions(
+  providers: VaultCallProviders,
+  args: CompleteSwapCircuitArgs,
+): CallTxOptions<VaultContract, 'completeSwap'> {
+  return vaultCallOptions(providers, 'completeSwap', [
+    args.requestId,
+    args.serializedOutput,
+    args.mintNonce,
+    args.changeNonce,
+  ])
+}
+
+export interface CompleteSwapCircuitArgs extends CallerCircuitArgs {
+  readonly requestId: Uint8Array
+  /** 32 bytes: the attested `amountIn` for an executed swap, ignored for the other verdicts. */
+  readonly serializedOutput: Uint8Array
+  /** 32 random bytes each, fresh per call and different from each other. */
+  readonly mintNonce: Uint8Array
+  readonly changeNonce: Uint8Array
+}
+
+/** Deployer-gated: the contract refuses any other caller's secret at build time. */
+export function startApproveRouterCallOptions(
+  providers: VaultCallProviders,
+  args: StartApproveRouterCircuitArgs,
+): CallTxOptions<VaultContract, 'startApproveRouter'> {
+  return vaultCallOptions(providers, 'startApproveRouter', [
+    args.inIndex,
+    evmAddressBytes(args.erc20Address),
+  ])
+}
+
+export interface StartApproveRouterCircuitArgs extends CallerCircuitArgs {
+  readonly inIndex: bigint
+  /** The token the router may spend, `0x` plus 40 hex characters. */
+  readonly erc20Address: string
+}
+
+/** Deployer-gated: the contract refuses any other caller's secret at build time. */
+export function startApproveStataCallOptions(
+  providers: VaultCallProviders,
+  args: StartApproveStataCircuitArgs,
+): CallTxOptions<VaultContract, 'startApproveStata'> {
+  return vaultCallOptions(providers, 'startApproveStata', [args.inIndex])
+}
+
+export interface StartApproveStataCircuitArgs extends CallerCircuitArgs {
+  readonly inIndex: bigint
+}
+
+export function completeApproveCallOptions(
+  providers: VaultCallProviders,
+  args: CompleteApproveCircuitArgs,
+): CallTxOptions<VaultContract, 'completeApprove'> {
+  return vaultCallOptions(providers, 'completeApprove', [args.requestId, args.serializedOutput])
+}
+
+export interface CompleteApproveCircuitArgs extends CallerCircuitArgs {
+  readonly requestId: Uint8Array
+  /** One byte: the attested approve result for an executed approval, ignored for the other verdicts. */
+  readonly serializedOutput: Uint8Array
+}
+
 /** `completeDeposit` mints to the caller's own public key when no recipient is named. */
 const NO_RECIPIENT = {
   is_some: false,

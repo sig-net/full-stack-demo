@@ -285,7 +285,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
         destination,
       })
 
-      // Both caller calls were bound by the user and paid by the relayer, never signed from a sign turn.
+      // Both caller calls were bound by the user and paid by the relayer.
       const transactions = await midnight.transactionV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: withdraw.name }],
         order: { field: 'createTime', direction: 'asc' },

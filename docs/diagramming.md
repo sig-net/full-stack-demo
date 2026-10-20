@@ -196,7 +196,9 @@ There are two composition roots: `createBackend()` in `src/server/backend.ts` fo
 and every `.ts` and `.tsx` file under `src/components` for the browser (`SeedWallet`,
 `TokenInfoRegistry`). Each root is walked through the calls it makes into functions declared
 in its own files or under `src/lib`, a module reached through `await import(...)` included, so
-`DepositCallBuilder`, `WithdrawCallBuilder`, `SupplyCallBuilder` and `RedeemCallBuilder` are built by both. The generator records which roots build each provider
+`DepositCallBuilder`, `WithdrawCallBuilder`, `SupplyCallBuilder`, `RedeemCallBuilder`,
+`SwapCallBuilder` and `ApprovalCallBuilder` are built by both. The generator records which roots
+build each provider
 and prints it on the provider's log line, and the drawing does not show it.
 A provider implementing an interface has a property row for each property of that interface
 and a method row for each method, inherited members included. An adaptor or a standalone class

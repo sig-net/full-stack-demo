@@ -15,6 +15,7 @@ import { ensureAaveReserveAcceptsDeposits } from './aave-reserve'
 import { testBackend } from './backend'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
 import { secretKeyOf } from './user-caller-call'
+import { completeApprovalAsUser, startApprovalAsUser } from './user-approval'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
 import { completeSupplyAsUser, startSupplyAsUser } from './user-supply'
 import { mergedBoundTx, startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
@@ -78,14 +79,10 @@ describe('ERC20 vault supply round trip over the local stack', () => {
     async () => {
       const { ethereum } = backend
       const { approvalV1, depositV1 } = backend.midnight.ethereumErc20Vault
-      const wallet = user.publicKeys
       const { underlyingErc20Address } = target
       if (target.allowance === 0n) {
         log('the wrapper holds no allowance on the underlying: approving first')
-        const approval = await approvalV1.adaptor.startApproval(callerSecret, {
-          approvalRequest: { kind: 'stata' },
-          wallet,
-        })
+        const approval = await startApprovalAsUser(backend, callerSecret, user, { kind: 'stata' })
         if (!approval.ok) throw new Error(approval.error)
         created.push(['midnight_ethereum_erc20_vault_approvals_v1', approval.approval.name])
         await driveOperation(
@@ -96,10 +93,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
             name: approval.approval.name,
             state: async () => (await approvalV1.repository.get(approval.approval.name))?.state,
             complete: () =>
-              approvalV1.adaptor.completeApproval(callerSecret, {
-                name: approval.approval.name,
-                wallet,
-              }),
+              completeApprovalAsUser(backend, callerSecret, user, approval.approval.name),
           },
           ROUND_TRIP_TIMEOUT_MS,
         )
@@ -263,7 +257,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
         destination: stataErc20Address,
       })
 
-      // Both caller calls were bound by the user and paid by the relayer, never signed from a sign turn.
+      // Both caller calls were bound by the user and paid by the relayer.
       const transactions = await midnight.transactionV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: supply.supply.name }],
         order: { field: 'createTime', direction: 'asc' },

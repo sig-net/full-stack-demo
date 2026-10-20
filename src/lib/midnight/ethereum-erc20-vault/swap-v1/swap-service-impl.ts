@@ -2,7 +2,6 @@ import 'server-only'
 
 import { randomUUID } from 'node:crypto'
 
-import { hexToBytes } from '@sig-net/midnight'
 import { newInputIndex } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
@@ -11,7 +10,13 @@ import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import type { UniswapQuoter } from '@/lib/ethereum/uniswap-quoter'
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
-import { type Swap, swapName } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
+import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
+import {
+  type Swap,
+  type SwapCompleteInputs,
+  swapName,
+  type SwapStartInputs,
+} from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import {
   amountOutMinimumOf,
   SWAP_FEE_TIERS,
@@ -22,6 +27,8 @@ import type {
   CompleteSwapArgs,
   GetSwapArgs,
   ListSwapsArgs,
+  PrepareCompleteSwapArgs,
+  PrepareStartSwapArgs,
   QuoteSwapArgs,
   StartSwapArgs,
   SwapService,
@@ -31,43 +38,40 @@ import {
   SwapStateConflict,
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-state-controller'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
-import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import {
   type AttestedRequestFields,
   attestedRequestFields,
-  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
-import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
 
 export class SwapServiceImpl implements SwapService {
   private readonly swapRepository: SwapRepository
   private readonly swapStateController: SwapStateController
   private readonly vaultRequestRepository: VaultRequestRepository
-  private readonly circuits: VaultCircuits
   private readonly quoter: UniswapQuoter
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
+  private readonly guard: SponsoredCallGuard
 
   constructor(
     swapRepository: SwapRepository,
     swapStateController: SwapStateController,
     vaultRequestRepository: VaultRequestRepository,
-    circuits: VaultCircuits,
     quoter: UniswapQuoter,
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
+    guard: SponsoredCallGuard,
   ) {
     this.swapRepository = swapRepository
     this.swapStateController = swapStateController
     this.vaultRequestRepository = vaultRequestRepository
-    this.circuits = circuits
     this.quoter = quoter
     this.unitOfWork = unitOfWork
     this.signet = signet
     this.vault = vault
+    this.guard = guard
   }
 
   /** Every tier is asked and the one paying most wins, so a pair with one thin pool still quotes. */
@@ -94,43 +98,38 @@ export class SwapServiceImpl implements SwapService {
     return { ...args, fee: best.fee, amountOut: best.amountOut, amountOutMinimum }
   }
 
-  async startSwap(caller: Caller, { swapRequest, wallet }: StartSwapArgs): Promise<Swap> {
-    const inIndex = newInputIndex()
-    const unprovenTx = await this.circuits.startSwap({
-      secretKey: caller.secretKey,
-      wallet,
-      inIndex,
-      ...swapRequest,
-      coinType: vaultTokenType(swapRequest.erc20AddressIn, this.vault.contractAddress),
-    })
+  async prepareStartSwap(_caller: Caller, _args: PrepareStartSwapArgs): Promise<SwapStartInputs> {
+    return { inIndex: newInputIndex() }
+  }
+
+  async startSwap(caller: Caller, { swapRequest, inIndex, boundTx }: StartSwapArgs): Promise<Swap> {
+    this.guard.assertSponsoredCall(boundTx, 'startSwap')
     return this.unitOfWork.runInTransaction(() =>
       this.swapStateController.startSwap({
         name: swapName(caller.name, randomUUID()),
         ...swapRequest,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        call: { unprovenTx },
+        call: { boundTx },
       }),
     )
   }
 
-  /** The state table is asked before the slow build, and the controller asks it again under the lock. */
-  async completeSwap(caller: Caller, { name, wallet }: CompleteSwapArgs): Promise<Swap> {
-    const swap = await this.ownSwap(caller, name)
-    if (nextState(swap.state, 'complete') === undefined) {
-      throw new SwapStateConflict(name, swap.state, 'complete')
-    }
-    const request = await this.attestedRequestOf(name)
-    const unprovenTx = await this.circuits.completeSwap({
-      secretKey: caller.secretKey,
-      wallet,
-      requestId: hexToBytes(request.requestId),
-      serializedOutput: completionOutput(request, 32),
-      mintNonce: crypto.getRandomValues(new Uint8Array(32)),
-      changeNonce: crypto.getRandomValues(new Uint8Array(32)),
-    })
+  async prepareCompleteSwap(
+    caller: Caller,
+    { name }: PrepareCompleteSwapArgs,
+  ): Promise<SwapCompleteInputs> {
+    await this.assertCompletable(caller, name)
+    const { requestId, attestationOutputKind, attestationOutput } =
+      await this.attestedRequestOf(name)
+    return { requestId, attestationOutputKind, attestationOutput }
+  }
+
+  async completeSwap(caller: Caller, { name, boundTx }: CompleteSwapArgs): Promise<Swap> {
+    this.guard.assertSponsoredCall(boundTx, 'completeSwap')
+    await this.assertCompletable(caller, name)
     return this.unitOfWork.runInTransaction(() =>
-      this.swapStateController.completeSwap({ name, call: { unprovenTx } }),
+      this.swapStateController.completeSwap({ name, call: { boundTx } }),
     )
   }
 
@@ -144,6 +143,14 @@ export class SwapServiceImpl implements SwapService {
       criteria: [{ type: 'prefix-text', field: 'name', prefix: `${caller.name}/` }],
       order: { field: 'createTime', direction: 'desc' },
     })
+  }
+
+  /** The state table is asked here, outside the lock, and the controller asks it again under it. */
+  private async assertCompletable(caller: Caller, name: string): Promise<void> {
+    const swap = await this.ownSwap(caller, name)
+    if (nextState(swap.state, 'complete') === undefined) {
+      throw new SwapStateConflict(name, swap.state, 'complete')
+    }
   }
 
   private async ownSwap(caller: Caller, name: string): Promise<Swap> {

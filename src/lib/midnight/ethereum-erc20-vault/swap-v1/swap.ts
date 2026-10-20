@@ -12,6 +12,7 @@ import {
   callerOperationStateSchema,
   isTerminalCallerOperationState,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
+import type { CompletionInputs } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import {
   amountSchema,
   evmAddressSchema,
@@ -60,8 +61,9 @@ export type SwapOutcome = z.infer<typeof swapOutcomeSchema>
 /**
  * The swap resource: exact output on the vault's pinned Uniswap router, paid from a vault coin
  * of the sold token worth `amountInMaximum` that the start circuit burns. The caller supplies
- * the request, the server assigns everything else before the `startSwap` circuit is built. The
- * transactions and the vault request behind its steps name it as their parent.
+ * the request, the server assigns the slot before the browser builds the `startSwap` circuit
+ * call, and derives the vault account when it commits it. The transactions and the vault request
+ * behind its steps name it as their parent.
  */
 export const swapSchema = z.object({
   name: swapNameSchema,
@@ -102,6 +104,12 @@ export const swapRequestSchema = swapSchema.pick({
 })
 
 export type SwapRequest = z.infer<typeof swapRequestSchema>
+
+/** What the server assigns to a start call, afresh on every `prepareStartSwap`: the slot. */
+export type SwapStartInputs = Pick<Swap, 'inIndex'>
+
+/** What the complete circuit takes from the swap's attested request. */
+export type SwapCompleteInputs = CompletionInputs
 
 export function swapName(parent: string, id: string): string {
   return `${parent}/${SWAP_COLLECTION}/${id}`

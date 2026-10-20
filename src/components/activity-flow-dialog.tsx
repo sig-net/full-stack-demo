@@ -215,13 +215,7 @@ function callLabel(transaction: ActivityWalletTransaction): string {
   return CIRCUIT_LABELS[transaction.circuit] ?? transaction.circuit
 }
 
-const CIRCUIT_LABELS: Record<string, string> = {
-  startSwap: 'start',
-  completeSwap: 'completion',
-  startApproveRouter: 'start',
-  startApproveStata: 'start',
-  completeApprove: 'completion',
-}
+const CIRCUIT_LABELS: Record<string, string> = {}
 
 /**
  * The wallet's turn: the proved call is read afresh, balanced and signed by the wallet, then

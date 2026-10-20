@@ -170,10 +170,10 @@ describe('activityStepsOf', () => {
   const walletTurns: { type: ActivityType; expected: WalletTurn }[] = [
     { type: 'Deposit', expected: 'inPage' },
     { type: 'Withdraw', expected: 'inPage' },
-    { type: 'Swap', expected: 'signTurn' },
+    { type: 'Swap', expected: 'inPage' },
     { type: 'Supply', expected: 'inPage' },
     { type: 'Redeem', expected: 'inPage' },
-    { type: 'Approval', expected: 'signTurn' },
+    { type: 'Approval', expected: 'inPage' },
   ]
   test.each(walletTurns)(
     'a $type has the wallet sign its start and completion as $expected',

@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest'
 
+import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
+import type {
+  SwapCompleteInputs,
+  SwapStartInputs,
+} from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import {
   ERC20_ADDRESS_IN,
   ERC20_ADDRESS_OUT,
@@ -8,14 +13,19 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-fixtures'
 import type { SwapQuote } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-quote'
 import type { SwapService } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service'
-import { SwapServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service-adaptor'
+import {
+  type SwapResult,
+  SwapServiceAdaptor,
+} from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service-adaptor'
 import { SwapStateConflict } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-state-controller'
+import {
+  ATTESTATION_FIELDS,
+  REQUEST_ID_HEX,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
 import { mock } from '@/lib/testing/mock'
 import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const CALLER_SECRET = 'ab'.repeat(32)
-const WALLET = { coinPublicKey: `0x${'AA'.repeat(32)}`, encryptionPublicKey: 'bb'.repeat(32) }
-const PARSED_WALLET = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const swap = swapFixture()
 const quote: SwapQuote = {
   erc20AddressIn: ERC20_ADDRESS_IN,
@@ -33,6 +43,15 @@ const REQUEST = {
   amountOut: 980_100n,
   amountInMaximum: 1_000_000n,
 }
+const WIRE_REQUEST = { ...REQUEST, fee: '500', amountOut: '980100', amountInMaximum: '1000000' }
+const BOUND_TX = `0x${'B0BD'.repeat(2)}`
+const PARSED_BOUND_TX = 'b0bd'.repeat(2)
+const START_INPUTS: SwapStartInputs = { inIndex: 42n }
+const COMPLETE_INPUTS: SwapCompleteInputs = {
+  requestId: REQUEST_ID_HEX,
+  attestationOutputKind: ATTESTATION_FIELDS.attestationOutputKind,
+  attestationOutput: ATTESTATION_FIELDS.attestationOutput,
+}
 
 function adaptorOver(service: Partial<SwapService>, received: object[] = []) {
   const recording =
@@ -44,7 +63,9 @@ function adaptorOver(service: Partial<SwapService>, received: object[] = []) {
   return new SwapServiceAdaptor(
     mock<SwapService>('SwapService', {
       quoteSwap: recording(quote),
+      prepareStartSwap: recording(START_INPUTS),
       startSwap: recording(swap),
+      prepareCompleteSwap: recording(COMPLETE_INPUTS),
       completeSwap: recording(swap),
       getSwap: recording(swap),
       listSwaps: recording([swap]),
@@ -102,28 +123,64 @@ describe('SwapServiceAdaptor parsing', () => {
       expectError: 'amountIn',
     },
     {
-      name: 'startSwap normalises the wallet keys and carries the request',
-      call: (a) => a.startSwap(CALLER_SECRET, { swapRequest: REQUEST, wallet: WALLET }),
-      expectReceived: [{ swapRequest: REQUEST, wallet: PARSED_WALLET }],
+      name: 'prepareStartSwap carries the request with its amounts as bigints',
+      call: (a) => a.prepareStartSwap(CALLER_SECRET, { swapRequest: WIRE_REQUEST }),
+      expectReceived: [{ swapRequest: REQUEST }],
+    },
+    {
+      name: 'prepareStartSwap refuses a request without a fee tier',
+      call: (a) =>
+        a.prepareStartSwap(CALLER_SECRET, { swapRequest: { ...REQUEST, fee: undefined } }),
+      expectReceived: [],
+      expectError: 'swapRequest.fee',
+    },
+    {
+      name: 'startSwap carries the request, the slot and the bound bytes normalised',
+      call: (a) =>
+        a.startSwap(CALLER_SECRET, {
+          swapRequest: WIRE_REQUEST,
+          inIndex: '42',
+          boundTx: BOUND_TX,
+        }),
+      expectReceived: [{ swapRequest: REQUEST, inIndex: 42n, boundTx: PARSED_BOUND_TX }],
     },
     {
       name: 'startSwap refuses a request without a fee tier',
       call: (a) =>
         a.startSwap(CALLER_SECRET, {
           swapRequest: { ...REQUEST, fee: undefined },
-          wallet: WALLET,
+          inIndex: 42n,
+          boundTx: BOUND_TX,
         }),
       expectReceived: [],
       expectError: 'swapRequest.fee',
     },
     {
-      name: 'completeSwap passes the name and the wallet',
-      call: (a) => a.completeSwap(CALLER_SECRET, { name: SWAP_NAME, wallet: WALLET }),
-      expectReceived: [{ name: SWAP_NAME, wallet: PARSED_WALLET }],
+      name: 'startSwap refuses bound bytes that are not hex',
+      call: (a) =>
+        a.startSwap(CALLER_SECRET, { swapRequest: REQUEST, inIndex: 42n, boundTx: 'zz' }),
+      expectReceived: [],
+      expectError: 'boundTx',
+    },
+    {
+      name: 'startSwap refuses a missing slot',
+      call: (a) => a.startSwap(CALLER_SECRET, { swapRequest: REQUEST, boundTx: BOUND_TX }),
+      expectReceived: [],
+      expectError: 'inIndex',
+    },
+    {
+      name: 'prepareCompleteSwap passes the name',
+      call: (a) => a.prepareCompleteSwap(CALLER_SECRET, { name: SWAP_NAME }),
+      expectReceived: [{ name: SWAP_NAME }],
+    },
+    {
+      name: 'completeSwap passes the name and the bound bytes',
+      call: (a) => a.completeSwap(CALLER_SECRET, { name: SWAP_NAME, boundTx: BOUND_TX }),
+      expectReceived: [{ name: SWAP_NAME, boundTx: PARSED_BOUND_TX }],
     },
     {
       name: 'completeSwap refuses a name that is not a swap',
-      call: (a) => a.completeSwap(CALLER_SECRET, { name: 'swaps/1', wallet: WALLET }),
+      call: (a) => a.completeSwap(CALLER_SECRET, { name: 'swaps/1', boundTx: BOUND_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-swaps/{uuid}',
     },
@@ -160,37 +217,66 @@ describe('SwapServiceAdaptor outcomes', () => {
     ).toEqual({ ok: false, error: 'No Uniswap pool prices this pair.' })
   })
 
-  test('a state conflict is a result the caller can act on', async () => {
-    const adaptor = adaptorOver({
-      completeSwap: async () => {
-        throw new SwapStateConflict(SWAP_NAME, 'AwaitingVaultRequest', 'complete')
-      },
-    })
-    expect(await adaptor.completeSwap(CALLER_SECRET, { name: SWAP_NAME, wallet: WALLET })).toEqual({
+  test('a missing swap is a not-found result', async () => {
+    const adaptor = adaptorOver({ getSwap: async () => undefined })
+    expect(await adaptor.getSwap(CALLER_SECRET, { name: SWAP_NAME })).toEqual({
       ok: false,
-      error: `${SWAP_NAME} is AwaitingVaultRequest, which does not allow complete`,
+      error: `${SWAP_NAME} was not found.`,
     })
   })
 
-  test("a contract assert at build time is the vault's refusal", async () => {
-    const adaptor = adaptorOver({
-      startSwap: async () => {
-        throw new Error('failed assert: erc20AddressOut not allowed')
-      },
+  test('the prepare methods answer with the inputs the service assigned or read', async () => {
+    const adaptor = adaptorOver({})
+    expect(await adaptor.prepareStartSwap(CALLER_SECRET, { swapRequest: REQUEST })).toEqual({
+      ok: true,
+      inputs: START_INPUTS,
     })
-    expect(
-      await adaptor.startSwap(CALLER_SECRET, { swapRequest: REQUEST, wallet: WALLET }),
-    ).toEqual({ ok: false, error: 'erc20AddressOut not allowed' })
+    expect(await adaptor.prepareCompleteSwap(CALLER_SECRET, { name: SWAP_NAME })).toEqual({
+      ok: true,
+      inputs: COMPLETE_INPUTS,
+    })
   })
 
-  test('any other failure propagates', async () => {
-    const adaptor = adaptorOver({
-      startSwap: async () => {
-        throw new Error('indexer down')
+  const refusals: ReadonlyArray<[string, Error, SwapResult | undefined]> = [
+    [
+      'a state conflict',
+      new SwapStateConflict(SWAP_NAME, 'AwaitingVaultRequest', 'complete'),
+      {
+        ok: false,
+        error: `${SWAP_NAME} is AwaitingVaultRequest, which does not allow complete`,
       },
+    ],
+    [
+      'bound bytes that are not the expected vault call',
+      new SponsoredCallMismatch('startSwap'),
+      {
+        ok: false,
+        error:
+          'the bound bytes must be exactly one startSwap call to the vault, spending shielded coins alone',
+      },
+    ],
+    ['any other error', new Error('indexer down'), undefined],
+  ]
+
+  test.each(refusals)('%s from a user action', async (_name, error, expectRefusal) => {
+    const refusing = async () => {
+      throw error
+    }
+    const adaptor = adaptorOver({
+      startSwap: refusing,
+      prepareCompleteSwap: refusing,
+      completeSwap: refusing,
     })
-    await expect(
-      adaptor.startSwap(CALLER_SECRET, { swapRequest: REQUEST, wallet: WALLET }),
-    ).rejects.toThrow('indexer down')
+    const starting = adaptor.startSwap(CALLER_SECRET, {
+      swapRequest: REQUEST,
+      inIndex: 42n,
+      boundTx: BOUND_TX,
+    })
+    const preparing = adaptor.prepareCompleteSwap(CALLER_SECRET, { name: SWAP_NAME })
+    const completing = adaptor.completeSwap(CALLER_SECRET, { name: SWAP_NAME, boundTx: BOUND_TX })
+    for (const outcome of [starting, preparing, completing]) {
+      if (expectRefusal === undefined) await expect(outcome).rejects.toThrow(error.message)
+      else expect(await outcome).toEqual(expectRefusal)
+    }
   })
 })

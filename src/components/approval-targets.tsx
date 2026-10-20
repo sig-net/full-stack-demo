@@ -2,11 +2,12 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ACTIVITIES_QUERY_KEY } from '@/components/activity-section'
 import { useCaller } from '@/components/contexts/CallerContext'
+import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
@@ -28,9 +29,10 @@ import type {
   ApprovalKind,
   ApprovalTarget,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { tokenLabel } from '@/lib/tokens/token-label'
-import { startApproval } from '@/server/actions/approval-actions'
+import { prepareStartApproval, startApproval } from '@/server/actions/approval-actions'
 
 const KIND_LABELS: Record<ApprovalKind, string> = {
   router: 'Uniswap router',
@@ -40,37 +42,49 @@ const KIND_LABELS: Record<ApprovalKind, string> = {
 /**
  * Every spender the vault may grant, with the allowance the vault account holds for it, and the
  * control that starts the approval the spender still lacks. The allowance is the chain's word:
- * an approval in flight shows in the Approvals list below until the chain reflects it.
+ * an approval in flight shows in the Approvals list below until the chain reflects it. The page
+ * builds, proves and binds the approval's start call, and the server records it for the relayer
+ * to pay and submit.
  */
 export function ApprovalTargets(): ReactNode {
   const { callerSecret } = useCaller()
   const { wallet } = useMidnightWallet()
+  const config = useConfig()
   const registry = useTokenInfoRegistry()
   const { checks } = useVaultReadiness()
   const queryClient = useQueryClient()
   const targets = useApprovalTargets()
+  const [stage, setStage] = useState<CallerCallStage | null>(null)
   const approving = useMutation({
     mutationFn: async (target: ApprovalTarget) => {
       if (callerSecret === null) throw new Error('The identity secret is not set.')
       if (wallet === null) throw new Error('No Midnight wallet is connected.')
-      const result = await startApproval(callerSecret, {
+      // Loaded on first use, so a visitor who never approves never downloads the call builder and the contract.
+      const calls =
+        await import('@/lib/midnight/ethereum-erc20-vault/approval-v1/browser-approval-calls')
+      return calls.startApprovalInBrowser({
+        actions: { prepareStartApproval, startApproval },
+        builder: calls.browserApprovalCallBuilder(config, window.location.origin),
+        wallet,
+        callerSecret,
         approvalRequest:
           target.kind === 'router'
             ? { kind: 'router', erc20Address: target.erc20Address }
             : { kind: 'stata' },
-        wallet: wallet.publicKeys,
+        onStage: setStage,
       })
-      if (!result.ok) throw new Error(result.error)
-      return result.approval
     },
     onSuccess: async (approval) => {
       toast.success(
-        `Approval of ${symbolOf(approval.erc20Address)} for ${KIND_LABELS[approval.kind]} started. Sign its start call from the Approvals row once it is proved.`,
+        `Approval of ${symbolOf(approval.erc20Address)} for ${KIND_LABELS[approval.kind]} started: the backend is paying for its start call and submitting it.`,
       )
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
     },
     onError: (error) => {
       toast.error(`Starting the approval failed: ${error.message}`)
+    },
+    onSettled: () => {
+      setStage(null)
     },
   })
   const symbolOf = (erc20Address: string): string => {
@@ -96,6 +110,11 @@ export function ApprovalTargets(): ReactNode {
         </p>
       ) : (
         missing.length > 0 && <ReadinessChecklist checkIds={missing} />
+      )}
+      {approving.isPending && stage !== null && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {START_STAGE_LABELS[stage]}
+        </p>
       )}
       {targets.isError ? (
         <p role="alert" className="text-destructive">
@@ -161,4 +180,11 @@ export function ApprovalTargets(): ReactNode {
       )}
     </section>
   )
+}
+
+const START_STAGE_LABELS: Record<CallerCallStage, string> = {
+  preparing: 'Preparing the approval',
+  building: 'Building and proving the start call',
+  signing: 'Signing with your wallet',
+  recording: 'Recording the approval',
 }

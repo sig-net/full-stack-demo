@@ -78,15 +78,12 @@ export function missingReadiness(
 /** What every action the vault account signs for needs: the relayer's DUST for the flushes and sends, the vault account's ETH for the gas. */
 const VAULT_SIGNED_CHECKS = ['relayerDust', 'vaultAccountEth'] as const
 
-/** The vault-signed actions whose caller still pays the DUST of its own two calls from the sign turn. */
-const CALLER_PAID_VAULT_SIGNED_CHECKS = ['callerDust', ...VAULT_SIGNED_CHECKS] as const
-
-/** An action whose two caller calls the page builds needs no caller DUST: the relayer pays their fees. */
+/** The relayer pays every caller call's fee, so each list holds the relayer's DUST and the paying account's ETH. */
 const READINESS_CHECKS_BY_ACTION: Record<ReadinessAction, readonly ReadinessCheckId[]> = {
   deposit: ['relayerDust', 'depositAccountEth'],
   withdraw: VAULT_SIGNED_CHECKS,
-  approve: CALLER_PAID_VAULT_SIGNED_CHECKS,
-  swap: CALLER_PAID_VAULT_SIGNED_CHECKS,
+  approve: VAULT_SIGNED_CHECKS,
+  swap: VAULT_SIGNED_CHECKS,
   supply: VAULT_SIGNED_CHECKS,
   redeem: VAULT_SIGNED_CHECKS,
 }

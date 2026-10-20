@@ -23,6 +23,11 @@ const SHIELDED_SPEND_ADMITTED: Readonly<Record<SponsoredCircuit, boolean>> = {
   completeSupply: false,
   startRedeem: true,
   completeRedeem: false,
+  startSwap: true,
+  completeSwap: false,
+  startApproveRouter: false,
+  startApproveStata: false,
+  completeApprove: false,
 }
 const SPONSORED_CIRCUITS: readonly SponsoredCircuit[] = [
   'startDeposit',
@@ -33,6 +38,11 @@ const SPONSORED_CIRCUITS: readonly SponsoredCircuit[] = [
   'completeSupply',
   'startRedeem',
   'completeRedeem',
+  'startSwap',
+  'completeSwap',
+  'startApproveRouter',
+  'startApproveStata',
+  'completeApprove',
 ]
 
 const vaultCall = (circuit: string): BoundContractAction => ({
@@ -93,6 +103,17 @@ const realBytes: ReadonlyArray<{ circuit: SponsoredCircuit; contents: BoundTrans
         shieldedOutputs: 2,
       }),
     },
+    {
+      circuit: 'startSwap',
+      contents: contentsOf([vaultCall('startSwap')], {
+        shieldedInputs: 1,
+        shieldedTransients: 1,
+        shieldedOutputs: 2,
+      }),
+    },
+    // An approval start carries the call alone.
+    { circuit: 'startApproveRouter', contents: contentsOf([vaultCall('startApproveRouter')]) },
+    { circuit: 'startApproveStata', contents: contentsOf([vaultCall('startApproveStata')]) },
   ]
 
 /** Bytes every sponsored circuit refuses, whatever its policy. */

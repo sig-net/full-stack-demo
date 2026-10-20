@@ -93,6 +93,7 @@ import { DepositStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/de
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
 import { Erc4626ReaderEthersImpl } from '@/lib/ethereum/erc4626-reader-ethers-impl'
 import { Erc20ReaderEthersImpl } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader-ethers-impl'
+import { ApprovalCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-call-builder'
 import { ApprovalEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-event-consumer'
 import type { ApprovalRepository } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-repository'
 import { ApprovalRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-repository-sql-impl'
@@ -125,6 +126,7 @@ import type { SupplyStateController } from '@/lib/midnight/ethereum-erc20-vault/
 import { SupplyStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-controller-impl'
 import type { SupplyStateResolver } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-resolver'
 import { SupplyStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-resolver-impl'
+import { SwapCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-call-builder'
 import { SwapEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-event-consumer'
 import type { SwapRepository } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-repository'
 import { SwapRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-repository-sql-impl'
@@ -362,6 +364,8 @@ export interface MidnightBackend {
       readonly eventConsumer: SwapEventConsumer
       readonly service: SwapService
       readonly adaptor: SwapServiceAdaptor
+      /** The browser's side of a swap call, over the backend's own providers. */
+      readonly callBuilder: SwapCallBuilder
     }
     /** The caller's supplies: a vault coin of the stata underlying burnt for a deposit into Aave's static wrapper the vault account signs. */
     readonly supplyV1: {
@@ -393,6 +397,8 @@ export interface MidnightBackend {
       readonly eventConsumer: ApprovalEventConsumer
       readonly service: ApprovalService
       readonly adaptor: ApprovalServiceAdaptor
+      /** The browser's side of an approval call, over the backend's own providers. */
+      readonly callBuilder: ApprovalCallBuilder
     }
     /** The read model over the lifecycle tables: the database derives its rows, so it has no writer. */
     readonly activityV1: {
@@ -856,6 +862,8 @@ function createMidnightEthereumErc20Vault(
   const withdrawCallBuilder = new WithdrawCallBuilder(callProviders, proofProvider)
   const supplyCallBuilder = new SupplyCallBuilder(callProviders, proofProvider)
   const redeemCallBuilder = new RedeemCallBuilder(callProviders, proofProvider)
+  const swapCallBuilder = new SwapCallBuilder(callProviders, proofProvider)
+  const approvalCallBuilder = new ApprovalCallBuilder(callProviders, proofProvider)
   const sponsoredCallGuard = new SponsoredCallGuard(vaultAddress, inspectBoundTransaction)
   const ledger = new VaultLedgerIndexerImpl(publicDataProvider, vaultAddress)
   const readers = signetReaders({
@@ -927,10 +935,9 @@ function createMidnightEthereumErc20Vault(
       config,
       transactionV1,
       vaultRequestV1,
-      {
-        circuits,
-        ledger,
-      },
+      { ledger },
+      swapCallBuilder,
+      sponsoredCallGuard,
       logger,
     ),
     supplyV1: createMidnightEthereumErc20VaultSupplyV1(
@@ -963,7 +970,9 @@ function createMidnightEthereumErc20Vault(
       config,
       transactionV1,
       vaultRequestV1,
-      { circuits, ledger },
+      { ledger },
+      approvalCallBuilder,
+      sponsoredCallGuard,
       logger,
     ),
     activityV1: createMidnightEthereumErc20VaultActivityV1(db, logger),
@@ -1175,7 +1184,9 @@ function createMidnightEthereumErc20VaultSwapV1(
   config: ServerConfig,
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
-  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
+  callBuilder: SwapCallBuilder,
+  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['swapV1'] {
   const repository = new SwapRepositorySQLImpl(db.database)
@@ -1199,11 +1210,11 @@ function createMidnightEthereumErc20VaultSwapV1(
     repository,
     stateController,
     vaultRequestV1.repository,
-    vault.circuits,
     new UniswapQuoterEthersImpl(ethereum.provider, config.client.ethereum.uniswapQuoterAddress),
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
+    guard,
   )
   return {
     repository,
@@ -1215,6 +1226,7 @@ function createMidnightEthereumErc20VaultSwapV1(
     ),
     service,
     adaptor: new SwapServiceAdaptor(service, logger.child({ component: 'SwapServiceAdaptor' })),
+    callBuilder,
   }
 }
 
@@ -1225,7 +1237,9 @@ function createMidnightEthereumErc20VaultApprovalV1(
   config: ServerConfig,
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
-  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
+  callBuilder: ApprovalCallBuilder,
+  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['approvalV1'] {
   const repository = new ApprovalRepositorySQLImpl(db.database)
@@ -1249,12 +1263,12 @@ function createMidnightEthereumErc20VaultApprovalV1(
     repository,
     stateController,
     vaultRequestV1.repository,
-    vault.circuits,
     vault.ledger,
     new Erc20ReaderEthersImpl(ethereum.provider),
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
+    guard,
   )
   return {
     repository,
@@ -1269,6 +1283,7 @@ function createMidnightEthereumErc20VaultApprovalV1(
       service,
       logger.child({ component: 'ApprovalServiceAdaptor' }),
     ),
+    callBuilder,
   }
 }
 

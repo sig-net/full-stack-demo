@@ -2,7 +2,7 @@ import 'server-only'
 
 import { randomUUID } from 'node:crypto'
 
-import { bytesToHex, hexToBytes } from '@sig-net/midnight'
+import { bytesToHex } from '@sig-net/midnight'
 import { newInputIndex } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
@@ -11,7 +11,10 @@ import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import {
   type Approval,
+  type ApprovalCompleteInputs,
   approvalName,
+  type ApprovalRequest,
+  type ApprovalStartInputs,
   type ApprovalTarget,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
 import type { ApprovalRepository } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-repository'
@@ -21,16 +24,19 @@ import type {
   GetApprovalArgs,
   ListApprovalsArgs,
   ListApprovalTargetsArgs,
+  PrepareCompleteApprovalArgs,
+  PrepareStartApprovalArgs,
   StartApprovalArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service'
 import {
   ApprovalStateConflict,
   type ApprovalStateController,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-controller'
+import { APPROVAL_START_CIRCUIT_BY_KIND } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-controller-impl'
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
+import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
-import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import type {
   SpenderLedger,
   SpenderLedgerState,
@@ -38,7 +44,6 @@ import type {
 import {
   type AttestedRequestFields,
   attestedRequestFields,
-  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 
@@ -46,33 +51,33 @@ export class ApprovalServiceImpl implements ApprovalService {
   private readonly approvalRepository: ApprovalRepository
   private readonly approvalStateController: ApprovalStateController
   private readonly vaultRequestRepository: VaultRequestRepository
-  private readonly circuits: VaultCircuits
   private readonly ledger: SpenderLedger
   private readonly erc20Reader: Erc20Reader
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
+  private readonly guard: SponsoredCallGuard
 
   constructor(
     approvalRepository: ApprovalRepository,
     approvalStateController: ApprovalStateController,
     vaultRequestRepository: VaultRequestRepository,
-    circuits: VaultCircuits,
     ledger: SpenderLedger,
     erc20Reader: Erc20Reader,
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
+    guard: SponsoredCallGuard,
   ) {
     this.approvalRepository = approvalRepository
     this.approvalStateController = approvalStateController
     this.vaultRequestRepository = vaultRequestRepository
-    this.circuits = circuits
     this.ledger = ledger
     this.erc20Reader = erc20Reader
     this.unitOfWork = unitOfWork
     this.signet = signet
     this.vault = vault
+    this.guard = guard
   }
 
   /** The router on every allowed token, then the wrapper on its underlying, each with the chain's allowance. */
@@ -106,60 +111,48 @@ export class ApprovalServiceImpl implements ApprovalService {
     )
   }
 
+  async prepareStartApproval(
+    _caller: Caller,
+    _args: PrepareStartApprovalArgs,
+  ): Promise<ApprovalStartInputs> {
+    return { inIndex: newInputIndex() }
+  }
+
   async startApproval(
     caller: Caller,
-    { approvalRequest, wallet }: StartApprovalArgs,
+    { approvalRequest, inIndex, boundTx }: StartApprovalArgs,
   ): Promise<Approval> {
-    const state = await this.ledger.state()
-    const inIndex = newInputIndex()
-    const callerArgs = { secretKey: caller.secretKey, wallet, inIndex }
-    const target =
-      approvalRequest.kind === 'router'
-        ? {
-            kind: approvalRequest.kind,
-            erc20Address: approvalRequest.erc20Address,
-            spender: evmAddress(state.uniswapRouter),
-            call: {
-              unprovenTx: await this.circuits.startApproveRouter({
-                ...callerArgs,
-                erc20Address: approvalRequest.erc20Address,
-              }),
-            },
-          }
-        : {
-            kind: approvalRequest.kind,
-            erc20Address: evmAddress(state.stataUnderlying),
-            spender: evmAddress(state.stataToken),
-            call: { unprovenTx: await this.circuits.startApproveStata(callerArgs) },
-          }
+    this.guard.assertSponsoredCall(boundTx, APPROVAL_START_CIRCUIT_BY_KIND[approvalRequest.kind])
+    const grant = await this.grantOf(approvalRequest)
     return this.unitOfWork.runInTransaction(() =>
       this.approvalStateController.startApproval({
         name: approvalName(caller.name, randomUUID()),
-        ...target,
+        ...grant,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
+        call: { boundTx },
       }),
     )
   }
 
-  /** The state table is asked before the slow build, and the controller asks it again under the lock. */
+  async prepareCompleteApproval(
+    caller: Caller,
+    { name }: PrepareCompleteApprovalArgs,
+  ): Promise<ApprovalCompleteInputs> {
+    await this.assertCompletable(caller, name)
+    const { requestId, attestationOutputKind, attestationOutput } =
+      await this.attestedRequestOf(name)
+    return { requestId, attestationOutputKind, attestationOutput }
+  }
+
   async completeApproval(
     caller: Caller,
-    { name, wallet }: CompleteApprovalArgs,
+    { name, boundTx }: CompleteApprovalArgs,
   ): Promise<Approval> {
-    const approval = await this.ownApproval(caller, name)
-    if (nextState(approval.state, 'complete') === undefined) {
-      throw new ApprovalStateConflict(name, approval.state, 'complete')
-    }
-    const request = await this.attestedRequestOf(name)
-    const unprovenTx = await this.circuits.completeApprove({
-      secretKey: caller.secretKey,
-      wallet,
-      requestId: hexToBytes(request.requestId),
-      serializedOutput: completionOutput(request, 1),
-    })
+    this.guard.assertSponsoredCall(boundTx, 'completeApprove')
+    await this.assertCompletable(caller, name)
     return this.unitOfWork.runInTransaction(() =>
-      this.approvalStateController.completeApproval({ name, call: { unprovenTx } }),
+      this.approvalStateController.completeApproval({ name, call: { boundTx } }),
     )
   }
 
@@ -173,6 +166,32 @@ export class ApprovalServiceImpl implements ApprovalService {
       criteria: [{ type: 'prefix-text', field: 'name', prefix: `${caller.name}/` }],
       order: { field: 'createTime', direction: 'desc' },
     })
+  }
+
+  /** The token and the spender the kind's start circuit grants, as the vault ledger pins them. */
+  private async grantOf(
+    approvalRequest: ApprovalRequest,
+  ): Promise<Pick<Approval, 'kind' | 'erc20Address' | 'spender'>> {
+    const state = await this.ledger.state()
+    return approvalRequest.kind === 'router'
+      ? {
+          kind: approvalRequest.kind,
+          erc20Address: approvalRequest.erc20Address,
+          spender: evmAddress(state.uniswapRouter),
+        }
+      : {
+          kind: approvalRequest.kind,
+          erc20Address: evmAddress(state.stataUnderlying),
+          spender: evmAddress(state.stataToken),
+        }
+  }
+
+  /** The state table is asked here, outside the lock, and the controller asks it again under it. */
+  private async assertCompletable(caller: Caller, name: string): Promise<void> {
+    const approval = await this.ownApproval(caller, name)
+    if (nextState(approval.state, 'complete') === undefined) {
+      throw new ApprovalStateConflict(name, approval.state, 'complete')
+    }
   }
 
   private async ownApproval(caller: Caller, name: string): Promise<Approval> {

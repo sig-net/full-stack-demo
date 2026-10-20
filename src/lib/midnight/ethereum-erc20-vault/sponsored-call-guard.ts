@@ -69,6 +69,12 @@ export const SPONSORED_CALL_POLICY_BY_CIRCUIT = {
   /** Surrenders a fresh coin of the wrapper's vault token, which the caller's wallet funds from its own coins. */
   startRedeem: { shieldedSpend: true },
   completeRedeem: { shieldedSpend: false },
+  /** Surrenders a fresh coin of the sold token worth `amountInMaximum`, which the caller's wallet funds from its own coins. */
+  startSwap: { shieldedSpend: true },
+  completeSwap: { shieldedSpend: false },
+  startApproveRouter: { shieldedSpend: false },
+  startApproveStata: { shieldedSpend: false },
+  completeApprove: { shieldedSpend: false },
 } as const satisfies Partial<Record<VaultCircuitId, SponsoredCallPolicy>>
 
 export type SponsoredCircuit = keyof typeof SPONSORED_CALL_POLICY_BY_CIRCUIT

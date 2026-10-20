@@ -108,12 +108,30 @@ describe('missingReadiness', () => {
       checks: checks({ callerDust: SHORT }),
       expected: [],
     },
-    ...(['approve', 'swap'] as const).map((action) => ({
-      name: `${action} is vault signed and its caller pays its own calls`,
-      action,
-      checks: checks({ callerDust: UNREAD, relayerDust: SHORT, vaultAccountEth: UNREAD }),
-      expected: ['callerDust', 'relayerDust', 'vaultAccountEth'] as ReadinessCheckId[],
-    })),
+    {
+      name: 'a swap needs the relayer and the vault account and ignores the deposit account',
+      action: 'swap',
+      checks: checks({ relayerDust: SHORT, depositAccountEth: SHORT, vaultAccountEth: UNREAD }),
+      expected: ['relayerDust', 'vaultAccountEth'],
+    },
+    {
+      name: 'an approval needs the relayer and the vault account and ignores the deposit account',
+      action: 'approve',
+      checks: checks({ relayerDust: SHORT, depositAccountEth: SHORT, vaultAccountEth: UNREAD }),
+      expected: ['relayerDust', 'vaultAccountEth'],
+    },
+    {
+      name: 'a swap ignores the caller DUST, since the relayer pays its fees',
+      action: 'swap',
+      checks: checks({ callerDust: SHORT }),
+      expected: [],
+    },
+    {
+      name: 'an approval ignores the caller DUST, since the relayer pays its fees',
+      action: 'approve',
+      checks: checks({ callerDust: SHORT }),
+      expected: [],
+    },
   ]
 
   test.each(cases)('$name', ({ action, checks: state, expected }) => {

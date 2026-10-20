@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 
 import { ACTIVITIES_QUERY_KEY } from '@/components/activity-section'
 import { useCaller } from '@/components/contexts/CallerContext'
+import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
@@ -23,12 +24,13 @@ import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import { supportedBalancesOf } from '@/lib/balances/supported-balances'
 import { routerAllowanceOf } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { SWAP_MAX_SLIPPAGE_BPS } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-quote'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
 import type { TokenInfo } from '@/lib/tokens/token-info'
-import { quoteSwap, startSwap } from '@/server/actions/swap-actions'
+import { prepareStartSwap, quoteSwap, startSwap } from '@/server/actions/swap-actions'
 
 const AMOUNT_INPUT = /^\d*\.?\d*$/
 
@@ -55,11 +57,14 @@ interface SwapPanelProps {
 /**
  * Sells vault tokens the wallet holds for another token the vault admits, at a live quote. The
  * From amount is what the swap may spend at most and is surrendered whole, the To amount is the
- * least the trade accepts, and whatever the trade does not spend comes back as change.
+ * least the trade accepts, and whatever the trade does not spend comes back as change. The page
+ * builds, proves and binds a swap's start call with the wallet's coin of the sold token, and the
+ * server records it for the relayer to pay and submit.
  */
 export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   const { callerSecret, callerName } = useCaller()
   const { wallet } = useMidnightWallet()
+  const config = useConfig()
   const registry = useTokenInfoRegistry()
   const { checks } = useVaultReadiness()
   const balances = useMidnightBalances()
@@ -74,6 +79,7 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   })
   const [toErc20Address, setToErc20Address] = useState<string | null>(null)
   const [slippageText, setSlippageText] = useState(DEFAULT_SLIPPAGE_PERCENT)
+  const [stage, setStage] = useState<CallerCallStage | null>(null)
   const slippage = slippageBpsOf(slippageText)
   const slippageBps = slippage.value
   const fromErc20Address =
@@ -132,7 +138,13 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
       if (callerSecret === null) throw new Error('The identity secret is not set.')
       if (wallet === null) throw new Error('No Midnight wallet is connected.')
       if (quote.data === undefined || toToken === null) throw new Error('No quote yet.')
-      const result = await startSwap(callerSecret, {
+      // Loaded on first use, so a visitor who never swaps never downloads the call builder and the contract.
+      const calls = await import('@/lib/midnight/ethereum-erc20-vault/swap-v1/browser-swap-calls')
+      return calls.startSwapInBrowser({
+        actions: { prepareStartSwap, startSwap },
+        builder: calls.browserSwapCallBuilder(config, window.location.origin),
+        wallet,
+        callerSecret,
         swapRequest: {
           erc20AddressIn: quote.data.erc20AddressIn,
           erc20AddressOut: quote.data.erc20AddressOut,
@@ -140,20 +152,21 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
           amountOut: quote.data.amountOutMinimum,
           amountInMaximum: quote.data.amountIn,
         },
-        wallet: wallet.publicKeys,
+        onStage: setStage,
       })
-      if (!result.ok) throw new Error(result.error)
-      return result.swap
     },
     onSuccess: async () => {
       toast.success(
-        `Swap of ${fromAmount} ${fromToken?.symbol ?? ''} started. Sign its start call from the Activity row once it is proved.`,
+        `Swap of ${fromAmount} ${fromToken?.symbol ?? ''} started: the backend is paying for its start call and submitting it.`,
       )
       setFromAmount('')
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
     },
     onError: (error) => {
       toast.error(`Starting the swap failed: ${error.message}`)
+    },
+    onSettled: () => {
+      setStage(null)
     },
   })
 
@@ -252,6 +265,11 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
             <ReadinessChecklist checkIds={missing} />
           </div>
         )}
+        {busy && stage !== null && (
+          <p role="status" className="self-stretch text-sm text-muted-foreground">
+            {START_STAGE_LABELS[stage]}
+          </p>
+        )}
         <Button
           variant="pink"
           size="xl"
@@ -324,6 +342,13 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
       </div>
     </section>
   )
+}
+
+const START_STAGE_LABELS: Record<CallerCallStage, string> = {
+  preparing: 'Preparing the swap',
+  building: 'Building and proving the start call',
+  signing: 'Signing with your wallet',
+  recording: 'Recording the swap',
 }
 
 /** The typed amount in base units, or why it cannot be priced yet. */

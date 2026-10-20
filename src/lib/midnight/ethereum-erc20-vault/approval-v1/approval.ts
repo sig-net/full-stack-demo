@@ -12,6 +12,7 @@ import {
   callerOperationStateSchema,
   isTerminalCallerOperationState,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
+import type { CompletionInputs } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import { evmAddressSchema, HEX_32_BYTES, uint64Schema, UUID } from '@/lib/value-schemas'
 
 /** The collection segment of an approval's resource name. */
@@ -61,7 +62,8 @@ export type ApprovalOutcome = z.infer<typeof approvalOutcomeSchema>
 /**
  * The approval resource: the vault account granting one of its contract-fixed spenders an
  * unlimited allowance on one ERC20, which only the vault's deployer may start and complete.
- * The server reads the spender from the vault ledger before the start circuit is built.
+ * The server assigns the slot before the browser builds the kind's start circuit call, and reads
+ * the spender (and the stata underlying) from the vault ledger when it commits it.
  */
 export const approvalSchema = z.object({
   name: approvalNameSchema,
@@ -94,6 +96,12 @@ export const approvalRequestSchema = z.discriminatedUnion('kind', [
 ])
 
 export type ApprovalRequest = z.infer<typeof approvalRequestSchema>
+
+/** What the server assigns to a start call, afresh on every `prepareStartApproval`: the slot, the one input of either start circuit the request does not carry. */
+export type ApprovalStartInputs = Pick<Approval, 'inIndex'>
+
+/** What the complete circuit takes from the approval's attested request. */
+export type ApprovalCompleteInputs = CompletionInputs
 
 /** One spender the vault may grant, with what the vault account has allowed it so far. */
 export const approvalTargetSchema = z.object({

@@ -58,7 +58,7 @@ export class DepositNonceConflict extends Error {
 const walletKeySchema = hexBytesSchema.pipe(z.string().length(64, 'expected a 32-byte key in hex'))
 
 /** The browser wallet's keys: the call builder reads them for every circuit, and the complete circuit mints to the coin key. */
-export const walletPublicKeysSchema = z.object({
+const walletPublicKeysSchema = z.object({
   coinPublicKey: walletKeySchema,
   encryptionPublicKey: walletKeySchema,
 })

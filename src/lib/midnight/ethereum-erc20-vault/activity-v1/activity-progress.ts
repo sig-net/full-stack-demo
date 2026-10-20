@@ -49,6 +49,8 @@ export const IN_PAGE_TYPES = [
   'Withdraw',
   'Supply',
   'Redeem',
+  'Swap',
+  'Approval',
 ] as const satisfies readonly ActivityType[]
 
 export type InPageType = (typeof IN_PAGE_TYPES)[number]
