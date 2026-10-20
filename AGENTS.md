@@ -161,8 +161,8 @@ Keep setup instructions and application reference material in README.md and docs
   touches shared contract state is never a step of one request's lifecycle.
 - A transaction row names its `signer` (`caller` or `relayer`). A caller row is committed bound
   and enters `AwaitingFee`, the relayer's fee to pay. `AwaitingWallet` is the relayer's to-do,
-  which the resolver takes through the `RelayerWallet` port, and the resolver leaves a caller
-  row in `AwaitingWallet` to expire at its TTL.
+  which the resolver takes through the `RelayerWallet` port, and the state machine refuses a
+  caller row in `AwaitingProof` or `AwaitingWallet` and a relayer row in `AwaitingFee`.
 - The sweep (`src/lib/sweep.ts`, every 30 seconds from `start()`) calls every resolver's
   `resolvePending()` in dependency order (Midnight transactions, Ethereum transactions, vault
   requests, deposits) and then fires `flush()` without awaiting it. Every resolver has a
@@ -311,7 +311,7 @@ Keep setup instructions and application reference material in README.md and docs
   `integration-tests/` folder, run with `yarn test:integration` against the local services. A
   `*.test.ts` under `src` that opens a socket is in the wrong folder.
 - `integration-tests/ethereum-erc20-vault-deposit.test.ts` is the end-to-end deposit. It runs
-  inside `yarn test:integration` (45 to 55 minutes for the suite of 20 files, since each of the six
+  inside `yarn test:integration` (45 to 55 minutes for the suite of 21 files, since each of the six
   operation round trips takes four to fifteen), needs the whole local stack, and needs no dev server running
   (`ps aux | grep "[n]ext dev"` finds nothing), since a dev server joins the same Kafka consumer
   group. Run the suite whenever a change touches a state machine, a state controller, a
@@ -385,6 +385,25 @@ Keep setup instructions and application reference material in README.md and docs
   supporting schemas (its name format, its collection constant) above the resource schema for
   that reason; generic value schemas go to `src/lib/value-schemas.ts` instead of a file of their
   own.
+
+## NEVER BREAK: Nothing is backwards compatible unless the user asks for it explicitly.
+
+- This codebase has no deployed data, no released API and no consumer on an older version.
+  NEVER write, keep or suggest a backwards-compatibility measure of any kind unless the user has
+  asked for that specific measure in so many words: no accommodation of rows, bytes, events,
+  configuration or callers written by an earlier version of the code, no tolerated legacy shape,
+  no fallback branch, no deprecation period, no migration that preserves data, no comment or
+  document that explains what an older version did.
+- A shape the code can no longer produce is an invariant to refuse (a state machine assertion, a
+  schema that rejects it), never a case a resolver, a parser or a UI tolerates. When a change
+  makes an existing row impossible, the row is gone with the database, not carried.
+- The database starts from scratch on every schema change. `drizzle` holds exactly one migration,
+  `0000_schema`, which `yarn db:generate` regenerates from the whole schema (appending the outbox
+  trigger from `src/lib/db/outbox-notify.sql`, which drizzle cannot derive), and `yarn stack:restart`
+  resets the local database to it. Never add a migration on top of it, never edit it by hand.
+- "The user asked" means an explicit instruction in this conversation naming the thing to keep
+  compatible. A reviewer's suggestion, a subagent's caution, a rule inferred from another
+  codebase or from general practice is not that instruction: raise it as a question instead.
 
 ## NEVER BREAK: Skills are written in agent-agnostic prose.
 

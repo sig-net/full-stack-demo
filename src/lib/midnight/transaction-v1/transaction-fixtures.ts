@@ -8,8 +8,8 @@ export function transactionFixture(
     name: TRANSACTION_NAME,
     parent: DEPOSIT_NAME,
     state: 'AwaitingProof',
-    circuit: 'completeDeposit',
-    signer: 'caller',
+    circuit: 'sendDeposit',
+    signer: 'relayer',
     unprovenTx: 'unproven',
     unboundTx: null,
     boundTx: null,
@@ -31,8 +31,8 @@ export const TRANSACTION_NAME = `${CALLER_NAME}/midnight-transactions/0d8c7d10-6
 export const BLOCK_HEIGHT = 8562
 
 /**
- * The row each state leaves behind, consistent with the state machine's field table. The states
- * from `AwaitingSubmission` on hold the backend-proved shape, with `unboundTx` set.
+ * The row each state leaves behind, consistent with the state machine's field table: the relayer's
+ * unproven shape, with `unboundTx` set from `AwaitingWallet` on.
  */
 export const TRANSACTION_IN_STATE: Record<MidnightTransaction['state'], MidnightTransaction> = {
   AwaitingProof: transactionFixture(),
@@ -42,6 +42,8 @@ export const TRANSACTION_IN_STATE: Record<MidnightTransaction['state'], Midnight
     unboundTx: 'unbound',
   }),
   AwaitingFee: transactionFixture({
+    signer: 'caller',
+    circuit: 'completeDeposit',
     state: 'AwaitingFee',
     unprovenTx: null,
     boundTx: 'bound',
@@ -78,6 +80,8 @@ export const TRANSACTION_IN_STATE: Record<MidnightTransaction['state'], Midnight
 /** `AwaitingSubmission` reached from `AwaitingFee`: bound by the caller's wallet, with the relayer's fee paid. */
 export const CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION: MidnightTransaction = transactionFixture(
   {
+    signer: 'caller',
+    circuit: 'completeDeposit',
     state: 'AwaitingSubmission',
     unprovenTx: null,
     boundTx: 'bound',

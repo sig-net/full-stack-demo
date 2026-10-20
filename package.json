@@ -17,7 +17,7 @@
     "diagram-library": "node scripts/diagram-library.ts",
     "diagram-library:check": "node scripts/diagram-library.ts --check",
     "check": "yarn typecheck && yarn lint && yarn format:check && yarn boundaries && yarn diagram-library:check && yarn test",
-    "db:generate": "drizzle-kit generate",
+    "db:generate": "rm -rf drizzle && drizzle-kit generate --name schema && cat src/lib/db/outbox-notify.sql >> drizzle/0000_schema.sql",
     "db:migrate": "drizzle-kit migrate",
     "stack:up": "docker compose --env-file .env.local up -d --wait",
     "stack:down": "docker compose --env-file .env.local down --volumes",

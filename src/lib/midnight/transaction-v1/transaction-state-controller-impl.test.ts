@@ -87,10 +87,10 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
   const storedRow = (
     stored: MidnightTransaction,
     state: MidnightTransaction['state'],
-    bytes: Pick<MidnightTransaction, 'unprovenTx' | 'boundTx'>,
+    decided: Pick<MidnightTransaction, 'signer' | 'unprovenTx' | 'boundTx'>,
   ): MidnightTransaction => ({
     ...committed,
-    ...bytes,
+    ...decided,
     state,
     unboundTx: null,
     finalizedTx: null,
@@ -111,11 +111,15 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
   }> = [
     {
       name: 'unproven bytes - stored in AwaitingProof and the proof event published',
-      args: { ...committed, unprovenTx: 'unproven' },
+      args: { ...committed, signer: 'relayer', unprovenTx: 'unproven' },
       check: async (result, calls, before) => {
         const stored = await result
         expect(stored).toEqual(
-          storedRow(stored, 'AwaitingProof', { unprovenTx: 'unproven', boundTx: null }),
+          storedRow(stored, 'AwaitingProof', {
+            signer: 'relayer',
+            unprovenTx: 'unproven',
+            boundTx: null,
+          }),
         )
         expect(stored.createTime.getTime()).toBeGreaterThanOrEqual(before)
         expect(calls.created).toEqual([stored])
@@ -140,7 +144,11 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
       check: async (result, calls, before) => {
         const stored = await result
         expect(stored).toEqual(
-          storedRow(stored, 'AwaitingFee', { unprovenTx: null, boundTx: 'bound' }),
+          storedRow(stored, 'AwaitingFee', {
+            signer: 'caller',
+            unprovenTx: null,
+            boundTx: 'bound',
+          }),
         )
         expect(stored.createTime.getTime()).toBeGreaterThanOrEqual(before)
         expect(calls.created).toEqual([stored])
@@ -160,8 +168,17 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
       },
     },
     {
-      name: 'failure - the repository refuses the row, so nothing is published or logged',
+      name: 'refused - a caller call with unproven bytes is inconsistent, so nothing is stored',
       args: { ...committed, unprovenTx: 'unproven' },
+      check: async (result, calls) => {
+        await expect(result).rejects.toThrow('must be signed by the relayer')
+        expect(calls.created).toEqual([])
+        expect(calls.published).toHaveLength(0)
+      },
+    },
+    {
+      name: 'failure - the repository refuses the row, so nothing is published or logged',
+      args: { ...committed, signer: 'relayer', unprovenTx: 'unproven' },
       create: async () => {
         throw new Error(`${TRANSACTION_NAME} already exists`)
       },

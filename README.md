@@ -53,8 +53,8 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `yarn diagram-library`       | Regenerate the per-package diagram library under `docs/diagram-library/` from the code and render its PNGs (see `docs/diagramming.md`). |
 | `yarn diagram-library:check` | Fail when a file under `docs/diagram-library/` differs from a fresh generation, is missing or is not generated from the code.           |
 | `yarn check`                 | Run the type check, the linter, the format check, the boundary check, the diagram library check and the unit tests in sequence.         |
-| `yarn db:generate`           | Write a SQL migration for the changes made to the schema.                                                                               |
-| `yarn db:migrate`            | Apply the migrations that the database has not yet run.                                                                                 |
+| `yarn db:generate`           | Regenerate the one SQL migration from the schema and the outbox trigger.                                                                |
+| `yarn db:migrate`            | Apply the migration to an empty database.                                                                                               |
 | `yarn stack:up`              | Start the compose services (Postgres, Kafka and the explorers) with `.env.local` and wait until they are healthy.                       |
 | `yarn stack:down`            | Stop the compose services and delete their volumes, so the database and the broker start empty next time.                               |
 | `yarn stack:restart`         | `stack:down`, `stack:up`, then `db:migrate`: a fresh database with the schema applied and an empty history.                             |
@@ -290,19 +290,21 @@ implementation extends `SQLRepository` in `src/lib/repository/repository-sql-imp
 table, the resource schema and two row mappers, so repositories differ only in the table they
 name. The table's column properties carry the resource's field names, which is how a criterion
 finds its column. Every row read is parsed with the resource schema, since a stored row is as
-untrusted as wire input: it may have been written by an older version of the code.
+untrusted as wire input.
 
-To change the schema, edit `src/lib/db/schema.ts`, then write the migration and commit the files
-it adds under `drizzle`:
+Nothing in this codebase is backwards compatible, the database included: `drizzle` holds one
+migration, `0000_schema`, generated from the whole schema with the outbox's insert trigger from
+`src/lib/db/outbox-notify.sql` appended, since drizzle derives no trigger from the schema. To
+change the schema, edit `src/lib/db/schema.ts`, generate the migration again and commit it:
 
 ```bash
-yarn db:generate --name describe_the_change
+yarn db:generate
 ```
 
-Apply the migrations the database has not yet run:
+Then reset the local database to it:
 
 ```bash
-yarn db:migrate
+yarn stack:restart
 ```
 
 ## Kafka
@@ -378,7 +380,8 @@ relay would compete with the test's.
 | `repository-sql.test.ts`                            | Postgres                                                                  | `SQLRepository`: the round trip, a malformed row refused on read, a skip-locked search.                                                                                                                                                                                                                                                                                                                                  |
 | `backend-lifecycle.test.ts`                         | Postgres, Kafka, the Midnight stack                                       | `start()` runs once, syncs the relayer wallet and sweeps, and `stop()` ends every loop.                                                                                                                                                                                                                                                                                                                                  |
 | `midnight-transaction-ledger.test.ts`               | the indexer, the proof server                                             | `MidnightTransactionLedgerImpl`: an unknown id is pending, an empty transaction proves.                                                                                                                                                                                                                                                                                                                                  |
-| `midnight-transaction-resolve.test.ts`              | Postgres, the proof server, the Midnight stack (the relayer wallet syncs) | An unproven commit is proven into `AwaitingWallet`, and a bound commit has its fee paid by the relayer wallet into `AwaitingSubmission`, each with its row and outbox trail.                                                                                                                                                                                                                                             |
+| `midnight-transaction-resolve.test.ts`              | Postgres, the proof server, the Midnight stack (the relayer wallet syncs) | An unproven relayer commit is proven and finalised by the relayer wallet into `AwaitingSubmission`, with its row and outbox trail.                                                                                                                                                                                                                                                                                       |
+| `midnight-transaction-fee.test.ts`                  | Postgres, the Midnight stack (the relayer wallet syncs)                   | A bound caller commit has its fee paid by the relayer wallet into `AwaitingSubmission`, with its row and outbox trail.                                                                                                                                                                                                                                                                                                   |
 | `ethereum-transaction-broadcast.test.ts`            | Postgres, the anvil fork                                                  | A signed transaction is broadcast and included, and a second one at a consumed nonce ends `NonceConsumed`.                                                                                                                                                                                                                                                                                                               |
 | `ethereum-erc20-vault-request.test.ts`              | Postgres, the indexer                                                     | Vault request storage, the one-live-request index, a starter's conflict mapping, the readers and the resolver's reads.                                                                                                                                                                                                                                                                                                   |
 | `ethereum-erc20-vault-flush.test.ts`                | the Midnight stack (the relayer wallet syncs)                             | The first flush starts the relayer wallet and submits nothing when nothing is queued.                                                                                                                                                                                                                                                                                                                                    |
@@ -395,7 +398,7 @@ relay would compete with the test's.
 | `ethereum-erc20-vault-deposit.test.ts`              | the whole stack                                                           | The end-to-end deposit below.                                                                                                                                                                                                                                                                                                                                                                                            |
 
 The whole suite takes 45 to 55 minutes (measured at 45.5, 46.9, 47.6, 53.0, 50.1 and 50.2 minutes over
-its 20 files, each of the six operation round trips taking four to fifteen), of which the end-to-end
+its 21 files, each of the six operation round trips taking four to fifteen), of which the end-to-end
 deposit is four to four and a half:
 
 ```bash
@@ -618,9 +621,8 @@ signs it, `relayer` when the backend's own wallet does, which is the case for ev
 permissionless vault circuit (flushes, sends, attestation queues). `AwaitingWallet` is the
 relayer's to-do: the resolver finalises a relayer transaction through the `RelayerWallet` port
 and moves it to `AwaitingSubmission`. A caller transaction is committed bound and enters
-`AwaitingFee`, so the resolver leaves a caller transaction it finds in `AwaitingWallet` alone.
-Such a row, committed by a release in which the backend built the caller's calls, has no
-submitter and expires at its TTL.
+`AwaitingFee`, and the state machine refuses a caller row in `AwaitingProof` or `AwaitingWallet`
+and a relayer row in `AwaitingFee`.
 
 The browser's side of a transaction is `TransactionService` (`transaction-service.ts`):
 `getTransaction(caller, { name })` reads a transaction the caller owns. The server action in
@@ -1483,7 +1485,7 @@ popover links to it.
 ## Activity view
 
 `midnight_ethereum_erc20_vault_activity_v1` is a Postgres view over the lifecycle tables, one row
-per vault activity, defined in `src/lib/db/schema.ts` (migrations 0013 to 0022). It has one
+per vault activity, defined in `src/lib/db/schema.ts`. It has one
 branch per caller operation, deposits, withdrawals, swaps, supplies, redeems and approvals,
 joined with
 `UNION ALL`. Each

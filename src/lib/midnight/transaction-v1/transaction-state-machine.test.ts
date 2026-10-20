@@ -102,6 +102,17 @@ describe('assertConsistent', () => {
   })
 
   const violations: ReadonlyArray<[string, Partial<MidnightTransaction>, string]> = [
+    ['AwaitingProof signed by the caller', { signer: 'caller' }, 'must be signed by the relayer'],
+    [
+      'AwaitingWallet signed by the caller',
+      { ...TRANSACTION_IN_STATE.AwaitingWallet, signer: 'caller' },
+      'must be signed by the relayer',
+    ],
+    [
+      'AwaitingFee signed by the relayer',
+      { ...TRANSACTION_IN_STATE.AwaitingFee, signer: 'relayer' },
+      'must be signed by the caller',
+    ],
     ['AwaitingProof without the unproven bytes', { unprovenTx: null }, 'must have unprovenTx set'],
     ['AwaitingProof without the TTL', { expireTime: null }, 'must have expireTime set'],
     ['AwaitingProof with proven bytes', { unboundTx: 'x' }, 'must have unboundTx unset'],

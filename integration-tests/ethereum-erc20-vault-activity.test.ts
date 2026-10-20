@@ -136,7 +136,7 @@ describe('The activity view over Postgres', () => {
     parent,
     state: 'AwaitingProof',
     circuit,
-    signer: 'caller',
+    signer: 'relayer',
     unprovenTx: 'aa',
     unboundTx: null,
     boundTx: null,

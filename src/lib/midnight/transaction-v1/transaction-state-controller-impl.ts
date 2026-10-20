@@ -43,7 +43,7 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
 
   async commitTransaction(args: CommitTransactionArgs): Promise<MidnightTransaction> {
     const now = new Date()
-    const stored = await this.transactionRepository.create({
+    const row: MidnightTransaction = {
       ...args,
       state: entryState(args),
       unprovenTx: 'unprovenTx' in args ? args.unprovenTx : null,
@@ -57,7 +57,9 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
       error: null,
       createTime: now,
       updateTime: now,
-    })
+    }
+    assertConsistent(row)
+    const stored = await this.transactionRepository.create(row)
     await this.eventPublisher.publishEvent(
       MIDNIGHT_TRANSACTION_EVENT_BY_STATE[stored.state].create(stored.name, {
         name: stored.name,

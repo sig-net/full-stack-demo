@@ -99,14 +99,8 @@ const cases: Case[] = [
     ],
   },
   {
-    name: 'AwaitingWallet - a caller transaction is left for its TTL to expire',
-    stored: TRANSACTION_IN_STATE.AwaitingWallet,
-    ledger: {},
-    expectTransitions: [],
-  },
-  {
     name: 'AwaitingWallet - a relayer transaction is finalised by the relayer wallet and submitted',
-    stored: { ...TRANSACTION_IN_STATE.AwaitingWallet, signer: 'relayer' },
+    stored: TRANSACTION_IN_STATE.AwaitingWallet,
     ledger: {},
     relayerWallet: { finalize: async (unboundTx) => `finalized(${unboundTx})` },
     expectTransitions: [

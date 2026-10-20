@@ -1,3 +1,4 @@
+--> statement-breakpoint
 -- Wakes the outbox entry processor as soon as an entry's transaction commits: pg_notify inside a
 -- transaction is delivered on commit, never before.
 CREATE FUNCTION event_outbox_notify() RETURNS trigger AS $$

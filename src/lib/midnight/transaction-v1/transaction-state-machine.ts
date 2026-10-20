@@ -78,6 +78,12 @@ export const EXPIRABLE_STATES: readonly MidnightTransactionState[] = [
 
 /** Throws unless the transaction holds exactly the step fields its state requires. */
 export function assertConsistent(transaction: MidnightTransaction): void {
+  const signer = SIGNER_BY_STATE[transaction.state]
+  if (signer !== undefined && transaction.signer !== signer) {
+    throw new Error(
+      `${transaction.name} in state ${transaction.state} must be signed by the ${signer}`,
+    )
+  }
   const { set, unset } = FIELDS_BY_STATE[transaction.state]
   for (const field of set) {
     if (transaction[field] === null) {
@@ -89,6 +95,13 @@ export function assertConsistent(transaction: MidnightTransaction): void {
       throw new Error(`${transaction.name} in state ${transaction.state} must have ${field} unset`)
     }
   }
+}
+
+/** A relayer call is committed unproven and a caller call bound, so the entry states and the wallet's to-do name their signer. */
+const SIGNER_BY_STATE: Partial<Record<MidnightTransactionState, MidnightTransaction['signer']>> = {
+  AwaitingProof: 'relayer',
+  AwaitingWallet: 'relayer',
+  AwaitingFee: 'caller',
 }
 
 type StepField =

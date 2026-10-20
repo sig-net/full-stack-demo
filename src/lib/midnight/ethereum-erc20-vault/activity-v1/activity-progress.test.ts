@@ -63,14 +63,14 @@ describe('activityStepsOf', () => {
   }
   const cases: { name: string; activity: Partial<DepositActivity>; expected: string }[] = [
     {
-      name: 'a start call being proved stands at the signing step',
-      activity: { startTransaction: transaction('AwaitingProof', null) },
+      name: 'a start call the page has not committed stands at the signing step',
+      activity: { startTransaction: null },
       expected: 'cppppppppp',
     },
     {
-      name: 'a start call waiting for the wallet stands at the signing step',
-      activity: { startTransaction: transaction('AwaitingWallet', null) },
-      expected: 'cppppppppp',
+      name: 'a bound start call awaiting its fee stands at inclusion',
+      activity: { startTransaction: transaction('AwaitingFee', null) },
+      expected: 'dcpppppppp',
     },
     {
       name: 'a submitted start call stands at inclusion',

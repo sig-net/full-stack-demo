@@ -187,13 +187,9 @@ const PROGRESS_BY_OPERATION_STATE: Record<
   }),
 }
 
-/** A call stands at its signing step until the wallet hands it back, then at its inclusion step. */
+/** A call stands at its signing step until the page commits it bound, then at its inclusion step. */
 function signingStep(transaction: ActivityTransaction | null, signing: number): number {
-  return transaction === null ||
-    transaction.lifecycleState === 'AwaitingProof' ||
-    transaction.lifecycleState === 'AwaitingWallet'
-    ? signing
-    : signing + 1
+  return transaction === null ? signing : signing + 1
 }
 
 const VAULT_REQUEST_STEPS: Record<VaultRequestState, number> = {

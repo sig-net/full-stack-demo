@@ -120,14 +120,11 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
     return this.write(() => this.stateController.recordProof({ name, unboundTx }))
   }
 
-  /** A relayer transaction is finalised here, and a caller transaction is left for its TTL to expire. */
   private async resolveAwaitingWallet({
     name,
     state,
-    signer,
     unboundTx,
   }: MidnightTransaction): Promise<void> {
-    if (signer === 'caller') return
     if (unboundTx === null) throw new Error(`${name} in ${state} holds no unboundTx`)
     const finalizedTx = await this.relayerWallet.finalize(unboundTx)
     return this.write(() => this.stateController.submitTransaction({ name, finalizedTx }))
