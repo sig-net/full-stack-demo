@@ -1,4 +1,5 @@
 import {
+  type Binding,
   DustSecretKey,
   LedgerParameters,
   nativeToken,
@@ -34,10 +35,20 @@ export interface UserWallet {
   readonly unshieldedAddress: string
   /** Unshielded NIGHT in STAR, from the synced state. */
   nightBalance(): Promise<bigint>
+  /** The shielded coins of `tokenType` the wallet may spend, in the token's base units, from the synced state. */
+  shieldedBalance(tokenType: string): Promise<bigint>
   /** The finalized bytes in hex of the unbound bytes in hex, as `submitTransaction` takes them. */
   balance(unboundTx: string): Promise<string>
   /** The bound bytes in hex of the unbound bytes in hex, balanced and signed without a DUST fee, as the relayer wallet's `payFee` takes them. */
   balanceWithoutFee(unboundTx: string): Promise<string>
+  /** Releases the coins a bound transaction holds as pending, for bytes that will never be submitted. */
+  revert(boundTx: string): Promise<void>
+  /** The bound bytes in hex of a fee-less transfer of `amount` of `tokenType` on `ledger` to the wallet's own address, for merging into a call. */
+  selfTransfer(
+    ledger: 'shielded' | 'unshielded',
+    tokenType: string,
+    amount: bigint,
+  ): Promise<string>
   stop(): Promise<void>
 }
 
@@ -108,10 +119,45 @@ export async function startUserWallet(
       const state = await facade.waitForSyncedState()
       return state.unshielded.balances[nativeToken().raw] ?? 0n
     },
+    async shieldedBalance(tokenType: string): Promise<bigint> {
+      const state = await facade.waitForSyncedState()
+      return state.shielded.balances[tokenType] ?? 0n
+    },
     balance: (unboundTx) => bind(unboundTx, 'all'),
     balanceWithoutFee: (unboundTx) => bind(unboundTx, ['shielded', 'unshielded']),
+    revert: (boundTx) => facade.revertTransaction(boundTransactionOf(boundTx)),
+    async selfTransfer(ledger, tokenType, amount): Promise<string> {
+      const state = await facade.waitForSyncedState()
+      const recipe = await facade.transferTransaction(
+        [
+          ledger === 'shielded'
+            ? {
+                type: 'shielded',
+                outputs: [{ type: tokenType, receiverAddress: state.shielded.address, amount }],
+              }
+            : {
+                type: 'unshielded',
+                outputs: [{ type: tokenType, receiverAddress: state.unshielded.address, amount }],
+              },
+        ],
+        { shieldedSecretKeys: keys.shieldedSecretKeys, dustSecretKey: keys.dustSecretKey },
+        { ttl: new Date(Date.now() + BALANCE_TTL_MS), payFees: false },
+      )
+      const signed = await facade.signRecipe(recipe, keys.unshieldedKeystore.signDataAsync)
+      const finalized = await facade.finalizeRecipe(signed)
+      return Buffer.from(finalized.serialize()).toString('hex')
+    },
     stop: () => facade.stop(),
   }
+}
+
+function boundTransactionOf(boundTx: string): Transaction<SignatureEnabled, Proof, Binding> {
+  return Transaction.deserialize<SignatureEnabled, Proof, Binding>(
+    'signature',
+    'proof',
+    'binding',
+    Uint8Array.from(Buffer.from(boundTx, 'hex')),
+  )
 }
 
 /** The facade keeps this option type private, so it is read off the method that takes it. */

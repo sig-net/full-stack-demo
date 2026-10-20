@@ -10,7 +10,6 @@ import type {
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import {
   completeDepositArgsSchema,
-  DepositCallMismatch,
   DepositNonceConflict,
   DepositRecipientMismatch,
   type DepositService,
@@ -21,6 +20,7 @@ import {
   startDepositArgsSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 import { DepositStateConflict } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
+import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import type { Logger } from '@/lib/logging/logger'
 
 /**
@@ -149,7 +149,7 @@ async function outcomeOf<Result>(action: () => Promise<Result>): Promise<Result 
     if (
       error instanceof DepositStateConflict ||
       error instanceof DepositRecipientMismatch ||
-      error instanceof DepositCallMismatch
+      error instanceof SponsoredCallMismatch
     ) {
       return { ok: false, error: error.message }
     }

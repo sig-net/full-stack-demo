@@ -27,21 +27,33 @@ export function inspectBoundTransaction(boundTx: string): BoundTransactionConten
   const offers = [transaction.guaranteedOffer, ...(transaction.fallibleOffer?.values() ?? [])]
   return {
     actions: intents.flatMap((intent) => intent.actions.map(summaryOf)),
-    spendsCoins:
-      offers.some(spendsShieldedCoins) ||
-      intents.some(
-        (intent) =>
-          intent.guaranteedUnshieldedOffer !== undefined ||
-          intent.fallibleUnshieldedOffer !== undefined ||
-          intent.dustActions !== undefined,
-      ),
+    shieldedInputs: countOver(offers, (offer) => offer.inputs.length),
+    shieldedTransients: countOver(offers, (offer) => offer.transients.length),
+    shieldedOutputs: countOver(offers, (offer) => offer.outputs.length),
+    unshieldedOffers: intents.reduce(
+      (count, intent) =>
+        count +
+        (intent.guaranteedUnshieldedOffer === undefined ? 0 : 1) +
+        (intent.fallibleUnshieldedOffer === undefined ? 0 : 1),
+      0,
+    ),
+    dustActions: intents.some((intent) => intent.dustActions !== undefined),
   }
 }
 
+/** The contract actions and the coin movement of bound bytes, summed over the guaranteed and the fallible offers. */
 export interface BoundTransactionContents {
   readonly actions: BoundContractAction[]
-  /** True when the bytes spend shielded coins, carry an unshielded offer or act on DUST, none of which a contract call alone needs. */
-  readonly spendsCoins: boolean
+  /** Shielded coins the bytes spend. */
+  readonly shieldedInputs: number
+  /** Shielded coins the bytes create and spend at once, which a circuit that takes a coin requires. */
+  readonly shieldedTransients: number
+  /** Shielded coins the bytes create: a contract's mint, or the change of a spend. */
+  readonly shieldedOutputs: number
+  /** Unshielded offers across the intents, which no vault circuit needs. */
+  readonly unshieldedOffers: number
+  /** Whether any intent spends or registers DUST, which the relayer's fee adds later. */
+  readonly dustActions: boolean
 }
 
 /** A contract action with the address as the ledger renders it and a call's entry point as text. */
@@ -50,9 +62,11 @@ export type BoundContractAction =
   | { readonly kind: 'deploy'; readonly address: string }
   | { readonly kind: 'maintenance-update'; readonly address: string }
 
-/** Outputs alone are what a contract mints, and an input or a transient spends a coin. */
-function spendsShieldedCoins(offer: ZswapOffer<Proof> | undefined): boolean {
-  return offer !== undefined && (offer.inputs.length > 0 || offer.transients.length > 0)
+function countOver(
+  offers: ReadonlyArray<ZswapOffer<Proof> | undefined>,
+  countOf: (offer: ZswapOffer<Proof>) => number,
+): number {
+  return offers.reduce((count, offer) => count + (offer === undefined ? 0 : countOf(offer)), 0)
 }
 
 function summaryOf(action: ContractAction<Proof>): BoundContractAction {

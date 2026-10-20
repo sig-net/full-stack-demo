@@ -4,13 +4,27 @@ import type {
   CompleteWithdrawArgs,
   GetWithdrawArgs,
   ListWithdrawsArgs,
+  PrepareCompleteWithdrawArgs,
+  PrepareStartWithdrawArgs,
   StartWithdrawArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service'
 import type {
+  WithdrawCompleteInputsResult,
   WithdrawListResult,
   WithdrawResult,
+  WithdrawStartInputsResult,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service-adaptor'
 import { getBackend } from '@/server/backend'
+
+export async function prepareStartWithdraw(
+  callerSecret: string,
+  args: PrepareStartWithdrawArgs,
+): Promise<WithdrawStartInputsResult> {
+  return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.prepareStartWithdraw(
+    callerSecret,
+    args,
+  )
+}
 
 export async function startWithdraw(
   callerSecret: string,
@@ -20,6 +34,15 @@ export async function startWithdraw(
     callerSecret,
     args,
   )
+}
+
+export async function prepareCompleteWithdraw(
+  callerSecret: string,
+  args: PrepareCompleteWithdrawArgs,
+): Promise<WithdrawCompleteInputsResult> {
+  return (
+    await getBackend()
+  ).midnight.ethereumErc20Vault.withdrawV1.adaptor.prepareCompleteWithdraw(callerSecret, args)
 }
 
 export async function completeWithdraw(

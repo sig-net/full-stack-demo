@@ -55,9 +55,15 @@ export function attestedRequestFields(request: VaultRequest): AttestedRequestFie
   }
 }
 
+/** What a complete circuit takes from its operation's attested request, as the request holds them. */
+export type CompletionInputs = Pick<
+  AttestedRequestFields,
+  'requestId' | 'attestationOutputKind' | 'attestationOutput'
+>
+
 /** The `serializedOutput` a complete circuit takes: the attested bytes for an executed sweep, else `outputWidth` zero bytes, which the circuit ignores. */
 export function completionOutput(
-  request: Pick<AttestedRequestFields, 'attestationOutputKind' | 'attestationOutput'>,
+  request: Pick<CompletionInputs, 'attestationOutputKind' | 'attestationOutput'>,
   outputWidth: number,
 ): Uint8Array {
   return request.attestationOutputKind === 'executed'

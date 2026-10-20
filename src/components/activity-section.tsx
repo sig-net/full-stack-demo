@@ -12,11 +12,16 @@ import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryCon
 import { useSpotPrices } from '@/components/use-spot-prices'
 import { activityEntryOf } from '@/lib/activity/activity-entries'
 import { activitiesDueForCompletion } from '@/lib/activity/completions-due'
+import type { ClientConfig } from '@/lib/config/client-config'
 import type {
   Activity,
   ActivityType,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
-import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
+import {
+  completesInPage,
+  type InPageType,
+} from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress'
+import type { Wallet, WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 import { NO_PRICES } from '@/lib/pricing/spot-price-table'
 import { completeApproval } from '@/server/actions/approval-actions'
 import { listActivities } from '@/server/actions/activity-actions'
@@ -24,7 +29,7 @@ import { completeDeposit, prepareCompleteDeposit } from '@/server/actions/deposi
 import { completeRedeem } from '@/server/actions/redeem-actions'
 import { completeSupply } from '@/server/actions/supply-actions'
 import { completeSwap } from '@/server/actions/swap-actions'
-import { completeWithdraw } from '@/server/actions/withdraw-actions'
+import { completeWithdraw, prepareCompleteWithdraw } from '@/server/actions/withdraw-actions'
 
 /** A pending row changes on every sweep, so the list is read often while one exists and rarely otherwise. */
 const PENDING_REFETCH_INTERVAL_MS = 5_000
@@ -102,15 +107,51 @@ export function ActivitySection({ types, title = 'Activity' }: ActivitySectionPr
   )
 }
 
+/** What a completion the page builds, proves and signs takes, beside the activity's name. */
+interface PageCompletionArgs {
+  readonly config: ClientConfig
+  readonly wallet: Wallet
+  readonly callerSecret: string
+  readonly name: string
+}
+
+/**
+ * The completion of each type the page runs, loading its module on first use so a visitor who
+ * never completes one downloads neither the call builder nor the contract.
+ */
+const PAGE_COMPLETE_BY_TYPE: Record<InPageType, (args: PageCompletionArgs) => Promise<void>> = {
+  Deposit: async ({ config, wallet, callerSecret, name }) => {
+    const calls =
+      await import('@/lib/midnight/ethereum-erc20-vault/deposit-v1/browser-deposit-calls')
+    await calls.completeDepositInBrowser({
+      actions: { prepareCompleteDeposit, completeDeposit },
+      builder: calls.browserDepositCallBuilder(config, window.location.origin),
+      wallet,
+      callerSecret,
+      name,
+    })
+  },
+  Withdraw: async ({ config, wallet, callerSecret, name }) => {
+    const calls =
+      await import('@/lib/midnight/ethereum-erc20-vault/withdraw-v1/browser-withdraw-calls')
+    await calls.completeWithdrawInBrowser({
+      actions: { prepareCompleteWithdraw, completeWithdraw },
+      builder: calls.browserWithdrawCallBuilder(config, window.location.origin),
+      wallet,
+      callerSecret,
+      name,
+    })
+  },
+}
+
 /** The completion action of each type whose call the server builds, all of one shape on the wire. */
 const SERVER_BUILT_COMPLETE_BY_TYPE: Record<
-  Exclude<ActivityType, 'Deposit'>,
+  Exclude<ActivityType, InPageType>,
   (
     callerSecret: string,
     args: { name: string; wallet: WalletPublicKeys },
   ) => Promise<{ ok: true } | { ok: false; error: string }>
 > = {
-  Withdraw: completeWithdraw,
   Swap: completeSwap,
   Supply: completeSupply,
   Redeem: completeRedeem,
@@ -119,9 +160,9 @@ const SERVER_BUILT_COMPLETE_BY_TYPE: Record<
 
 /**
  * Starts the completion of every activity that awaits it, once per row per retry window. The
- * page builds, proves and binds a deposit's completion call, and the server builds every other
- * type's for the connected wallet's keys, so nothing runs without a wallet, and a refusal (the
- * row already completing elsewhere) is reported and left to the next window.
+ * page builds, proves and binds an in-page type's completion call, and the server builds every
+ * other type's for the connected wallet's keys, so nothing runs without a wallet, and a refusal
+ * (the row already completing elsewhere) is reported and left to the next window.
  */
 function useAutoCompletion(activities: readonly Activity[] | undefined): void {
   const { callerSecret } = useCaller()
@@ -135,13 +176,9 @@ function useAutoCompletion(activities: readonly Activity[] | undefined): void {
     attemptedAt.current.set(activity.name, Date.now())
     const { description } = activityEntryOf(activity, registry, NO_PRICES)
     try {
-      if (activity.type === 'Deposit') {
-        // Loaded on first use, so a visitor who never deposits never downloads the call builder and the contract.
-        const calls =
-          await import('@/lib/midnight/ethereum-erc20-vault/deposit-v1/browser-deposit-calls')
-        await calls.completeDepositInBrowser({
-          actions: { prepareCompleteDeposit, completeDeposit },
-          builder: calls.browserDepositCallBuilder(config, window.location.origin),
+      if (completesInPage(activity.type)) {
+        await PAGE_COMPLETE_BY_TYPE[activity.type]({
+          config,
           wallet,
           callerSecret,
           name: activity.name,

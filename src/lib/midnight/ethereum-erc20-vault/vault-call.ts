@@ -14,7 +14,7 @@ import type {
   WalletProvider,
   ZKConfigProvider,
 } from '@midnight-ntwrk/midnight-js/types'
-import { bytesToHex } from '@sig-net/midnight'
+import { bytesToHex, hexToBytes } from '@sig-net/midnight'
 import {
   type Contract,
   createVaultPrivateState,
@@ -25,6 +25,7 @@ import {
   type VaultPrivateState,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
+import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
 import { MemoryPrivateStateProvider } from '@/lib/midnight/memory-private-state-provider'
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 
@@ -148,6 +149,53 @@ export function completeDepositCallOptions(
 export interface CompleteDepositCircuitArgs extends CallerCircuitArgs {
   readonly requestId: Uint8Array
   /** One byte: the attested transfer result for an executed sweep, ignored for the other verdicts. */
+  readonly serializedOutput: Uint8Array
+  /** 32 random bytes, fresh per call. */
+  readonly mintNonce: Uint8Array
+}
+
+/** The surrendered coin is a fresh coin of the sent token's vault coin type worth exactly `amount`, which the caller's wallet funds when it balances the call. */
+export function startWithdrawCallOptions(
+  providers: VaultCallProviders,
+  args: StartWithdrawCircuitArgs,
+): CallTxOptions<VaultContract, 'startWithdraw'> {
+  return vaultCallOptions(providers, 'startWithdraw', [
+    args.inIndex,
+    {
+      erc20Address: evmAddressBytes(args.erc20Address),
+      amount: args.amount,
+      destEvmAddress: evmAddressBytes(args.destEvmAddress),
+    },
+    {
+      nonce: crypto.getRandomValues(new Uint8Array(32)),
+      color: hexToBytes(vaultTokenType(args.erc20Address, providers.vaultAddress)),
+      value: args.amount,
+    },
+  ])
+}
+
+export interface StartWithdrawCircuitArgs extends CallerCircuitArgs {
+  readonly inIndex: bigint
+  /** `0x` plus 40 hex characters, both of them. */
+  readonly erc20Address: string
+  readonly destEvmAddress: string
+  readonly amount: bigint
+}
+
+export function completeWithdrawCallOptions(
+  providers: VaultCallProviders,
+  args: CompleteWithdrawCircuitArgs,
+): CallTxOptions<VaultContract, 'completeWithdraw'> {
+  return vaultCallOptions(providers, 'completeWithdraw', [
+    args.requestId,
+    args.serializedOutput,
+    args.mintNonce,
+  ])
+}
+
+export interface CompleteWithdrawCircuitArgs extends CallerCircuitArgs {
+  readonly requestId: Uint8Array
+  /** One byte: the attested transfer result for an executed withdrawal, ignored for the other verdicts. */
   readonly serializedOutput: Uint8Array
   /** 32 random bytes, fresh per call. */
   readonly mintNonce: Uint8Array

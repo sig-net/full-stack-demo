@@ -34,36 +34,48 @@ mechanism worked, the presentation did not.
       `activityStepsOf()` for a refunded swap, a refunded send and a reverted trade still
       awaiting its attestation flush.
 
-## Bound the relayer's DUST exposure to sponsored deposit calls
+## Bound the relayer's DUST exposure to sponsored caller calls
 
-The relayer attaches its DUST fee to any bound bytes that pass the fee guard in
-`src/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-impl.ts` (exactly one call to
-the vault at the expected circuit, spending no coins). The guard bounds what the relayer pays
-for, not how often: anyone can mint a caller secret and submit valid deposit calls, each costing
-relayer DUST, and the fee of a call that fails in the fallible phase is not refunded.
+The relayer attaches its DUST fee to any bound bytes that pass the sponsored call guard in
+`src/lib/midnight/ethereum-erc20-vault/sponsored-call-guard.ts` (exactly one call to the vault
+at the expected circuit, no unshielded offer, no DUST action, and shielded coins spent only where
+`SPONSORED_CALL_POLICY_BY_CIRCUIT` admits them). The guard bounds what the relayer pays for, not
+how often: anyone can mint a caller secret and submit valid deposit or withdraw calls, each
+costing relayer DUST, and the fee of a call that fails in the fallible phase is not refunded.
 
-- [ ] Decide the limit: a per-caller rate, a per-caller count of live deposits, or a deposit
+A `startWithdraw` call surrenders a coin the caller's wallet funds, so its bound bytes carry
+shielded inputs and change by design. The shielded offer is opaque to the inspector, so the
+guard cannot tell the coin the circuit needs from extra shielded movement a caller bundles
+beside it (a transfer to a third party, or many inputs that enlarge the bytes): the relayer
+pays the DUST fee of whatever shielded movement rides on a `startWithdraw`. The same holds for
+every start circuit that takes a coin (swap, supply, redeem) as it migrates.
+
+- [ ] Decide the limit: a per-caller rate, a per-caller count of live operations, or a deposit
       account that must hold funds before a start call is sponsored.
-- [ ] Enforce it in `startDeposit` and `completeDeposit` before the controller call, with a
-      refusal the adaptor reports as a result.
-- [ ] Cover it in `src/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-impl.test.ts`
-      and in `integration-tests/ethereum-erc20-vault-deposit-start.test.ts`.
+- [ ] Enforce it in the start and complete methods of the deposit and withdraw services before
+      the controller call, with a refusal the adaptor reports as a result.
+- [ ] Cover it in the deposit and withdraw services' unit tests and in
+      `integration-tests/ethereum-erc20-vault-deposit-start.test.ts` and
+      `integration-tests/ethereum-erc20-vault-withdraw.test.ts`.
+- [ ] Bound the shielded movement a sponsored `startWithdraw` may carry (a ceiling on the
+      inputs and outputs the inspector counts, or a fee estimate the relayer refuses to exceed),
+      once a size the wallet's balancing never exceeds is known.
 - [ ] Apply the same limit to each operation as it moves to browser-side proving.
 
 ## Refuse a start call that claims another caller's live slot
 
-`startDeposit` stores the `inIndex` the browser sends without checking it against the bound
-bytes or the live rows. The backend keys its work on the stored slot, so a caller that claims
-another user's live slot gets a vault request row that tracks the victim's ledger entry: the
-relayer duplicates the victim's sends on its own DUST, and the liar's deposit is recorded
-`Completed` when the victim's settles. No funds move to the liar, since the complete circuit
-checks the caller's commitment.
+`startDeposit` and `startWithdraw` store the `inIndex` the browser sends without checking it
+against the bound bytes or the live rows. The backend keys its work on the stored slot, so a
+caller that claims another user's live slot gets a vault request row that tracks the victim's
+ledger entry: the relayer duplicates the victim's sends on its own DUST, and the liar's
+operation is recorded `Completed` when the victim's settles. No funds move to the liar, since
+the complete circuit checks the caller's commitment.
 
 - [ ] Choose the fix: refuse an `inIndex` a live caller operation or vault request already holds
       (a search under the row lock, in the controller's create method), or sign the prepared
       assignment with a server secret and verify the signature at commit.
-- [ ] Cover the refusal in the deposit service's unit tests and in the deposit-start integration
-      file.
+- [ ] Cover the refusal in the deposit and withdraw services' unit tests and in the deposit-start
+      and withdraw integration files.
 - [ ] Carry the check into each operation's prepare and commit methods as it migrates.
 
 ## Pay a sponsored call's fee once when two resolvers race
@@ -82,3 +94,19 @@ relayer's DUST state.
       one payment at a time) and document it in the README's Midnight transactions section.
 - [ ] Cover the race in `transaction-state-resolver-impl.test.ts` with two concurrent resolves of
       one row, asserting one `payFee` call.
+
+## Back off a rejected Ethereum broadcast
+
+Seen on 2026-10-20 after the fork was re-created: the vault account held no ETH and chain nonce
+0 while the MPC signed the transfer at the vault contract's nonce 8, so every broadcast was
+rejected ("Insufficient funds for gas * price + value") and the resolver replaced the child at
+once, 2,244 Ethereum transaction rows in ten minutes.
+
+- [ ] Give a rejected broadcast a retry delay that grows per attempt, and a cap after which the
+      vault request records the failure for a person to look at.
+- [ ] Record the rejection reason on the replaced child so the row explains the loop.
+- [ ] Cover it in the Ethereum transaction resolver's unit tests and in a vault request test
+      that drives a rejected broadcast.
+- [ ] Document in the README's stack section that a re-created fork leaves the vault account
+      unfunded with nonce 0 while the vault contract's counter continues, and the cheatcodes
+      that realign them (`anvil_setBalance`, `anvil_setNonce`, `anvil_dropAllTransactions`).

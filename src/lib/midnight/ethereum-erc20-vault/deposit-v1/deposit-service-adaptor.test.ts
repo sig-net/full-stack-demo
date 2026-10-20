@@ -12,7 +12,6 @@ import {
   ERC20_ADDRESS,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-fixtures'
 import {
-  DepositCallMismatch,
   DepositNonceConflict,
   DepositRecipientMismatch,
   type DepositService,
@@ -22,6 +21,7 @@ import {
   DepositServiceAdaptor,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-adaptor'
 import { DepositStateConflict } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
+import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import {
   ATTESTATION_FIELDS,
   REQUEST_ID_HEX,
@@ -277,7 +277,7 @@ describe('DepositServiceAdaptor outcomes', () => {
     ],
     [
       'bound bytes that are not the expected vault call',
-      new DepositCallMismatch('startDeposit'),
+      new SponsoredCallMismatch('startDeposit'),
       {
         ok: false,
         error:

@@ -75,15 +75,20 @@ export function missingReadiness(
   return READINESS_CHECKS_BY_ACTION[action].filter((id) => checks[id].status !== 'ok')
 }
 
-const VAULT_SIGNED_CHECKS = ['callerDust', 'relayerDust', 'vaultAccountEth'] as const
+/** What every action the vault account signs for needs: the relayer's DUST for the flushes and sends, the vault account's ETH for the gas. */
+const VAULT_SIGNED_CHECKS = ['relayerDust', 'vaultAccountEth'] as const
 
+/** The vault-signed actions whose caller still pays the DUST of its own two calls from the sign turn. */
+const CALLER_PAID_VAULT_SIGNED_CHECKS = ['callerDust', ...VAULT_SIGNED_CHECKS] as const
+
+/** A deposit and a withdrawal need no caller DUST: the relayer pays the fees of the calls the page builds. */
 const READINESS_CHECKS_BY_ACTION: Record<ReadinessAction, readonly ReadinessCheckId[]> = {
   deposit: ['relayerDust', 'depositAccountEth'],
   withdraw: VAULT_SIGNED_CHECKS,
-  approve: VAULT_SIGNED_CHECKS,
-  swap: VAULT_SIGNED_CHECKS,
-  supply: VAULT_SIGNED_CHECKS,
-  redeem: VAULT_SIGNED_CHECKS,
+  approve: CALLER_PAID_VAULT_SIGNED_CHECKS,
+  swap: CALLER_PAID_VAULT_SIGNED_CHECKS,
+  supply: CALLER_PAID_VAULT_SIGNED_CHECKS,
+  redeem: CALLER_PAID_VAULT_SIGNED_CHECKS,
 }
 
 /** Runs one read and turns its outcome into a check: a thrown read is reported, not treated as empty. */
@@ -107,10 +112,10 @@ export async function readReadinessCheck(
 }
 
 /**
- * The DUST a payer must hold before an action starts, in SPECK. A deposit costs the relayer the
- * fees of the caller's two transactions, two flushes, a send and an attestation, and the local
- * chain's fee overhead alone is 0.05 DUST per transaction, so both minimums leave several times
- * that.
+ * The DUST a payer must hold before an action starts, in SPECK. A deposit or a withdrawal costs
+ * the relayer the fees of the caller's two transactions, two flushes, a send and an attestation,
+ * and the local chain's fee overhead alone is 0.05 DUST per transaction, so both minimums leave
+ * several times that.
  */
 export const CALLER_DUST_MINIMUM = 1_000_000_000_000_000n
 export const RELAYER_DUST_MINIMUM = 5_000_000_000_000_000n

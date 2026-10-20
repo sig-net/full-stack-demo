@@ -9,14 +9,11 @@ import type { CallerCircuitArgs } from '@/lib/midnight/ethereum-erc20-vault/vaul
  * serialisation, for a Midnight transaction row to carry through its lifecycle. Building reads
  * the contract's state from the indexer, so each call takes a moment and is made outside any
  * database transaction. The caller circuits take the caller's secret as the witness, and the
- * permissionless ones prove under any private state. The deposit's two caller circuits are built
- * in the browser by `deposit-v1/deposit-call-builder.ts`.
+ * permissionless ones prove under any private state. The deposit's and the withdrawal's caller
+ * circuits are built in the browser by their call builders over `vault-call.ts`.
  */
 export interface VaultCircuits {
   sendDeposit(args: SendRequestCircuitArgs): Promise<string>
-  /** Surrenders a fresh coin of the token worth exactly `amount`, which the caller's wallet funds when it balances the call. */
-  startWithdraw(args: StartWithdrawCircuitArgs): Promise<string>
-  completeWithdraw(args: CompleteWithdrawCircuitArgs): Promise<string>
   sendWithdraw(args: SendRequestCircuitArgs): Promise<string>
   /** Surrenders a fresh coin of the sold token worth `amountInMaximum`, which the caller's wallet funds when it balances the call. */
   startSwap(args: StartSwapCircuitArgs): Promise<string>
@@ -38,24 +35,6 @@ export interface VaultCircuits {
   sendApprove(args: SendRequestCircuitArgs): Promise<string>
   /** Queues an attestation from the post alone: the MPC's signature covers the output's width and hash, so the output is presented at completion. */
   queueAttestation(args: QueueAttestationCircuitArgs): Promise<string>
-}
-
-export interface StartWithdrawCircuitArgs extends CallerCircuitArgs {
-  readonly inIndex: bigint
-  /** `0x` plus 40 hex characters, both of them. */
-  readonly erc20Address: string
-  readonly destEvmAddress: string
-  readonly amount: bigint
-  /** The shielded token type of the sent ERC20's vault coin, in hex. */
-  readonly coinType: string
-}
-
-export interface CompleteWithdrawCircuitArgs extends CallerCircuitArgs {
-  readonly requestId: Uint8Array
-  /** One byte: the attested transfer result for an executed withdrawal, ignored for the other verdicts. */
-  readonly serializedOutput: Uint8Array
-  /** 32 random bytes, fresh per call. */
-  readonly mintNonce: Uint8Array
 }
 
 export interface StartSwapCircuitArgs extends CallerCircuitArgs {

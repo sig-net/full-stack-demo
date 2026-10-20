@@ -2,7 +2,7 @@ import 'server-only'
 
 import { randomUUID } from 'node:crypto'
 
-import { newInputIndex, type VaultCircuitId } from '@sig-net/midnight-examples-erc20-vault-contract'
+import { newInputIndex } from '@sig-net/midnight-examples-erc20-vault-contract'
 import type { Provider } from 'ethers'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
@@ -11,7 +11,6 @@ import type { MidnightNetworkConfig } from '@/lib/config/midnight-network-config
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
-import type { inspectBoundTransaction } from '@/lib/midnight/transaction-v1/inspect-bound-transaction'
 import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
 import {
   type Deposit,
@@ -24,7 +23,6 @@ import { nextState } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposi
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
 import {
   type CompleteDepositArgs,
-  DepositCallMismatch,
   DepositNonceConflict,
   DepositRecipientMismatch,
   type DepositService,
@@ -38,6 +36,7 @@ import {
   DepositStateConflict,
   type DepositStateController,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
+import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { SWEEP_GAS } from '@/lib/midnight/ethereum-erc20-vault/sweep-gas'
 import {
   type AttestedRequestFields,
@@ -55,7 +54,7 @@ export class DepositServiceImpl implements DepositService {
   private readonly signet: MidnightSignetConfig
   private readonly midnightNetwork: MidnightNetworkConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
-  private readonly inspect: typeof inspectBoundTransaction
+  private readonly guard: SponsoredCallGuard
 
   constructor(
     depositRepository: DepositRepository,
@@ -66,10 +65,10 @@ export class DepositServiceImpl implements DepositService {
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
     midnightNetwork: MidnightNetworkConfig,
-    inspect: typeof inspectBoundTransaction,
+    guard: SponsoredCallGuard,
   ) {
     this.midnightNetwork = midnightNetwork
-    this.inspect = inspect
+    this.guard = guard
     this.depositRepository = depositRepository
     this.depositStateController = depositStateController
     this.vaultRequestRepository = vaultRequestRepository
@@ -96,7 +95,7 @@ export class DepositServiceImpl implements DepositService {
     caller: Caller,
     { depositRequest, wallet, inIndex, evmNonce, boundTx }: StartDepositArgs,
   ): Promise<Deposit> {
-    this.assertVaultCall(boundTx, 'startDeposit')
+    this.guard.assertSponsoredCall(boundTx, 'startDeposit')
     const depositAccount = depositAccountOf(caller, this.signet, this.vault)
     if (evmNonce !== (await this.nextEvmNonce(depositAccount))) {
       throw new DepositNonceConflict(depositAccount)
@@ -130,7 +129,7 @@ export class DepositServiceImpl implements DepositService {
     caller: Caller,
     { name, wallet, boundTx }: CompleteDepositArgs,
   ): Promise<Deposit> {
-    this.assertVaultCall(boundTx, 'completeDeposit')
+    this.guard.assertSponsoredCall(boundTx, 'completeDeposit')
     await this.assertCompletable(caller, name, wallet)
     return this.unitOfWork.runInTransaction(() =>
       this.depositStateController.completeDeposit({ name, call: { boundTx } }),
@@ -169,22 +168,6 @@ export class DepositServiceImpl implements DepositService {
     return deposits
       .filter((deposit) => !isTerminalDepositState(deposit.state))
       .reduce((highest, deposit) => bigger(highest, deposit.evmNonce + 1n), pending)
-  }
-
-  /** The ledger renders a call's address as the configuration stores the vault's, in lower-case hex without a prefix. */
-  private assertVaultCall(boundTx: string, circuit: VaultCircuitId): void {
-    const contents = this.inspect(boundTx)
-    const [action] = contents?.actions ?? []
-    if (
-      contents === undefined ||
-      contents.spendsCoins ||
-      contents.actions.length !== 1 ||
-      action?.kind !== 'call' ||
-      action.address !== this.vault.contractAddress ||
-      action.entryPoint !== circuit
-    ) {
-      throw new DepositCallMismatch(circuit)
-    }
   }
 
   /** The state table is asked here, outside the lock, and the controller asks it again under it. */

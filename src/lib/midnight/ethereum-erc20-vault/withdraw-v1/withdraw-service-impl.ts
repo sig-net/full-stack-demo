@@ -2,7 +2,6 @@ import 'server-only'
 
 import { randomUUID } from 'node:crypto'
 
-import { hexToBytes } from '@sig-net/midnight'
 import { newInputIndex } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
@@ -10,24 +9,26 @@ import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-eth
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
+import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
-import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import {
   type AttestedRequestFields,
   attestedRequestFields,
-  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
-import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
 import {
   type Withdraw,
+  type WithdrawCompleteInputs,
   withdrawName,
+  type WithdrawStartInputs,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw'
 import type { WithdrawRepository } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-repository'
 import type {
   CompleteWithdrawArgs,
   GetWithdrawArgs,
   ListWithdrawsArgs,
+  PrepareCompleteWithdrawArgs,
+  PrepareStartWithdrawArgs,
   StartWithdrawArgs,
   WithdrawService,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service'
@@ -40,71 +41,70 @@ export class WithdrawServiceImpl implements WithdrawService {
   private readonly withdrawRepository: WithdrawRepository
   private readonly withdrawStateController: WithdrawStateController
   private readonly vaultRequestRepository: VaultRequestRepository
-  private readonly circuits: VaultCircuits
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
+  private readonly guard: SponsoredCallGuard
 
   constructor(
     withdrawRepository: WithdrawRepository,
     withdrawStateController: WithdrawStateController,
     vaultRequestRepository: VaultRequestRepository,
-    circuits: VaultCircuits,
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
+    guard: SponsoredCallGuard,
   ) {
     this.withdrawRepository = withdrawRepository
     this.withdrawStateController = withdrawStateController
     this.vaultRequestRepository = vaultRequestRepository
-    this.circuits = circuits
     this.unitOfWork = unitOfWork
     this.signet = signet
     this.vault = vault
+    this.guard = guard
+  }
+
+  async prepareStartWithdraw(
+    _caller: Caller,
+    _args: PrepareStartWithdrawArgs,
+  ): Promise<WithdrawStartInputs> {
+    return { inIndex: newInputIndex() }
   }
 
   async startWithdraw(
     caller: Caller,
-    { withdrawRequest, wallet }: StartWithdrawArgs,
+    { withdrawRequest, inIndex, boundTx }: StartWithdrawArgs,
   ): Promise<Withdraw> {
-    const inIndex = newInputIndex()
-    const unprovenTx = await this.circuits.startWithdraw({
-      secretKey: caller.secretKey,
-      wallet,
-      inIndex,
-      ...withdrawRequest,
-      coinType: vaultTokenType(withdrawRequest.erc20Address, this.vault.contractAddress),
-    })
+    this.guard.assertSponsoredCall(boundTx, 'startWithdraw')
     return this.unitOfWork.runInTransaction(() =>
       this.withdrawStateController.startWithdraw({
         name: withdrawName(caller.name, randomUUID()),
         ...withdrawRequest,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        call: { unprovenTx },
+        call: { boundTx },
       }),
     )
   }
 
-  /** The state table is asked before the slow build, and the controller asks it again under the lock. */
+  async prepareCompleteWithdraw(
+    caller: Caller,
+    { name }: PrepareCompleteWithdrawArgs,
+  ): Promise<WithdrawCompleteInputs> {
+    await this.assertCompletable(caller, name)
+    const { requestId, attestationOutputKind, attestationOutput } =
+      await this.attestedRequestOf(name)
+    return { requestId, attestationOutputKind, attestationOutput }
+  }
+
   async completeWithdraw(
     caller: Caller,
-    { name, wallet }: CompleteWithdrawArgs,
+    { name, boundTx }: CompleteWithdrawArgs,
   ): Promise<Withdraw> {
-    const withdraw = await this.ownWithdraw(caller, name)
-    if (nextState(withdraw.state, 'complete') === undefined) {
-      throw new WithdrawStateConflict(name, withdraw.state, 'complete')
-    }
-    const request = await this.attestedRequestOf(name)
-    const unprovenTx = await this.circuits.completeWithdraw({
-      secretKey: caller.secretKey,
-      wallet,
-      requestId: hexToBytes(request.requestId),
-      serializedOutput: completionOutput(request, 1),
-      mintNonce: crypto.getRandomValues(new Uint8Array(32)),
-    })
+    this.guard.assertSponsoredCall(boundTx, 'completeWithdraw')
+    await this.assertCompletable(caller, name)
     return this.unitOfWork.runInTransaction(() =>
-      this.withdrawStateController.completeWithdraw({ name, call: { unprovenTx } }),
+      this.withdrawStateController.completeWithdraw({ name, call: { boundTx } }),
     )
   }
 
@@ -118,6 +118,14 @@ export class WithdrawServiceImpl implements WithdrawService {
       criteria: [{ type: 'prefix-text', field: 'name', prefix: `${caller.name}/` }],
       order: { field: 'createTime', direction: 'desc' },
     })
+  }
+
+  /** The state table is asked here, outside the lock, and the controller asks it again under it. */
+  private async assertCompletable(caller: Caller, name: string): Promise<void> {
+    const withdraw = await this.ownWithdraw(caller, name)
+    if (nextState(withdraw.state, 'complete') === undefined) {
+      throw new WithdrawStateConflict(name, withdraw.state, 'complete')
+    }
   }
 
   private async ownWithdraw(caller: Caller, name: string): Promise<Withdraw> {

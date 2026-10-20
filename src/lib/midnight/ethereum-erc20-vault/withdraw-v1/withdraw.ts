@@ -12,6 +12,7 @@ import {
   callerOperationStateSchema,
   isTerminalCallerOperationState,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
+import type { CompletionInputs } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import {
   amountSchema,
   evmAddressSchema,
@@ -60,9 +61,9 @@ export type WithdrawOutcome = z.infer<typeof withdrawOutcomeSchema>
 /**
  * The withdraw resource: an ERC20 transfer from the vault account to a destination on Ethereum,
  * paid from a vault coin of the token worth exactly `amount` that the start circuit burns. The
- * caller supplies the request, the server assigns everything else before the `startWithdraw`
- * circuit is built. The transactions and the vault request behind its steps name it as their
- * parent.
+ * caller supplies the request, the server assigns the slot before the browser builds the
+ * `startWithdraw` circuit call and derives the vault account when it commits it. The
+ * transactions and the vault request behind its steps name it as their parent.
  */
 export const withdrawSchema = z.object({
   name: withdrawNameSchema,
@@ -97,6 +98,12 @@ export const withdrawRequestSchema = withdrawSchema.pick({
 })
 
 export type WithdrawRequest = z.infer<typeof withdrawRequestSchema>
+
+/** What the server assigns to a start call, afresh on every `prepareStartWithdraw`: the slot. */
+export type WithdrawStartInputs = Pick<Withdraw, 'inIndex'>
+
+/** What the complete circuit takes from the withdrawal's attested request. */
+export type WithdrawCompleteInputs = CompletionInputs
 
 export function withdrawName(parent: string, id: string): string {
   return `${parent}/${WITHDRAW_COLLECTION}/${id}`

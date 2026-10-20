@@ -1,0 +1,104 @@
+import { hexToBytes } from '@sig-net/midnight'
+
+import type {
+  WithdrawCompleteInputs,
+  WithdrawRequest,
+  WithdrawStartInputs,
+} from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw'
+import type { WithdrawResult } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service-adaptor'
+import type { Backend } from '@/server/backend'
+
+import { log } from './operation-round-trip'
+import { bindAsUser, type BoundCallerCall, completionOutput, secretKeyOf } from './user-caller-call'
+import type { UserWallet } from './user-wallet'
+
+/** The start call for the server's slot, with the caller secret as the witness, the user wallet's keys and its coin of the sent token. */
+export function buildStartCall(
+  backend: Backend,
+  callerSecret: string,
+  user: UserWallet,
+  withdrawRequest: WithdrawRequest,
+  inputs: WithdrawStartInputs,
+): Promise<BoundCallerCall> {
+  const { callBuilder } = backend.midnight.ethereumErc20Vault.withdrawV1
+  return bindAsUser(user, () =>
+    callBuilder.buildStart({
+      secretKey: secretKeyOf(callerSecret),
+      wallet: user.publicKeys,
+      inIndex: inputs.inIndex,
+      ...withdrawRequest,
+    }),
+  )
+}
+
+/** The complete call for the attested request's inputs, under a fresh mint nonce. */
+export function buildCompleteCall(
+  backend: Backend,
+  callerSecret: string,
+  user: UserWallet,
+  inputs: WithdrawCompleteInputs,
+): Promise<BoundCallerCall> {
+  const { callBuilder } = backend.midnight.ethereumErc20Vault.withdrawV1
+  return bindAsUser(user, () =>
+    callBuilder.buildComplete({
+      secretKey: secretKeyOf(callerSecret),
+      wallet: user.publicKeys,
+      requestId: hexToBytes(inputs.requestId),
+      serializedOutput: completionOutput(inputs, 1),
+      mintNonce: crypto.getRandomValues(new Uint8Array(32)),
+    }),
+  )
+}
+
+/** `prepareStartWithdraw`, the build, the bind and `startWithdraw`, as the send dialog runs them: a refusal at either server call is the result. */
+export async function startWithdrawAsUser(
+  backend: Backend,
+  callerSecret: string,
+  user: UserWallet,
+  withdrawRequest: WithdrawRequest,
+): Promise<WithdrawResult> {
+  const { adaptor } = backend.midnight.ethereumErc20Vault.withdrawV1
+  const prepared = await adaptor.prepareStartWithdraw(callerSecret, { withdrawRequest })
+  if (!prepared.ok) return prepared
+  const { boundTx, buildMs, bindMs } = await buildStartCall(
+    backend,
+    callerSecret,
+    user,
+    withdrawRequest,
+    prepared.inputs,
+  )
+  const calling = Date.now()
+  const result = await adaptor.startWithdraw(callerSecret, {
+    withdrawRequest,
+    inIndex: prepared.inputs.inIndex,
+    boundTx,
+  })
+  log(
+    `start call built in ${String(buildMs)} ms, bound in ${String(bindMs)} ms, startWithdraw answered in ${String(Date.now() - calling)} ms`,
+  )
+  return result
+}
+
+/** `prepareCompleteWithdraw`, the build, the bind and `completeWithdraw`, as the activity table's completion runs them. */
+export async function completeWithdrawAsUser(
+  backend: Backend,
+  callerSecret: string,
+  user: UserWallet,
+  name: string,
+): Promise<WithdrawResult> {
+  const { adaptor } = backend.midnight.ethereumErc20Vault.withdrawV1
+  const prepared = await adaptor.prepareCompleteWithdraw(callerSecret, { name })
+  if (!prepared.ok) return prepared
+  const { boundTx, buildMs, bindMs } = await buildCompleteCall(
+    backend,
+    callerSecret,
+    user,
+    prepared.inputs,
+  )
+  const calling = Date.now()
+  const result = await adaptor.completeWithdraw(callerSecret, { name, boundTx })
+  log(
+    `complete call built in ${String(buildMs)} ms, bound in ${String(bindMs)} ms, completeWithdraw answered in ${String(Date.now() - calling)} ms`,
+  )
+  return result
+}

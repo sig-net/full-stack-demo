@@ -63,48 +63,48 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 
 ## Layout
 
-| Path                                                       | Contents                                                                                                                                                                                                      |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/app`                                                  | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.                                                                                                              |
-| `src/app/(configured)`                                     | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                                                                                                                           |
-| `src/components`                                           | Application React components.                                                                                                                                                                                 |
-| `src/components/ui`                                        | Components written by the shadcn CLI.                                                                                                                                                                         |
-| `src/components/contexts`                                  | React contexts: each file holds a context, its provider and its `use<Name>` hook.                                                                                                                             |
-| `src/lib`                                                  | Non-React modules. The files at its root serve every domain: `value-schemas.ts`, `lazy-singleton.ts`, `sweep.ts`, `run-until-aborted.ts`, `coalescing-runner.ts`, `delay-unless-aborted.ts`, `message-of.ts`. |
-| `src/lib/caller`                                           | The caller secret and caller name schemas (`caller.ts`, shared with the browser) and the server's `resolveCaller()`.                                                                                          |
-| `src/lib/config`                                           | Server configuration loading and the client configuration type.                                                                                                                                               |
-| `src/lib/db`                                               | The Drizzle schema and the Postgres connection pool.                                                                                                                                                          |
-| `src/lib/kafka`                                            | The Kafka producer and consumer factories and the connection options.                                                                                                                                         |
-| `src/lib/logging`                                          | The `Logger` port with its field vocabulary, and its pino implementation (see [Logging](#logging)).                                                                                                           |
-| `src/lib/event`                                            | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.                                                                                                              |
-| `src/lib/repository`                                       | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.                                                                                                |
-| `src/lib/testing`                                          | Test helpers: the `mock()` double for any interface and the `RecordingLogger`.                                                                                                                                |
-| `src/lib/ethereum/transaction-v1`                          | The Ethereum transaction resource, its repository, state machine, state controller, ledger, resolver and event consumer.                                                                                      |
-| `src/lib/ethereum`                                         | The Ethereum modules the domains share: the account, ERC20 and ERC-4626 readers and the Uniswap quoter.                                                                                                       |
-| `src/lib/midnight/ethereum-erc20-vault`                    | The ERC-20 vault: its action set, circuit and ledger ports, signet readers, respond outcome sources, the flusher, and one folder per resource version.                                                        |
-| `src/lib/midnight/ethereum-erc20-vault/vault-request-v1`   | The vault request resource, its repository, state machine, state controller, resolver and event consumer.                                                                                                     |
-| `src/lib/midnight/ethereum-erc20-vault/activity-v1`        | The activity view: the resource the view projects, its read-only repository, service and adaptor.                                                                                                             |
-| `src/lib/midnight/ethereum-erc20-vault/caller-operation`   | The lifecycle every caller-started operation shares: its states, state machine, and the controller, resolver and event consumer bases the deposit, withdrawal, swap, supply, redeem and approval build on.    |
-| `src/lib/midnight/ethereum-erc20-vault/deposit-v1`         | The deposit resource, its repository, state machine, state controller, resolver, event consumer, service and adaptor, and the call builder the page builds and proves the deposit's two caller calls with.    |
-| `src/lib/midnight/ethereum-erc20-vault/withdraw-v1`        | The withdraw resource, the Send of the UI, with the same set of pieces as the deposit.                                                                                                                        |
-| `src/lib/midnight/ethereum-erc20-vault/swap-v1`            | The swap resource and its quote, with the same set of pieces as the deposit.                                                                                                                                  |
-| `src/lib/midnight/ethereum-erc20-vault/supply-v1`          | The supply resource, the Supply of the Lend tab, and its target (the pinned stata pair with the wrapper's allowance), with the same set of pieces as the deposit.                                             |
-| `src/lib/midnight/ethereum-erc20-vault/redeem-v1`          | The redeem resource, the Redeem of the Lend tab, with the same set of pieces as the deposit.                                                                                                                  |
-| `src/lib/midnight/ethereum-erc20-vault/approval-v1`        | The approval resource and the spender targets the deployer grants, with the same set of pieces as the deposit.                                                                                                |
-| `src/lib/midnight/ethereum-erc20-vault/supported-token-v1` | The vault's allowlist as a resource with each token's on-chain metadata, the funds a caller's deposit account holds of it, and their service and adaptor over the ledger and an ERC20 reader.                 |
-| `src/lib/midnight/transaction-v1`                          | The Midnight transaction resource, its repository, state machine, state controller, ledger, resolver, event consumer, service and adaptor.                                                                    |
-| `src/lib/midnight/wallet`                                  | The wallet layer: the `Wallet` interface, the seed wallet and its facade, the stored seed, and the backend's relayer wallet.                                                                                  |
-| `src/lib/pricing`                                          | Spot prices for display: the price request and price resources, the market source port with its CoinGecko implementation, the cached service and its adaptor.                                                 |
-| `src/lib/midnight`                                         | The Midnight modules every domain shares: the address abbreviation, the browser `Buffer` shim and the in-memory private state provider.                                                                       |
-| `src/server`                                               | The code that runs: the composition root, the server action files, the start-up and the console bridge.                                                                                                       |
-| `src/instrumentation.ts`                                   | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                                                                                                                     |
-| `integration-tests`                                        | The integration tests and their helpers, run with `yarn test:integration` (see [Testing](#testing)).                                                                                                          |
-| `scripts`                                                  | The boundary guard (`yarn boundaries`) and the diagram library generator (`yarn diagram-library`).                                                                                                            |
-| `drizzle`                                                  | SQL migrations and their snapshots, written by `yarn db:generate`.                                                                                                                                            |
-| `zk-assets`                                                | One prover key bundle per contract, built by `yarn zk-assets` and gitignored.                                                                                                                                 |
-| `public/zk-assets`                                         | The vault's bundle as the browser fetches it, copied by `yarn zk-assets:public` and gitignored.                                                                                                               |
-| `docs`                                                     | `architecture.md`, the design record the backend was built from, and the draw.io diagrams with their style guide `diagramming.md`.                                                                            |
-| `public/icons`                                             | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.                                                                                                                    |
+| Path                                                       | Contents                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/app`                                                  | App Router files: the root layout, `error`, `global-error`, `not-found`, `icon.svg`, global CSS.                                                                                                                                                                                                            |
+| `src/app/(configured)`                                     | Routes that render inside `ConfigProvider`, gated by its layout: `/` and `/design`.                                                                                                                                                                                                                         |
+| `src/components`                                           | Application React components.                                                                                                                                                                                                                                                                               |
+| `src/components/ui`                                        | Components written by the shadcn CLI.                                                                                                                                                                                                                                                                       |
+| `src/components/contexts`                                  | React contexts: each file holds a context, its provider and its `use<Name>` hook.                                                                                                                                                                                                                           |
+| `src/lib`                                                  | Non-React modules. The files at its root serve every domain: `value-schemas.ts`, `lazy-singleton.ts`, `sweep.ts`, `run-until-aborted.ts`, `coalescing-runner.ts`, `delay-unless-aborted.ts`, `message-of.ts`.                                                                                               |
+| `src/lib/caller`                                           | The caller secret and caller name schemas (`caller.ts`, shared with the browser) and the server's `resolveCaller()`.                                                                                                                                                                                        |
+| `src/lib/config`                                           | Server configuration loading and the client configuration type.                                                                                                                                                                                                                                             |
+| `src/lib/db`                                               | The Drizzle schema and the Postgres connection pool.                                                                                                                                                                                                                                                        |
+| `src/lib/kafka`                                            | The Kafka producer and consumer factories and the connection options.                                                                                                                                                                                                                                       |
+| `src/lib/logging`                                          | The `Logger` port with its field vocabulary, and its pino implementation (see [Logging](#logging)).                                                                                                                                                                                                         |
+| `src/lib/event`                                            | The event layer: events, the outbox and Kafka publishers, the consumer hub and the outbox relay.                                                                                                                                                                                                            |
+| `src/lib/repository`                                       | The repository contract every resource's storage implements, and its Postgres base class and an in-memory one.                                                                                                                                                                                              |
+| `src/lib/testing`                                          | Test helpers: the `mock()` double for any interface and the `RecordingLogger`.                                                                                                                                                                                                                              |
+| `src/lib/ethereum/transaction-v1`                          | The Ethereum transaction resource, its repository, state machine, state controller, ledger, resolver and event consumer.                                                                                                                                                                                    |
+| `src/lib/ethereum`                                         | The Ethereum modules the domains share: the account, ERC20 and ERC-4626 readers and the Uniswap quoter.                                                                                                                                                                                                     |
+| `src/lib/midnight/ethereum-erc20-vault`                    | The ERC-20 vault: its action set, circuit and ledger ports, the isomorphic call building, the page's provider set, the sponsored call guard, signet readers, respond outcome sources, the flusher, and one folder per resource version.                                                                     |
+| `src/lib/midnight/ethereum-erc20-vault/vault-request-v1`   | The vault request resource, its repository, state machine, state controller, resolver and event consumer.                                                                                                                                                                                                   |
+| `src/lib/midnight/ethereum-erc20-vault/activity-v1`        | The activity view: the resource the view projects, its read-only repository, service and adaptor.                                                                                                                                                                                                           |
+| `src/lib/midnight/ethereum-erc20-vault/caller-operation`   | The lifecycle every caller-started operation shares: its states, state machine, the controller, resolver and event consumer bases the deposit, withdrawal, swap, supply, redeem and approval build on, and the call builder base and page helpers the deposit and withdrawal build their caller calls with. |
+| `src/lib/midnight/ethereum-erc20-vault/deposit-v1`         | The deposit resource, its repository, state machine, state controller, resolver, event consumer, service and adaptor, and the call builder and page module the page builds, proves and binds the deposit's two caller calls with.                                                                           |
+| `src/lib/midnight/ethereum-erc20-vault/withdraw-v1`        | The withdraw resource, the Send of the UI, with the same set of pieces as the deposit, its own call builder and page module included.                                                                                                                                                                       |
+| `src/lib/midnight/ethereum-erc20-vault/swap-v1`            | The swap resource and its quote, with the same set of pieces as the deposit.                                                                                                                                                                                                                                |
+| `src/lib/midnight/ethereum-erc20-vault/supply-v1`          | The supply resource, the Supply of the Lend tab, and its target (the pinned stata pair with the wrapper's allowance), with the same set of pieces as the deposit.                                                                                                                                           |
+| `src/lib/midnight/ethereum-erc20-vault/redeem-v1`          | The redeem resource, the Redeem of the Lend tab, with the same set of pieces as the deposit.                                                                                                                                                                                                                |
+| `src/lib/midnight/ethereum-erc20-vault/approval-v1`        | The approval resource and the spender targets the deployer grants, with the same set of pieces as the deposit.                                                                                                                                                                                              |
+| `src/lib/midnight/ethereum-erc20-vault/supported-token-v1` | The vault's allowlist as a resource with each token's on-chain metadata, the funds a caller's deposit account holds of it, and their service and adaptor over the ledger and an ERC20 reader.                                                                                                               |
+| `src/lib/midnight/transaction-v1`                          | The Midnight transaction resource, its repository, state machine, state controller, ledger, resolver, event consumer, service and adaptor.                                                                                                                                                                  |
+| `src/lib/midnight/wallet`                                  | The wallet layer: the `Wallet` interface, the seed wallet and its facade, the stored seed, and the backend's relayer wallet.                                                                                                                                                                                |
+| `src/lib/pricing`                                          | Spot prices for display: the price request and price resources, the market source port with its CoinGecko implementation, the cached service and its adaptor.                                                                                                                                               |
+| `src/lib/midnight`                                         | The Midnight modules every domain shares: the address abbreviation, the browser `Buffer` shim and the in-memory private state provider.                                                                                                                                                                     |
+| `src/server`                                               | The code that runs: the composition root, the server action files, the start-up and the console bridge.                                                                                                                                                                                                     |
+| `src/instrumentation.ts`                                   | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                                                                                                                                                                                                                   |
+| `integration-tests`                                        | The integration tests and their helpers, run with `yarn test:integration` (see [Testing](#testing)).                                                                                                                                                                                                        |
+| `scripts`                                                  | The boundary guard (`yarn boundaries`) and the diagram library generator (`yarn diagram-library`).                                                                                                                                                                                                          |
+| `drizzle`                                                  | SQL migrations and their snapshots, written by `yarn db:generate`.                                                                                                                                                                                                                                          |
+| `zk-assets`                                                | One prover key bundle per contract, built by `yarn zk-assets` and gitignored.                                                                                                                                                                                                                               |
+| `public/zk-assets`                                         | The vault's bundle as the browser fetches it, copied by `yarn zk-assets:public` and gitignored.                                                                                                                                                                                                             |
+| `docs`                                                     | `architecture.md`, the design record the backend was built from, and the draw.io diagrams with their style guide `diagramming.md`.                                                                                                                                                                          |
+| `public/icons`                                             | The sig.network wordmark and swan, in brown (light theme) and white (dark theme) variants.                                                                                                                                                                                                                  |
 
 Pages and layouts are server components. A component opts into the browser with `'use client'`
 only when it needs state, effects or browser APIs, as `src/components/mode-toggle.tsx` does.
@@ -358,10 +358,11 @@ the [local services](#local-services) and the Midnight stack named in `.env.loca
 `vitest.integration.config.ts` runs the files one at a time, since they share one Postgres and
 one Kafka, `setup.ts` loads `.env.local`, `backend.ts` builds the test's backend through the same
 `getBackend()` the server uses, `user-wallet.ts` builds the user's wallet from
-`MIDNIGHT_USER_SEED`, `user-deposit.ts` plays the browser's deposit calls (prepared, built and
-proved through the backend's call builder, bound by that wallet without a fee, then committed),
-and `operation-round-trip.ts` plays that wallet for any caller operation until it completes and
-deletes the operation and its children afterwards. A test file creates
+`MIDNIGHT_USER_SEED`, `user-deposit.ts` and `user-withdraw.ts` play the browser's deposit and
+withdraw calls (prepared, built and proved through the backend's call builder, bound by that
+wallet without a fee, then committed) over `user-caller-call.ts`, which holds the timed bind and
+the mirrored completion output they share, and `operation-round-trip.ts` plays that wallet for
+any caller operation until it completes and deletes the operation and its children afterwards. A test file creates
 rows under a caller name of its own and deletes them, its outbox entries included, in
 `afterAll`, then stops the backend and ends the pool. The approval, swap, withdraw, supply and
 redeem round trips run under the stack's user identity, which deployed the vault, so they delete only the
@@ -369,26 +370,26 @@ rows they created. Stop any
 dev server before a run: it joins the same Kafka consumer group, so its consumers and outbox
 relay would compete with the test's.
 
-| File                                                | Needs                                                                     | Covers                                                                                                                                                                                                                                      |
-| --------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `repository-sql.test.ts`                            | Postgres                                                                  | `SQLRepository`: the round trip, a malformed row refused on read, a skip-locked search.                                                                                                                                                     |
-| `backend-lifecycle.test.ts`                         | Postgres, Kafka, the Midnight stack                                       | `start()` runs once, syncs the relayer wallet and sweeps, and `stop()` ends every loop.                                                                                                                                                     |
-| `midnight-transaction-ledger.test.ts`               | the indexer, the proof server                                             | `MidnightTransactionLedgerImpl`: an unknown id is pending, an empty transaction proves.                                                                                                                                                     |
-| `midnight-transaction-resolve.test.ts`              | Postgres, the proof server, the Midnight stack (the relayer wallet syncs) | An unproven commit is proven into `AwaitingWallet`, and a bound commit has its fee paid by the relayer wallet into `AwaitingSubmission`, each with its row and outbox trail.                                                                |
-| `ethereum-transaction-broadcast.test.ts`            | Postgres, the anvil fork                                                  | A signed transaction is broadcast and included, and a second one at a consumed nonce ends `NonceConsumed`.                                                                                                                                  |
-| `ethereum-erc20-vault-request.test.ts`              | Postgres, the indexer                                                     | Vault request storage, the one-live-request index, a starter's conflict mapping, the readers and the resolver's reads.                                                                                                                      |
-| `ethereum-erc20-vault-flush.test.ts`                | the Midnight stack (the relayer wallet syncs)                             | The first flush starts the relayer wallet and submits nothing when nothing is queued.                                                                                                                                                       |
-| `ethereum-erc20-vault-approval.test.ts`             | the whole local stack                                                     | A router approval from `startApproval` to `Completed` under the deployer identity, the allowance read back on the fork.                                                                                                                     |
-| `ethereum-erc20-vault-swap.test.ts`                 | the whole local stack                                                     | A deposit, the router approval when the vault lacks it, then a swap of the deposited USDC for EURC at a live quote.                                                                                                                         |
-| `ethereum-erc20-vault-withdraw.test.ts`             | the whole local stack                                                     | A deposit, then a send of the deposited USDC from the vault account to a fresh destination, its balance read back on the fork.                                                                                                              |
-| `ethereum-erc20-vault-supply.test.ts`               | the whole local stack                                                     | A deposit of the stata underlying, the wrapper approval when the vault lacks it, then a supply into the wrapper, the shares read back on the fork.                                                                                          |
-| `ethereum-erc20-vault-redeem.test.ts`               | the whole local stack                                                     | A deposit and a supply, then a redeem of the minted shares, the underlying paid out read back on the fork.                                                                                                                                  |
-| `ethereum-erc20-vault-deposit-start.test.ts`        | Postgres, the indexer, the proof server, the fork, the relayer wallet     | `prepareStartDeposit` assigns, the bound start call is stored in `AwaitingFee` and the relayer pays its fee, a moved nonce and bytes holding no vault call are refused, listing, the early completion refusal, a token the circuit refuses. |
-| `ethereum-erc20-vault-deposit-call-builder.test.ts` | the indexer, the proof server                                             | `DepositCallBuilder.buildStart` over the backend's providers returns unbound bytes the ledger deserialises as proven. Nothing is written or submitted.                                                                                      |
-| `ethereum-erc20-vault-activity.test.ts`             | Postgres                                                                  | The activity view's projection of the newest children and its aggregated states.                                                                                                                                                            |
-| `ethereum-local-faucet.test.ts`                     | the anvil fork                                                            | The Ethereum faucet: a fresh account holds the ETH and the USDC it is given, twice over on a second call.                                                                                                                                   |
-| `midnight-local-faucet.test.ts`                     | the Midnight stack                                                        | The NIGHT faucet: a fresh wallet holds the NIGHT the genesis wallet sends it, and a shielded address is refused.                                                                                                                            |
-| `ethereum-erc20-vault-deposit.test.ts`              | the whole stack                                                           | The end-to-end deposit below.                                                                                                                                                                                                               |
+| File                                                | Needs                                                                     | Covers                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `repository-sql.test.ts`                            | Postgres                                                                  | `SQLRepository`: the round trip, a malformed row refused on read, a skip-locked search.                                                                                                                                                                                                                                                                                                                                  |
+| `backend-lifecycle.test.ts`                         | Postgres, Kafka, the Midnight stack                                       | `start()` runs once, syncs the relayer wallet and sweeps, and `stop()` ends every loop.                                                                                                                                                                                                                                                                                                                                  |
+| `midnight-transaction-ledger.test.ts`               | the indexer, the proof server                                             | `MidnightTransactionLedgerImpl`: an unknown id is pending, an empty transaction proves.                                                                                                                                                                                                                                                                                                                                  |
+| `midnight-transaction-resolve.test.ts`              | Postgres, the proof server, the Midnight stack (the relayer wallet syncs) | An unproven commit is proven into `AwaitingWallet`, and a bound commit has its fee paid by the relayer wallet into `AwaitingSubmission`, each with its row and outbox trail.                                                                                                                                                                                                                                             |
+| `ethereum-transaction-broadcast.test.ts`            | Postgres, the anvil fork                                                  | A signed transaction is broadcast and included, and a second one at a consumed nonce ends `NonceConsumed`.                                                                                                                                                                                                                                                                                                               |
+| `ethereum-erc20-vault-request.test.ts`              | Postgres, the indexer                                                     | Vault request storage, the one-live-request index, a starter's conflict mapping, the readers and the resolver's reads.                                                                                                                                                                                                                                                                                                   |
+| `ethereum-erc20-vault-flush.test.ts`                | the Midnight stack (the relayer wallet syncs)                             | The first flush starts the relayer wallet and submits nothing when nothing is queued.                                                                                                                                                                                                                                                                                                                                    |
+| `ethereum-erc20-vault-approval.test.ts`             | the whole local stack                                                     | A router approval from `startApproval` to `Completed` under the deployer identity, the allowance read back on the fork.                                                                                                                                                                                                                                                                                                  |
+| `ethereum-erc20-vault-swap.test.ts`                 | the whole local stack                                                     | A deposit, the router approval when the vault lacks it, then a swap of the deposited USDC for EURC at a live quote.                                                                                                                                                                                                                                                                                                      |
+| `ethereum-erc20-vault-withdraw.test.ts`             | the whole local stack                                                     | A deposit, then the sponsored call guard over the caller's real coins (a start bound with a fee, one with an unshielded transfer merged beside it, and a deposit start with a shielded transfer merged beside it are refused), then a send of the deposited USDC from the vault account to a fresh destination, its balance read back on the fork, the coin gone from the wallet, both caller calls paid by the relayer. |
+| `ethereum-erc20-vault-supply.test.ts`               | the whole local stack                                                     | A deposit of the stata underlying, the wrapper approval when the vault lacks it, then a supply into the wrapper, the shares read back on the fork.                                                                                                                                                                                                                                                                       |
+| `ethereum-erc20-vault-redeem.test.ts`               | the whole local stack                                                     | A deposit and a supply, then a redeem of the minted shares, the underlying paid out read back on the fork.                                                                                                                                                                                                                                                                                                               |
+| `ethereum-erc20-vault-deposit-start.test.ts`        | Postgres, the indexer, the proof server, the fork, the relayer wallet     | `prepareStartDeposit` assigns, the bound start call is stored in `AwaitingFee` and the relayer pays its fee, a moved nonce and bytes holding no vault call are refused, listing, the early completion refusal, a token the circuit refuses.                                                                                                                                                                              |
+| `ethereum-erc20-vault-deposit-call-builder.test.ts` | the indexer, the proof server                                             | `DepositCallBuilder.buildStart` over the backend's providers returns unbound bytes the ledger deserialises as proven. Nothing is written or submitted.                                                                                                                                                                                                                                                                   |
+| `ethereum-erc20-vault-activity.test.ts`             | Postgres                                                                  | The activity view's projection of the newest children and its aggregated states.                                                                                                                                                                                                                                                                                                                                         |
+| `ethereum-local-faucet.test.ts`                     | the anvil fork                                                            | The Ethereum faucet: a fresh account holds the ETH and the USDC it is given, twice over on a second call.                                                                                                                                                                                                                                                                                                                |
+| `midnight-local-faucet.test.ts`                     | the Midnight stack                                                        | The NIGHT faucet: a fresh wallet holds the NIGHT the genesis wallet sends it, and a shielded address is refused.                                                                                                                                                                                                                                                                                                         |
+| `ethereum-erc20-vault-deposit.test.ts`              | the whole stack                                                           | The end-to-end deposit below.                                                                                                                                                                                                                                                                                                                                                                                            |
 
 The whole suite takes 45 to 48 minutes (measured at 45.5, 46.9 and 47.6 minutes over its 20 files,
 each of the six operation round trips taking four to ten), of which the end-to-end deposit is four
@@ -642,7 +643,8 @@ the relayer wallet attaches its DUST fee to the bound bytes (`RelayerWallet.payF
 merges a fee transaction with no contract interaction into the bound one. The fee is taken in the
 guaranteed phase, so the relayer pays for a sponsored call whose fallible phase fails. A bound
 call committed as a transaction waits in `AwaitingFee` for the resolver to take the relayer's
-step. The deposit's two caller calls take this path (see [Deposit lifecycle](#deposit-lifecycle)),
+step. The deposit's and the withdrawal's caller calls take this path (see
+[Deposit lifecycle](#deposit-lifecycle) and [ERC-20 vault withdraw API](#erc-20-vault-withdraw-api)),
 and every other operation's caller calls take the sign turn above.
 
 `MidnightTransactionLedgerImpl` is the ledger behind the local or stagenet services: `prove`
@@ -699,7 +701,7 @@ stack it is one of the wallets the stack's test harness funded.
 `src/lib/midnight/ethereum-erc20-vault/vault-circuits.ts` is the port that builds the circuit
 calls the backend makes as unproven transactions in hex, one method per circuit: the
 permissionless ones (`sendDeposit`, `queueAttestation` and the other operations' sends) and the
-caller circuits of the withdrawal, swap, supply, redeem and approval. Its implementation
+caller circuits of the swap, supply, redeem and approval. Its implementation
 binds the vault's generated contract to the prover keys under
 `zk-assets/ethereum-erc20-vault/` with compact-js and builds each call with midnight-js's
 `createUnprovenCallTx`, under a private state provider that lives for that one call
@@ -707,12 +709,26 @@ binds the vault's generated contract to the prover keys under
 of a caller circuit, and the permissionless ones prove under a random secret with the
 relayer's wallet keys. The building itself is `vault-call.ts` beside the port, which the
 implementation calls for every circuit. The call builder reads the wallet's public keys for
-every circuit, so every caller circuit takes them as arguments. The deposit's two caller
-circuits are built in the page: `deposit-v1/deposit-call-builder.ts` (`DepositCallBuilder`)
-builds and proves a deposit's start or complete call to unbound bytes over `vault-call.ts` and
-`transaction-v1/prove-transaction.ts`, with its provider set from
-`deposit-v1/deposit-call-providers.ts`, and `deposit-v1/browser-deposit-calls.ts` drives it for
-the deposit dialog and the Activity table's auto-completion.
+every circuit, so every caller circuit takes them as arguments. The deposit's and the
+withdrawal's caller circuits are built in the page: `caller-operation/caller-call-builder.ts`
+(`CallerCallBuilder`) builds and proves a caller call to unbound bytes over `vault-call.ts` and
+`transaction-v1/prove-transaction.ts`, `deposit-v1/deposit-call-builder.ts`
+(`DepositCallBuilder`) and `withdraw-v1/withdraw-call-builder.ts` (`WithdrawCallBuilder`) name
+each operation's two circuits over it, the page's provider set comes from
+`browser-vault-call-providers.ts` (the indexer, the prover material fetched from the page's
+origin, the proof server), and `deposit-v1/browser-deposit-calls.ts` and
+`withdraw-v1/browser-withdraw-calls.ts` drive the builders for the dialogs and the Activity
+table's auto-completion, over the stage type and the vault-refusal rethrow in
+`caller-operation/browser-caller-calls.ts`. The server side of a page-built call is
+`sponsored-call-guard.ts`: `SponsoredCallGuard.assertSponsoredCall(boundTx, circuit)` refuses,
+with `SponsoredCallMismatch`, bound bytes that are not exactly one call to the vault at the
+circuit the action commits, or that carry an unshielded offer or a DUST action, or that spend
+shielded coins when `SPONSORED_CALL_POLICY_BY_CIRCUIT` says the circuit takes no coin
+(`startDeposit`, `completeDeposit`, `completeWithdraw`). `startWithdraw` surrenders a coin the
+caller's wallet funds, so its bound bytes carry the wallet's shielded inputs, the transient the
+circuit consumes and the change, which the policy admits. The guard reads the bytes through
+`transaction-v1/inspect-bound-transaction.ts`, which reports the contract actions and the counts
+of shielded inputs, transients and outputs, unshielded offers and DUST actions.
 
 `vault-ledger.ts` is the read port over the vault contract's public state through the indexer,
 and `requestStage()` beside it is the pure function that places a request on the vault's
@@ -722,9 +738,9 @@ never inferred from its own transaction's outcome.
 
 ### Proving keys
 
-Every circuit call is proved through the proof server: the deposit's two caller calls by the
-page, so the caller secret embedded in the unproven bytes never reaches the backend, and every
-other circuit by the backend. The SDK's `ProvingProvider` has one implementation, an HTTP client
+Every circuit call is proved through the proof server: the deposit's and the withdrawal's
+caller calls by the page, so the caller secret embedded in the unproven bytes never reaches the
+backend, and every other circuit by the backend. The SDK's `ProvingProvider` has one implementation, an HTTP client
 for that server, and the server holds no contract keys: on every `/check` and `/prove` call the
 client reads the circuit's prover key and ZKIR from a bundle and sends them with the request. The ledger is per chain and the keys
 are per contract, so the backend builds a `ZKConfigRegistry` over `MIDNIGHT_ZK_ASSETS_ROOT`: every
@@ -1098,7 +1114,7 @@ encryptionPublicKey }`, 32 bytes each in hex): the browser's call builder reads 
   state conflict, a recipient mismatch, a nonce that moved since the preparation
   (`DepositNonceConflict`, after which the browser prepares and builds again) and bound bytes
   that are not exactly one call to the vault at the expected circuit, spending no coins
-  (`DepositCallMismatch`)
+  (`SponsoredCallMismatch` from `sponsored-call-guard.ts`)
   are `{ ok: false }` results. The server actions the UI calls, `prepareStartDeposit`,
   `startDeposit`, `prepareCompleteDeposit`, `completeDeposit`, `getDeposit` and `listDeposits`
   in `src/server/actions/deposit-actions.ts`, each forward to it. Amounts cross as `bigint`.
@@ -1108,9 +1124,10 @@ Building reads the vault's state from the indexer and runs the circuit in the pa
 where the contract's own asserts fire (the vault refusing the token, for example, throws
 `failed assert: ...` from the builder), so a refused call never reaches the server. The relayer
 attaches the DUST fee to whatever bound bytes it is given, so `startDeposit` and
-`completeDeposit` first check that the bytes hold exactly one contract call, to the vault's
-address, at the circuit the action commits, and write nothing otherwise. They do not inspect the
-inputs the call carries. `startDeposit` then reads the deposit account's nonce from the EVM
+`completeDeposit` first ask the sponsored call guard (see
+[Vault circuits and ledger](#vault-circuits-and-ledger)) that the bytes hold exactly one
+contract call, to the vault's address, at the circuit the action commits, spending no coins, and
+write nothing otherwise. They do not inspect the inputs the call carries. `startDeposit` then reads the deposit account's nonce from the EVM
 chain. Each service method opens one transaction around the controller call that stores the
 deposit's step and commits the bound call as a Midnight transaction in `AwaitingFee` under it.
 The adaptor opens no transaction for these two methods, and the read and prepare methods open
@@ -1151,6 +1168,47 @@ const completed = await completeDeposit(callerSecret, {
 })
 ```
 
+## ERC-20 vault withdraw API
+
+`src/lib/midnight/ethereum-erc20-vault/withdraw-v1` is the resource-oriented API for sending a
+vault token back out to Ethereum, which the UI calls Send. A withdrawal is named
+`callers/{caller}/ethereum-erc20-vault-withdraws/{withdraw}` and runs the caller operation's
+six states under its own names, as the deposit does: `AwaitingStartTransaction` while the
+page-built `startWithdraw` call is paid for by the relayer and included, `AwaitingVaultRequest`
+while the vault request behind it runs to `Attested` (the MPC signs `transfer(destEvmAddress,
+amount)` from the vault account), `AwaitingCompletion` for the user, or the sweep once the
+ledger shows the request settled, `AwaitingCompleteTransaction` while the page-built
+`completeWithdraw` call is paid for and included, then `Completed` with `outcome` `sent` (the
+transfer executed and returned true) or `refunded` (the complete circuit re-minted the
+surrendered amount to the caller), or `Failed` with `StartFailed`.
+
+A withdrawal holds the caller's request (`erc20Address`, `amount`, `destEvmAddress`), the slot
+`inIndex` the server assigns when the start is prepared, and `vaultAccount`, which the server
+derives when the start is committed. The caller's two calls take the same path as the deposit's
+(see [ERC-20 vault deposit API](#erc-20-vault-deposit-api)): the browser calls
+`prepareStartWithdraw(callerSecret, { withdrawRequest })`, which answers with `{ inIndex }`
+(`WithdrawStartInputs` in `withdraw.ts`) and writes nothing, builds the `startWithdraw` call
+with the caller secret as the witness and the connected wallet's keys (`WithdrawCallBuilder`),
+proves it, and has the wallet balance it without a DUST fee. The circuit surrenders a fresh coin
+of the token worth exactly `amount`, so this balancing spends the wallet's own coins of that
+vault token and leaves the change. The browser then calls `startWithdraw(callerSecret, {
+withdrawRequest, inIndex, boundTx })`. The server asks the sponsored call guard that the bytes
+are exactly one `startWithdraw` call to the vault spending shielded coins alone (no unshielded
+offer, no DUST action), derives the vault account, and in one database transaction stores the
+withdrawal in `AwaitingStartTransaction` and commits the call as a Midnight transaction in
+`AwaitingFee`. Completion is `prepareCompleteWithdraw(callerSecret, { name })`, which checks the
+state and answers with the attested request's `requestId`, `attestationOutputKind` and
+`attestationOutput` (`WithdrawCompleteInputs`), the `completeWithdraw` call built from them
+under a fresh mint nonce with a one-byte completion output, bound without a fee, and
+`completeWithdraw(callerSecret, { name, boundTx })`, which asks the guard for exactly one
+`completeWithdraw` call spending no coins, checks the state again, and commits the call in
+`AwaitingFee`. No withdraw method takes the wallet's keys: they go into the calls the page
+builds and nowhere else. A state conflict and a guard refusal (`SponsoredCallMismatch`) are
+`{ ok: false }` results of `WithdrawServiceAdaptor`, and the six server actions in
+`src/server/actions/withdraw-actions.ts` forward to it. `withdraw-v1/browser-withdraw-calls.ts`
+(`startWithdrawInBrowser`, `completeWithdrawInBrowser`, `browserWithdrawCallBuilder`) runs the
+sequence for the Send dialog and the Activity table's auto-completion, reporting each stage.
+
 ## Swaps and approvals
 
 A deposit, a swap and an approval share one lifecycle: the caller's start call queues a vault
@@ -1168,10 +1226,11 @@ controller, resolver and consumer are the bases bound to their kind. The vault r
 its `signerAccount`: the caller's deposit account for a deposit, the vault account for a
 withdrawal, a swap, a supply, a redeem or an approval, whose nonce the flush assigns.
 
-A withdrawal (`src/lib/midnight/ethereum-erc20-vault/withdraw-v1`) is the contract's ERC20
-transfer out of the vault, which the UI calls Send: `startWithdraw` burns a vault coin of the
-token worth exactly `amount`, which the caller's wallet funds from its balance when it balances
-the call, `sendWithdraw` has the MPC sign `transfer(destEvmAddress, amount)` from the vault
+A withdrawal (`src/lib/midnight/ethereum-erc20-vault/withdraw-v1`, see
+[ERC-20 vault withdraw API](#erc-20-vault-withdraw-api)) is the contract's ERC20 transfer out
+of the vault, which the UI calls Send: `startWithdraw` burns a vault coin of the token worth
+exactly `amount`, which the caller's wallet funds from its balance when it balances the call in
+the page, `sendWithdraw` has the MPC sign `transfer(destEvmAddress, amount)` from the vault
 account, and `completeWithdraw` closes the withdrawal after a transfer that returned true or
 re-mints the surrendered amount to the caller after one the MPC attested as failed, unviable or
 returning false (outcomes `sent` and `refunded`). The caller supplies the token, the amount and
@@ -1276,10 +1335,10 @@ circuit and deadline. `activityActionOf()` and `activityStepsOf()`
 (`src/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress.ts`) derive from those
 the user's next step (`balance`, `complete` or `none`) and the ten-step progress, each step
 carrying its `walletTurn` and the `reference` it leaves behind. `walletTurn` says how the
-caller's wallet takes the step: `signTurn` for the start and completion calls of a withdraw,
-swap, supply, redeem or approval, which the backend proves and the user signs from the row,
-`inPage` for a deposit's two calls, which the page builds, proves and signs with the wallet
-unprompted, and null for every step the wallet takes no part in. The references are the start
+caller's wallet takes the step: `signTurn` for the start and completion calls of a swap,
+supply, redeem or approval, which the backend proves and the user signs from the row, `inPage`
+for a deposit's or a withdrawal's two calls (`IN_PAGE_TYPES`), which the page builds, proves
+and signs with the wallet unprompted, and null for every step the wallet takes no part in. The references are the start
 and completion calls' Midnight transaction ids, the vault request's Sig Network request id
 (projected by the view as `vaultRequestId`) and the sweep's Ethereum transaction hash, each
 null until its step assigns it.
@@ -1444,9 +1503,11 @@ under Styling and theme.
   over the wallet's supported balances, with the balance and a MAX control under it, then a
   pasted Ethereum address, which the dialog checks as one is typed, and a Send control gated on
   the identity secret, the wallet, an amount within the balance, a valid address and the
-  withdraw readiness checks. Starting a send calls `startWithdraw` and hands the rest to the
-  Activity table, where the withdrawal is listed as a Send with the same wallet turns and
-  auto-completion as a deposit. Send is disabled on a balance the vault does not admit and while
+  withdraw readiness checks. Starting a send prepares, builds, proves and binds the
+  `startWithdraw` call in the page with the wallet's coin of the token, reporting each stage
+  under the controls, records it for the relayer to pay and submit, and hands the rest to the
+  Activity table, where the withdrawal is listed as a Send and completed in the page as a
+  deposit is. Send is disabled on a balance the vault does not admit and while
   the identity secret is unset.
 - `ActivitySection` (`src/components/activity-section.tsx`) reads the caller's activity through
   `listActivities` and renders `ActivityTable`. Each entry is a collapsible table body: from the
@@ -1553,9 +1614,9 @@ file, which is why `usdValue` is a string the UI already renders.
 
 An action costs its payers fees before it can start, and four payers are involved. The caller's
 Midnight wallet pays the DUST of the transactions it signs for the operations it finalises
-itself (withdraw, swap, supply, redeem, approval). The relayer wallet pays the DUST of every
-queue flush, send and attestation, and of the deposit's two caller transactions, which the
-caller binds without a fee, so a deposit needs no DUST from the caller. The caller's deposit
+itself (swap, supply, redeem, approval). The relayer wallet pays the DUST of every queue flush,
+send and attestation, and of the deposit's and the withdrawal's caller transactions, which the
+caller binds without a fee, so neither a deposit nor a withdrawal needs DUST from the caller. The caller's deposit
 account pays the Ethereum gas of its sweep, since the MPC signs the sweep from that account. The
 vault account (`vaultAccountOf()` in `src/lib/midnight/ethereum-erc20-vault/vault-account.ts`,
 the SDK's `deriveVaultEvmAddress`) pays the gas of withdrawals, approvals, swaps, supplies and
@@ -1565,7 +1626,8 @@ redemptions, which the MPC signs from the vault's own account.
 `ReadinessCheck` per payer: `ok` or `insufficient` with the balance and the requirement, or
 `unavailable` with the reason a read failed, never a zero. `missingReadiness(action, checks)` is
 the pure rule a gate asks: the checks a deposit or a vault-signed kind needs that do not pass, in
-display order. The requirements are the sweep's gas budget (`gasBudget(SWEEP_GAS)` in
+display order (a withdrawal needs the relayer's DUST and the vault account's ETH, the other
+vault-signed kinds the caller's DUST as well). The requirements are the sweep's gas budget (`gasBudget(SWEEP_GAS)` in
 `sweep-gas.ts`, gas limit times fee ceiling, 0.003 ETH), the costliest vault-signed envelope
 read from the ledger (`vaultGasEnvelope()` over every kind, so one check serves them all), and
 two pinned DUST minimums, `CALLER_DUST_MINIMUM` (1 DUST) and `RELAYER_DUST_MINIMUM` (5 DUST).

@@ -1,7 +1,7 @@
 /**
- * The browser's provider set for building and proving a deposit call: the indexer for the
- * vault's public state, the prover material fetched from the page's own origin, the proof server
- * and the vault's generated contract.
+ * The page's provider set for building and proving a vault call: the indexer for the vault's
+ * public state, the prover material fetched from the page's own origin, the proof server and
+ * the vault's generated contract.
  */
 
 import { CompiledContract } from '@midnight-ntwrk/compact-js/effect'
@@ -17,21 +17,22 @@ import {
   witnesses,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
-import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
-import type { MidnightNetworkConfig } from '@/lib/config/midnight-network-config'
+import type { ClientConfig } from '@/lib/config/client-config'
 import {
   PROOF_TIMEOUT_MS,
   type VaultCallProviders,
   type VaultContract,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 
-/** The fetch provider verifies every artefact against the bundle's manifest under `zkAssetsURL`. */
-export function depositCallProviders({
-  midnightNetwork,
-  vault,
-  zkAssetsURL,
-}: DepositCallProvidersArgs): DepositCallProviders {
-  const zkConfigProvider = new FetchZkConfigProvider<VaultCircuitId>(zkAssetsURL)
+/** The fetch provider verifies every artefact against the bundle's manifest under `origin` plus `ZK_ASSETS_PUBLIC_PATH`. */
+export function browserVaultCallProviders(
+  config: ClientConfig,
+  origin: string,
+): BrowserVaultCallProviders {
+  const { midnightNetwork, midnightEthereumErc20Vault: vault } = config
+  const zkConfigProvider = new FetchZkConfigProvider<VaultCircuitId>(
+    `${origin}${ZK_ASSETS_PUBLIC_PATH}`,
+  )
   return {
     providers: {
       publicDataProvider: indexerPublicDataProvider({
@@ -50,14 +51,7 @@ export function depositCallProviders({
   }
 }
 
-export interface DepositCallProvidersArgs {
-  readonly midnightNetwork: MidnightNetworkConfig
-  readonly vault: MidnightEthereumErc20VaultConfig
-  /** The absolute http(s) URL the vault's prover key bundle is served under. */
-  readonly zkAssetsURL: string
-}
-
-export interface DepositCallProviders {
+export interface BrowserVaultCallProviders {
   readonly providers: VaultCallProviders
   readonly proofProvider: ProofProvider
 }

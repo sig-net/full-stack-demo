@@ -43,6 +43,19 @@ export type ActivityStepStatus = 'done' | 'current' | 'pending' | 'failed'
  */
 export type WalletTurn = 'signTurn' | 'inPage'
 
+/** The types whose two caller calls the page builds, proves and signs by itself, for the relayer to pay. */
+export const IN_PAGE_TYPES = ['Deposit', 'Withdraw'] as const satisfies readonly ActivityType[]
+
+export type InPageType = (typeof IN_PAGE_TYPES)[number]
+
+export function completesInPage(type: ActivityType): type is InPageType {
+  return IN_PAGE_TYPES.some((inPage) => inPage === type)
+}
+
+function walletTurnOf(type: ActivityType): WalletTurn {
+  return completesInPage(type) ? 'inPage' : 'signTurn'
+}
+
 /** An identifier a step leaves behind, with `id` null until the step assigns it, and the block that holds it once a chain recorded it. */
 export interface ActivityReference {
   readonly kind: ActivityReferenceKind
@@ -66,43 +79,43 @@ export interface ActivityStepDefinition {
 /**
  * Every activity type runs the same ten steps, as every caller operation does: the three
  * steps the MPC and Ethereum take are named for what the type's request does there, and the
- * wallet signs a deposit's calls in the page and every other type's from its sign turn.
+ * wallet signs an in-page type's calls in the page and every other type's from its sign turn.
  */
 export const ACTIVITY_STEPS_BY_TYPE: Readonly<
   Record<ActivityType, readonly ActivityStepDefinition[]>
 > = {
   Deposit: operationSteps(
-    'inPage',
+    'Deposit',
     'Sweep signed by the MPC',
     'Funds swept on Ethereum',
     'Sweep attested by the MPC',
   ),
   Withdraw: operationSteps(
-    'signTurn',
+    'Withdraw',
     'Transfer signed by the MPC',
     'Tokens sent on Ethereum',
     'Transfer attested by the MPC',
   ),
   Swap: operationSteps(
-    'signTurn',
+    'Swap',
     'Trade signed by the MPC',
     'Tokens traded on Ethereum',
     'Trade attested by the MPC',
   ),
   Supply: operationSteps(
-    'signTurn',
+    'Supply',
     'Deposit signed by the MPC',
     'Tokens supplied on Ethereum',
     'Deposit attested by the MPC',
   ),
   Redeem: operationSteps(
-    'signTurn',
+    'Redeem',
     'Redeem signed by the MPC',
     'Shares redeemed on Ethereum',
     'Redeem attested by the MPC',
   ),
   Approval: operationSteps(
-    'signTurn',
+    'Approval',
     'Approval signed by the MPC',
     'Allowance granted on Ethereum',
     'Approval attested by the MPC',
@@ -110,11 +123,12 @@ export const ACTIVITY_STEPS_BY_TYPE: Readonly<
 }
 
 function operationSteps(
-  walletTurn: WalletTurn,
+  type: ActivityType,
   signed: string,
   executed: string,
   attested: string,
 ): readonly ActivityStepDefinition[] {
+  const walletTurn = walletTurnOf(type)
   return [
     { label: 'Start call signed by your wallet', walletTurn, reference: null },
     {

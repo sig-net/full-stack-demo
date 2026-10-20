@@ -7,7 +7,15 @@ import {
   inspectBoundTransaction,
 } from '@/lib/midnight/transaction-v1/inspect-bound-transaction'
 
-/** A contract call and a shielded spend need proven circuits, so the deposit's integration tests cover those. */
+/** A contract call and a shielded spend need proven circuits, so the deposit and withdraw integration tests cover those. */
+const NO_COINS = {
+  shieldedInputs: 0,
+  shieldedTransients: 0,
+  shieldedOutputs: 0,
+  unshieldedOffers: 0,
+  dustActions: false,
+}
+
 const cases: ReadonlyArray<{
   name: string
   boundTx: string
@@ -23,12 +31,12 @@ const cases: ReadonlyArray<{
   {
     name: 'a bound transaction without intents',
     boundTx: bytesToHex(Transaction.fromParts('undeployed').mockProve().serialize()),
-    expected: { actions: [], spendsCoins: false },
+    expected: { actions: [], ...NO_COINS },
   },
   {
     name: 'a bound transaction carrying an unshielded offer',
     boundTx: bytesToHex(unshieldedTransfer().mockProve().serialize()),
-    expected: { actions: [], spendsCoins: true },
+    expected: { actions: [], ...NO_COINS, unshieldedOffers: 1 },
   },
 ]
 

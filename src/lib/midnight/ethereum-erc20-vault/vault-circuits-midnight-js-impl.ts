@@ -27,7 +27,6 @@ import type {
   CompleteRedeemCircuitArgs,
   CompleteSupplyCircuitArgs,
   CompleteSwapCircuitArgs,
-  CompleteWithdrawCircuitArgs,
   QueueAttestationCircuitArgs,
   SendRequestCircuitArgs,
   StartApproveRouterCircuitArgs,
@@ -35,7 +34,6 @@ import type {
   StartRedeemCircuitArgs,
   StartSupplyCircuitArgs,
   StartSwapCircuitArgs,
-  StartWithdrawCircuitArgs,
   VaultCircuits,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
@@ -64,38 +62,6 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
       permissionlessVaultPrivateState(),
       this.relayerWallet,
       vaultCallOptions(this.providers, 'sendDeposit', [args.outIndex]),
-    )
-  }
-
-  startWithdraw(args: StartWithdrawCircuitArgs): Promise<string> {
-    return this.build(
-      createVaultPrivateState(args.secretKey),
-      args.wallet,
-      vaultCallOptions(this.providers, 'startWithdraw', [
-        args.inIndex,
-        {
-          erc20Address: evmAddressBytes(args.erc20Address),
-          amount: args.amount,
-          destEvmAddress: evmAddressBytes(args.destEvmAddress),
-        },
-        {
-          nonce: crypto.getRandomValues(new Uint8Array(32)),
-          color: hexToBytes(args.coinType),
-          value: args.amount,
-        },
-      ]),
-    )
-  }
-
-  completeWithdraw(args: CompleteWithdrawCircuitArgs): Promise<string> {
-    return this.build(
-      createVaultPrivateState(args.secretKey),
-      args.wallet,
-      vaultCallOptions(this.providers, 'completeWithdraw', [
-        args.requestId,
-        args.serializedOutput,
-        args.mintNonce,
-      ]),
     )
   }
 

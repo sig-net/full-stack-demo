@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest'
 
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
 import {
   completeDepositInBrowser,
   type DepositActions,
-  type DepositCallStage,
   startDepositInBrowser,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/browser-deposit-calls'
 import type {
@@ -156,7 +156,7 @@ function collaborators(doubles: Doubles) {
       return `bound(${unboundTx})`
     },
   })
-  const onStage = (stage: DepositCallStage): void => {
+  const onStage = (stage: CallerCallStage): void => {
     trail.events.push(`stage:${stage}`)
   }
   return { trail, args: { actions, builder, wallet, callerSecret: CALLER_SECRET, onStage } }

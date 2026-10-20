@@ -1,4 +1,3 @@
-import type { VaultCircuitId } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { z } from 'zod'
 
 import type { Caller } from '@/lib/caller/caller'
@@ -15,8 +14,8 @@ import { hexBytesSchema, uint64Schema } from '@/lib/value-schemas'
  * The deposit API's methods, independent of the transport that exposes them. The browser builds,
  * proves and binds the caller's two circuit calls from the inputs the prepare methods return,
  * and the two user actions commit the bound bytes. The server checks that the bound bytes are
- * exactly one call to the vault's expected circuit spending no coins, since the relayer pays their
- * fee, and does not inspect the inputs the call carries.
+ * exactly one call to the vault's expected circuit under that circuit's coin policy, since the
+ * relayer pays their fee, and does not inspect the inputs the call carries.
  */
 export interface DepositService {
   /** The start circuit's server-decided inputs, assigned afresh on every call and verified again at `startDeposit`, with nothing written. */
@@ -52,15 +51,6 @@ export class DepositNonceConflict extends Error {
     super(
       `the next nonce of ${depositAccount} moved since the start call was prepared: prepare and build it again`,
     )
-  }
-}
-
-/** The bound bytes are not the one vault call the action commits, alone and spending no coins, so the relayer would pay the fee of something else. */
-export class DepositCallMismatch extends Error {
-  readonly name = 'DepositCallMismatch'
-
-  constructor(circuit: VaultCircuitId) {
-    super(`the bound bytes must be exactly one ${circuit} call to the vault, spending no coins`)
   }
 }
 

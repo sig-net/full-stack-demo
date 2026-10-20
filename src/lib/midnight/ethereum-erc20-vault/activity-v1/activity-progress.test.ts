@@ -169,7 +169,7 @@ describe('activityStepsOf', () => {
 
   const walletTurns: { type: ActivityType; expected: WalletTurn }[] = [
     { type: 'Deposit', expected: 'inPage' },
-    { type: 'Withdraw', expected: 'signTurn' },
+    { type: 'Withdraw', expected: 'inPage' },
     { type: 'Swap', expected: 'signTurn' },
     { type: 'Supply', expected: 'signTurn' },
     { type: 'Redeem', expected: 'signTurn' },

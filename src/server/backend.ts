@@ -78,6 +78,8 @@ import { ActivityServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/acti
 import { ActivityServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-impl'
 import { DepositEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-event-consumer'
 import { DepositCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-call-builder'
+import { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
+import { WithdrawCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-call-builder'
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
 import { DepositRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository-sql-impl'
 import type { DepositService } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
@@ -348,6 +350,8 @@ export interface MidnightBackend {
       readonly eventConsumer: WithdrawEventConsumer
       readonly service: WithdrawService
       readonly adaptor: WithdrawServiceAdaptor
+      /** The browser's side of a withdraw call, over the backend's own providers. */
+      readonly callBuilder: WithdrawCallBuilder
     }
     readonly swapV1: {
       readonly repository: SwapRepository
@@ -841,10 +845,10 @@ function createMidnightEthereumErc20Vault(
     relayerWallet.publicKeys(),
     logger.child({ component: 'VaultCircuitsMidnightJsImpl' }),
   )
-  const depositCallBuilder = new DepositCallBuilder(
-    { publicDataProvider, zkConfigProvider, compiledContract, vaultAddress },
-    proofProvider,
-  )
+  const callProviders = { publicDataProvider, zkConfigProvider, compiledContract, vaultAddress }
+  const depositCallBuilder = new DepositCallBuilder(callProviders, proofProvider)
+  const withdrawCallBuilder = new WithdrawCallBuilder(callProviders, proofProvider)
+  const sponsoredCallGuard = new SponsoredCallGuard(vaultAddress, inspectBoundTransaction)
   const ledger = new VaultLedgerIndexerImpl(publicDataProvider, vaultAddress)
   const readers = signetReaders({
     vaultAddress,
@@ -894,6 +898,7 @@ function createMidnightEthereumErc20Vault(
       vaultRequestV1,
       { ledger },
       depositCallBuilder,
+      sponsoredCallGuard,
       logger,
     ),
     withdrawV1: createMidnightEthereumErc20VaultWithdrawV1(
@@ -902,7 +907,9 @@ function createMidnightEthereumErc20Vault(
       config,
       transactionV1,
       vaultRequestV1,
-      { circuits, ledger },
+      { ledger },
+      withdrawCallBuilder,
+      sponsoredCallGuard,
       logger,
     ),
     swapV1: createMidnightEthereumErc20VaultSwapV1(
@@ -998,7 +1005,9 @@ function createMidnightEthereumErc20VaultWithdrawV1(
   config: ServerConfig,
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
-  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
+  callBuilder: WithdrawCallBuilder,
+  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['withdrawV1'] {
   const repository = new WithdrawRepositorySQLImpl(db.database)
@@ -1022,10 +1031,10 @@ function createMidnightEthereumErc20VaultWithdrawV1(
     repository,
     stateController,
     vaultRequestV1.repository,
-    vault.circuits,
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
+    guard,
   )
   return {
     repository,
@@ -1040,6 +1049,7 @@ function createMidnightEthereumErc20VaultWithdrawV1(
       service,
       logger.child({ component: 'WithdrawServiceAdaptor' }),
     ),
+    callBuilder,
   }
 }
 
@@ -1411,6 +1421,7 @@ function createMidnightEthereumErc20VaultDepositV1(
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
   callBuilder: DepositCallBuilder,
+  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['depositV1'] {
   const repository = new DepositRepositorySQLImpl(db.database)
@@ -1439,7 +1450,7 @@ function createMidnightEthereumErc20VaultDepositV1(
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
     config.client.midnightNetwork,
-    inspectBoundTransaction,
+    guard,
   )
   return {
     repository,

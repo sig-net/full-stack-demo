@@ -1,15 +1,16 @@
 import { hexToBytes } from '@sig-net/midnight'
 
 import type { ClientConfig } from '@/lib/config/client-config'
+import { browserVaultCallProviders } from '@/lib/midnight/ethereum-erc20-vault/browser-vault-call-providers'
+import {
+  type CallerCallStage,
+  vaultRefusalOf,
+} from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
 import type {
   Deposit,
   DepositRequest,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import { DepositCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-call-builder'
-import {
-  depositCallProviders,
-  ZK_ASSETS_PUBLIC_PATH,
-} from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-call-providers'
 import type {
   CompleteDepositArgs,
   PrepareCompleteDepositArgs,
@@ -21,7 +22,6 @@ import type {
   DepositResult,
   DepositStartInputsResult,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-adaptor'
-import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { Wallet } from '@/lib/midnight/wallet/wallet'
 
@@ -60,6 +60,7 @@ export async function completeDepositInBrowser(
       serializedOutput: completionOutput(prepared.inputs, 1),
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
     }),
+    'deposit',
   )
   onStage?.('signing')
   const boundTx = await wallet.balanceWithoutFee(unboundTx)
@@ -78,16 +79,9 @@ export function browserDepositCallBuilder(
   config: ClientConfig,
   origin: string,
 ): DepositCallBuilder {
-  const { providers, proofProvider } = depositCallProviders({
-    midnightNetwork: config.midnightNetwork,
-    vault: config.midnightEthereumErc20Vault,
-    zkAssetsURL: `${origin}${ZK_ASSETS_PUBLIC_PATH}`,
-  })
+  const { providers, proofProvider } = browserVaultCallProviders(config, origin)
   return new DepositCallBuilder(providers, () => Promise.resolve(proofProvider))
 }
-
-/** The step a deposit call is at, reported as each begins. */
-export type DepositCallStage = 'preparing' | 'building' | 'signing' | 'recording'
 
 /** The deposit's server actions, as the page imports them. */
 export interface DepositActions {
@@ -108,7 +102,7 @@ interface DepositCallArgs {
   readonly wallet: Wallet
   /** The stored identity secret, lower-case hex without `0x`, which is the call's witness. */
   readonly callerSecret: string
-  readonly onStage?: (stage: DepositCallStage) => void
+  readonly onStage?: (stage: CallerCallStage) => void
 }
 
 export interface StartDepositInBrowserArgs extends DepositCallArgs {
@@ -142,6 +136,7 @@ async function attemptStart(args: StartDepositInBrowserArgs): Promise<DepositRes
       erc20Address: depositRequest.erc20Address,
       amount: depositRequest.amount,
     }),
+    'deposit',
   )
   onStage?.('signing')
   const boundTx = await wallet.balanceWithoutFee(unboundTx)
@@ -153,15 +148,4 @@ async function attemptStart(args: StartDepositInBrowserArgs): Promise<DepositRes
     evmNonce,
     boundTx,
   })
-}
-
-/** A contract assert firing while the call is built is the vault refusing the deposit. */
-async function vaultRefusalOf(building: Promise<string>): Promise<string> {
-  try {
-    return await building
-  } catch (error: unknown) {
-    const refusal = circuitAssertMessage(error)
-    if (refusal === undefined) throw error
-    throw new Error(`the vault refused the deposit: ${refusal}`, { cause: error })
-  }
 }

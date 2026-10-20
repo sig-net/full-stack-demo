@@ -43,7 +43,7 @@ import { abbreviateHex } from '@/lib/abbreviate-hex'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { fundLabel } from '@/lib/tokens/fund-label'
-import type { DepositCallStage } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/browser-deposit-calls'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
 import type { DepositAccountFund } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/deposit-account-fund'
 import { ORIGIN_NETWORKS } from '@/lib/tokens/token-info'
 import { prepareStartDeposit, startDeposit } from '@/server/actions/deposit-actions'
@@ -154,7 +154,7 @@ function DepositAccountFunds({
   const { checks, recheck } = useVaultReadiness()
   const queryClient = useQueryClient()
   const ready = missingReadiness('deposit', checks).length === 0
-  const [stage, setStage] = useState<DepositCallStage | null>(null)
+  const [stage, setStage] = useState<CallerCallStage | null>(null)
   const depositing = useMutation({
     mutationFn: async (fund: DepositAccountFund) => {
       if (callerSecret === null) throw new Error('The identity secret is not set.')
@@ -318,7 +318,7 @@ function DepositAccountFunds({
   )
 }
 
-const START_STAGE_LABELS: Record<DepositCallStage, string> = {
+const START_STAGE_LABELS: Record<CallerCallStage, string> = {
   preparing: 'Preparing the deposit',
   building: 'Building and proving the start call',
   signing: 'Signing with your wallet',

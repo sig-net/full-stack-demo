@@ -78,11 +78,17 @@ describe('missingReadiness', () => {
       checks: checks({ depositAccountEth: SHORT, vaultAccountEth: SHORT }),
       expected: ['vaultAccountEth'],
     },
+    {
+      name: 'a withdraw ignores the caller DUST, since the relayer pays its fees',
+      action: 'withdraw',
+      checks: checks({ callerDust: SHORT }),
+      expected: [],
+    },
     ...(['approve', 'swap', 'supply', 'redeem'] as const).map((action) => ({
-      name: `${action} is vault signed`,
+      name: `${action} is vault signed and its caller pays its own calls`,
       action,
-      checks: checks({ relayerDust: SHORT, vaultAccountEth: UNREAD }),
-      expected: ['relayerDust', 'vaultAccountEth'] as ReadinessCheckId[],
+      checks: checks({ callerDust: UNREAD, relayerDust: SHORT, vaultAccountEth: UNREAD }),
+      expected: ['callerDust', 'relayerDust', 'vaultAccountEth'] as ReadinessCheckId[],
     })),
   ]
 
