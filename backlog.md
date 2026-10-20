@@ -33,3 +33,52 @@ mechanism worked, the presentation did not.
 - [ ] Cover the presentation with table-driven tests over `activityEntryOf()` and
       `activityStepsOf()` for a refunded swap, a refunded send and a reverted trade still
       awaiting its attestation flush.
+
+## Bound the relayer's DUST exposure to sponsored deposit calls
+
+The relayer attaches its DUST fee to any bound bytes that pass the fee guard in
+`src/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-impl.ts` (exactly one call to
+the vault at the expected circuit, spending no coins). The guard bounds what the relayer pays
+for, not how often: anyone can mint a caller secret and submit valid deposit calls, each costing
+relayer DUST, and the fee of a call that fails in the fallible phase is not refunded.
+
+- [ ] Decide the limit: a per-caller rate, a per-caller count of live deposits, or a deposit
+      account that must hold funds before a start call is sponsored.
+- [ ] Enforce it in `startDeposit` and `completeDeposit` before the controller call, with a
+      refusal the adaptor reports as a result.
+- [ ] Cover it in `src/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-impl.test.ts`
+      and in `integration-tests/ethereum-erc20-vault-deposit-start.test.ts`.
+- [ ] Apply the same limit to each operation as it moves to browser-side proving.
+
+## Refuse a start call that claims another caller's live slot
+
+`startDeposit` stores the `inIndex` the browser sends without checking it against the bound
+bytes or the live rows. The backend keys its work on the stored slot, so a caller that claims
+another user's live slot gets a vault request row that tracks the victim's ledger entry: the
+relayer duplicates the victim's sends on its own DUST, and the liar's deposit is recorded
+`Completed` when the victim's settles. No funds move to the liar, since the complete circuit
+checks the caller's commitment.
+
+- [ ] Choose the fix: refuse an `inIndex` a live caller operation or vault request already holds
+      (a search under the row lock, in the controller's create method), or sign the prepared
+      assignment with a server secret and verify the signature at commit.
+- [ ] Cover the refusal in the deposit service's unit tests and in the deposit-start integration
+      file.
+- [ ] Carry the check into each operation's prepare and commit methods as it migrates.
+
+## Pay a sponsored call's fee once when two resolvers race
+
+`resolveAwaitingFee` in `src/lib/midnight/transaction-v1/transaction-state-resolver-impl.ts`
+calls `RelayerWallet.payFee` outside the transaction and then writes `recordFee`. Two resolvers
+on one `AwaitingFee` row (an event and a sweep, or two processes) both pay before one loses the
+write with a `StateConflict`, so the relayer spends DUST twice for one call. The same
+single-wallet concurrency leaves two in-flight fee transactions free to double spend the
+relayer's DUST state.
+
+- [ ] Serialise fee payments per row: claim the row before `payFee` (a lease field or a
+      `search` with `lock: 'update'` and `skipLocked`), or run every relayer fee through one
+      queue per process.
+- [ ] Decide what the relayer wallet needs for fees in flight at once (a DUST UTXO per fee, or
+      one payment at a time) and document it in the README's Midnight transactions section.
+- [ ] Cover the race in `transaction-state-resolver-impl.test.ts` with two concurrent resolves of
+      one row, asserting one `payFee` call.
