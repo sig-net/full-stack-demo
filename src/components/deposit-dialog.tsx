@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 
 import { ACTIVITIES_QUERY_KEY } from '@/components/activity-section'
 import { useCaller } from '@/components/contexts/CallerContext'
+import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
@@ -42,9 +43,10 @@ import { abbreviateHex } from '@/lib/abbreviate-hex'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { fundLabel } from '@/lib/tokens/fund-label'
+import type { DepositCallStage } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/browser-deposit-calls'
 import type { DepositAccountFund } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/deposit-account-fund'
 import { ORIGIN_NETWORKS } from '@/lib/tokens/token-info'
-import { startDeposit } from '@/server/actions/deposit-actions'
+import { prepareStartDeposit, startDeposit } from '@/server/actions/deposit-actions'
 import { listDepositAccountFunds } from '@/server/actions/supported-token-actions'
 
 interface DepositDialogProps {
@@ -131,8 +133,8 @@ const LOGO_FRACTION = 0.22
 /**
  * The scan of the deposit account: a status line with a check-again control, then one line per
  * fund with the control that deposits the whole fund. Starting a deposit is the dialog's one
- * action: the server builds the start call and records the deposit, and the activity row takes
- * it from there.
+ * action: the page builds, proves and binds the start call, the server records the deposit for
+ * the relayer to pay and submit, and the activity row takes it from there.
  */
 function DepositAccountFunds({
   address,
@@ -147,20 +149,27 @@ function DepositAccountFunds({
 }): ReactNode {
   const { callerSecret, callerName } = useCaller()
   const { wallet } = useMidnightWallet()
+  const config = useConfig()
   const registry = useTokenInfoRegistry()
   const { checks, recheck } = useVaultReadiness()
   const queryClient = useQueryClient()
   const ready = missingReadiness('deposit', checks).length === 0
+  const [stage, setStage] = useState<DepositCallStage | null>(null)
   const depositing = useMutation({
     mutationFn: async (fund: DepositAccountFund) => {
       if (callerSecret === null) throw new Error('The identity secret is not set.')
       if (wallet === null) throw new Error('No Midnight wallet is connected.')
-      const result = await startDeposit(callerSecret, {
+      // Loaded on first use, so a visitor who never deposits never downloads the call builder and the contract.
+      const calls =
+        await import('@/lib/midnight/ethereum-erc20-vault/deposit-v1/browser-deposit-calls')
+      return calls.startDepositInBrowser({
+        actions: { prepareStartDeposit, startDeposit },
+        builder: calls.browserDepositCallBuilder(config, window.location.origin),
+        wallet,
+        callerSecret,
         depositRequest: { erc20Address: fund.erc20Address, amount: fund.amount },
-        wallet: wallet.publicKeys,
+        onStage: setStage,
       })
-      if (!result.ok) throw new Error(result.error)
-      return result.deposit
     },
     onMutate: () => {
       onBusyChange(true)
@@ -172,7 +181,7 @@ function DepositAccountFunds({
           ? deposit.amount.toString()
           : `${formatTokenAmount(deposit.amount, info.decimals)} ${info.symbol}`
       toast.success(
-        `Deposit of ${amount} started. Sign its start call from the Activity row once it is proved.`,
+        `Deposit of ${amount} started: the backend is paying for its start call and submitting it.`,
       )
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
       onBusyChange(false)
@@ -182,6 +191,9 @@ function DepositAccountFunds({
       toast.error(`Starting the deposit failed: ${error.message}`)
       await Promise.all([funds.refetch(), recheck()])
       onBusyChange(false)
+    },
+    onSettled: () => {
+      setStage(null)
     },
   })
   const funds = useQuery({
@@ -300,9 +312,17 @@ function DepositAccountFunds({
             })}
           </ul>
         )}
+        {depositing.isPending && stage !== null && <p role="status">{START_STAGE_LABELS[stage]}</p>}
       </div>
     </TooltipProvider>
   )
+}
+
+const START_STAGE_LABELS: Record<DepositCallStage, string> = {
+  preparing: 'Preparing the deposit',
+  building: 'Building and proving the start call',
+  signing: 'Signing with your wallet',
+  recording: 'Recording the deposit',
 }
 
 /** Whether every payer of a deposit holds what it costs, read afresh as the dialog opens and again on demand. */

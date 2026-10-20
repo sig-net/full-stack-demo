@@ -1,4 +1,4 @@
-import type { GasEnvelope } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import type { GasEnvelope } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 
 /**
  * The EIP-1559 envelope of every sweep, as the prep repository's deposit flow sets it: a

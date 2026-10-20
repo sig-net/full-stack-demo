@@ -3,23 +3,30 @@ import 'server-only'
 import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
-import type { Deposit } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
-import { DepositRecipientMismatch } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
+import type {
+  Deposit,
+  DepositCompleteInputs,
+  DepositStartInputs,
+} from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
 import {
   completeDepositArgsSchema,
+  DepositCallMismatch,
+  DepositNonceConflict,
+  DepositRecipientMismatch,
   type DepositService,
   getDepositArgsSchema,
   listDepositsArgsSchema,
+  prepareCompleteDepositArgsSchema,
+  prepareStartDepositArgsSchema,
   startDepositArgsSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 import { DepositStateConflict } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
-import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Adapts the deposit service to the wire: the caller secret stands in for the caller, the
  * arguments are untrusted until parsed, and every outcome the caller can act on is a result.
- * The service opens the transaction of each user action itself, after the circuit build.
+ * The service opens the transaction of each user action itself, after its chain and row reads.
  */
 export class DepositServiceAdaptor {
   private readonly depositService: DepositService
@@ -30,6 +37,19 @@ export class DepositServiceAdaptor {
     this.logger = logger
   }
 
+  async prepareStartDeposit(
+    callerSecret: string,
+    args: unknown,
+  ): Promise<DepositStartInputsResult> {
+    const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'prepareStartDeposit', caller: caller.name })
+    const parsed = prepareStartDepositArgsSchema.safeParse(args)
+    if (!parsed.success) {
+      return { ok: false, error: z.prettifyError(parsed.error) }
+    }
+    return { ok: true, inputs: await this.depositService.prepareStartDeposit(caller, parsed.data) }
+  }
+
   async startDeposit(callerSecret: string, args: unknown): Promise<DepositResult> {
     const caller = resolveCaller(callerSecret)
     this.logger.debug('method called', { method: 'startDeposit', caller: caller.name })
@@ -37,7 +57,26 @@ export class DepositServiceAdaptor {
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
     }
-    return outcomeOf(() => this.depositService.startDeposit(caller, parsed.data))
+    return outcomeOf<DepositResult>(async () => ({
+      ok: true,
+      deposit: await this.depositService.startDeposit(caller, parsed.data),
+    }))
+  }
+
+  async prepareCompleteDeposit(
+    callerSecret: string,
+    args: unknown,
+  ): Promise<DepositCompleteInputsResult> {
+    const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'prepareCompleteDeposit', caller: caller.name })
+    const parsed = prepareCompleteDepositArgsSchema.safeParse(args)
+    if (!parsed.success) {
+      return { ok: false, error: z.prettifyError(parsed.error) }
+    }
+    return outcomeOf<DepositCompleteInputsResult>(async () => ({
+      ok: true,
+      inputs: await this.depositService.prepareCompleteDeposit(caller, parsed.data),
+    }))
   }
 
   async completeDeposit(callerSecret: string, args: unknown): Promise<DepositResult> {
@@ -47,7 +86,10 @@ export class DepositServiceAdaptor {
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
     }
-    return outcomeOf(() => this.depositService.completeDeposit(caller, parsed.data))
+    return outcomeOf<DepositResult>(async () => ({
+      ok: true,
+      deposit: await this.depositService.completeDeposit(caller, parsed.data),
+    }))
   }
 
   async getDeposit(callerSecret: string, args: unknown): Promise<DepositResult> {
@@ -75,24 +117,42 @@ export class DepositServiceAdaptor {
   }
 }
 
-export type DepositResult =
-  | { readonly ok: true; readonly deposit: Deposit }
-  | { readonly ok: false; readonly error: string }
+export type DepositResult = { readonly ok: true; readonly deposit: Deposit } | Refused
 
-export type DepositListResult =
-  | { readonly ok: true; readonly deposits: Deposit[] }
-  | { readonly ok: false; readonly error: string }
+export type DepositListResult = { readonly ok: true; readonly deposits: Deposit[] } | Refused
 
-/** A state conflict and a contract assert firing at build time are the vault refusing the call, which the caller can act on. */
-async function outcomeOf(action: () => Promise<Deposit>): Promise<DepositResult> {
+export type DepositStartInputsResult =
+  | { readonly ok: true; readonly inputs: DepositStartInputs }
+  | Refused
+
+export type DepositCompleteInputsResult =
+  | { readonly ok: true; readonly inputs: DepositCompleteInputs }
+  | Refused
+
+/** A refusal the caller recovers from by a fixed step: a nonce conflict by preparing and building the call again. */
+export type DepositRefusalReason = 'nonceConflict'
+
+type Refused = {
+  readonly ok: false
+  readonly error: string
+  readonly reason?: DepositRefusalReason
+}
+
+/** A state conflict, a recipient mismatch, a moved nonce and bound bytes that are not the expected vault call are refusals the caller can act on. */
+async function outcomeOf<Result>(action: () => Promise<Result>): Promise<Result | Refused> {
   try {
-    return { ok: true, deposit: await action() }
+    return await action()
   } catch (error: unknown) {
-    if (error instanceof DepositStateConflict || error instanceof DepositRecipientMismatch) {
+    if (error instanceof DepositNonceConflict) {
+      return { ok: false, error: error.message, reason: 'nonceConflict' }
+    }
+    if (
+      error instanceof DepositStateConflict ||
+      error instanceof DepositRecipientMismatch ||
+      error instanceof DepositCallMismatch
+    ) {
       return { ok: false, error: error.message }
     }
-    const refusal = circuitAssertMessage(error)
-    if (refusal !== undefined) return { ok: false, error: refusal }
     throw error
   }
 }

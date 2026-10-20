@@ -1,10 +1,16 @@
 // Generates docs/diagram-library/<package path>/diagram-library.drawio and its rendered PNG for
 // every package under src/lib that declares a provider class or an entity: one provider
-// container per service provider `createBackend()` builds and one entity container per repository
-// resource, read from the code through the TypeScript checker. `yarn diagram-library` writes them,
-// and `yarn diagram-library:check` (part of `yarn check`) exits 1 when a committed file differs
-// from a fresh generation, is missing or is not generated. The cells carry the palette's styles
-// byte for byte, so an action flow copies them unchanged.
+// container per src/lib class a composition root builds and one entity container per repository
+// resource, read from the code through the TypeScript checker. The roots are `createBackend()`
+// for the server and every file under src/components for the browser, each walked into the
+// functions it calls that are declared in its own files or under src/lib. A class that
+// implements and adapts no src/lib interface is drawn standalone, under its own name with its
+// public members. A provider's rows are its properties as `name: type`, an optional one marked
+// `?`, then its methods, each kind in source order.
+// `yarn diagram-library` writes them, and `yarn diagram-library:check` (part of `yarn check`)
+// exits 1 when a committed file differs from a fresh generation, is missing or is not
+// generated. The cells carry the palette's styles byte for byte, so an action flow copies them
+// unchanged.
 
 import { execFileSync } from 'node:child_process'
 import {
@@ -20,19 +26,32 @@ import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  isBindingElement,
   isCallExpression,
   isClassDeclaration,
+  isConstructorDeclaration,
   isFunctionDeclaration,
+  isGetAccessorDeclaration,
   isIdentifier,
   isInterfaceDeclaration,
+  isLiteralTypeNode,
+  isMethodDeclaration,
   isMethodSignatureDeclaration,
   isNewExpression,
+  isPrivateIdentifier,
+  isPropertyAccessExpression,
+  isPropertyDeclaration,
+  isPropertySignatureDeclaration,
   isTypeAliasDeclaration,
   isTypeReferenceNode,
+  isUnionTypeNode,
+  isVariableDeclaration,
   type ClassDeclaration,
   type InterfaceDeclaration,
+  type MethodDeclaration,
   type MethodSignatureDeclaration,
   type Node,
+  type PropertySignatureDeclaration,
   type SourceFile,
   SyntaxKind,
   type TypeAliasDeclaration,
@@ -55,18 +74,56 @@ interface DiagramLibrary {
   readonly entities: readonly Entity[]
 }
 
-interface Provider {
+type Provider = InterfaceProvider | StandaloneProvider
+
+interface InterfaceProvider {
   readonly id: string
   readonly className: string
+  readonly relation: Exclude<ProviderRelation, 'standalone'>
+  /** The interface the class implements, or for an adaptor the service interface it adapts. */
   readonly interfaceName: string
   /** The package declaring the class, whose file the container is drawn in. */
   readonly packagePath: string
   readonly interfacePackagePath: string
+  /** The roots that build the class, in `RUNTIMES` order, recorded for the log and never drawn. */
+  readonly runtimes: readonly Runtime[]
+  readonly properties: readonly ProviderProperty[]
   readonly methods: readonly ProviderMethod[]
+}
+
+interface StandaloneProvider {
+  readonly id: string
+  readonly className: string
+  readonly relation: 'standalone'
+  /** The package declaring the class, whose file the container is drawn in. */
+  readonly packagePath: string
+  /** The roots that build the class, in `RUNTIMES` order, recorded for the log and never drawn. */
+  readonly runtimes: readonly Runtime[]
+  readonly properties: readonly ProviderProperty[]
+  readonly methods: readonly ProviderMethod[]
+}
+
+const RUNTIMES = ['server', 'browser'] as const
+
+type Runtime = (typeof RUNTIMES)[number]
+
+/**
+ * An adaptor draws its own public methods and the service it adapts, a standalone class (one
+ * that implements no src/lib interface outside an adaptor file) its own public methods under its
+ * name alone, every other provider the interface it implements.
+ */
+type ProviderRelation = 'implements' | 'adapts' | 'standalone'
+
+interface ProviderProperty {
+  readonly name: string
+  readonly optional: boolean
+  /** The declared type as the code spells it, type parameters of an instantiated generic substituted. */
+  readonly type: string
 }
 
 interface ProviderMethod {
   readonly name: string
+  readonly optional: boolean
   /** Each parameter as the interface spells it, type parameters of an instantiated generic substituted. */
   readonly parameters: readonly string[]
   /** The declared return type without its `Promise<...>` wrapper. */
@@ -92,31 +149,46 @@ interface EntityField {
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BACKEND_FILE = join(ROOT, 'src/server/backend.ts')
+const COMPONENTS_DIRECTORY = join(ROOT, 'src/components')
 const LIB_DIRECTORY = join(ROOT, 'src/lib')
 const REPOSITORY_FILE = join(ROOT, 'src/lib/repository/repository.ts')
 const EVENT_FILE = join(ROOT, 'src/lib/event/event.ts')
 const OUTPUT_DIRECTORY = join(ROOT, 'docs/diagram-library')
 const OUTPUT_NAME = 'diagram-library.drawio'
 const RENDERED_NAME = `${OUTPUT_NAME}.png`
+/** The `-adaptor.ts` entry of `BACKEND_SUFFIXES` in scripts/check-boundaries.ts, which runs on import, so this copy goes once that list moves to an importable module. */
+const ADAPTOR_SUFFIX = '-adaptor.ts'
 
 function readDiagramLibrary(project: Project): DiagramLibrary {
   const checker = project.checker
-  const backend = sourceFile(project, BACKEND_FILE)
   const providers: Provider[] = []
   const excludedClasses: ExcludedClass[] = []
   const interfaceKeys = new Map<string, string>()
-  const implementations = instantiatedClasses(checker, backend).map((declaration) =>
-    implementation(project, declaration),
-  )
+  const builtBy = new Map<string, { instantiated: Instantiated; runtimes: Runtime[] }>()
+  for (const runtime of RUNTIMES) {
+    for (const [key, instantiated] of instantiatedClasses(
+      checker,
+      compositionRoot(project, runtime),
+    )) {
+      const found = builtBy.get(key) ?? { instantiated, runtimes: [] }
+      found.runtimes.push(runtime)
+      builtBy.set(key, found)
+    }
+  }
+  const implementations = [...builtBy.values()].map(({ instantiated, runtimes }) => {
+    const found = implementation(project, instantiated)
+    return 'reason' in found ? found : { ...found, runtimes }
+  })
   const implementationCounts = new Map<string, number>()
   for (const found of implementations) {
-    if ('reason' in found) continue
+    if ('reason' in found || found.relation === 'standalone') continue
     const key = `${found.interfacePackagePath}.${found.interfaceName}`
     const clash = interfaceKeys.get(found.interfaceName)
     if (clash !== undefined && clash !== key) {
       throw new Error(`Two interfaces named ${found.interfaceName}: ${clash} and ${key}`)
     }
     interfaceKeys.set(found.interfaceName, key)
+    if (found.relation === 'adapts') continue
     implementationCounts.set(key, (implementationCounts.get(key) ?? 0) + 1)
   }
   for (const found of implementations) {
@@ -124,55 +196,85 @@ function readDiagramLibrary(project: Project): DiagramLibrary {
       excludedClasses.push(found)
       continue
     }
+    if (found.relation === 'standalone') {
+      providers.push({ ...found, id: `provider-${kebab(found.className)}` })
+      continue
+    }
     const shared =
       (implementationCounts.get(`${found.interfacePackagePath}.${found.interfaceName}`) ?? 0) > 1
-    const key = shared
-      ? `${kebab(found.interfaceName)}-${kebab(implementationQualifier(found))}`
-      : kebab(found.interfaceName)
+    const key =
+      found.relation === 'adapts'
+        ? kebab(found.className)
+        : shared
+          ? `${kebab(found.interfaceName)}-${kebab(implementationQualifier(found))}`
+          : kebab(found.interfaceName)
     providers.push({ ...found, id: `provider-${key}` })
   }
   const entities = entityTypes(project).map((alias) => readEntity(project, alias))
   return { providers, excludedClasses, entities }
 }
 
-type Implementation = Omit<Provider, 'id'>
+type Implementation =
+  | Omit<InterfaceProvider, 'id' | 'runtimes'>
+  | Omit<StandaloneProvider, 'id' | 'runtimes'>
+
+/** Where a root's walk starts, and the files outside src/lib whose functions it follows calls into. */
+interface CompositionRoot {
+  readonly entries: readonly Node[]
+  readonly files: ReadonlySet<string>
+}
+
+function compositionRoot(project: Project, runtime: Runtime): CompositionRoot {
+  const roots: Record<Runtime, () => CompositionRoot> = {
+    server: () => {
+      const entry = sourceFile(project, BACKEND_FILE).statements.find(
+        (statement) => isFunctionDeclaration(statement) && statement.name?.text === 'createBackend',
+      )
+      if (entry === undefined) throw new Error('backend.ts declares no createBackend()')
+      return { entries: [entry], files: new Set([BACKEND_FILE]) }
+    },
+    browser: () => {
+      const files = project.program
+        .getSourceFileNames()
+        .filter(
+          (file) =>
+            isUnder(file, COMPONENTS_DIRECTORY) &&
+            /\.tsx?$/.test(file) &&
+            !/\.test\.tsx?$/.test(file),
+        )
+        .sort()
+      if (files.length === 0) {
+        throw new Error('src/components holds no file in the tsconfig program')
+      }
+      return { entries: files.map((file) => sourceFile(project, file)), files: new Set(files) }
+    },
+  }
+  return roots[runtime]()
+}
 
 /**
- * Every class `createBackend()` instantiates, following calls into the functions backend.ts
- * declares, in the order the walk first meets each class.
+ * Every class the root instantiates, keyed and in the order the walk first meets each, following
+ * each call into a function declared in a root file or under src/lib.
  */
-function instantiatedClasses(checker: Checker, backend: SourceFile): Instantiated[] {
-  const functions = new Map<string, Node>()
-  for (const statement of backend.statements) {
-    if (isFunctionDeclaration(statement) && statement.name !== undefined) {
-      functions.set(statement.name.text, statement)
-    }
-  }
-  const entry = functions.get('createBackend')
-  if (entry === undefined) throw new Error('backend.ts declares no createBackend()')
-  const visited = new Set<string>(['createBackend'])
-  const queue: Node[] = [entry]
-  const classes: Instantiated[] = []
-  const seen = new Set<string>()
+function instantiatedClasses(checker: Checker, root: CompositionRoot): Map<string, Instantiated> {
+  const visited = new Set<string>(root.entries.map(nodeKey))
+  const queue: Node[] = [...root.entries]
+  const classes = new Map<string, Instantiated>()
   const visit = (node: Node): void => {
-    if (isCallExpression(node) && isIdentifier(node.expression)) {
-      const callee = node.expression.text
-      const declaration = functions.get(callee)
-      if (declaration !== undefined && !visited.has(callee)) {
-        visited.add(callee)
-        queue.push(declaration)
+    if (isCallExpression(node)) {
+      const callee = calledFunction(checker, node.expression)
+      if (callee !== undefined && !visited.has(nodeKey(callee))) {
+        const file = callee.getSourceFile().fileName
+        if (root.files.has(file) || isUnder(file, LIB_DIRECTORY)) {
+          visited.add(nodeKey(callee))
+          queue.push(callee)
+        }
       }
     }
     if (isNewExpression(node)) {
       const instantiated = classDeclarationOf(checker, node.expression)
-      const key =
-        'globalName' in instantiated
-          ? instantiated.globalName
-          : `${instantiated.getSourceFile().fileName}:${instantiated.pos.toString()}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        classes.push(instantiated)
-      }
+      const key = 'globalName' in instantiated ? instantiated.globalName : nodeKey(instantiated)
+      if (!classes.has(key)) classes.set(key, instantiated)
     }
     node.forEachChild(visit)
   }
@@ -180,16 +282,38 @@ function instantiatedClasses(checker: Checker, backend: SourceFile): Instantiate
   return classes
 }
 
+function nodeKey(node: Node): string {
+  return `${node.getSourceFile().fileName}:${node.pos.toString()}`
+}
+
+/** The function declaration a call names directly (`f()`) or as a module member (`module.f()`), if it has a body. */
+function calledFunction(checker: Checker, expression: Node): Node | undefined {
+  const name = isPropertyAccessExpression(expression) ? expression.name : expression
+  if (!isIdentifier(name)) return undefined
+  return valueDeclarations(checker, name).find(
+    (declaration) => isFunctionDeclaration(declaration) && declaration.body !== undefined,
+  )
+}
+
 /** A class declaration, or a runtime global declared as a variable plus an interface (`Error`). */
 type Instantiated = ClassDeclaration | { readonly globalName: string }
 
 function classDeclarationOf(checker: Checker, expression: Node): Instantiated {
-  const symbol = resolvedSymbol(checker, expression)
-  for (const handle of symbol.declarations) {
-    const declaration = handle.resolve()
-    if (declaration !== undefined && isClassDeclaration(declaration)) return declaration
+  const found = valueDeclarations(checker, expression).find(isClassDeclaration)
+  return found ?? { globalName: resolvedSymbol(checker, expression).name }
+}
+
+/** The declarations of the symbol at the node, a variable's replaced by its type's, so a binding destructured from `await import(...)` reaches the export. */
+function valueDeclarations(checker: Checker, node: Node): Node[] {
+  const symbol = checker.getSymbolAtLocation(node)
+  if (symbol === undefined) return []
+  const resolved = symbol.flags & SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
+  const declarations = resolved.declarations.flatMap((handle) => handle.resolve() ?? [])
+  if (!declarations.some((found) => isBindingElement(found) || isVariableDeclaration(found))) {
+    return declarations
   }
-  return { globalName: symbol.name }
+  const typeSymbol = checker.getTypeAtLocation(node)?.getSymbol()
+  return (typeSymbol?.declarations ?? []).flatMap((handle) => handle.resolve() ?? [])
 }
 
 /** The provider a class implements, or the reason it is left off the library. */
@@ -224,13 +348,15 @@ function implementation(
     libInterfaces.add(target)
   }
   if (libInterfaces.size === 0) {
-    const named = implemented.map((type) => type.expression.getText()).join(', ')
+    if (implemented.length === 0 && file.endsWith(ADAPTOR_SUFFIX)) {
+      return adaptation(project, declaration)
+    }
     return {
       className,
-      reason:
-        named === ''
-          ? 'implements no interface'
-          : `implements only interfaces declared outside src/lib (${named})`,
+      relation: 'standalone',
+      packagePath: packagePathOf(file),
+      properties: publicProperties(declaration).map((member) => providerProperty(project, member)),
+      methods: publicMethods(declaration).map((member) => providerMethod(project, member)),
     }
   }
   const provided = [...libInterfaces].filter(
@@ -243,13 +369,116 @@ function implementation(
   }
   const [target] = provided
   if (target === undefined) throw new Error(`${className} lost its implements clause`)
+  const members = interfaceMembers(project, target)
   return {
     className,
+    relation: 'implements',
     interfaceName: target.name.text,
     packagePath: packagePathOf(declaration.getSourceFile().fileName),
     interfacePackagePath: packagePathOf(target.getSourceFile().fileName),
-    methods: interfaceMembers(project, target).map((member) => providerMethod(project, member)),
+    properties: members.properties.map((member) => providerProperty(project, member)),
+    methods: members.methods.map((member) => providerMethod(project, member)),
   }
+}
+
+/** An adaptor's provider: the service interface its constructor takes first, and its public instance members in source order. */
+function adaptation(project: Project, declaration: ClassDeclaration): Implementation {
+  const className = declaration.name?.text ?? '(anonymous)'
+  const [adapted] = declaration.members.find(isConstructorDeclaration)?.parameters ?? []
+  const target = adapted?.type === undefined ? undefined : adaptedInterface(project, adapted.type)
+  if (target === undefined) {
+    throw new Error(`${className} takes no src/lib interface as its first constructor parameter`)
+  }
+  return {
+    className,
+    relation: 'adapts',
+    interfaceName: target.name.text,
+    packagePath: packagePathOf(declaration.getSourceFile().fileName),
+    interfacePackagePath: packagePathOf(target.getSourceFile().fileName),
+    properties: publicProperties(declaration).map((member) => providerProperty(project, member)),
+    methods: publicMethods(declaration).map((member) => providerMethod(project, member)),
+  }
+}
+
+/** The class's own public instance methods in source order, a provider with none being an error. */
+function publicMethods(declaration: ClassDeclaration): DeclaredMethod[] {
+  const methods = declaration.members
+    .filter(isMethodDeclaration)
+    .filter(
+      (member) =>
+        !isPrivateIdentifier(member.name) &&
+        !(member.modifiers ?? []).some((modifier) => HIDDEN_MODIFIERS.includes(modifier.kind)),
+    )
+  if (methods.length === 0) {
+    throw new Error(`${declaration.name?.text ?? '(anonymous)'} has no public method`)
+  }
+  return methods.map((member) => ({ declaration: member, substitutions: new Map() }))
+}
+
+/** The class's own public instance properties in source order: fields, getters and constructor parameter properties. */
+function publicProperties(declaration: ClassDeclaration): DeclaredProperty[] {
+  const isPublic = (member: Node & { readonly modifiers?: readonly Node[] }): boolean =>
+    !(member.modifiers ?? []).some((modifier) => HIDDEN_MODIFIERS.includes(modifier.kind))
+  return declaration.members.flatMap((member): DeclaredProperty[] => {
+    if (isConstructorDeclaration(member)) {
+      return member.parameters
+        .filter(
+          (parameter) =>
+            (parameter.modifiers ?? []).some((modifier) =>
+              PARAMETER_PROPERTY_MODIFIERS.includes(modifier.kind),
+            ) && isPublic(parameter),
+        )
+        .map((parameter) => ({
+          name: parameter.name.getText(),
+          optional: parameter.questionToken !== undefined,
+          type: parameter.type,
+          substitutions: new Map(),
+        }))
+    }
+    if (!(isPropertyDeclaration(member) || isGetAccessorDeclaration(member))) return []
+    if (isPrivateIdentifier(member.name) || !isPublic(member)) return []
+    return [
+      {
+        name: member.name.getText(),
+        optional: member.postfixToken?.kind === SyntaxKind.QuestionToken,
+        type: member.type,
+        substitutions: new Map(),
+      },
+    ]
+  })
+}
+
+const HIDDEN_MODIFIERS: readonly SyntaxKind[] = [
+  SyntaxKind.PrivateKeyword,
+  SyntaxKind.ProtectedKeyword,
+  SyntaxKind.StaticKeyword,
+]
+
+/** A constructor parameter carrying one of these is also a property of the class. */
+const PARAMETER_PROPERTY_MODIFIERS: readonly SyntaxKind[] = [
+  SyntaxKind.PublicKeyword,
+  SyntaxKind.PrivateKeyword,
+  SyntaxKind.ProtectedKeyword,
+  SyntaxKind.ReadonlyKeyword,
+]
+
+/** The src/lib interface a parameter type names, a `| null` for an absent service dropped. */
+function adaptedInterface(
+  project: Project,
+  type: TypeNode,
+): InterfaceDeclaration | TypeAliasDeclaration | undefined {
+  const named = isUnionTypeNode(type)
+    ? type.types.filter(
+        (member) => !(isLiteralTypeNode(member) && member.literal.kind === SyntaxKind.NullKeyword),
+      )
+    : [type]
+  const [only] = named
+  if (named.length !== 1 || only === undefined || !isTypeReferenceNode(only)) return undefined
+  const target = declarationOf(project.checker, only.typeName)
+  if (target === undefined || !isUnder(target.getSourceFile().fileName, LIB_DIRECTORY)) {
+    return undefined
+  }
+  return isInterfaceDeclaration(target) || isTypeAliasDeclaration(target) ? target : undefined
 }
 
 /** The class, then each base class it extends, nearest first, up to the first base that is not a class declaration. */
@@ -293,21 +522,35 @@ function interfacesBehind(
   return behind
 }
 
-/** A method declaration with the type parameter substitutions that hold where it is declared. */
-interface InterfaceMethod {
-  readonly declaration: MethodSignatureDeclaration
+/** An interface or class method declaration with the type parameter substitutions that hold where it is declared. */
+interface DeclaredMethod {
+  readonly declaration: MethodSignatureDeclaration | MethodDeclaration
   readonly substitutions: ReadonlyMap<number, string>
 }
 
+/** An interface or class property with the type parameter substitutions that hold where it is declared. */
+interface DeclaredProperty {
+  readonly name: string
+  readonly optional: boolean
+  readonly type: TypeNode | undefined
+  readonly substitutions: ReadonlyMap<number, string>
+}
+
+interface DeclaredMembers {
+  readonly properties: readonly DeclaredProperty[]
+  readonly methods: readonly DeclaredMethod[]
+}
+
 /**
- * The interface's method declarations in source order, reached through a type alias of a
- * generic interface (`Repository<Deposit>`) with each type parameter mapped to its argument.
+ * The interface's property and method declarations, each kind in source order, reached through a
+ * type alias of a generic interface (`Repository<Deposit>`) with each type parameter mapped to its
+ * argument.
  */
 function interfaceMembers(
   project: Project,
   target: InterfaceDeclaration | TypeAliasDeclaration,
-): InterfaceMethod[] {
-  if (!isTypeAliasDeclaration(target)) return ownAndInheritedMethods(project, target, new Map())
+): DeclaredMembers {
+  if (!isTypeAliasDeclaration(target)) return ownAndInheritedMembers(project, target, new Map())
   const aliased = target.type
   const resolved = isTypeReferenceNode(aliased)
     ? declarationOf(project.checker, aliased.typeName)
@@ -326,22 +569,39 @@ function interfaceMembers(
     aliased.typeArguments ?? [],
     new Map(),
   )
-  return ownAndInheritedMethods(project, resolved, substitutions)
+  return ownAndInheritedMembers(project, resolved, substitutions)
 }
 
-/** The interface's own methods in source order, then each inherited method it does not redeclare. */
-function ownAndInheritedMethods(
+/** The interface's own members of each kind in source order, then each inherited member it does not redeclare. */
+function ownAndInheritedMembers(
   project: Project,
   declaration: InterfaceDeclaration,
   substitutions: ReadonlyMap<number, string>,
-): InterfaceMethod[] {
-  const own = declaration.members.map((member) => {
+): DeclaredMembers {
+  const own = declaration.members.map((member): DeclaredMethod | PropertySignatureDeclaration => {
     if (isMethodSignatureDeclaration(member)) return { declaration: member, substitutions }
+    if (isPropertySignatureDeclaration(member)) return member
     throw new Error(
-      `${declaration.name.text} has a member that is not a method: ${member.getText()}`,
+      `${declaration.name.text} has a member that is neither a property nor a method: ${member.getText()}`,
     )
   })
-  const names = new Set(own.map((member) => member.declaration.name.getText()))
+  const ownProperties = own.flatMap((member): DeclaredProperty[] =>
+    'substitutions' in member
+      ? []
+      : [
+          {
+            name: member.name.getText(),
+            optional: member.postfixToken?.kind === SyntaxKind.QuestionToken,
+            type: member.type,
+            substitutions,
+          },
+        ],
+  )
+  const ownMethods = own.flatMap((member) => ('substitutions' in member ? [member] : []))
+  const names = new Set([
+    ...ownProperties.map((member) => member.name),
+    ...ownMethods.map((member) => member.declaration.name.getText()),
+  ])
   const inherited = (declaration.heritageClauses ?? [])
     .flatMap((clause) => [...clause.types])
     .flatMap((type) => {
@@ -356,10 +616,22 @@ function ownAndInheritedMethods(
         type.typeArguments ?? [],
         substitutions,
       )
-      return ownAndInheritedMethods(project, base, baseSubstitutions)
+      return ownAndInheritedMembers(project, base, baseSubstitutions)
     })
-    .filter((member) => !names.has(member.declaration.name.getText()))
-  return [...own, ...inherited]
+  return {
+    properties: [
+      ...ownProperties,
+      ...inherited
+        .flatMap((members) => members.properties)
+        .filter((member) => !names.has(member.name)),
+    ],
+    methods: [
+      ...ownMethods,
+      ...inherited
+        .flatMap((members) => members.methods)
+        .filter((member) => !names.has(member.declaration.name.getText())),
+    ],
+  }
 }
 
 /**
@@ -391,9 +663,16 @@ function typeArgumentSubstitutions(
   return substitutions
 }
 
-function providerMethod(project: Project, method: InterfaceMethod): ProviderMethod {
+function providerProperty(project: Project, property: DeclaredProperty): ProviderProperty {
+  const { name, optional, type, substitutions } = property
+  if (type === undefined) throw new Error(`${name} declares no type`)
+  return { name, optional, type: spellTypeNode(project.checker, type, substitutions) }
+}
+
+function providerMethod(project: Project, method: DeclaredMethod): ProviderMethod {
   const { declaration: member, substitutions } = method
   const name = member.name.getText()
+  const optionalMethod = member.postfixToken?.kind === SyntaxKind.QuestionToken
   const spell = (type: TypeNode): string => spellTypeNode(project.checker, type, substitutions)
   const parameters = member.parameters.map((parameter) => {
     if (parameter.type === undefined) throw new Error(`${name} has an untyped parameter`)
@@ -402,7 +681,12 @@ function providerMethod(project: Project, method: InterfaceMethod): ProviderMeth
     return `${rest}${parameter.name.getText()}${optional}: ${spell(parameter.type)}`
   })
   if (member.type === undefined) throw new Error(`${name} declares no return type`)
-  return { name, parameters, returnType: spell(unwrapPromise(project, member.type)) }
+  return {
+    name,
+    optional: optionalMethod,
+    parameters,
+    returnType: spell(unwrapPromise(project, member.type)),
+  }
 }
 
 function unwrapPromise(project: Project, type: TypeNode): TypeNode {
@@ -725,6 +1009,8 @@ const HEADING_HEIGHT = 20
 /** The tallest column the packer tries, past any single container's height. */
 const MAX_COLUMN_BUDGET = 3000
 const PROVIDER_HEADER = 65
+/** A header band holding the one line of a standalone class name. */
+const STANDALONE_HEADER = 26
 const ENTITY_HEADER = 40
 const METHOD_ROW = 73
 const FIELD_ROW = 30
@@ -746,17 +1032,26 @@ const TITLE_FONT = { size: 16, bold: true }
 const INDENT = '&nbsp; '
 
 function providerContainer(provider: Provider): Container {
-  const header = [
-    provider.className,
-    `&lt;${escapeHtml(provider.interfacePackagePath)}.`,
-    `${escapeHtml(provider.interfaceName)}&gt;`,
-  ]
-  const rows = provider.methods.map((method) => {
+  const header =
+    provider.relation === 'standalone'
+      ? [provider.className]
+      : [
+          provider.className,
+          `${provider.relation === 'adapts' ? 'adapts ' : ''}&lt;${escapeHtml(provider.interfacePackagePath)}.`,
+          `${escapeHtml(provider.interfaceName)}&gt;`,
+        ]
+  const propertyRows = provider.properties.map((property) => ({
+    id: `${provider.id}-${kebab(property.name)}`,
+    value: escapeHtml(`${property.name}${property.optional ? '?' : ''}: ${property.type}`),
+    height: FIELD_ROW,
+  }))
+  const methodRows = provider.methods.map((method) => {
+    const name = escapeHtml(`${method.name}${method.optional ? '?' : ''}`)
     const lines =
       method.parameters.length === 0
-        ? [`${escapeHtml(method.name)}() (${escapeHtml(method.returnType)})`]
+        ? [`${name}() (${escapeHtml(method.returnType)})`]
         : [
-            `${escapeHtml(method.name)}(`,
+            `${name}(`,
             ...method.parameters.map(
               (parameter, index) =>
                 `${INDENT}${escapeHtml(parameter)}${index < method.parameters.length - 1 ? ',' : ''}`,
@@ -769,7 +1064,12 @@ function providerContainer(provider: Provider): Container {
       height: METHOD_ROW + Math.max(0, lines.length - 4) * EXTRA_LINE,
     }
   })
-  return buildContainer(provider.id, header, PROVIDER_HEADER, rows)
+  return buildContainer(
+    provider.id,
+    header,
+    provider.relation === 'standalone' ? STANDALONE_HEADER : PROVIDER_HEADER,
+    [...propertyRows, ...methodRows],
+  )
 }
 
 function entityContainer(entity: Entity): Container {
@@ -1036,7 +1336,7 @@ function kebab(name: string): string {
 }
 
 /** What tells one implementation of a shared interface from its siblings: its class name less the interface name and `Impl`. */
-function implementationQualifier(found: Implementation): string {
+function implementationQualifier(found: Omit<InterfaceProvider, 'id'>): string {
   const qualifier = found.className.replace(found.interfaceName, '').replace(/Impl$/, '')
   return qualifier === '' ? found.className : qualifier
 }
@@ -1153,8 +1453,12 @@ if (check) {
   )
 } else {
   for (const provider of library.providers) {
+    const relation =
+      provider.relation === 'standalone'
+        ? provider.relation
+        : `${provider.relation} ${provider.interfacePackagePath}.${provider.interfaceName}`
     console.log(
-      `provider ${provider.id}: ${provider.packagePath}.${provider.className} implements ${provider.interfacePackagePath}.${provider.interfaceName}, ${provider.methods.length.toString()} methods`,
+      `provider ${provider.id}: ${provider.packagePath}.${provider.className} ${relation}, ${provider.properties.length.toString()} properties, ${provider.methods.length.toString()} methods, built by ${provider.runtimes.join(' and ')}`,
     )
   }
   for (const excluded of library.excludedClasses) {

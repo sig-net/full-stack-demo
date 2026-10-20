@@ -43,7 +43,7 @@ export class SwapStateControllerImpl
     )
   }
 
-  startSwap({ unprovenTx, ...swap }: StartSwapArgs): Promise<Swap> {
+  startSwap({ call, ...swap }: StartSwapArgs): Promise<Swap> {
     const now = new Date()
     return this.start(
       {
@@ -56,7 +56,7 @@ export class SwapStateControllerImpl
         updateTime: now,
       },
       'startSwap',
-      unprovenTx,
+      call,
     )
   }
 

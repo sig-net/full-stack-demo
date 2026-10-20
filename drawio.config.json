@@ -23,6 +23,7 @@
       "commitTransaction",
       "recordProof",
       "recordProofFailure",
+      "recordFee",
       "submitTransaction",
       "recordSubmission",
       "recordRejection",

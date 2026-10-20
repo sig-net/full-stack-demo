@@ -7,6 +7,7 @@ import type { Backend } from '@/server/backend'
 import { testBackend } from './backend'
 import { CIRCLE_EURC, CIRCLE_USDC } from './sepolia-tokens'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
+import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 45 * 60_000
@@ -85,9 +86,9 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         )
       }
 
-      const deposit = await depositV1.adaptor.startDeposit(callerSecret, {
-        depositRequest: { erc20Address: CIRCLE_USDC, amount: AMOUNT_IN },
-        wallet,
+      const deposit = await startDepositAsUser(backend, callerSecret, user, {
+        erc20Address: CIRCLE_USDC,
+        amount: AMOUNT_IN,
       })
       if (!deposit.ok) throw new Error(deposit.error)
       created.push(['midnight_ethereum_erc20_vault_deposits_v1', deposit.deposit.name])
@@ -106,8 +107,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         {
           name: deposit.deposit.name,
           state: async () => (await depositV1.repository.get(deposit.deposit.name))?.state,
-          complete: () =>
-            depositV1.adaptor.completeDeposit(callerSecret, { name: deposit.deposit.name, wallet }),
+          complete: () => completeDepositAsUser(backend, callerSecret, user, deposit.deposit.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )

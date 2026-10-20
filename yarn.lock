@@ -1440,6 +1440,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@midnight-ntwrk/midnight-js-fetch-zk-config-provider@npm:5.0.0-beta.6":
+  version: 5.0.0-beta.6
+  resolution: "@midnight-ntwrk/midnight-js-fetch-zk-config-provider@npm:5.0.0-beta.6"
+  dependencies:
+    "@midnight-ntwrk/midnight-js-types": "npm:5.0.0-beta.6"
+    "@midnight-ntwrk/midnight-js-utils": "npm:5.0.0-beta.6"
+    cross-fetch: "npm:^4.1.0"
+  checksum: 10c0/32080b3bbd5fe5fea674841254a864567dd2de92c5b84dc56f4eadfedc9b04599784a97d29efa9aed897b71e8cb76d1fcb86ecfa0b276f2d5454f2a532211e86
+  languageName: node
+  linkType: hard
+
 "@midnight-ntwrk/midnight-js-http-client-proof-provider@npm:5.0.0-beta.6":
   version: 5.0.0-beta.6
   resolution: "@midnight-ntwrk/midnight-js-http-client-proof-provider@npm:5.0.0-beta.6"
@@ -5405,6 +5416,7 @@ __metadata:
     "@midnight-ntwrk/compact-js": "npm:2.5.5-rc.7"
     "@midnight-ntwrk/compact-runtime": "npm:0.18.0-rc.1"
     "@midnight-ntwrk/midnight-js": "npm:5.0.0-beta.6"
+    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "npm:5.0.0-beta.6"
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "npm:5.0.0-beta.6"
     "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "npm:5.0.0-beta.6"
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "npm:5.0.0-beta.6"

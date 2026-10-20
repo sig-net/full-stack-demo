@@ -77,10 +77,12 @@ import type { ActivityService } from '@/lib/midnight/ethereum-erc20-vault/activi
 import { ActivityServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-adaptor'
 import { ActivityServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-impl'
 import { DepositEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-event-consumer'
+import { DepositCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-call-builder'
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
 import { DepositRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository-sql-impl'
 import type { DepositService } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 import { DepositServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-adaptor'
+import { inspectBoundTransaction } from '@/lib/midnight/transaction-v1/inspect-bound-transaction'
 import { DepositServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-impl'
 import type { DepositStateController } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
 import { DepositStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller-impl'
@@ -159,8 +161,11 @@ import { SupportedTokenServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/s
 import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
 import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import {
-  compiledVaultContract,
   permissionlessVaultPrivateState,
+  PROOF_TIMEOUT_MS,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-call'
+import {
+  compiledVaultContract,
   VaultCircuitsMidnightJsImpl,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits-midnight-js-impl'
 import type { VaultLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
@@ -192,7 +197,7 @@ import { SpotPriceServiceAdaptor } from '@/lib/pricing/spot-price-service-adapto
 import { SpotPriceServiceImpl } from '@/lib/pricing/spot-price-service-impl'
 import type { SpotPriceSource } from '@/lib/pricing/spot-price-source'
 import { SpotPriceSourceCoinGeckoImpl } from '@/lib/pricing/spot-price-source-coingecko-impl'
-import { PrivateStateProviderMemoryImpl } from '@/lib/midnight/private-state-provider-memory-impl'
+import { MemoryPrivateStateProvider } from '@/lib/midnight/memory-private-state-provider'
 import {
   GENESIS_MINT_WALLET_SEED,
   type LocalMidnightFaucetService,
@@ -332,6 +337,8 @@ export interface MidnightBackend {
       readonly eventConsumer: DepositEventConsumer
       readonly service: DepositService
       readonly adaptor: DepositServiceAdaptor
+      /** The browser's side of a deposit call, over the backend's own providers. */
+      readonly callBuilder: DepositCallBuilder
     }
     /** The caller's withdrawals: a vault coin burnt for an ERC20 transfer the vault account signs to a destination. */
     readonly withdrawV1: {
@@ -755,9 +762,6 @@ function createMidnight(
   }
 }
 
-/** A vault circuit proves in minutes on a loaded host, well past the SDK's five-minute default. */
-const PROOF_TIMEOUT_MS = 15 * 60 * 1000
-
 function createMidnightTransactionV1(
   db: DbBackend,
   event: EventBackend,
@@ -837,6 +841,10 @@ function createMidnightEthereumErc20Vault(
     relayerWallet.publicKeys(),
     logger.child({ component: 'VaultCircuitsMidnightJsImpl' }),
   )
+  const depositCallBuilder = new DepositCallBuilder(
+    { publicDataProvider, zkConfigProvider, compiledContract, vaultAddress },
+    proofProvider,
+  )
   const ledger = new VaultLedgerIndexerImpl(publicDataProvider, vaultAddress)
   const readers = signetReaders({
     vaultAddress,
@@ -884,7 +892,8 @@ function createMidnightEthereumErc20Vault(
       config,
       transactionV1,
       vaultRequestV1,
-      { circuits, ledger },
+      { ledger },
+      depositCallBuilder,
       logger,
     ),
     withdrawV1: createMidnightEthereumErc20VaultWithdrawV1(
@@ -1290,7 +1299,7 @@ function createVaultProviders(
   loggerProvider: LoggerProvider,
 ): () => Promise<VaultProviders> {
   return lazySingleton(async (): Promise<VaultProviders> => {
-    const privateStateProvider = await PrivateStateProviderMemoryImpl.holding(
+    const privateStateProvider = await MemoryPrivateStateProvider.holding(
       vaultAddress,
       VAULT_PRIVATE_STATE_ID,
       permissionlessVaultPrivateState(),
@@ -1400,7 +1409,8 @@ function createMidnightEthereumErc20VaultDepositV1(
   config: ServerConfig,
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
-  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
+  callBuilder: DepositCallBuilder,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['depositV1'] {
   const repository = new DepositRepositorySQLImpl(db.database)
@@ -1424,12 +1434,12 @@ function createMidnightEthereumErc20VaultDepositV1(
     repository,
     stateController,
     vaultRequestV1.repository,
-    vault.circuits,
     ethereum.provider,
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
     config.client.midnightNetwork,
+    inspectBoundTransaction,
   )
   return {
     repository,
@@ -1444,5 +1454,6 @@ function createMidnightEthereumErc20VaultDepositV1(
       service,
       logger.child({ component: 'DepositServiceAdaptor' }),
     ),
+    callBuilder,
   }
 }

@@ -6,12 +6,15 @@ import {
   type MidnightTransactionState,
 } from '@/lib/midnight/transaction-v1/transaction'
 import {
+  CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION,
   TRANSACTION_IN_STATE,
   transactionFixture,
 } from '@/lib/midnight/transaction-v1/transaction-fixtures'
 import {
   assertConsistent,
-  INITIAL_STATE,
+  type CommittedCall,
+  ENTRY_STATE_BY_CALL,
+  entryState,
   EXPIRABLE_STATES,
   nextState,
   type TransactionAction,
@@ -21,6 +24,7 @@ const ACTIONS: readonly TransactionAction[] = [
   'recordProof',
   'recordProofFailure',
   'submit',
+  'recordFee',
   'recordSubmission',
   'recordRejection',
   'recordLedgerFailure',
@@ -37,6 +41,8 @@ const ALLOWED: ReadonlyArray<
   ['AwaitingProof', 'expire', 'Failed'],
   ['AwaitingWallet', 'submit', 'AwaitingSubmission'],
   ['AwaitingWallet', 'expire', 'Failed'],
+  ['AwaitingFee', 'recordFee', 'AwaitingSubmission'],
+  ['AwaitingFee', 'expire', 'Failed'],
   ['AwaitingSubmission', 'recordSubmission', 'AwaitingInclusion'],
   ['AwaitingSubmission', 'recordRejection', 'Failed'],
   ['AwaitingSubmission', 'expire', 'Failed'],
@@ -69,9 +75,20 @@ describe('nextState', () => {
       ).sort(),
     )
   })
+})
 
-  test('a transaction is committed before proving', () => {
-    expect(INITIAL_STATE).toBe('AwaitingProof')
+describe('entryState', () => {
+  const calls: ReadonlyArray<[string, CommittedCall, MidnightTransactionState]> = [
+    ['unproven bytes wait for the proof', { unprovenTx: 'unproven' }, 'AwaitingProof'],
+    ['bound bytes wait for the relayer fee', { boundTx: 'bound' }, 'AwaitingFee'],
+  ]
+
+  test.each(calls)('%s', (_name, call, state) => {
+    expect(entryState(call)).toBe(state)
+  })
+
+  test('the table names one entry state per kind of call', () => {
+    expect(ENTRY_STATE_BY_CALL).toEqual({ unprovenTx: 'AwaitingProof', boundTx: 'AwaitingFee' })
   })
 })
 
@@ -80,14 +97,39 @@ describe('assertConsistent', () => {
     expect(() => assertConsistent(TRANSACTION_IN_STATE[state])).not.toThrow()
   })
 
+  test('AwaitingSubmission holds a caller-bound call as it holds a backend-proved one', () => {
+    expect(() => assertConsistent(CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION)).not.toThrow()
+  })
+
   const violations: ReadonlyArray<[string, Partial<MidnightTransaction>, string]> = [
     ['AwaitingProof without the unproven bytes', { unprovenTx: null }, 'must have unprovenTx set'],
     ['AwaitingProof without the TTL', { expireTime: null }, 'must have expireTime set'],
     ['AwaitingProof with proven bytes', { unboundTx: 'x' }, 'must have unboundTx unset'],
+    ['AwaitingProof with bound bytes', { boundTx: 'x' }, 'must have boundTx unset'],
     [
       'AwaitingWallet still holding the unproven bytes',
       { state: 'AwaitingWallet', unboundTx: 'x' },
       'must have unprovenTx unset',
+    ],
+    [
+      'AwaitingFee without the bound bytes',
+      { ...TRANSACTION_IN_STATE.AwaitingFee, boundTx: null },
+      'must have boundTx set',
+    ],
+    [
+      'AwaitingFee holding proven bytes',
+      { ...TRANSACTION_IN_STATE.AwaitingFee, unboundTx: 'x' },
+      'must have unboundTx unset',
+    ],
+    [
+      'AwaitingFee already paid for',
+      { ...TRANSACTION_IN_STATE.AwaitingFee, finalizedTx: 'x' },
+      'must have finalizedTx unset',
+    ],
+    [
+      'AwaitingSubmission without the paid bytes',
+      { ...CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION, finalizedTx: null },
+      'must have finalizedTx set',
     ],
     [
       'AwaitingInclusion without the id',

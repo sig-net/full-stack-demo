@@ -2,18 +2,17 @@ import type { RespondBidirectionalEvent } from '@sig-net/midnight'
 import type { VaultCircuitId } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
-import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
+import type { CallerCircuitArgs } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 
 /**
- * Builds the vault's circuit calls as unproven transactions, hex in the ledger's serialisation,
- * for a Midnight transaction row to carry through its lifecycle. Building reads the contract's
- * state from the indexer, so each call takes a moment and is made outside any database
- * transaction. The two user circuits take the caller's secret as the witness, and the permissionless
- * ones prove under any private state.
+ * Builds the circuit calls the backend makes as unproven transactions, hex in the ledger's
+ * serialisation, for a Midnight transaction row to carry through its lifecycle. Building reads
+ * the contract's state from the indexer, so each call takes a moment and is made outside any
+ * database transaction. The caller circuits take the caller's secret as the witness, and the
+ * permissionless ones prove under any private state. The deposit's two caller circuits are built
+ * in the browser by `deposit-v1/deposit-call-builder.ts`.
  */
 export interface VaultCircuits {
-  startDeposit(args: StartDepositCircuitArgs): Promise<string>
-  completeDeposit(args: CompleteDepositCircuitArgs): Promise<string>
   sendDeposit(args: SendRequestCircuitArgs): Promise<string>
   /** Surrenders a fresh coin of the token worth exactly `amount`, which the caller's wallet funds when it balances the call. */
   startWithdraw(args: StartWithdrawCircuitArgs): Promise<string>
@@ -39,36 +38,6 @@ export interface VaultCircuits {
   sendApprove(args: SendRequestCircuitArgs): Promise<string>
   /** Queues an attestation from the post alone: the MPC's signature covers the output's width and hash, so the output is presented at completion. */
   queueAttestation(args: QueueAttestationCircuitArgs): Promise<string>
-}
-
-/** The caller's secret as the witness and the wallet's keys, which every caller circuit takes. */
-export interface CallerCircuitArgs {
-  readonly secretKey: Uint8Array
-  readonly wallet: WalletPublicKeys
-}
-
-/** The EIP-1559 fee envelope of the request's EVM transaction, fixed at start. */
-export interface GasEnvelope {
-  readonly gasLimit: bigint
-  readonly maxFeePerGas: bigint
-  readonly maxPriorityFeePerGas: bigint
-}
-
-export interface StartDepositCircuitArgs extends CallerCircuitArgs {
-  readonly inIndex: bigint
-  readonly evmNonce: bigint
-  readonly gas: GasEnvelope
-  /** `0x` plus 40 hex characters. */
-  readonly erc20Address: string
-  readonly amount: bigint
-}
-
-export interface CompleteDepositCircuitArgs extends CallerCircuitArgs {
-  readonly requestId: Uint8Array
-  /** One byte: the attested transfer result for an executed sweep, ignored for the other verdicts. */
-  readonly serializedOutput: Uint8Array
-  /** 32 random bytes, fresh per call. */
-  readonly mintNonce: Uint8Array
 }
 
 export interface StartWithdrawCircuitArgs extends CallerCircuitArgs {
@@ -175,14 +144,3 @@ export const SEND_CIRCUIT_BY_ACTION: Readonly<Record<VaultAction, VaultCircuitId
   redeem: 'sendRedeem',
   approve: 'sendApprove',
 }
-
-/**
- * The contract's assert message when the error is the compact runtime refusing a call at build
- * time, which it reports as a plain `Error` whose message it prefixes, or undefined otherwise.
- */
-export function circuitAssertMessage(error: unknown): string | undefined {
-  if (!(error instanceof Error) || !error.message.startsWith(ASSERT_PREFIX)) return undefined
-  return error.message.slice(ASSERT_PREFIX.length)
-}
-
-const ASSERT_PREFIX = 'failed assert: '

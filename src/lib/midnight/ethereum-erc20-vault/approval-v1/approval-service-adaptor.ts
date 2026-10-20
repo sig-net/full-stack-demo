@@ -16,7 +16,7 @@ import {
   startApprovalArgsSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service'
 import { CallerOperationStateConflict } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
-import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 import type { Logger } from '@/lib/logging/logger'
 
 /**

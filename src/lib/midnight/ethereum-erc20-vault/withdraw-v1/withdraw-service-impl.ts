@@ -15,6 +15,7 @@ import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-ci
 import {
   type AttestedRequestFields,
   attestedRequestFields,
+  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
@@ -80,7 +81,7 @@ export class WithdrawServiceImpl implements WithdrawService {
         ...withdrawRequest,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        unprovenTx,
+        call: { unprovenTx },
       }),
     )
   }
@@ -99,11 +100,11 @@ export class WithdrawServiceImpl implements WithdrawService {
       secretKey: caller.secretKey,
       wallet,
       requestId: hexToBytes(request.requestId),
-      serializedOutput: completionOutput(request),
+      serializedOutput: completionOutput(request, 1),
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
     })
     return this.unitOfWork.runInTransaction(() =>
-      this.withdrawStateController.completeWithdraw({ name, unprovenTx }),
+      this.withdrawStateController.completeWithdraw({ name, call: { unprovenTx } }),
     )
   }
 
@@ -141,11 +142,4 @@ export class WithdrawServiceImpl implements WithdrawService {
     }
     return attestedRequestFields(request)
   }
-}
-
-/** The circuit verifies the attested byte only for an executed transfer, and ignores it otherwise. */
-function completionOutput(request: AttestedRequestFields): Uint8Array {
-  return request.attestationOutputKind === 'executed'
-    ? hexToBytes(request.attestationOutput)
-    : new Uint8Array([0])
 }

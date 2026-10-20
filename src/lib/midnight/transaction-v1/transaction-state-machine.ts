@@ -15,6 +15,7 @@ export type TransactionAction =
   | 'recordProof'
   | 'recordProofFailure'
   | 'submit'
+  | 'recordFee'
   | 'recordSubmission'
   | 'recordRejection'
   | 'recordLedgerFailure'
@@ -27,6 +28,7 @@ const TRANSITIONS: Record<
 > = {
   AwaitingProof: { recordProof: 'AwaitingWallet', recordProofFailure: 'Failed', expire: 'Failed' },
   AwaitingWallet: { submit: 'AwaitingSubmission', expire: 'Failed' },
+  AwaitingFee: { recordFee: 'AwaitingSubmission', expire: 'Failed' },
   AwaitingSubmission: {
     recordSubmission: 'AwaitingInclusion',
     recordRejection: 'Failed',
@@ -41,13 +43,29 @@ const TRANSITIONS: Record<
   Failed: {},
 }
 
-/** The state a transaction is committed in: built, with its unproven bytes. */
-export const INITIAL_STATE: MidnightTransactionState = 'AwaitingProof'
+/** The bytes a call is committed with: unproven from the backend's builder, or bound by the caller's wallet without a fee. */
+export type CommittedCall = { unprovenTx: string } | { boundTx: string }
+
+/** The state a committed call enters, by the bytes it arrives with: unproven bytes wait for the proof, bound bytes wait for the relayer's fee. */
+export const ENTRY_STATE_BY_CALL: Record<CommittedCallKind, MidnightTransactionState> = {
+  unprovenTx: 'AwaitingProof',
+  boundTx: 'AwaitingFee',
+}
+
+export function entryState(call: CommittedCall): MidnightTransactionState {
+  return 'unprovenTx' in call ? ENTRY_STATE_BY_CALL.unprovenTx : ENTRY_STATE_BY_CALL.boundTx
+}
+
+/** The field that names each kind of committed call. */
+type CommittedCallKind = KeyOfEach<CommittedCall>
+
+type KeyOfEach<Union> = Union extends unknown ? keyof Union : never
 
 /** The states in which `expireTime` passing ends the transaction. */
 export const EXPIRABLE_STATES: readonly MidnightTransactionState[] = [
   'AwaitingProof',
   'AwaitingWallet',
+  'AwaitingFee',
   'AwaitingSubmission',
   'AwaitingInclusion',
 ]
@@ -70,6 +88,7 @@ export function assertConsistent(transaction: MidnightTransaction): void {
 type StepField =
   | 'unprovenTx'
   | 'unboundTx'
+  | 'boundTx'
   | 'finalizedTx'
   | 'expireTime'
   | 'txId'
@@ -79,8 +98,9 @@ type StepField =
 
 /**
  * What each state holds. A field in neither list is free: a failure keeps whatever the step
- * before it produced. `unprovenTx` embeds the private transcript and is deleted on leaving
- * `AwaitingProof`.
+ * before it produced, and from `AwaitingSubmission` on a call holds `unboundTx` when the backend
+ * proved it or `boundTx` when the caller's wallet bound it. `unprovenTx` embeds the private
+ * transcript and is deleted on leaving `AwaitingProof`.
  */
 const FIELDS_BY_STATE: Record<
   MidnightTransactionState,
@@ -88,18 +108,22 @@ const FIELDS_BY_STATE: Record<
 > = {
   AwaitingProof: {
     set: ['unprovenTx', 'expireTime'],
-    unset: ['unboundTx', 'finalizedTx', 'txId', 'blockHeight', 'failure', 'error'],
+    unset: ['unboundTx', 'boundTx', 'finalizedTx', 'txId', 'blockHeight', 'failure', 'error'],
   },
   AwaitingWallet: {
     set: ['unboundTx', 'expireTime'],
-    unset: ['unprovenTx', 'finalizedTx', 'txId', 'blockHeight', 'failure', 'error'],
+    unset: ['unprovenTx', 'boundTx', 'finalizedTx', 'txId', 'blockHeight', 'failure', 'error'],
+  },
+  AwaitingFee: {
+    set: ['boundTx', 'expireTime'],
+    unset: ['unprovenTx', 'unboundTx', 'finalizedTx', 'txId', 'blockHeight', 'failure', 'error'],
   },
   AwaitingSubmission: {
-    set: ['unboundTx', 'finalizedTx', 'expireTime'],
+    set: ['finalizedTx', 'expireTime'],
     unset: ['unprovenTx', 'txId', 'blockHeight', 'failure', 'error'],
   },
   AwaitingInclusion: {
-    set: ['unboundTx', 'finalizedTx', 'expireTime', 'txId'],
+    set: ['finalizedTx', 'expireTime', 'txId'],
     unset: ['unprovenTx', 'blockHeight', 'failure', 'error'],
   },
   Succeeded: { set: ['txId', 'blockHeight'], unset: ['unprovenTx', 'failure', 'error'] },

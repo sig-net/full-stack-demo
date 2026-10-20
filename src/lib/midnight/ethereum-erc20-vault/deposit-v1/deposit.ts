@@ -12,6 +12,7 @@ import {
   callerOperationStateSchema,
   isTerminalCallerOperationState,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
+import type { AttestedRequestFields } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import {
   amountSchema,
   evmAddressSchema,
@@ -98,6 +99,18 @@ export type Deposit = z.infer<typeof depositSchema>
 export const depositRequestSchema = depositSchema.pick({ erc20Address: true, amount: true })
 
 export type DepositRequest = z.infer<typeof depositRequestSchema>
+
+/** What the server assigns to a start call, afresh on every `prepareStartDeposit`: the slot, the sweep's nonce and its gas envelope. */
+export type DepositStartInputs = Pick<
+  Deposit,
+  'inIndex' | 'evmNonce' | 'gasLimit' | 'maxFeePerGas' | 'maxPriorityFeePerGas'
+>
+
+/** What the complete circuit takes from the deposit's attested request, as the request holds them. */
+export type DepositCompleteInputs = Pick<
+  AttestedRequestFields,
+  'requestId' | 'attestationOutputKind' | 'attestationOutput'
+>
 
 export function depositName(parent: string, id: string): string {
   return `${parent}/${DEPOSIT_COLLECTION}/${id}`

@@ -165,6 +165,11 @@ introduces the stages, and the palette card carries their swatches:
   `args: SubmitTransactionArgs`), then the closing line `) (ReturnType)`. The return type
   is the resolved type with its `Promise<...>` wrapper dropped:
   `Promise<MidnightTransaction | undefined>` reads `(MidnightTransaction | undefined)`.
+- A provider's property rows come before its method rows, each kind in source order. A
+  property row is 30 units tall and reads `name: type`, the type spelled as the code
+  spells it, and an optional member carries its `?` (`dustAddress?: string`, and on a
+  method row `registerNightForDust?() (bigint)`).
+- A standalone provider's header band is 26 units tall and holds its class name alone.
 - An entity's header band is 40 units tall: the package path with its trailing dot
   (`event.outbox-entry-v1.`) over the type name (`OutboxEntry`).
 - An entity row is 30 units tall and reads `field: type`, the fields taken from the
@@ -183,15 +188,33 @@ class or an entity, filed in
 [diagram-library/](diagram-library) at the package's path: the providers and entities of
 `src/lib/midnight/transaction-v1` are in
 [diagram-library/midnight/transaction-v1/diagram-library.drawio](diagram-library/midnight/transaction-v1/diagram-library.drawio).
-Each file holds a provider container for every service provider `createBackend()` builds
+Each file holds a provider container for every service provider a composition root builds
 whose class the package declares, whichever package declares its interface, and an entity
 container for every resource a repository stores whose schema the package declares, plus
 the `Event` schema in `event`.
+There are two composition roots: `createBackend()` in `src/server/backend.ts` for the server,
+and every `.ts` and `.tsx` file under `src/components` for the browser (`SeedWallet`,
+`TokenInfoRegistry`). Each root is walked through the calls it makes into functions declared
+in its own files or under `src/lib`, a module reached through `await import(...)` included, so
+`DepositCallBuilder` is built by both. The generator records which roots build each provider
+and prints it on the provider's log line, and the drawing does not show it.
+A provider implementing an interface has a property row for each property of that interface
+and a method row for each method, inherited members included. An adaptor or a standalone class
+has a row for each of its own public instance properties (fields, getters and constructor
+parameter properties) and public methods.
+A service adaptor (a class in a `-adaptor.ts` file that a root builds) is drawn too, with a
+header naming the class over the word `adapts` and the service interface its constructor takes
+first, as
+`DepositServiceAdaptor adapts <midnight.ethereum-erc20-vault.deposit-v1.DepositService>`, and its
+id is `provider-` and its class name in kebab case (`provider-deposit-service-adaptor`).
+Any other class a root builds that implements no interface under `src/lib` is drawn
+standalone, under a header holding its class name alone, and an id formed as an adaptor's is
+(`provider-unit-of-work`).
 `scripts/diagram-library.ts` generates them from the code through the TypeScript checker, so
 they are never edited by hand:
 
 - Regenerate them with `yarn diagram-library` whenever `src` changes an interface, a provider
-  the backend builds or a resource schema. It writes every file, renders the PNG of each file
+  a composition root builds or a resource schema. It writes every file, renders the PNG of each file
   whose pair `drawio-cli check-pair` finds stale, and deletes every pair under
   `docs/diagram-library/` that the code does not generate.
 - `yarn diagram-library:check`, part of `yarn check`, fails and names the file and each
@@ -204,13 +227,14 @@ they are never edited by hand:
   `drawio-cli diff-cells docs/diagram-library/midnight/ethereum-erc20-vault/deposit-v1/diagram-library.drawio docs/ethereum-erc20-vault/deposit/deposit-v2.drawio`:
   every shared id must match, so the output holds no `differs` line. Its `only in A` and
   `only in B` lines list the cells the flow leaves out and adds, and make it exit 1.
-- A class the backend builds counts as implementing an interface under `src/lib` when it or
+- A class a root builds counts as implementing an interface under `src/lib` when it or
   any base class it extends implements one, so `MidnightTransactionEventConsumer` gets its
-  `EventConsumer` container from `LifecycleEventConsumer`. A base class the backend never
+  `EventConsumer` container from `LifecycleEventConsumer`. A base class no root
   builds gets no container of its own, and an alias the class implements
   (`DepositRepository`) stands for the generic interface its base class implements
-  (`Repository`). A class the backend builds that implements no interface under `src/lib`
-  (the service adaptors, `UnitOfWork`, library classes) has no container. When several
+  (`Repository`). A class declared outside `src/lib` (`JsonRpcProvider`, `NodeZkConfigProvider`)
+  and a class a root builds through a factory method with no `new` expression
+  (`MemoryPrivateStateProvider.holding()`) have no container. When several
   classes implement one interface, each container id carries a qualifier taken from its
   class name less the interface name and `Impl` (`provider-event-publisher-kafka`,
   `provider-event-consumer-midnight-transaction`).

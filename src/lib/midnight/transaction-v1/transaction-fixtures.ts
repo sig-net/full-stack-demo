@@ -12,6 +12,7 @@ export function transactionFixture(
     signer: 'caller',
     unprovenTx: 'unproven',
     unboundTx: null,
+    boundTx: null,
     finalizedTx: null,
     expireTime: new Date('2100-01-01T00:00:00Z'),
     txId: null,
@@ -29,13 +30,21 @@ export const DEPOSIT_NAME = `${CALLER_NAME}/ethereum-erc20-vault-deposits/1f2e3d
 export const TRANSACTION_NAME = `${CALLER_NAME}/midnight-transactions/0d8c7d10-6a3e-4d7e-9f1c-2b7a1c3d4e5f`
 export const BLOCK_HEIGHT = 8562
 
-/** The row each state leaves behind, consistent with the state machine's field table. */
+/**
+ * The row each state leaves behind, consistent with the state machine's field table. The states
+ * from `AwaitingSubmission` on hold the backend-proved shape, with `unboundTx` set.
+ */
 export const TRANSACTION_IN_STATE: Record<MidnightTransaction['state'], MidnightTransaction> = {
   AwaitingProof: transactionFixture(),
   AwaitingWallet: transactionFixture({
     state: 'AwaitingWallet',
     unprovenTx: null,
     unboundTx: 'unbound',
+  }),
+  AwaitingFee: transactionFixture({
+    state: 'AwaitingFee',
+    unprovenTx: null,
+    boundTx: 'bound',
   }),
   AwaitingSubmission: transactionFixture({
     state: 'AwaitingSubmission',
@@ -65,3 +74,13 @@ export const TRANSACTION_IN_STATE: Record<MidnightTransaction['state'], Midnight
     error: 'boom',
   }),
 }
+
+/** `AwaitingSubmission` reached from `AwaitingFee`: bound by the caller's wallet, with the relayer's fee paid. */
+export const CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION: MidnightTransaction = transactionFixture(
+  {
+    state: 'AwaitingSubmission',
+    unprovenTx: null,
+    boundTx: 'bound',
+    finalizedTx: 'finalized',
+  },
+)

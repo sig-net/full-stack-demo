@@ -141,7 +141,7 @@ export function ActivityFlowDialog({ entry, onOpenChange }: ActivityFlowDialogPr
                           />
                           <span>{step.label}</span>
                           <span className="sr-only">({step.status})</span>
-                          {step.walletTurn && <WalletSigningIcon className="size-4" />}
+                          {step.walletTurn !== null && <WalletSigningIcon className="size-4" />}
                         </div>
                         {step.reference !== null && (
                           <ActivityReferenceLine reference={step.reference} />
@@ -193,13 +193,20 @@ function description(
         : ` It expires at ${formatTimestamp(walletTransaction.expireTime)}.`
     return `${subject} is in progress. You need to sign with your wallet for the ${callLabel(walletTransaction)} call: it is proved, your Midnight wallet pays its DUST fee and signs it, then the backend submits it.${expiry}`
   }
+  const remaining = entry.steps.filter((step) => step.status !== 'done')
+  const inPage = remaining.some((step) => step.walletTurn === 'inPage')
   if (entry.action.kind === 'complete') {
-    return `${subject} is in progress. Nothing for you to do now: the completion call is being built for your wallet, and starts by itself while this page is open with the wallet connected.`
+    return inPage
+      ? `${subject} is in progress. Nothing for you to do now: this page builds, proves and signs the completion call with your wallet by itself while it is open with the wallet connected, then the backend pays its fee and submits it.`
+      : `${subject} is in progress. Nothing for you to do now: the completion call is being built for your wallet, and starts by itself while this page is open with the wallet connected.`
   }
-  const turns = entry.steps.filter((step) => step.walletTurn && step.status !== 'done').length
+  const turns = remaining.filter((step) => step.walletTurn === 'signTurn').length
   const approvals =
     turns === 0 ? '' : ` Your wallet will need to approve ${TURN_WORDS[turns] ?? String(turns)}.`
-  return `${subject} is in progress. Nothing for you to do now.${approvals}`
+  const signedInPage = inPage
+    ? ' This page signs the completion call with your wallet by itself once it is due, while it is open with the wallet connected.'
+    : ''
+  return `${subject} is in progress. Nothing for you to do now.${approvals}${signedInPage}`
 }
 
 const TURN_WORDS: Record<number, string> = { 1: 'once more', 2: 'twice' }
@@ -209,8 +216,6 @@ function callLabel(transaction: ActivityWalletTransaction): string {
 }
 
 const CIRCUIT_LABELS: Record<string, string> = {
-  startDeposit: 'start',
-  completeDeposit: 'completion',
   startWithdraw: 'start',
   completeWithdraw: 'completion',
   startSwap: 'start',

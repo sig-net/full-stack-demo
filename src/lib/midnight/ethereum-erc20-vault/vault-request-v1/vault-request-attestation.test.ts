@@ -4,10 +4,14 @@ import { describe, expect, test } from 'vitest'
 import {
   attestationFields,
   attestationToEvent,
+  type AttestedRequestFields,
+  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import {
   ATTESTATION,
   ATTESTATION_FIELDS,
+  ATTESTATION_OUTPUT,
+  REQUEST_ID_HEX,
   VAULT_REQUEST_IN_STATE,
   vaultRequestFixture,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
@@ -47,3 +51,46 @@ describe('the attestation codec', () => {
     )
   })
 })
+
+describe('completionOutput', () => {
+  test.each<{
+    name: string
+    request: AttestedRequestFields
+    outputWidth: number
+    expected: Uint8Array
+  }>([
+    {
+      name: 'an executed sweep hands the circuit the attested output bytes',
+      request: attestedRequest('executed'),
+      outputWidth: 1,
+      expected: ATTESTATION_OUTPUT,
+    },
+    {
+      name: 'a failed sweep hands a one-byte circuit the single zero byte',
+      request: attestedRequest('failed'),
+      outputWidth: 1,
+      expected: new Uint8Array([0]),
+    },
+    {
+      name: 'an unviable sweep hands a one-byte circuit the single zero byte',
+      request: attestedRequest('unviable'),
+      outputWidth: 1,
+      expected: new Uint8Array([0]),
+    },
+    {
+      name: 'a failed sweep hands a 32-byte circuit 32 zero bytes',
+      request: attestedRequest('failed'),
+      outputWidth: 32,
+      expected: new Uint8Array(32),
+    },
+  ])('$name', ({ request, outputWidth, expected }) => {
+    expect(completionOutput(request, outputWidth)).toEqual(expected)
+  })
+})
+
+/** The fixture attestation is an executed transfer, and the other verdicts differ in kind alone. */
+function attestedRequest(
+  attestationOutputKind: AttestedRequestFields['attestationOutputKind'],
+): AttestedRequestFields {
+  return { requestId: REQUEST_ID_HEX, ...ATTESTATION_FIELDS, attestationOutputKind }
+}

@@ -43,7 +43,7 @@ export class DepositStateControllerImpl
     )
   }
 
-  startDeposit({ unprovenTx, ...deposit }: StartDepositArgs): Promise<Deposit> {
+  startDeposit({ call, ...deposit }: StartDepositArgs): Promise<Deposit> {
     const now = new Date()
     return this.start(
       {
@@ -56,7 +56,7 @@ export class DepositStateControllerImpl
         updateTime: now,
       },
       'startDeposit',
-      unprovenTx,
+      call,
     )
   }
 

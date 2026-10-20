@@ -12,6 +12,8 @@ node_modules
 
 # Built by `yarn zk-assets`: the vault's prover keys and ZKIR for the backend's proof provider
 zk-assets
+# Copied by `yarn zk-assets:public`: the vault's bundle the browser fetches from the page's origin
+public/zk-assets
 
 # Next.js
 .next

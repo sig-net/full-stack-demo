@@ -43,7 +43,7 @@ export class WithdrawStateControllerImpl
     )
   }
 
-  startWithdraw({ unprovenTx, ...withdraw }: StartWithdrawArgs): Promise<Withdraw> {
+  startWithdraw({ call, ...withdraw }: StartWithdrawArgs): Promise<Withdraw> {
     const now = new Date()
     return this.start(
       {
@@ -56,7 +56,7 @@ export class WithdrawStateControllerImpl
         updateTime: now,
       },
       'startWithdraw',
-      unprovenTx,
+      call,
     )
   }
 

@@ -43,7 +43,7 @@ export class SupplyStateControllerImpl
     )
   }
 
-  startSupply({ unprovenTx, ...supply }: StartSupplyArgs): Promise<Supply> {
+  startSupply({ call, ...supply }: StartSupplyArgs): Promise<Supply> {
     const now = new Date()
     return this.start(
       {
@@ -56,7 +56,7 @@ export class SupplyStateControllerImpl
         updateTime: now,
       },
       'startSupply',
-      unprovenTx,
+      call,
     )
   }
 

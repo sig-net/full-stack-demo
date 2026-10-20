@@ -6,7 +6,7 @@ import { FailFallible } from '@midnight-ntwrk/midnight-js/types'
 import { CoalescingRunner } from '@/lib/coalescing-runner'
 import { caughtError, type Logger } from '@/lib/logging/logger'
 import type { Flusher } from '@/lib/midnight/ethereum-erc20-vault/flusher'
-import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 
 /**
  * One flush in flight per process. `runFlush` is the SDK's `flushPending` over the relayer's

@@ -139,6 +139,7 @@ describe('The activity view over Postgres', () => {
     signer: 'caller',
     unprovenTx: 'aa',
     unboundTx: null,
+    boundTx: null,
     finalizedTx: null,
     expireTime: null,
     txId: null,

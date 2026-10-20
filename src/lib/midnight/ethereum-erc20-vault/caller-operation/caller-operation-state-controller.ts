@@ -5,6 +5,7 @@ import type {
   CallerOperation,
   CallerOperationState,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
+import type { CommittedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 
 /**
  * The transitions every caller operation's controller records, one per action of the state
@@ -48,8 +49,8 @@ export interface RecordCompleteFailureArgs {
 
 export interface CompleteOperationArgs {
   name: string
-  /** The complete circuit call, built for the operation's attested request. */
-  unprovenTx: string
+  /** The complete circuit call, built for the operation's attested request, as the bytes it is committed with. */
+  call: CommittedCall
 }
 
 /** The operation is not in a state the action applies to, so another actor got there first. */

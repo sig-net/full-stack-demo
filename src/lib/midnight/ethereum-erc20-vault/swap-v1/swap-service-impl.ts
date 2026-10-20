@@ -35,6 +35,7 @@ import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-ci
 import {
   type AttestedRequestFields,
   attestedRequestFields,
+  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
@@ -108,7 +109,7 @@ export class SwapServiceImpl implements SwapService {
         ...swapRequest,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        unprovenTx,
+        call: { unprovenTx },
       }),
     )
   }
@@ -124,12 +125,12 @@ export class SwapServiceImpl implements SwapService {
       secretKey: caller.secretKey,
       wallet,
       requestId: hexToBytes(request.requestId),
-      serializedOutput: completionOutput(request),
+      serializedOutput: completionOutput(request, 32),
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
       changeNonce: crypto.getRandomValues(new Uint8Array(32)),
     })
     return this.unitOfWork.runInTransaction(() =>
-      this.swapStateController.completeSwap({ name, unprovenTx }),
+      this.swapStateController.completeSwap({ name, call: { unprovenTx } }),
     )
   }
 
@@ -167,11 +168,4 @@ export class SwapServiceImpl implements SwapService {
     }
     return attestedRequestFields(request)
   }
-}
-
-/** The circuit verifies the 32 attested bytes only for an executed trade, and ignores them otherwise. */
-function completionOutput(request: AttestedRequestFields): Uint8Array {
-  return request.attestationOutputKind === 'executed'
-    ? hexToBytes(request.attestationOutput)
-    : new Uint8Array(32)
 }

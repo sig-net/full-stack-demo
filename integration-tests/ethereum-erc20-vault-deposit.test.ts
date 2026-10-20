@@ -12,20 +12,22 @@ import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
 import { CIRCLE_USDC } from './sepolia-tokens'
+import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 40 * 60_000
 const POLL_EVERY_MS = 5_000
-/** How many times `completeDeposit` is called again after an attempt ended failed. */
+/** How many times the completion is built and committed again after an attempt ended failed. */
 const COMPLETE_RETRIES = 3
 /** Past one sweep interval, so the resolver's ledger check runs before a retry builds a second complete. */
 const RETRY_AFTER_MS = 40_000
 
 /**
- * One deposit from `startDeposit` to `Completed` over the whole local stack: the backend proves,
- * flushes, sends, polls the MPC, broadcasts on the fork, queues and flushes the attestation on
- * its own, and this test plays the user's wallet, which binds the two caller calls without a
- * fee for the relayer wallet to pay, and funds the deposit account on the fork.
+ * One deposit from `startDeposit` to `Completed` over the whole local stack: this test plays the
+ * browser, which builds, proves and binds the two caller calls without a fee, and funds the
+ * deposit account on the fork, and the backend pays each call's fee from the relayer wallet,
+ * submits, flushes, sends, polls the MPC, broadcasts on the fork, queues and flushes the
+ * attestation on its own.
  */
 describe('ERC20 vault deposit round trip over the local stack', () => {
   let backend: Backend
@@ -69,14 +71,11 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
   test(
     'deposit from start to Completed',
     async () => {
-      const { adaptor } = backend.midnight.ethereumErc20Vault.depositV1
-      const transactions = backend.midnight.transactionV1.adaptor
-      const wallet = user.publicKeys
       const startedAt = Date.now()
 
-      const started = await adaptor.startDeposit(callerSecret, {
-        depositRequest: { erc20Address: CIRCLE_USDC, amount: 1_000_000n },
-        wallet,
+      const started = await startDepositAsUser(backend, callerSecret, user, {
+        erc20Address: CIRCLE_USDC,
+        amount: 1_000_000n,
       })
       expect(started.ok).toBe(true)
       if (!started.ok) return
@@ -87,36 +86,7 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
       await fundDepositAccount(backend, evm, deposit.depositAccount, deposit.amount)
       log(`funded ${deposit.depositAccount} with one ETH and ${deposit.amount.toString()} USDC`)
 
-      const submitted = new Set<string>()
       const trail = new Trail(backend, deposit.name)
-      const playWallet = async (): Promise<void> => {
-        const live = await transactions.listTransactions(callerSecret, { parent: deposit.name })
-        if (!live.ok) throw new Error(live.error)
-        for (const transaction of live.transactions) {
-          if (
-            transaction.state !== 'AwaitingWallet' ||
-            transaction.signer !== 'caller' ||
-            transaction.unboundTx === null ||
-            submitted.has(transaction.name)
-          ) {
-            continue
-          }
-          submitted.add(transaction.name)
-          const binding = Date.now()
-          const boundTx = await user.balanceWithoutFee(transaction.unboundTx)
-          const paying = Date.now()
-          const finalizedTx = await backend.midnight.relayerWallet.payFee(boundTx)
-          const paid = Date.now()
-          const result = await transactions.submitTransaction(callerSecret, {
-            name: transaction.name,
-            finalizedTx,
-          })
-          if (!result.ok) throw new Error(result.error)
-          log(
-            `bound ${transaction.circuit} ${transaction.name} without a fee in ${String(paying - binding)} ms, the relayer paid the fee in ${String(paid - paying)} ms, submitted`,
-          )
-        }
-      }
       const depositState = async (): Promise<Deposit['state']> => {
         await trail.observe()
         const current = await backend.midnight.ethereumErc20Vault.depositV1.repository.get(
@@ -126,13 +96,10 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
         return current.state
       }
 
-      await waitFor(async () => {
-        await playWallet()
-        return (await depositState()) === 'AwaitingCompletion'
-      })
+      await waitFor(async () => (await depositState()) === 'AwaitingCompletion')
       log(`AwaitingCompletion reached ${String(Date.now() - startedAt)} ms after the start`)
 
-      const completing = await adaptor.completeDeposit(callerSecret, { name: deposit.name, wallet })
+      const completing = await completeDepositAsUser(backend, callerSecret, user, deposit.name)
       expect(completing.ok).toBe(true)
       if (!completing.ok) return
       // A failed attempt returns the deposit to AwaitingCompletion. The deposit resolver reads the
@@ -142,7 +109,6 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
       const failedAttempts = new Map<string, number>()
       let retries = 0
       await waitFor(async () => {
-        await playWallet()
         const state = await depositState()
         if (state === 'Completed') return true
         if (state !== 'AwaitingCompletion') return false
@@ -161,7 +127,7 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
           return false
         }
         retries += 1
-        const retried = await adaptor.completeDeposit(callerSecret, { name: deposit.name, wallet })
+        const retried = await completeDepositAsUser(backend, callerSecret, user, deposit.name)
         log(
           `completeDeposit retry ${String(retries)} ${retried.ok ? 'accepted' : `refused: ${retried.error}`}`,
         )
@@ -205,8 +171,7 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
       const events = await eventTrail(backend, deposit.name)
       const expectedTrail: [Actor, string][] = [
         ['deposit', 'awaiting-start-transaction'],
-        ['start', 'awaiting-proof'],
-        ['start', 'awaiting-wallet'],
+        ['start', 'awaiting-fee'],
         ['start', 'awaiting-submission'],
         ['start', 'awaiting-inclusion'],
         ['start', 'succeeded'],
@@ -221,8 +186,7 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
         ['request', 'attested'],
         ['deposit', 'awaiting-completion'],
         ['deposit', 'awaiting-complete-transaction'],
-        ['complete', 'awaiting-proof'],
-        ['complete', 'awaiting-wallet'],
+        ['complete', 'awaiting-fee'],
         ['complete', 'awaiting-submission'],
         ['complete', 'awaiting-inclusion'],
         ['complete', 'succeeded'],

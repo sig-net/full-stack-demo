@@ -43,7 +43,7 @@ export class RedeemStateControllerImpl
     )
   }
 
-  startRedeem({ unprovenTx, ...redeem }: StartRedeemArgs): Promise<Redeem> {
+  startRedeem({ call, ...redeem }: StartRedeemArgs): Promise<Redeem> {
     const now = new Date()
     return this.start(
       {
@@ -56,7 +56,7 @@ export class RedeemStateControllerImpl
         updateTime: now,
       },
       'startRedeem',
-      unprovenTx,
+      call,
     )
   }
 

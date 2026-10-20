@@ -78,7 +78,7 @@ export function missingReadiness(
 const VAULT_SIGNED_CHECKS = ['callerDust', 'relayerDust', 'vaultAccountEth'] as const
 
 const READINESS_CHECKS_BY_ACTION: Record<ReadinessAction, readonly ReadinessCheckId[]> = {
-  deposit: ['callerDust', 'relayerDust', 'depositAccountEth'],
+  deposit: ['relayerDust', 'depositAccountEth'],
   withdraw: VAULT_SIGNED_CHECKS,
   approve: VAULT_SIGNED_CHECKS,
   swap: VAULT_SIGNED_CHECKS,
@@ -107,9 +107,10 @@ export async function readReadinessCheck(
 }
 
 /**
- * The DUST a payer must hold before an action starts, in SPECK. A deposit costs the caller two
- * transactions and the relayer two flushes, a send and an attestation, and the local chain's
- * fee overhead alone is 0.05 DUST per transaction, so both minimums leave several times that.
+ * The DUST a payer must hold before an action starts, in SPECK. A deposit costs the relayer the
+ * fees of the caller's two transactions, two flushes, a send and an attestation, and the local
+ * chain's fee overhead alone is 0.05 DUST per transaction, so both minimums leave several times
+ * that.
  */
 export const CALLER_DUST_MINIMUM = 1_000_000_000_000_000n
 export const RELAYER_DUST_MINIMUM = 5_000_000_000_000_000n

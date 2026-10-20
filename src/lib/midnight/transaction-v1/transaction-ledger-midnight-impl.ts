@@ -4,8 +4,6 @@ import type { ProofProvider } from '@midnight-ntwrk/midnight-js/types'
 import {
   type Binding,
   type FinalizedTransaction,
-  type PreBinding,
-  type PreProof,
   type Proof,
   type SignatureEnabled,
   Transaction,
@@ -19,7 +17,7 @@ import {
 } from '@midnightntwrk/wallet-sdk-node-client/effect'
 import { ApiPromise, WsProvider } from '@polkadot/api'
 import { Cause, Effect, Exit, Option } from 'effect'
-import { bytesToHex, hexToBytes } from '@sig-net/midnight'
+import { hexToBytes } from '@sig-net/midnight'
 import { z } from 'zod'
 
 import { caughtError, type Logger } from '@/lib/logging/logger'
@@ -27,6 +25,7 @@ import type {
   MidnightLedgerTransactionStatus,
   MidnightTransactionLedger,
 } from '@/lib/midnight/transaction-v1/transaction-ledger'
+import { proveTransaction } from '@/lib/midnight/transaction-v1/prove-transaction'
 
 /**
  * The ledger behind the proof server, the node and the indexer. Transaction bytes cross as hex
@@ -53,16 +52,11 @@ export class MidnightTransactionLedgerImpl implements MidnightTransactionLedger 
   }
 
   async prove(unprovenTx: string): Promise<string> {
-    const unproven = Transaction.deserialize<SignatureEnabled, PreProof, PreBinding>(
-      'signature',
-      'pre-proof',
-      'pre-binding',
-      hexToBytes(unprovenTx),
-    )
+    const proofProvider = await this.proofProvider()
     const started = Date.now()
-    const unbound = await (await this.proofProvider()).proveTx(unproven)
+    const unboundTx = await proveTransaction(proofProvider, unprovenTx)
     this.logger.debug('transaction proved', { durationMs: Date.now() - started })
-    return bytesToHex(unbound.serialize())
+    return unboundTx
   }
 
   async submit(finalizedTx: string): Promise<string> {

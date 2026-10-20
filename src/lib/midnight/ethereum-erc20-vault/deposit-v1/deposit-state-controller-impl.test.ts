@@ -109,7 +109,7 @@ describe('DepositStateControllerImpl.startDeposit', () => {
     maxPriorityFeePerGas: 1_000_000_000n,
     depositAccount: DEPOSIT_ACCOUNT,
     recipient: RECIPIENT,
-    unprovenTx: 'start-call',
+    call: { boundTx: 'start-call' },
   }
 
   const cases: ReadonlyArray<{
@@ -121,7 +121,7 @@ describe('DepositStateControllerImpl.startDeposit', () => {
       name: 'success - the row in AwaitingStartTransaction, the caller start call under it and the event',
       check: async (result, calls, before) => {
         const stored = await result
-        const { unprovenTx, ...deposit } = args
+        const { call, ...deposit } = args
         expect(stored).toEqual({
           ...deposit,
           state: 'AwaitingStartTransaction',
@@ -139,7 +139,7 @@ describe('DepositStateControllerImpl.startDeposit', () => {
             parent: DEPOSIT_NAME,
             circuit: 'startDeposit',
             signer: 'caller',
-            unprovenTx,
+            ...call,
           },
         ])
         expect(calls.published).toHaveLength(1)
@@ -218,7 +218,8 @@ describe('DepositStateControllerImpl transitions', () => {
     {
       name: 'completeDeposit',
       from: DEPOSIT_IN_STATE.AwaitingCompletion,
-      transition: (c) => c.completeDeposit({ name: DEPOSIT_NAME, unprovenTx: 'complete-call' }),
+      transition: (c) =>
+        c.completeDeposit({ name: DEPOSIT_NAME, call: { boundTx: 'complete-call' } }),
       to: 'AwaitingCompleteTransaction',
       patch: {},
       check: (calls) => {
@@ -228,7 +229,7 @@ describe('DepositStateControllerImpl transitions', () => {
             parent: DEPOSIT_NAME,
             circuit: 'completeDeposit',
             signer: 'caller',
-            unprovenTx: 'complete-call',
+            boundTx: 'complete-call',
           },
         ])
       },
@@ -285,7 +286,7 @@ describe('DepositStateControllerImpl transitions', () => {
     {
       name: 'completeDeposit before the request is attested',
       from: DEPOSIT_IN_STATE.AwaitingVaultRequest,
-      transition: (c) => c.completeDeposit({ name: DEPOSIT_NAME, unprovenTx: 'x' }),
+      transition: (c) => c.completeDeposit({ name: DEPOSIT_NAME, call: { boundTx: 'x' } }),
     },
     {
       name: 'recordCompleted on a terminal deposit',

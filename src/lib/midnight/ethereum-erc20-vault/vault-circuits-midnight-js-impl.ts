@@ -1,25 +1,13 @@
 import 'server-only'
 
-import {
-  CompiledContract,
-  type Contract as CompactContract,
-} from '@midnight-ntwrk/compact-js/effect'
-import {
-  type CallTxOptions,
-  createCallTxOptions,
-  createUnprovenCallTx,
-} from '@midnight-ntwrk/midnight-js/contracts'
-import type {
-  PublicDataProvider,
-  WalletProvider,
-  ZKConfigProvider,
-} from '@midnight-ntwrk/midnight-js/types'
-import { bytesToHex, hexToBytes, respondBidirectionalEventToCircuitInput } from '@sig-net/midnight'
+import { CompiledContract } from '@midnight-ntwrk/compact-js/effect'
+import type { CallTxOptions } from '@midnight-ntwrk/midnight-js/contracts'
+import type { PublicDataProvider, ZKConfigProvider } from '@midnight-ntwrk/midnight-js/types'
+import { hexToBytes, respondBidirectionalEventToCircuitInput } from '@sig-net/midnight'
 import {
   Contract,
   createVaultPrivateState,
   evmAddressBytes,
-  VAULT_PRIVATE_STATE_ID,
   type VaultCircuitId,
   type VaultCompiledContract,
   type VaultPrivateState,
@@ -28,33 +16,32 @@ import {
 
 import type { Logger } from '@/lib/logging/logger'
 import {
-  type CompleteApproveCircuitArgs,
-  type CompleteDepositCircuitArgs,
-  type CompleteRedeemCircuitArgs,
-  type CompleteSupplyCircuitArgs,
-  type CompleteSwapCircuitArgs,
-  type CompleteWithdrawCircuitArgs,
-  type QueueAttestationCircuitArgs,
-  type SendRequestCircuitArgs,
-  type StartApproveRouterCircuitArgs,
-  type StartApproveStataCircuitArgs,
-  type StartDepositCircuitArgs,
-  type StartRedeemCircuitArgs,
-  type StartSupplyCircuitArgs,
-  type StartSwapCircuitArgs,
-  type StartWithdrawCircuitArgs,
-  type VaultCircuits,
+  buildVaultCall,
+  permissionlessVaultPrivateState,
+  type VaultCallProviders,
+  vaultCallOptions,
+  type VaultContract,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-call'
+import type {
+  CompleteApproveCircuitArgs,
+  CompleteRedeemCircuitArgs,
+  CompleteSupplyCircuitArgs,
+  CompleteSwapCircuitArgs,
+  CompleteWithdrawCircuitArgs,
+  QueueAttestationCircuitArgs,
+  SendRequestCircuitArgs,
+  StartApproveRouterCircuitArgs,
+  StartApproveStataCircuitArgs,
+  StartRedeemCircuitArgs,
+  StartSupplyCircuitArgs,
+  StartSwapCircuitArgs,
+  StartWithdrawCircuitArgs,
+  VaultCircuits,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
-import { PrivateStateProviderMemoryImpl } from '@/lib/midnight/private-state-provider-memory-impl'
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 
-type VaultContract = Contract<VaultPrivateState>
-
 export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
-  private readonly publicDataProvider: PublicDataProvider
-  private readonly zkConfigProvider: ZKConfigProvider<VaultCircuitId>
-  private readonly compiledContract: VaultCompiledContract
-  private readonly vaultAddress: string
+  private readonly providers: VaultCallProviders
   private readonly relayerWallet: WalletPublicKeys
   private readonly logger: Logger
 
@@ -67,49 +54,16 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     relayerWallet: WalletPublicKeys,
     logger: Logger,
   ) {
-    this.publicDataProvider = publicDataProvider
-    this.zkConfigProvider = zkConfigProvider
-    this.compiledContract = compiledContract
-    this.vaultAddress = vaultAddress
+    this.providers = { publicDataProvider, zkConfigProvider, compiledContract, vaultAddress }
     this.relayerWallet = relayerWallet
     this.logger = logger
-  }
-
-  startDeposit(args: StartDepositCircuitArgs): Promise<string> {
-    return this.build(
-      createVaultPrivateState(args.secretKey),
-      args.wallet,
-      this.options('startDeposit', [
-        args.inIndex,
-        args.evmNonce,
-        {
-          gasLimit: args.gas.gasLimit,
-          maxFeePerGas: args.gas.maxFeePerGas,
-          maxPriorityFeePerGas: args.gas.maxPriorityFeePerGas,
-        },
-        { erc20Address: evmAddressBytes(args.erc20Address), amount: args.amount },
-      ]),
-    )
-  }
-
-  completeDeposit(args: CompleteDepositCircuitArgs): Promise<string> {
-    return this.build(
-      createVaultPrivateState(args.secretKey),
-      args.wallet,
-      this.options('completeDeposit', [
-        args.requestId,
-        args.serializedOutput,
-        args.mintNonce,
-        NO_RECIPIENT,
-      ]),
-    )
   }
 
   sendDeposit(args: SendRequestCircuitArgs): Promise<string> {
     return this.build(
       permissionlessVaultPrivateState(),
       this.relayerWallet,
-      this.options('sendDeposit', [args.outIndex]),
+      vaultCallOptions(this.providers, 'sendDeposit', [args.outIndex]),
     )
   }
 
@@ -117,7 +71,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('startWithdraw', [
+      vaultCallOptions(this.providers, 'startWithdraw', [
         args.inIndex,
         {
           erc20Address: evmAddressBytes(args.erc20Address),
@@ -137,7 +91,11 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('completeWithdraw', [args.requestId, args.serializedOutput, args.mintNonce]),
+      vaultCallOptions(this.providers, 'completeWithdraw', [
+        args.requestId,
+        args.serializedOutput,
+        args.mintNonce,
+      ]),
     )
   }
 
@@ -145,7 +103,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       permissionlessVaultPrivateState(),
       this.relayerWallet,
-      this.options('sendWithdraw', [args.outIndex]),
+      vaultCallOptions(this.providers, 'sendWithdraw', [args.outIndex]),
     )
   }
 
@@ -153,7 +111,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('startSwap', [
+      vaultCallOptions(this.providers, 'startSwap', [
         args.inIndex,
         {
           erc20AddressIn: evmAddressBytes(args.erc20AddressIn),
@@ -175,7 +133,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('completeSwap', [
+      vaultCallOptions(this.providers, 'completeSwap', [
         args.requestId,
         args.serializedOutput,
         args.mintNonce,
@@ -188,7 +146,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       permissionlessVaultPrivateState(),
       this.relayerWallet,
-      this.options('sendSwap', [args.outIndex]),
+      vaultCallOptions(this.providers, 'sendSwap', [args.outIndex]),
     )
   }
 
@@ -196,7 +154,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('startSupply', [
+      vaultCallOptions(this.providers, 'startSupply', [
         args.inIndex,
         { amount: args.amount },
         {
@@ -212,7 +170,11 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('completeSupply', [args.requestId, args.serializedOutput, args.mintNonce]),
+      vaultCallOptions(this.providers, 'completeSupply', [
+        args.requestId,
+        args.serializedOutput,
+        args.mintNonce,
+      ]),
     )
   }
 
@@ -220,7 +182,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       permissionlessVaultPrivateState(),
       this.relayerWallet,
-      this.options('sendSupply', [args.outIndex]),
+      vaultCallOptions(this.providers, 'sendSupply', [args.outIndex]),
     )
   }
 
@@ -228,7 +190,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('startRedeem', [
+      vaultCallOptions(this.providers, 'startRedeem', [
         args.inIndex,
         { shares: args.shares },
         {
@@ -244,7 +206,11 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('completeRedeem', [args.requestId, args.serializedOutput, args.mintNonce]),
+      vaultCallOptions(this.providers, 'completeRedeem', [
+        args.requestId,
+        args.serializedOutput,
+        args.mintNonce,
+      ]),
     )
   }
 
@@ -252,7 +218,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       permissionlessVaultPrivateState(),
       this.relayerWallet,
-      this.options('sendRedeem', [args.outIndex]),
+      vaultCallOptions(this.providers, 'sendRedeem', [args.outIndex]),
     )
   }
 
@@ -260,7 +226,10 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('startApproveRouter', [args.inIndex, evmAddressBytes(args.erc20Address)]),
+      vaultCallOptions(this.providers, 'startApproveRouter', [
+        args.inIndex,
+        evmAddressBytes(args.erc20Address),
+      ]),
     )
   }
 
@@ -268,7 +237,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('startApproveStata', [args.inIndex]),
+      vaultCallOptions(this.providers, 'startApproveStata', [args.inIndex]),
     )
   }
 
@@ -276,7 +245,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       createVaultPrivateState(args.secretKey),
       args.wallet,
-      this.options('completeApprove', [args.requestId, args.serializedOutput]),
+      vaultCallOptions(this.providers, 'completeApprove', [args.requestId, args.serializedOutput]),
     )
   }
 
@@ -284,7 +253,7 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       permissionlessVaultPrivateState(),
       this.relayerWallet,
-      this.options('sendApprove', [args.outIndex]),
+      vaultCallOptions(this.providers, 'sendApprove', [args.outIndex]),
     )
   }
 
@@ -292,50 +261,24 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     return this.build(
       permissionlessVaultPrivateState(),
       this.relayerWallet,
-      this.options('queueAttestation', [respondBidirectionalEventToCircuitInput(args.attestation)]),
+      vaultCallOptions(this.providers, 'queueAttestation', [
+        respondBidirectionalEventToCircuitInput(args.attestation),
+      ]),
     )
   }
 
-  private options<Circuit extends VaultCircuitId>(
-    circuit: Circuit,
-    args: CompactContract.Contract.CircuitParameters<VaultContract, Circuit>,
-  ): CallTxOptions<VaultContract, Circuit> {
-    return createCallTxOptions(
-      this.compiledContract,
-      circuit,
-      this.vaultAddress,
-      VAULT_PRIVATE_STATE_ID,
-      undefined,
-      args,
-    )
-  }
-
-  /** One private state provider per call: the secret lives only as long as the call it proves. */
   private async build<Circuit extends VaultCircuitId>(
     privateState: VaultPrivateState,
     wallet: WalletPublicKeys,
     options: CallTxOptions<VaultContract, Circuit>,
   ): Promise<string> {
-    const privateStateProvider = await PrivateStateProviderMemoryImpl.holding(
-      this.vaultAddress,
-      VAULT_PRIVATE_STATE_ID,
-      privateState,
-    )
     const started = Date.now()
-    const call = await createUnprovenCallTx(
-      {
-        publicDataProvider: this.publicDataProvider,
-        zkConfigProvider: this.zkConfigProvider,
-        walletProvider: walletProviderOf(wallet),
-        privateStateProvider,
-      },
-      { ...options, privateStateId: VAULT_PRIVATE_STATE_ID },
-    )
+    const unprovenTx = await buildVaultCall(this.providers, privateState, wallet, options)
     this.logger.debug('circuit call built', {
       circuit: options.circuitId,
       durationMs: Date.now() - started,
     })
-    return bytesToHex(call.private.unprovenTx.serialize())
+    return unprovenTx
   }
 }
 
@@ -345,29 +288,4 @@ export function compiledVaultContract(assetsPath: string): VaultCompiledContract
     CompiledContract.withWitnesses(witnesses),
     CompiledContract.withCompiledFileAssets(assetsPath),
   )
-}
-
-/** The call builder reads the wallet's keys, and the wallet itself balances later, elsewhere. */
-function walletProviderOf(wallet: WalletPublicKeys): WalletProvider {
-  return {
-    getCoinPublicKey: () => wallet.coinPublicKey,
-    getEncryptionPublicKey: () => wallet.encryptionPublicKey,
-    balanceTx: () =>
-      Promise.reject(new Error('Balancing belongs to the signer wallet, not the call builder')),
-  }
-}
-
-/** The private state of a permissionless call: those circuits never read the secret witness, so a random one proves. */
-export function permissionlessVaultPrivateState(): VaultPrivateState {
-  return createVaultPrivateState(crypto.getRandomValues(new Uint8Array(32)))
-}
-
-/** `completeDeposit` mints to the caller's own public key when no recipient is named. */
-const NO_RECIPIENT = {
-  is_some: false,
-  value: {
-    is_left: true,
-    left: { bytes: new Uint8Array(32) },
-    right: { bytes: new Uint8Array(32) },
-  },
 }

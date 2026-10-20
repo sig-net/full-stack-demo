@@ -27,6 +27,7 @@ import { vaultRequestName } from '@/lib/midnight/ethereum-erc20-vault/vault-requ
 import type { VaultRequestStateController } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-controller'
 import { midnightTransactionName } from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
+import type { CommittedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 import type { Repository } from '@/lib/repository/repository'
 import type { Logger } from '@/lib/logging/logger'
 
@@ -110,7 +111,7 @@ export abstract class CallerOperationStateControllerImpl<
   protected async start(
     row: Resource,
     circuit: VaultCircuitId,
-    unprovenTx: string,
+    call: CommittedCall,
   ): Promise<Resource> {
     const stored = await this.repository.create(row)
     await this.eventPublisher.publishEvent(
@@ -122,20 +123,20 @@ export abstract class CallerOperationStateControllerImpl<
       parent: stored.name,
       circuit,
       signer: 'caller',
-      unprovenTx,
+      ...call,
     })
     return stored
   }
 
   /** `AwaitingCompletion` to `AwaitingCompleteTransaction`, committing the caller's complete call. */
-  protected async complete({ name, unprovenTx }: CompleteOperationArgs): Promise<Resource> {
+  protected async complete({ name, call }: CompleteOperationArgs): Promise<Resource> {
     const completing = await this.transition(name, 'complete', {})
     await this.midnightTransactionStateController.commitTransaction({
       name: midnightTransactionName(callerOf(completing.name), randomUUID()),
       parent: completing.name,
       circuit: this.kind.completeCircuit,
       signer: 'caller',
-      unprovenTx,
+      ...call,
     })
     return completing
   }

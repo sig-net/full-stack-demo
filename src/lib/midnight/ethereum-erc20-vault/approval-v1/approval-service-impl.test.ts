@@ -84,7 +84,7 @@ function serviceOver(options: {
     mock<ApprovalStateController>('ApprovalStateController', {
       startApproval: async (args) => {
         recorded.started.push(args)
-        const { unprovenTx: _unprovenTx, ...approval } = args
+        const { call: _call, ...approval } = args
         return approvalFixture(approval)
       },
       completeApproval: async (args) =>
@@ -181,7 +181,7 @@ describe('ApprovalServiceImpl.startApproval', () => {
         spender: hex(ROUTER),
         inIndex: approval.inIndex,
         vaultAccount: VAULT_ACCOUNT,
-        unprovenTx: 'router-call',
+        call: { unprovenTx: 'router-call' },
       },
     ])
   })
@@ -199,7 +199,7 @@ describe('ApprovalServiceImpl.startApproval', () => {
       kind: 'stata',
       erc20Address: hex(STATA_UNDERLYING),
       spender: hex(STATA_TOKEN),
-      unprovenTx: 'stata-call',
+      call: { unprovenTx: 'stata-call' },
     })
   })
 })

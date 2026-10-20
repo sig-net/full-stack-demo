@@ -2,8 +2,12 @@ import { describe, expect, test } from 'vitest'
 
 import type { Event } from '@/lib/event/event'
 import type { EventPublisher } from '@/lib/event/event-publisher'
-import type { MidnightTransaction } from '@/lib/midnight/transaction-v1/transaction'
 import {
+  MIDNIGHT_TRANSACTION_STATES,
+  type MidnightTransaction,
+} from '@/lib/midnight/transaction-v1/transaction'
+import {
+  CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION,
   DEPOSIT_NAME,
   TRANSACTION_IN_STATE,
   TRANSACTION_NAME,
@@ -72,36 +76,47 @@ function emptyCalls(): Calls {
 }
 
 describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
-  const args: CommitTransactionArgs = {
+  const committed = {
     name: TRANSACTION_NAME,
     parent: DEPOSIT_NAME,
     circuit: 'completeDeposit',
     signer: 'caller',
-    unprovenTx: 'unproven',
-  }
+  } as const
+
+  /** The row a commit stores: the entry state its bytes decide, an hour to live, and the fields later steps fill unset. */
+  const storedRow = (
+    stored: MidnightTransaction,
+    state: MidnightTransaction['state'],
+    bytes: Pick<MidnightTransaction, 'unprovenTx' | 'boundTx'>,
+  ): MidnightTransaction => ({
+    ...committed,
+    ...bytes,
+    state,
+    unboundTx: null,
+    finalizedTx: null,
+    txId: null,
+    blockHeight: null,
+    expireTime: new Date(stored.createTime.getTime() + 3_600_000),
+    failure: null,
+    error: null,
+    createTime: stored.createTime,
+    updateTime: stored.createTime,
+  })
 
   const cases: ReadonlyArray<{
     name: string
+    args: CommitTransactionArgs
     create?: MidnightTransactionRepository['create']
     check: (result: Promise<MidnightTransaction>, calls: Calls, before: number) => Promise<void>
   }> = [
     {
-      name: 'success - stored in AwaitingProof with an hour to live and the fields later steps fill unset',
+      name: 'unproven bytes - stored in AwaitingProof and the proof event published',
+      args: { ...committed, unprovenTx: 'unproven' },
       check: async (result, calls, before) => {
         const stored = await result
-        expect(stored).toEqual({
-          ...args,
-          state: 'AwaitingProof',
-          unboundTx: null,
-          finalizedTx: null,
-          txId: null,
-          blockHeight: null,
-          expireTime: new Date(stored.createTime.getTime() + 3_600_000),
-          failure: null,
-          error: null,
-          createTime: stored.createTime,
-          updateTime: stored.createTime,
-        })
+        expect(stored).toEqual(
+          storedRow(stored, 'AwaitingProof', { unprovenTx: 'unproven', boundTx: null }),
+        )
         expect(stored.createTime.getTime()).toBeGreaterThanOrEqual(before)
         expect(calls.created).toEqual([stored])
         expect(calls.published).toHaveLength(1)
@@ -120,7 +135,33 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
       },
     },
     {
+      name: 'bound bytes - stored in AwaitingFee and the fee event published',
+      args: { ...committed, boundTx: 'bound' },
+      check: async (result, calls, before) => {
+        const stored = await result
+        expect(stored).toEqual(
+          storedRow(stored, 'AwaitingFee', { unprovenTx: null, boundTx: 'bound' }),
+        )
+        expect(stored.createTime.getTime()).toBeGreaterThanOrEqual(before)
+        expect(calls.created).toEqual([stored])
+        expect(calls.published).toHaveLength(1)
+        expect(calls.published[0]).toMatchObject({
+          type: 'midnight.transaction-v1.awaiting-fee',
+          key: TRANSACTION_NAME,
+          data: { name: TRANSACTION_NAME, parent: DEPOSIT_NAME },
+        })
+        expect(calls.logger.lines).toEqual([
+          {
+            level: 'info',
+            message: 'resource created',
+            fields: { resource: TRANSACTION_NAME, parent: DEPOSIT_NAME, toState: 'AwaitingFee' },
+          },
+        ])
+      },
+    },
+    {
       name: 'failure - the repository refuses the row, so nothing is published or logged',
+      args: { ...committed, unprovenTx: 'unproven' },
       create: async () => {
         throw new Error(`${TRANSACTION_NAME} already exists`)
       },
@@ -132,7 +173,7 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
     },
   ]
 
-  test.each(cases)('$name', async ({ create, check }) => {
+  test.each(cases)('$name', async ({ args, create, check }) => {
     const calls = emptyCalls()
     const { transactionRepository, eventPublisher } = fields(undefined, calls)
     const controller = new MidnightTransactionStateControllerImpl(
@@ -180,8 +221,22 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
       patch: { finalizedTx: 'finalized' },
     },
     {
+      name: 'recordFee',
+      from: TRANSACTION_IN_STATE.AwaitingFee,
+      transition: (c) => c.recordFee({ name: TRANSACTION_NAME, finalizedTx: 'finalized' }),
+      to: 'AwaitingSubmission',
+      patch: { finalizedTx: 'finalized' },
+    },
+    {
       name: 'recordSubmission',
       from: TRANSACTION_IN_STATE.AwaitingSubmission,
+      transition: (c) => c.recordSubmission({ name: TRANSACTION_NAME, txId: 'tx-1' }),
+      to: 'AwaitingInclusion',
+      patch: { txId: 'tx-1' },
+    },
+    {
+      name: 'recordSubmission of a caller-bound call',
+      from: CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION,
       transition: (c) => c.recordSubmission({ name: TRANSACTION_NAME, txId: 'tx-1' }),
       to: 'AwaitingInclusion',
       patch: { txId: 'tx-1' },
@@ -219,6 +274,13 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
       transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
       to: 'Failed',
       patch: { failure: 'Expired', unprovenTx: null },
+    },
+    {
+      name: 'expireTransaction from AwaitingFee',
+      from: TRANSACTION_IN_STATE.AwaitingFee,
+      transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
+      to: 'Failed',
+      patch: { failure: 'Expired' },
     },
     {
       name: 'expireTransaction from AwaitingInclusion',
@@ -285,6 +347,17 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
       name: 'expireTransaction on a terminal transaction',
       from: TRANSACTION_IN_STATE.Failed,
       transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
+    },
+    ...MIDNIGHT_TRANSACTION_STATES.filter((state) => state !== 'AwaitingFee').map((state) => ({
+      name: `recordFee from ${state}`,
+      from: TRANSACTION_IN_STATE[state],
+      transition: (c: MidnightTransactionStateController) =>
+        c.recordFee({ name: TRANSACTION_NAME, finalizedTx: 'paid' }),
+    })),
+    {
+      name: 'recordFee on a caller-bound call already paid for',
+      from: CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION,
+      transition: (c) => c.recordFee({ name: TRANSACTION_NAME, finalizedTx: 'again' }),
     },
   ]
 

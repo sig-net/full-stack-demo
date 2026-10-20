@@ -26,6 +26,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-fixtures'
 import { WithdrawServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service-impl'
 import {
+  type CompleteWithdrawArgs,
   type StartWithdrawArgs,
   WithdrawStateConflict,
   type WithdrawStateController,
@@ -51,7 +52,7 @@ interface Recorded {
   startBuilds: StartWithdrawCircuitArgs[]
   completeBuilds: CompleteWithdrawCircuitArgs[]
   started: StartWithdrawArgs[]
-  completed: { name: string; unprovenTx: string }[]
+  completed: CompleteWithdrawArgs[]
 }
 
 function serviceOver(options: { withdraws?: Withdraw[]; requests?: VaultRequest[] }) {
@@ -73,7 +74,7 @@ function serviceOver(options: { withdraws?: Withdraw[]; requests?: VaultRequest[
     mock<WithdrawStateController>('WithdrawStateController', {
       startWithdraw: async (args) => {
         recorded.started.push(args)
-        const { unprovenTx: _unprovenTx, ...withdraw } = args
+        const { call: _call, ...withdraw } = args
         return withdrawFixture(withdraw)
       },
       completeWithdraw: async (args) => {
@@ -144,7 +145,7 @@ describe('WithdrawServiceImpl.startWithdraw', () => {
         ...REQUEST,
         inIndex: withdraw.inIndex,
         vaultAccount: vaultAccountOf(SIGNET, VAULT),
-        unprovenTx: 'start-call',
+        call: { unprovenTx: 'start-call' },
       },
     ])
     expect(withdraw.inIndex).toBeGreaterThan(0n)
@@ -170,7 +171,9 @@ describe('WithdrawServiceImpl.completeWithdraw', () => {
       serializedOutput: new Uint8Array([1]),
     })
     expect(build?.mintNonce).toHaveLength(32)
-    expect(recorded.completed).toEqual([{ name: stored.name, unprovenTx: 'complete-call' }])
+    expect(recorded.completed).toEqual([
+      { name: stored.name, call: { unprovenTx: 'complete-call' } },
+    ])
   })
 
   test('a failed transfer completes over one zero byte, which the circuit ignores', async () => {

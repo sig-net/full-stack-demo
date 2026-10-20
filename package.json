@@ -22,13 +22,15 @@
     "stack:up": "docker compose --env-file .env.local up -d --wait",
     "stack:down": "docker compose --env-file .env.local down --volumes",
     "stack:restart": "yarn stack:down && yarn stack:up && yarn db:migrate",
-    "zk-assets": "erc20-vault-zk-assets zk-assets/ethereum-erc20-vault --vault-only && erc20-vault-zk-assets zk-assets --signet-only"
+    "zk-assets": "erc20-vault-zk-assets zk-assets/ethereum-erc20-vault --vault-only && erc20-vault-zk-assets zk-assets --signet-only",
+    "zk-assets:public": "rsync -a --delete zk-assets/ethereum-erc20-vault/ public/zk-assets/ethereum-erc20-vault/"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@midnight-ntwrk/compact-js": "2.5.5-rc.7",
     "@midnight-ntwrk/compact-runtime": "0.18.0-rc.1",
     "@midnight-ntwrk/midnight-js": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "5.0.0-beta.6",
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-beta.6",
     "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.0-beta.6",
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-beta.6",

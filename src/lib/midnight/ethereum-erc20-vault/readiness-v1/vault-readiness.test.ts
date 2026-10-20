@@ -49,10 +49,16 @@ describe('missingReadiness', () => {
       expected: [],
     },
     {
-      name: 'a deposit needs the caller, the relayer and the deposit account, in that order',
+      name: 'a deposit needs the relayer and the deposit account, in that order',
       action: 'deposit',
-      checks: checks({ callerDust: SHORT, relayerDust: UNREAD, depositAccountEth: SHORT }),
-      expected: ['callerDust', 'relayerDust', 'depositAccountEth'],
+      checks: checks({ relayerDust: UNREAD, depositAccountEth: SHORT }),
+      expected: ['relayerDust', 'depositAccountEth'],
+    },
+    {
+      name: 'a deposit ignores the caller DUST, since the relayer pays its fees',
+      action: 'deposit',
+      checks: checks({ callerDust: SHORT }),
+      expected: [],
     },
     {
       name: 'a deposit ignores the vault account',

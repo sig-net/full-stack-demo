@@ -13,7 +13,7 @@ import {
   startSupplyArgsSchema,
   type SupplyService,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service'
-import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 import type { Logger } from '@/lib/logging/logger'
 
 /**

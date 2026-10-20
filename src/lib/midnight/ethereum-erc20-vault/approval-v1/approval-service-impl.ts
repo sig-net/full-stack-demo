@@ -38,6 +38,7 @@ import type {
 import {
   type AttestedRequestFields,
   attestedRequestFields,
+  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 
@@ -118,16 +119,18 @@ export class ApprovalServiceImpl implements ApprovalService {
             kind: approvalRequest.kind,
             erc20Address: approvalRequest.erc20Address,
             spender: evmAddress(state.uniswapRouter),
-            unprovenTx: await this.circuits.startApproveRouter({
-              ...callerArgs,
-              erc20Address: approvalRequest.erc20Address,
-            }),
+            call: {
+              unprovenTx: await this.circuits.startApproveRouter({
+                ...callerArgs,
+                erc20Address: approvalRequest.erc20Address,
+              }),
+            },
           }
         : {
             kind: approvalRequest.kind,
             erc20Address: evmAddress(state.stataUnderlying),
             spender: evmAddress(state.stataToken),
-            unprovenTx: await this.circuits.startApproveStata(callerArgs),
+            call: { unprovenTx: await this.circuits.startApproveStata(callerArgs) },
           }
     return this.unitOfWork.runInTransaction(() =>
       this.approvalStateController.startApproval({
@@ -153,10 +156,10 @@ export class ApprovalServiceImpl implements ApprovalService {
       secretKey: caller.secretKey,
       wallet,
       requestId: hexToBytes(request.requestId),
-      serializedOutput: completionOutput(request),
+      serializedOutput: completionOutput(request, 1),
     })
     return this.unitOfWork.runInTransaction(() =>
-      this.approvalStateController.completeApproval({ name, unprovenTx }),
+      this.approvalStateController.completeApproval({ name, call: { unprovenTx } }),
     )
   }
 
@@ -194,13 +197,6 @@ export class ApprovalServiceImpl implements ApprovalService {
     }
     return attestedRequestFields(request)
   }
-}
-
-/** The circuit verifies the attested output only for an executed approve, and ignores the byte otherwise. */
-function completionOutput(request: AttestedRequestFields): Uint8Array {
-  return request.attestationOutputKind === 'executed'
-    ? hexToBytes(request.attestationOutput)
-    : new Uint8Array([0])
 }
 
 /** A 20-byte ledger value as the lower-case `0x` address the resources carry. */

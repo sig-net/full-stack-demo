@@ -35,6 +35,7 @@ import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-le
 import {
   type AttestedRequestFields,
   attestedRequestFields,
+  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
@@ -101,7 +102,7 @@ export class SupplyServiceImpl implements SupplyService {
         amount: supplyRequest.amount,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        unprovenTx,
+        call: { unprovenTx },
       }),
     )
   }
@@ -117,11 +118,11 @@ export class SupplyServiceImpl implements SupplyService {
       secretKey: caller.secretKey,
       wallet,
       requestId: hexToBytes(request.requestId),
-      serializedOutput: completionOutput(request),
+      serializedOutput: completionOutput(request, 32),
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
     })
     return this.unitOfWork.runInTransaction(() =>
-      this.supplyStateController.completeSupply({ name, unprovenTx }),
+      this.supplyStateController.completeSupply({ name, call: { unprovenTx } }),
     )
   }
 
@@ -170,11 +171,4 @@ export class SupplyServiceImpl implements SupplyService {
     }
     return attestedRequestFields(request)
   }
-}
-
-/** The circuit verifies the 32 attested bytes only for an executed deposit, and ignores them otherwise. */
-function completionOutput(request: AttestedRequestFields): Uint8Array {
-  return request.attestationOutputKind === 'executed'
-    ? hexToBytes(request.attestationOutput)
-    : new Uint8Array(32)
 }

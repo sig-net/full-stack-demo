@@ -1,5 +1,3 @@
-import 'server-only'
-
 import type {
   ImportSigningKeysResult,
   PrivateStateExport,
@@ -13,10 +11,10 @@ type SigningKey = Parameters<PrivateStateProvider['setSigningKey']>[1]
 
 /**
  * A private state provider that lives for one circuit call. The vault's private state is the
- * caller's secret, which the server holds only for the duration of the call that needs it, so
- * nothing is persisted and the export and import of states and keys is refused.
+ * caller's secret, which the runtime building the call holds only for the duration of that
+ * call, so nothing is persisted and the export and import of states and keys is refused.
  */
-export class PrivateStateProviderMemoryImpl<PrivateState> implements PrivateStateProvider<
+export class MemoryPrivateStateProvider<PrivateState> implements PrivateStateProvider<
   PrivateStateId,
   PrivateState
 > {
@@ -29,8 +27,8 @@ export class PrivateStateProviderMemoryImpl<PrivateState> implements PrivateStat
     contractAddress: ContractAddress,
     privateStateId: PrivateStateId,
     state: PrivateState,
-  ): Promise<PrivateStateProviderMemoryImpl<PrivateState>> {
-    const provider = new PrivateStateProviderMemoryImpl<PrivateState>()
+  ): Promise<MemoryPrivateStateProvider<PrivateState>> {
+    const provider = new MemoryPrivateStateProvider<PrivateState>()
     provider.setContractAddress(contractAddress)
     await provider.set(privateStateId, state)
     return provider

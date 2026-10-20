@@ -125,13 +125,14 @@ Keep setup instructions and application reference material in README.md and docs
   It opens no transaction. Its interface file also defines its lifecycle events: one
   `defineEvent()` per state entered, data `{ name }`, keyed by the resource name. Never a
   generic created or updated event.
-- A resource has exactly one entry state, the `INITIAL_STATE` constant of its state machine,
-  never a set the caller picks from. The controller's create method (`commitTransaction`,
-  `queueRequest`, `startDeposit`) takes the fields its caller decides and nothing the controller
-  decides: no `state`, no timestamps, no field a later step fills. Its args type is derived from
-  the resource with `Omit`, so a field added to the resource reaches the args unless it is named
-  as the controller's. A full row is built in exactly one place, that create method, so a row's
-  initial shape has one definition.
+- A resource has one entry state per kind of committed call, a table in its state machine
+  (`INITIAL_STATE` where every call is of one kind, `ENTRY_STATE_BY_CALL` where the bytes
+  committed decide), never a state the caller names. The controller's create method
+  (`commitTransaction`, `queueRequest`, `startDeposit`) takes the fields its caller decides and
+  nothing the controller decides: no `state`, no timestamps, no field a later step fills. Its
+  args type is derived from the resource with `Omit`, so a field added to the resource reaches
+  the args unless it is named as the controller's. A full row is built in exactly one place,
+  that create method, so a row's initial shape has one definition.
 - The state resolver does what the current state needs: the slow external calls (proving,
   submitting, watching) outside any transaction, then one controller transition inside
   `UnitOfWork.runInTransaction()`, swallowing the `StateConflict` that means another resolver
@@ -309,8 +310,8 @@ Keep setup instructions and application reference material in README.md and docs
   `integration-tests/` folder, run with `yarn test:integration` against the local services. A
   `*.test.ts` under `src` that opens a socket is in the wrong folder.
 - `integration-tests/ethereum-erc20-vault-deposit.test.ts` is the end-to-end deposit. It runs
-  inside `yarn test:integration` (four and a half to five minutes for the suite, four to four and
-  a half of them the round trip), needs the whole local stack, and needs no dev server running
+  inside `yarn test:integration` (45 to 48 minutes for the suite of 20 files, since each of the six
+  operation round trips takes four to ten), needs the whole local stack, and needs no dev server running
   (`ps aux | grep "[n]ext dev"` finds nothing), since a dev server joins the same Kafka consumer
   group. Run the suite whenever a change touches a state machine, a state controller, a
   resolver, a ledger implementation, the flusher, the sweep or the composition root. One file

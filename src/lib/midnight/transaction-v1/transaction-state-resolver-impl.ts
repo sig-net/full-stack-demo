@@ -87,6 +87,8 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
         return this.resolveAwaitingProof(transaction)
       case 'AwaitingWallet':
         return this.resolveAwaitingWallet(transaction)
+      case 'AwaitingFee':
+        return this.resolveAwaitingFee(transaction)
       case 'AwaitingSubmission':
         return this.resolveAwaitingSubmission(transaction)
       case 'AwaitingInclusion':
@@ -129,6 +131,13 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
     if (unboundTx === null) throw new Error(`${name} in ${state} holds no unboundTx`)
     const finalizedTx = await this.relayerWallet.finalize(unboundTx)
     return this.write(() => this.stateController.submitTransaction({ name, finalizedTx }))
+  }
+
+  /** A `payFee` that throws records nothing: the sweep retries it until the TTL expires the row. */
+  private async resolveAwaitingFee({ name, state, boundTx }: MidnightTransaction): Promise<void> {
+    if (boundTx === null) throw new Error(`${name} in ${state} holds no boundTx`)
+    const finalizedTx = await this.relayerWallet.payFee(boundTx)
+    return this.write(() => this.stateController.recordFee({ name, finalizedTx }))
   }
 
   private async resolveAwaitingSubmission({

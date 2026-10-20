@@ -9,14 +9,17 @@ import { testBackend, uniqueCallerName } from './backend'
 
 /**
  * A transaction committed in AwaitingProof is proven by the resolver through the real proof
- * server and stored in AwaitingWallet, with both lifecycle events in the outbox.
+ * server and stored in AwaitingWallet, and one committed bound in AwaitingFee is paid for by the
+ * relayer wallet and stored in AwaitingSubmission, each with its lifecycle events in the outbox.
+ * The relayer wallet is started on its own, since a started backend would also submit.
  */
-describe('MidnightTransactionStateResolver over Postgres and the proof server', () => {
+describe('MidnightTransactionStateResolver over Postgres, the proof server and the relayer wallet', () => {
   let backend: Backend
   const caller = uniqueCallerName()
 
   beforeAll(async () => {
     backend = await testBackend()
+    await backend.midnight.relayerWallet.start()
   })
 
   afterAll(async () => {
@@ -53,13 +56,9 @@ describe('MidnightTransactionStateResolver over Postgres and the proof server', 
     expect(resolved?.state).toBe('AwaitingWallet')
     expect(resolved?.unprovenTx).toBeNull()
     expect(resolved?.unboundTx).toMatch(/^[0-9a-f]+$/)
+    expect(resolved?.boundTx).toBeNull()
 
-    const events = await backend.event.outboxEntryV1.repository.search({
-      criteria: [],
-      order: { field: 'createdAt', direction: 'asc' },
-    })
-    const ours = events.filter((entry) => new TextDecoder().decode(entry.data).includes(name))
-    expect(ours.map((entry) => entry.type)).toEqual([
+    expect(await outboxTrail(backend, name)).toEqual([
       'midnight.transaction-v1.awaiting-proof',
       'midnight.transaction-v1.awaiting-wallet',
     ])
@@ -68,4 +67,51 @@ describe('MidnightTransactionStateResolver over Postgres and the proof server', 
     await stateResolver.resolveTransaction({ name })
     expect((await repository.get(name))?.state).toBe('AwaitingWallet')
   })
+
+  test('commit bound, resolve, and the row and the outbox show the relayer paid the fee', async () => {
+    const { repository, stateController, stateResolver } = backend.midnight.transactionV1
+    const { unitOfWork } = backend.db
+    const { networkId } = backend.config.client.midnightNetwork
+    const name = `${caller}/midnight-transactions/${randomUUID()}`
+    const parent = `${caller}/ethereum-erc20-vault-deposits/${randomUUID()}`
+    const boundTx = Buffer.from(Transaction.fromParts(networkId).mockProve().serialize()).toString(
+      'hex',
+    )
+
+    await unitOfWork.runInTransaction(() =>
+      stateController.commitTransaction({
+        name,
+        parent,
+        circuit: 'startDeposit',
+        signer: 'caller',
+        boundTx,
+      }),
+    )
+
+    await stateResolver.resolveTransaction({ name })
+
+    const resolved = await repository.get(name)
+    expect(resolved?.state).toBe('AwaitingSubmission')
+    expect(resolved?.unprovenTx).toBeNull()
+    expect(resolved?.unboundTx).toBeNull()
+    expect(resolved?.boundTx).toBe(boundTx)
+    expect(resolved?.finalizedTx).toMatch(/^[0-9a-f]+$/)
+    expect(resolved?.finalizedTx).not.toBe(boundTx)
+
+    expect(await outboxTrail(backend, name)).toEqual([
+      'midnight.transaction-v1.awaiting-fee',
+      'midnight.transaction-v1.awaiting-submission',
+    ])
+  })
 })
+
+/** The lifecycle event types the outbox holds for one transaction, oldest first. */
+async function outboxTrail(backend: Backend, name: string): Promise<string[]> {
+  const events = await backend.event.outboxEntryV1.repository.search({
+    criteria: [],
+    order: { field: 'createdAt', direction: 'asc' },
+  })
+  return events
+    .filter((entry) => new TextDecoder().decode(entry.data).includes(name))
+    .map((entry) => entry.type)
+}

@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
 import { CallerOperationStateConflict } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
-import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 import type { Withdraw } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw'
 import {
   completeWithdrawArgsSchema,

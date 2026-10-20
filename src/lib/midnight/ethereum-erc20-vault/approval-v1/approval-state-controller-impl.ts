@@ -52,7 +52,7 @@ export class ApprovalStateControllerImpl
     )
   }
 
-  startApproval({ unprovenTx, ...approval }: StartApprovalArgs): Promise<Approval> {
+  startApproval({ call, ...approval }: StartApprovalArgs): Promise<Approval> {
     const now = new Date()
     return this.start(
       {
@@ -65,7 +65,7 @@ export class ApprovalStateControllerImpl
         updateTime: now,
       },
       APPROVAL_START_CIRCUIT_BY_KIND[approval.kind],
-      unprovenTx,
+      call,
     )
   }
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 
 import type {
   ActivityTransaction,
+  ActivityType,
   DepositActivity,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import {
@@ -14,6 +15,7 @@ import {
   type ActivityStepStatus,
   activityStepsOf,
   ACTIVITY_STEPS_BY_TYPE,
+  type WalletTurn,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress'
 
 const WALLET_TRANSACTION = {
@@ -164,6 +166,27 @@ describe('activityStepsOf', () => {
     )
     expect(steps.map((step) => letters[step.status]).join('')).toBe(expected)
   })
+
+  const walletTurns: { type: ActivityType; expected: WalletTurn }[] = [
+    { type: 'Deposit', expected: 'inPage' },
+    { type: 'Withdraw', expected: 'signTurn' },
+    { type: 'Swap', expected: 'signTurn' },
+    { type: 'Supply', expected: 'signTurn' },
+    { type: 'Redeem', expected: 'signTurn' },
+    { type: 'Approval', expected: 'signTurn' },
+  ]
+  test.each(walletTurns)(
+    'a $type has the wallet sign its start and completion as $expected',
+    ({ type, expected }) => {
+      const turns = ACTIVITY_STEPS_BY_TYPE[type].flatMap((step, index) =>
+        step.walletTurn === null ? [] : [{ index, walletTurn: step.walletTurn }],
+      )
+      expect(turns).toEqual([
+        { index: 0, walletTurn: expected },
+        { index: 8, walletTurn: expected },
+      ])
+    },
+  )
 
   test('reads each reference from the row, null while the step has not assigned it', () => {
     const steps = activityStepsOf(

@@ -16,6 +16,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-fixtures'
 import { SupplyServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service-impl'
 import {
+  type CompleteSupplyArgs,
   type StartSupplyArgs,
   SupplyStateConflict,
   type SupplyStateController,
@@ -56,7 +57,7 @@ interface Recorded {
   startBuilds: StartSupplyCircuitArgs[]
   completeBuilds: CompleteSupplyCircuitArgs[]
   started: StartSupplyArgs[]
-  completed: { name: string; unprovenTx: string }[]
+  completed: CompleteSupplyArgs[]
   allowanceReads: string[][]
 }
 
@@ -84,7 +85,7 @@ function serviceOver(options: {
     mock<SupplyStateController>('SupplyStateController', {
       startSupply: async (args) => {
         recorded.started.push(args)
-        const { unprovenTx: _unprovenTx, ...supply } = args
+        const { call: _call, ...supply } = args
         return supplyFixture(supply)
       },
       completeSupply: async (args) => {
@@ -186,7 +187,7 @@ describe('SupplyServiceImpl.startSupply', () => {
         amount: REQUEST.amount,
         inIndex: supply.inIndex,
         vaultAccount: vaultAccountOf(SIGNET, VAULT),
-        unprovenTx: 'start-call',
+        call: { unprovenTx: 'start-call' },
       },
     ])
     expect(supply.inIndex).toBeGreaterThan(0n)
@@ -212,7 +213,9 @@ describe('SupplyServiceImpl.completeSupply', () => {
       serializedOutput: hexToBytes(SHARES_OUTPUT),
     })
     expect(build?.mintNonce).toHaveLength(32)
-    expect(recorded.completed).toEqual([{ name: stored.name, unprovenTx: 'complete-call' }])
+    expect(recorded.completed).toEqual([
+      { name: stored.name, call: { unprovenTx: 'complete-call' } },
+    ])
   })
 
   test('a failed deposit completes over 32 zero bytes, which the circuit ignores', async () => {

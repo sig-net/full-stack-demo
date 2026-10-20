@@ -15,6 +15,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-fixtures'
 import { RedeemServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service-impl'
 import {
+  type CompleteRedeemArgs,
   type StartRedeemArgs,
   RedeemStateConflict,
   type RedeemStateController,
@@ -55,7 +56,7 @@ interface Recorded {
   startBuilds: StartRedeemCircuitArgs[]
   completeBuilds: CompleteRedeemCircuitArgs[]
   started: StartRedeemArgs[]
-  completed: { name: string; unprovenTx: string }[]
+  completed: CompleteRedeemArgs[]
 }
 
 function serviceOver(options: { redeems?: Redeem[]; requests?: VaultRequest[] }) {
@@ -77,7 +78,7 @@ function serviceOver(options: { redeems?: Redeem[]; requests?: VaultRequest[] })
     mock<RedeemStateController>('RedeemStateController', {
       startRedeem: async (args) => {
         recorded.started.push(args)
-        const { unprovenTx: _unprovenTx, ...redeem } = args
+        const { call: _call, ...redeem } = args
         return redeemFixture(redeem)
       },
       completeRedeem: async (args) => {
@@ -159,7 +160,7 @@ describe('RedeemServiceImpl.startRedeem', () => {
         shares: REQUEST.shares,
         inIndex: redeem.inIndex,
         vaultAccount: vaultAccountOf(SIGNET, VAULT),
-        unprovenTx: 'start-call',
+        call: { unprovenTx: 'start-call' },
       },
     ])
     expect(redeem.inIndex).toBeGreaterThan(0n)
@@ -185,7 +186,9 @@ describe('RedeemServiceImpl.completeRedeem', () => {
       serializedOutput: hexToBytes(ASSETS_OUTPUT),
     })
     expect(build?.mintNonce).toHaveLength(32)
-    expect(recorded.completed).toEqual([{ name: stored.name, unprovenTx: 'complete-call' }])
+    expect(recorded.completed).toEqual([
+      { name: stored.name, call: { unprovenTx: 'complete-call' } },
+    ])
   })
 
   test('a failed redeem completes over 32 zero bytes, which the circuit ignores', async () => {

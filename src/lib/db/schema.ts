@@ -93,6 +93,7 @@ export const midnightTransactionsV1 = pgTable(
     signer: text('signer', { enum: MIDNIGHT_TRANSACTION_SIGNERS }).notNull(),
     unprovenTx: text('unproven_tx'),
     unboundTx: text('unbound_tx'),
+    boundTx: text('bound_tx'),
     finalizedTx: text('finalized_tx'),
     expireTime: timestamp('expire_time', { withTimezone: true }),
     txId: text('tx_id'),

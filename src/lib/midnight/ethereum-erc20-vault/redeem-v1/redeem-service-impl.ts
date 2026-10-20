@@ -29,6 +29,7 @@ import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-le
 import {
   type AttestedRequestFields,
   attestedRequestFields,
+  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
 import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
@@ -80,7 +81,7 @@ export class RedeemServiceImpl implements RedeemService {
         shares: redeemRequest.shares,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        unprovenTx,
+        call: { unprovenTx },
       }),
     )
   }
@@ -96,11 +97,11 @@ export class RedeemServiceImpl implements RedeemService {
       secretKey: caller.secretKey,
       wallet,
       requestId: hexToBytes(request.requestId),
-      serializedOutput: completionOutput(request),
+      serializedOutput: completionOutput(request, 32),
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
     })
     return this.unitOfWork.runInTransaction(() =>
-      this.redeemStateController.completeRedeem({ name, unprovenTx }),
+      this.redeemStateController.completeRedeem({ name, call: { unprovenTx } }),
     )
   }
 
@@ -147,11 +148,4 @@ export class RedeemServiceImpl implements RedeemService {
     }
     return attestedRequestFields(request)
   }
-}
-
-/** The circuit verifies the 32 attested bytes only for an executed redeem, and ignores them otherwise. */
-function completionOutput(request: AttestedRequestFields): Uint8Array {
-  return request.attestationOutputKind === 'executed'
-    ? hexToBytes(request.attestationOutput)
-    : new Uint8Array(32)
 }

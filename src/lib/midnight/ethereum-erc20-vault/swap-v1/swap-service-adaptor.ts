@@ -14,7 +14,7 @@ import {
   startSwapArgsSchema,
   type SwapService,
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service'
-import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 import type { Logger } from '@/lib/logging/logger'
 
 /**

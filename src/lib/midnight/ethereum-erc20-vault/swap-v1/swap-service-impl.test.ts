@@ -15,6 +15,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-fixtures'
 import { SwapServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service-impl'
 import {
+  type CompleteSwapArgs,
   type StartSwapArgs,
   SwapStateConflict,
   type SwapStateController,
@@ -53,7 +54,7 @@ interface Recorded {
   startBuilds: StartSwapCircuitArgs[]
   completeBuilds: CompleteSwapCircuitArgs[]
   started: StartSwapArgs[]
-  completed: { name: string; unprovenTx: string }[]
+  completed: CompleteSwapArgs[]
 }
 
 function serviceOver(options: {
@@ -81,7 +82,7 @@ function serviceOver(options: {
     mock<SwapStateController>('SwapStateController', {
       startSwap: async (args) => {
         recorded.started.push(args)
-        const { unprovenTx: _unprovenTx, ...swap } = args
+        const { call: _call, ...swap } = args
         return swapFixture(swap)
       },
       completeSwap: async (args) => {
@@ -211,7 +212,7 @@ describe('SwapServiceImpl.startSwap', () => {
         ...swapRequest,
         inIndex: swap.inIndex,
         vaultAccount: vaultAccountOf(SIGNET, VAULT),
-        unprovenTx: 'start-call',
+        call: { unprovenTx: 'start-call' },
       },
     ])
     expect(swap.inIndex).toBeGreaterThan(0n)
@@ -239,7 +240,9 @@ describe('SwapServiceImpl.completeSwap', () => {
     expect(build?.mintNonce).toHaveLength(32)
     expect(build?.changeNonce).toHaveLength(32)
     expect(build?.mintNonce).not.toEqual(build?.changeNonce)
-    expect(recorded.completed).toEqual([{ name: stored.name, unprovenTx: 'complete-call' }])
+    expect(recorded.completed).toEqual([
+      { name: stored.name, call: { unprovenTx: 'complete-call' } },
+    ])
   })
 
   test('a failed trade completes over 32 zero bytes, which the circuit ignores', async () => {

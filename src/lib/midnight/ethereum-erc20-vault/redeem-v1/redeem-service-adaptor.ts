@@ -12,7 +12,7 @@ import {
   startRedeemArgsSchema,
   type RedeemService,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service'
-import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
+import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 import type { Logger } from '@/lib/logging/logger'
 
 /**

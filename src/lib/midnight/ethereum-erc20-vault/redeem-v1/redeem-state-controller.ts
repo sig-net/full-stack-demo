@@ -6,6 +6,7 @@ import {
   type CompleteOperationArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
 import { type Redeem, redeemNameSchema } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
+import type { CommittedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 
 /**
  * The only writer of a redeem's state: the caller operation's transitions over the redeem row,
@@ -25,7 +26,7 @@ export interface StartRedeemArgs extends Omit<
   'state' | 'outcome' | 'failure' | 'error' | 'createTime' | 'updateTime'
 > {
   /** The start circuit call, built with the redeem's assigned fields. */
-  unprovenTx: string
+  call: CommittedCall
 }
 
 export type CompleteRedeemArgs = CompleteOperationArgs

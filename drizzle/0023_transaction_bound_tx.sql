@@ -1,0 +1,1 @@
+ALTER TABLE "midnight_transactions_v1" ADD COLUMN "bound_tx" text;

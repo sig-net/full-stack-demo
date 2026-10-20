@@ -7,6 +7,7 @@ import {
   midnightTransactionNameSchema,
   type MidnightTransactionState,
 } from '@/lib/midnight/transaction-v1/transaction'
+import type { CommittedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 
 /**
  * The only writer of a transaction's state. Each method is one transition from the state machine
@@ -15,7 +16,10 @@ import {
  * entered. Methods open no transaction: the caller is the write boundary.
  */
 export interface MidnightTransactionStateController {
-  /** Stores a transaction the caller built, in `AwaitingProof` with its unproven bytes. */
+  /**
+   * Stores a transaction the caller built, in the state its bytes enter: `AwaitingProof` with
+   * unproven bytes, `AwaitingFee` with bytes the caller's wallet bound without a fee.
+   */
   commitTransaction(args: CommitTransactionArgs): Promise<MidnightTransaction>
   /** `AwaitingProof` to `AwaitingWallet`. The unproven bytes are deleted. */
   recordProof(args: RecordProofArgs): Promise<MidnightTransaction>
@@ -23,6 +27,8 @@ export interface MidnightTransactionStateController {
   recordProofFailure(args: RecordProofFailureArgs): Promise<MidnightTransaction>
   /** `AwaitingWallet` to `AwaitingSubmission`, with the bytes the wallet balanced and signed. */
   submitTransaction(args: SubmitTransactionArgs): Promise<MidnightTransaction>
+  /** `AwaitingFee` to `AwaitingSubmission`, with the bytes the relayer wallet paid for. */
+  recordFee(args: RecordFeeArgs): Promise<MidnightTransaction>
   /** `AwaitingSubmission` to `AwaitingInclusion`, with the id the node returned. */
   recordSubmission(args: RecordSubmissionArgs): Promise<MidnightTransaction>
   /**
@@ -43,11 +49,12 @@ export interface MidnightTransactionStateController {
 }
 
 /** What the committer decides. The controller sets the entry state, the TTL, the fields later steps fill, and the timestamps. */
-export interface CommitTransactionArgs extends Omit<
+export type CommitTransactionArgs = Omit<
   MidnightTransaction,
   | 'state'
   | 'unprovenTx'
   | 'unboundTx'
+  | 'boundTx'
   | 'finalizedTx'
   | 'txId'
   | 'blockHeight'
@@ -56,9 +63,8 @@ export interface CommitTransactionArgs extends Omit<
   | 'error'
   | 'createTime'
   | 'updateTime'
-> {
-  unprovenTx: string
-}
+> &
+  CommittedCall
 
 export interface RecordProofArgs {
   name: string
@@ -71,6 +77,11 @@ export interface RecordProofFailureArgs {
 }
 
 export interface SubmitTransactionArgs {
+  name: string
+  finalizedTx: string
+}
+
+export interface RecordFeeArgs {
   name: string
   finalizedTx: string
 }
@@ -138,6 +149,10 @@ export const MIDNIGHT_TRANSACTION_EVENT_BY_STATE: Record<
   ),
   AwaitingWallet: defineEvent(
     'midnight.transaction-v1.awaiting-wallet',
+    midnightTransactionEventDataSchema,
+  ),
+  AwaitingFee: defineEvent(
+    'midnight.transaction-v1.awaiting-fee',
     midnightTransactionEventDataSchema,
   ),
   AwaitingSubmission: defineEvent(

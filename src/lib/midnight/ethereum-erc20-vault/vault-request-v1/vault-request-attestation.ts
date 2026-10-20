@@ -55,6 +55,16 @@ export function attestedRequestFields(request: VaultRequest): AttestedRequestFie
   }
 }
 
+/** The `serializedOutput` a complete circuit takes: the attested bytes for an executed sweep, else `outputWidth` zero bytes, which the circuit ignores. */
+export function completionOutput(
+  request: Pick<AttestedRequestFields, 'attestationOutputKind' | 'attestationOutput'>,
+  outputWidth: number,
+): Uint8Array {
+  return request.attestationOutputKind === 'executed'
+    ? hexToBytes(request.attestationOutput)
+    : new Uint8Array(outputWidth)
+}
+
 /** The attestation as the singleton posted it, rebuilt from a row that holds one: the output's width and hash come from the stored output. */
 export function attestationToEvent(request: VaultRequest): RespondBidirectionalEvent {
   const attested = attestedRequestFields(request)
