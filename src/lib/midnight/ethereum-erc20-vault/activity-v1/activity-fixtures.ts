@@ -46,7 +46,6 @@ export function activityFixture(overrides: Partial<DepositActivity> = {}): Depos
     resourceState: 'AwaitingStartTransaction',
     vaultRequestState: null,
     vaultRequestId: null,
-    walletTransaction: null,
     startTransaction: {
       hash: START_TX_HASH,
       blockNumber: null,

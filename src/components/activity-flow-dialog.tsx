@@ -1,6 +1,5 @@
 'use client'
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronDown,
   Circle,
@@ -13,15 +12,9 @@ import {
   X,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { toast } from 'sonner'
 
-import { ACTIVITIES_QUERY_KEY } from '@/components/activity-section'
-import { useCaller } from '@/components/contexts/CallerContext'
 import { useConfig } from '@/components/contexts/ConfigContext'
-import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
-import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { CopyButton } from '@/components/copy-button'
-import { ReadinessChecklist } from '@/components/readiness-checklist'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
@@ -29,14 +22,12 @@ import {
   DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { WalletSigningIcon } from '@/components/wallet-signing-icon'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
-import { formatTimestamp } from '@/lib/activity/activity-entries'
 import type { ClientConfig } from '@/lib/config/client-config'
 import { ethereumExplorerOf } from '@/lib/config/ethereum-explorer'
 import { midnightExplorerOf } from '@/lib/config/midnight-explorer'
@@ -46,13 +37,11 @@ import {
   type ActivityEntry,
   type ActivityStatus,
 } from '@/lib/activity/activity-entry'
-import type { ActivityWalletTransaction } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import type {
   ActivityReference,
   ActivityReferenceKind,
   ActivityStepStatus,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress'
-import { listTransactions, submitTransaction } from '@/server/actions/transaction-actions'
 
 interface ActivityFlowDialogProps {
   entry: ActivityEntry
@@ -60,48 +49,23 @@ interface ActivityFlowDialogProps {
 }
 
 /**
- * Where an activity stands and what, if anything, the user must do for it: the wallet's turn as
- * the footer's signing button, and every step behind a details pane that opens closed. The
- * dialog holds no state the server does not, so closing it loses nothing: the row offers the
- * same turn again on its next refresh.
+ * Where an activity stands, with every step behind a details pane that opens closed. The dialog
+ * holds no state the server does not, so closing it loses nothing.
  */
 export function ActivityFlowDialog({ entry, onOpenChange }: ActivityFlowDialogProps): ReactNode {
-  const { wallet } = useMidnightWallet()
-  const { checks } = useVaultReadiness()
   const kindLabel = ACTIVITY_KIND_LABELS[entry.kind]
-  const walletTransaction = entry.action.kind === 'balance' ? entry.action.transaction : null
-  const signing = useWalletSigning(entry, walletTransaction, () => {
-    onOpenChange(false)
-  })
-  const busy = signing.isPending
-  const dustReady = checks.callerDust.status === 'ok'
   return (
-    <Dialog
-      open
-      onOpenChange={(value) => {
-        if (!busy) onOpenChange(value)
-      }}
-    >
+    <Dialog open onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false}>
         <DialogHeader className="flex-row items-center justify-between">
           <DialogTitle>
             {kindLabel} {TITLE_BY_STATUS[entry.status]}
           </DialogTitle>
-          <DialogClose
-            render={<Button variant="ghost" size="icon-sm" aria-label="Close" disabled={busy} />}
-          >
+          <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label="Close" />}>
             <X />
           </DialogClose>
         </DialogHeader>
-        <DialogDescription>{description(entry, walletTransaction)}</DialogDescription>
-        {walletTransaction !== null &&
-          (wallet === null ? (
-            <p role="alert" className="text-sm text-destructive">
-              Connect your Midnight wallet to sign the {callLabel(walletTransaction)} call.
-            </p>
-          ) : (
-            !dustReady && <ReadinessChecklist checkIds={['callerDust']} />
-          ))}
+        <DialogDescription>{description(entry)}</DialogDescription>
         {entry.error !== null && (
           <p role="alert" className="text-sm text-destructive">
             {entry.error}
@@ -110,12 +74,7 @@ export function ActivityFlowDialog({ entry, onOpenChange }: ActivityFlowDialogPr
         <Collapsible className="flex flex-col gap-2">
           <CollapsibleTrigger
             render={
-              <Button
-                variant="ghost"
-                size="sm"
-                className="self-start text-muted-foreground"
-                disabled={busy}
-              />
+              <Button variant="ghost" size="sm" className="self-start text-muted-foreground" />
             }
           >
             <ChevronDown
@@ -141,7 +100,7 @@ export function ActivityFlowDialog({ entry, onOpenChange }: ActivityFlowDialogPr
                           />
                           <span>{step.label}</span>
                           <span className="sr-only">({step.status})</span>
-                          {step.walletTurn !== null && <WalletSigningIcon className="size-4" />}
+                          {step.signedInPage && <WalletSigningIcon className="size-4" />}
                         </div>
                         {step.reference !== null && (
                           <ActivityReferenceLine reference={step.reference} />
@@ -154,20 +113,6 @@ export function ActivityFlowDialog({ entry, onOpenChange }: ActivityFlowDialogPr
             </TooltipProvider>
           </CollapsibleContent>
         </Collapsible>
-        {walletTransaction !== null && (
-          <DialogFooter>
-            <Button
-              type="button"
-              disabled={busy || wallet === null || !dustReady}
-              onClick={() => {
-                signing.mutate()
-              }}
-            >
-              {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : <WalletSigningIcon />}
-              {busy ? 'Signing…' : 'Sign with wallet'}
-            </Button>
-          </DialogFooter>
-        )}
       </DialogContent>
     </Dialog>
   )
@@ -179,81 +124,18 @@ const TITLE_BY_STATUS: Record<ActivityStatus, string> = {
   failed: 'failed',
 }
 
-function description(
-  entry: ActivityEntry,
-  walletTransaction: ActivityWalletTransaction | null,
-): string {
+function description(entry: ActivityEntry): string {
   const subject = `The ${entry.description}`
   if (entry.status === 'complete') return `${subject} is complete.`
   if (entry.status === 'failed') return `${subject} failed.`
-  if (walletTransaction !== null) {
-    const expiry =
-      walletTransaction.expireTime === null
-        ? ''
-        : ` It expires at ${formatTimestamp(walletTransaction.expireTime)}.`
-    return `${subject} is in progress. You need to sign with your wallet for the ${callLabel(walletTransaction)} call: it is proved, your Midnight wallet pays its DUST fee and signs it, then the backend submits it.${expiry}`
-  }
-  const remaining = entry.steps.filter((step) => step.status !== 'done')
-  const inPage = remaining.some((step) => step.walletTurn === 'inPage')
   if (entry.action.kind === 'complete') {
-    return inPage
-      ? `${subject} is in progress. Nothing for you to do now: this page builds, proves and signs the completion call with your wallet by itself while it is open with the wallet connected, then the backend pays its fee and submits it.`
-      : `${subject} is in progress. Nothing for you to do now: the completion call is being built for your wallet, and starts by itself while this page is open with the wallet connected.`
+    return `${subject} is in progress. Nothing for you to do now: this page builds, proves and signs the completion call with your wallet by itself while it is open with the wallet connected, then the backend pays its fee and submits it.`
   }
-  const turns = remaining.filter((step) => step.walletTurn === 'signTurn').length
-  const approvals =
-    turns === 0 ? '' : ` Your wallet will need to approve ${TURN_WORDS[turns] ?? String(turns)}.`
-  const signedInPage = inPage
+  const signingDue = entry.steps.some((step) => step.status !== 'done' && step.signedInPage)
+  const signedInPage = signingDue
     ? ' This page signs the completion call with your wallet by itself once it is due, while it is open with the wallet connected.'
     : ''
-  return `${subject} is in progress. Nothing for you to do now.${approvals}${signedInPage}`
-}
-
-const TURN_WORDS: Record<number, string> = { 1: 'once more', 2: 'twice' }
-
-function callLabel(transaction: ActivityWalletTransaction): string {
-  return CIRCUIT_LABELS[transaction.circuit] ?? transaction.circuit
-}
-
-const CIRCUIT_LABELS: Record<string, string> = {}
-
-/**
- * The wallet's turn: the proved call is read afresh, balanced and signed by the wallet, then
- * handed back to the backend to submit.
- */
-function useWalletSigning(
-  entry: ActivityEntry,
-  transaction: ActivityWalletTransaction | null,
-  onSigned: () => void,
-): ReturnType<typeof useMutation<void, Error, void>> {
-  const { callerSecret } = useCaller()
-  const { wallet } = useMidnightWallet()
-  const queryClient = useQueryClient()
-  const label = transaction === null ? '' : callLabel(transaction)
-  return useMutation({
-    mutationFn: async () => {
-      if (transaction === null) throw new Error('No call is waiting for the wallet.')
-      if (callerSecret === null) throw new Error('The identity secret is not set.')
-      if (wallet === null) throw new Error('No Midnight wallet is connected.')
-      const listed = await listTransactions(callerSecret, { parent: entry.name })
-      if (!listed.ok) throw new Error(listed.error)
-      const live = listed.transactions.find((candidate) => candidate.name === transaction.name)
-      if (live === undefined || live.unboundTx === null || live.state !== 'AwaitingWallet') {
-        throw new Error('The call is not waiting for the wallet any more.')
-      }
-      const finalizedTx = await wallet.finalize(live.unboundTx)
-      const submitted = await submitTransaction(callerSecret, { name: live.name, finalizedTx })
-      if (!submitted.ok) throw new Error(submitted.error)
-    },
-    onSuccess: async () => {
-      toast.success(`The ${label} call is signed and submitted.`)
-      await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
-      onSigned()
-    },
-    onError: (error) => {
-      toast.error(`Signing the ${label} call failed: ${error.message}`)
-    },
-  })
+  return `${subject} is in progress. Nothing for you to do now.${signedInPage}`
 }
 
 /**

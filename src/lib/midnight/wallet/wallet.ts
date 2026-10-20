@@ -42,11 +42,6 @@ export interface Wallet extends WalletMetadata {
   /** The keys a call is built for, known once the wallet has derived them. */
   readonly publicKeys: WalletPublicKeys
   /**
-   * Balances, signs and finalises the unbound bytes of a proven call, resolving with the
-   * finalized bytes, both in hex as the transaction resource carries them.
-   */
-  finalize(unboundTx: string): Promise<string>
-  /**
    * Balances the wallet's own coins into the unbound bytes of a proven call, signs and binds it
    * without a DUST fee, resolving with the bound bytes in hex for the relayer wallet to pay.
    */

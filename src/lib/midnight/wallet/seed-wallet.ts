@@ -9,7 +9,6 @@ import {
   bindWithoutFee,
   createWalletAndMidnightProvider,
   deriveAccountKeys,
-  finalizeUnboundTransaction,
   initialiseWalletFacade,
   type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
@@ -240,10 +239,6 @@ export class SeedWallet implements Wallet {
       coinPublicKey: this.keys.shieldedSecretKeys.coinPublicKey,
       encryptionPublicKey: this.keys.shieldedSecretKeys.encryptionPublicKey,
     }
-  }
-
-  finalize(unboundTx: string): Promise<string> {
-    return finalizeUnboundTransaction(this.requireProvider(), unboundTx)
   }
 
   balanceWithoutFee(unboundTx: string): Promise<string> {

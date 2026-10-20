@@ -1,8 +1,6 @@
 import type { CallerOperationState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
 import type { Backend } from '@/server/backend'
 
-import type { UserWallet } from './user-wallet'
-
 const POLL_EVERY_MS = 5_000
 
 /** A caller operation as the round trip drives it: where it stands, and the completion its type offers. */
@@ -13,44 +11,14 @@ export interface DrivenOperation {
 }
 
 /**
- * Plays the user's wallet for an operation until it completes: every caller call in
- * `AwaitingWallet` is balanced and submitted, and the completion is asked for once the
- * operation awaits it. A failed completion attempt is left to the sweep's ledger check and
- * asked for again, as the page does.
+ * Waits for an operation to complete, asking for the completion once it awaits it. A failed
+ * completion attempt is left to the sweep's ledger check and asked for again, as the page does.
  */
-export async function driveOperation(
-  backend: Backend,
-  callerSecret: string,
-  user: UserWallet,
-  operation: DrivenOperation,
-  timeoutMs: number,
-): Promise<void> {
-  const transactions = backend.midnight.transactionV1.adaptor
-  const submitted = new Set<string>()
+export async function driveOperation(operation: DrivenOperation, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs
   let completionAskedAt = 0
   let lastState: CallerOperationState | undefined
   while (Date.now() < deadline) {
-    const live = await transactions.listTransactions(callerSecret, { parent: operation.name })
-    if (!live.ok) throw new Error(live.error)
-    for (const transaction of live.transactions) {
-      if (
-        transaction.state !== 'AwaitingWallet' ||
-        transaction.signer !== 'caller' ||
-        transaction.unboundTx === null ||
-        submitted.has(transaction.name)
-      ) {
-        continue
-      }
-      submitted.add(transaction.name)
-      const finalizedTx = await user.balance(transaction.unboundTx)
-      const result = await transactions.submitTransaction(callerSecret, {
-        name: transaction.name,
-        finalizedTx,
-      })
-      if (!result.ok) throw new Error(result.error)
-      log(`${shortName(operation.name)}: balanced and submitted ${transaction.circuit}`)
-    }
     const state = await operation.state()
     if (state !== lastState) {
       log(`${shortName(operation.name)}: ${state ?? 'missing'}`)

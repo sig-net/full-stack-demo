@@ -63,7 +63,7 @@ describe('MidnightTransactionStateResolver over Postgres, the proof server and t
       'midnight.transaction-v1.awaiting-wallet',
     ])
 
-    // Resolving again finds nothing to do: the user holds the next step.
+    // Resolving again leaves a caller transaction in AwaitingWallet for its TTL to expire.
     await stateResolver.resolveTransaction({ name })
     expect((await repository.get(name))?.state).toBe('AwaitingWallet')
   })

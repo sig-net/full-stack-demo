@@ -159,9 +159,10 @@ Keep setup instructions and application reference material in README.md and docs
 - A vault-level batch (the flush) is a process with no row. `Flusher.flush()` coalesces nudges,
   runs one flush at a time, and calls `resolveWaitingFlushes()` when a flush lands. A step that
   touches shared contract state is never a step of one request's lifecycle.
-- A transaction row names its `signer` (`caller` or `relayer`), and `AwaitingWallet` is that
-  signer's to-do: the browser's `submitTransaction` for a caller, the resolver through the
-  `RelayerWallet` port for the relayer.
+- A transaction row names its `signer` (`caller` or `relayer`). A caller row is committed bound
+  and enters `AwaitingFee`, the relayer's fee to pay. `AwaitingWallet` is the relayer's to-do,
+  which the resolver takes through the `RelayerWallet` port, and the resolver leaves a caller
+  row in `AwaitingWallet` to expire at its TTL.
 - The sweep (`src/lib/sweep.ts`, every 30 seconds from `start()`) calls every resolver's
   `resolvePending()` in dependency order (Midnight transactions, Ethereum transactions, vault
   requests, deposits) and then fires `flush()` without awaiting it. Every resolver has a

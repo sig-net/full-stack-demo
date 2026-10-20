@@ -37,7 +37,7 @@ export interface UserWallet {
   nightBalance(): Promise<bigint>
   /** The shielded coins of `tokenType` the wallet may spend, in the token's base units, from the synced state. */
   shieldedBalance(tokenType: string): Promise<bigint>
-  /** The finalized bytes in hex of the unbound bytes in hex, as `submitTransaction` takes them. */
+  /** The finalized bytes in hex of the unbound bytes in hex, balanced and signed with the wallet paying the DUST fee. */
   balance(unboundTx: string): Promise<string>
   /** The bound bytes in hex of the unbound bytes in hex, balanced and signed without a DUST fee, as the relayer wallet's `payFee` takes them. */
   balanceWithoutFee(unboundTx: string): Promise<string>

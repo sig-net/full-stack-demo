@@ -26,10 +26,7 @@ import {
   ACTIVITY_TRANSACTION_STATE_BY_STATE,
   ACTIVITY_TYPES,
   type ActivityType,
-  ACTIVITY_WALLET_TRANSACTION_SIGNER,
-  ACTIVITY_WALLET_TRANSACTION_STATE,
   type ActivityTransaction,
-  type ActivityWalletTransaction,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import {
   DEPOSIT_FAILURES,
@@ -330,7 +327,6 @@ export const midnightEthereumErc20VaultActivityV1 = pgView(
     vaultRequestState: text('vault_request_state', { enum: VAULT_REQUEST_STATES }),
     vaultRequestId: text('vault_request_id'),
     // The repository parses every row with the resource schema, which checks the shape claimed here.
-    walletTransaction: jsonb('wallet_transaction').$type<ActivityWalletTransaction | null>(),
     startTransaction: jsonb('start_transaction').$type<ActivityTransaction | null>(),
     foreignChainTransaction: jsonb('foreign_chain_transaction').$type<ActivityTransaction | null>(),
     completeTransaction: jsonb('complete_transaction').$type<ActivityTransaction | null>(),
@@ -456,10 +452,6 @@ function activityBranch(branch: ActivityBranch): string {
     `LEFT JOIN LATERAL (SELECT * FROM "${getTableName(table)}" x WHERE ${where} ORDER BY x.create_time DESC, x.name LIMIT 1) ${alias} ON TRUE`
   const transaction = (alias: string, hash: PgColumn, block: PgColumn): string =>
     `CASE WHEN ${alias}.name IS NULL THEN NULL ELSE jsonb_build_object('hash', ${alias}.${hash.name}, 'blockNumber', ${alias}.${block.name}, 'state', ${caseOver(`${alias}.state`, ACTIVITY_TRANSACTION_STATE_BY_STATE, 'Pending')}, 'lifecycleState', ${alias}.state) END`
-  const waitingForWallet = (alias: string): string =>
-    `${alias}.${t.state.name} = '${ACTIVITY_WALLET_TRANSACTION_STATE}' AND ${alias}.${t.signer.name} = '${ACTIVITY_WALLET_TRANSACTION_SIGNER}'`
-  const walletTransaction = (alias: string): string =>
-    `jsonb_build_object('name', ${alias}.name, 'circuit', ${alias}.${t.circuit.name}, 'expireTime', ${alias}.${t.expireTime.name})`
   const circuits = (names: readonly string[]): string => names.map((name) => `'${name}'`).join(', ')
   const amountType = midnightEthereumErc20VaultSwapsV1.amountOut.getSQLType()
   const addressType = midnightEthereumErc20VaultSwapsV1.erc20AddressOut.getSQLType()
@@ -481,7 +473,6 @@ function activityBranch(branch: ActivityBranch): string {
       d.state AS resource_state,
       r.${r.state.name} AS vault_request_state,
       r.${r.requestId.name} AS vault_request_id,
-      CASE WHEN ${waitingForWallet('c')} THEN ${walletTransaction('c')} WHEN ${waitingForWallet('s')} THEN ${walletTransaction('s')} ELSE NULL END AS wallet_transaction,
       ${transaction('s', t.txId, t.blockHeight)} AS start_transaction,
       ${transaction('e', e.txHash, e.blockNumber)} AS foreign_chain_transaction,
       ${transaction('c', t.txId, t.blockHeight)} AS complete_transaction,

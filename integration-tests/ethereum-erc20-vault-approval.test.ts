@@ -139,9 +139,6 @@ describe('ERC20 vault approval round trip over the local stack', () => {
       expect(start?.boundTx).toMatch(/^[0-9a-f]+$/)
 
       await driveOperation(
-        backend,
-        callerSecret,
-        user,
         {
           name: started.approval.name,
           state: async () => (await repository.get(started.approval.name))?.state,

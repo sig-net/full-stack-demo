@@ -25,7 +25,7 @@ export interface MidnightTransactionStateController {
   recordProof(args: RecordProofArgs): Promise<MidnightTransaction>
   /** `AwaitingProof` to `Failed` as `ProofFailed`. */
   recordProofFailure(args: RecordProofFailureArgs): Promise<MidnightTransaction>
-  /** `AwaitingWallet` to `AwaitingSubmission`, with the bytes the wallet balanced and signed. */
+  /** `AwaitingWallet` to `AwaitingSubmission`, with the bytes the relayer wallet balanced and signed. */
   submitTransaction(args: SubmitTransactionArgs): Promise<MidnightTransaction>
   /** `AwaitingFee` to `AwaitingSubmission`, with the bytes the relayer wallet paid for. */
   recordFee(args: RecordFeeArgs): Promise<MidnightTransaction>

@@ -147,7 +147,7 @@ introduces the stages, and the palette card carries their swatches:
 | ----- | --------- | --------------------------------------------------------------------------------------------------------- |
 | 1     | `#E68310` | the user calls `startDeposit`, which creates the deposit and its start transaction                        |
 | 2     | `#11A579` | the outbox relays the lifecycle events to Kafka, the consumer hub dispatches them, the transaction proves |
-| 3     | `#D62728` | the user polls the transaction, balances it in the wallet and calls `submitTransaction`                   |
+| 3     | `#D62728` | the resolver has the relayer wallet pay the fee of the call the user's wallet bound                       |
 | 4     | `#00A2B8` | the resolver submits the transaction to the node and watches the indexer for its inclusion                |
 | 5     | `#8C564B` | the vault request is flushed, sent, signed by the MPC, broadcast on Ethereum and attested                 |
 | 6     | `#B8A000` | the user calls `completeDeposit`, and the completion transaction runs to `Completed`                      |
@@ -162,7 +162,7 @@ introduces the stages, and the palette card carries their swatches:
   gives `midnight.transaction-v1`.
 - A method row spreads the signature over lines: `methodName(`, then one line per
   parameter, indented and spelled exactly as the code spells it (`caller: Caller,` then
-  `args: SubmitTransactionArgs`), then the closing line `) (ReturnType)`. The return type
+  `args: GetTransactionArgs`), then the closing line `) (ReturnType)`. The return type
   is the resolved type with its `Promise<...>` wrapper dropped:
   `Promise<MidnightTransaction | undefined>` reads `(MidnightTransaction | undefined)`.
 - A provider's property rows come before its method rows, each kind in source order. A

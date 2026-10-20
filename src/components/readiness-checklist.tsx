@@ -112,14 +112,10 @@ function ReadinessDetail({
 }
 
 const READINESS_ITEMS: Record<ReadinessCheckId, { subject: string; explanation: string }> = {
-  callerDust: {
-    subject: 'Midnight wallet',
-    explanation: 'Your Midnight wallet pays the DUST fees of the transactions it signs.',
-  },
   relayerDust: {
     subject: 'relayer',
     explanation:
-      'The relayer pays the DUST fees of the vault queue flushes, sends and attestations.',
+      'The relayer pays the DUST fees of your vault calls and of the vault queue flushes, sends and attestations.',
   },
   depositAccountEth: {
     subject: 'deposit account',

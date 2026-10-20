@@ -99,7 +99,7 @@ const cases: Case[] = [
     ],
   },
   {
-    name: 'AwaitingWallet - a caller transaction is left for the browser wallet',
+    name: 'AwaitingWallet - a caller transaction is left for its TTL to expire',
     stored: TRANSACTION_IN_STATE.AwaitingWallet,
     ledger: {},
     expectTransitions: [],

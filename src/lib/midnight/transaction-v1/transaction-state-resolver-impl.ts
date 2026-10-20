@@ -120,7 +120,7 @@ export class MidnightTransactionStateResolverImpl implements MidnightTransaction
     return this.write(() => this.stateController.recordProof({ name, unboundTx }))
   }
 
-  /** A caller transaction is the browser wallet's to-do, and a relayer transaction is finalised here. */
+  /** A relayer transaction is finalised here, and a caller transaction is left for its TTL to expire. */
   private async resolveAwaitingWallet({
     name,
     state,

@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { TableBody, TableCell, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { WalletSigningIcon } from '@/components/wallet-signing-icon'
 import {
   ACTIVITY_KIND_LABELS,
   type ActivityEntry,
@@ -52,8 +51,6 @@ export function ActivityRow({ entry }: ActivityRowProps): ReactNode {
   const kindLabel = ACTIVITY_KIND_LABELS[kind]
   const badge = STATUS_BADGES[status]
   const [flowOpen, setFlowOpen] = useState(false)
-  const walletTurn = entry.action.kind === 'balance'
-  const flowLabel = walletTurn ? 'Action required' : 'View details'
   return (
     <Collapsible render={<TableBody />}>
       <TableRow className="hover:bg-transparent has-aria-expanded:bg-transparent">
@@ -81,17 +78,17 @@ export function ActivityRow({ entry }: ActivityRowProps): ReactNode {
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      className={walletTurn ? 'text-foreground' : 'text-subtle-foreground'}
-                      aria-label={`${flowLabel}: ${kindLabel} ${from.amount} ${from.assetSymbol}`}
+                      className="text-subtle-foreground"
+                      aria-label={`View details: ${kindLabel} ${from.amount} ${from.assetSymbol}`}
                       onClick={() => {
                         setFlowOpen(true)
                       }}
                     />
                   }
                 >
-                  {walletTurn ? <WalletSigningIcon /> : <Eye className="size-5" aria-hidden />}
+                  <Eye className="size-5" aria-hidden />
                 </TooltipTrigger>
-                <TooltipContent>{flowLabel}</TooltipContent>
+                <TooltipContent>View details</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

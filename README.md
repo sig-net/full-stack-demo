@@ -615,20 +615,20 @@ the parent's collection without a read.
 
 A transaction names its `signer`: `caller` when the caller's browser wallet balances and
 signs it, `relayer` when the backend's own wallet does, which is the case for every
-permissionless vault circuit (flushes, sends, attestation queues). `AwaitingWallet` is that
-wallet's to-do: a caller transaction waits for the browser to call `submitTransaction`, a
-relayer transaction is finalised by the resolver through the `RelayerWallet` port.
+permissionless vault circuit (flushes, sends, attestation queues). `AwaitingWallet` is the
+relayer's to-do: the resolver finalises a relayer transaction through the `RelayerWallet` port
+and moves it to `AwaitingSubmission`. A caller transaction is committed bound and enters
+`AwaitingFee`, so the resolver leaves a caller transaction it finds in `AwaitingWallet` alone.
+Such a row, committed by a release in which the backend built the caller's calls, has no
+submitter and expires at its TTL.
 
 The browser's side of a transaction is `TransactionService` (`transaction-service.ts`):
-`listTransactions(caller, { parent })` finds the live transaction under a resource the caller
-owns, the browser wallet balances and signs its `unboundTx`, and
-`submitTransaction(caller, { name, finalizedTx })` hands the finalized bytes back, which moves
-the row from `AwaitingWallet` to `AwaitingSubmission`. The server actions in
-`src/server/actions/transaction-actions.ts` forward to `TransactionServiceAdaptor`.
+`getTransaction(caller, { name })` reads a transaction the caller owns. The server action in
+`src/server/actions/transaction-actions.ts` forwards to `TransactionServiceAdaptor`.
 
 A call is committed with one of two kinds of bytes, and the bytes decide the state it enters
 (`ENTRY_STATE_BY_CALL` in `transaction-state-machine.ts`): `unprovenTx`, built on the backend
-for a permissionless circuit, enters `AwaitingProof` and takes the path above, and `boundTx`, balanced, signed
+for a permissionless circuit, enters `AwaitingProof` and, once proven, waits in `AwaitingWallet` for the relayer, and `boundTx`, balanced, signed
 and bound by the caller's wallet without a fee, enters `AwaitingFee`, the relayer's to-do. The
 resolver has the relayer wallet pay the fee (`RelayerWallet.payFee`) outside any database
 transaction and records the paid bytes as `finalizedTx` with `recordFee`, which moves the row to
@@ -652,8 +652,7 @@ step. Every operation's caller calls take this path (see
 [ERC-20 vault supply API](#erc-20-vault-supply-api),
 [ERC-20 vault redeem API](#erc-20-vault-redeem-api),
 [ERC-20 vault swap API](#erc-20-vault-swap-api) and
-[ERC-20 vault approval API](#erc-20-vault-approval-api)). The sign turn above is the path
-of a caller-signed transaction in `AwaitingWallet`.
+[ERC-20 vault approval API](#erc-20-vault-approval-api)).
 
 `MidnightTransactionLedgerImpl` is the ledger behind the local or stagenet services: `prove`
 deserialises the unproven bytes and proves them through the proof server with the prover keys
@@ -1502,7 +1501,7 @@ A row carries the projected resource's own `name`, `type`, `state`, `erc20Addres
 (what the operation surrenders or moves: the deposited token, the sold token and its cap, the
 approved token with a null amount), `erc20AddressOut` and `amountOut` (a swap's bought side),
 `spender` (an approval's), `outcome`, `error`, `resourceState` (the operation's own state),
-`vaultRequestState`, `vaultRequestId`, `walletTransaction`, three nullable `{ hash, state }`
+`vaultRequestState`, `vaultRequestId`, three nullable `{ hash, state }`
 objects (`startTransaction`, `foreignChainTransaction`, `completeTransaction`, stored as `jsonb`
 and parsed by the resource schema), `createTime` and `updateTime` (the newest update across the
 joined rows). The resource is a discriminated union on `type`, so each type's row keeps its own
@@ -1523,15 +1522,13 @@ three hashes.
 The browser keeps no flow state of its own: every step it offers is read from the activity row,
 so a closed tab, a reload or a lost connection loses nothing and the next refresh offers the
 same step again. The view projects, beside the aggregated state, the deposit's own state, the
-newest vault request's state, each child transaction's own state as `lifecycleState`, and
-`walletTransaction`, the newest caller-signed Midnight transaction in `AwaitingWallet` with its
-circuit and deadline. `activityActionOf()` and `activityStepsOf()`
+newest vault request's state and each child transaction's own state as `lifecycleState`.
+`activityActionOf()` and `activityStepsOf()`
 (`src/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress.ts`) derive from those
-the user's next step (`balance`, `complete` or `none`) and the ten-step progress, each step
-carrying its `walletTurn` and the `reference` it leaves behind. `walletTurn` says how the
-caller's wallet takes the step: `inPage` for every type's two calls (`IN_PAGE_TYPES` names
-them all), which the page builds, proves and signs with the wallet unprompted, and null for
-every step the wallet takes no part in. The references are the start
+the user's next step (`complete` or `none`) and the ten-step progress, each step carrying
+`signedInPage` and the `reference` it leaves behind. `signedInPage` is true for every type's
+start and completion calls, which the page builds, proves and signs with the wallet
+unprompted, and false for every step the wallet takes no part in. The references are the start
 and completion calls' Midnight transaction ids, the vault request's Sig Network request id
 (projected by the view as `vaultRequestId`) and the sweep's Ethereum transaction hash, each
 null until its step assigns it.
@@ -1539,11 +1536,10 @@ null until its step assigns it.
 `ActivitySection` reads `listActivities` through React Query, every five seconds while a row
 is pending and every thirty otherwise, and maps each row with `activityEntryOf()`
 (`src/lib/activity/activity-entries.ts`). Beside its status badge every row has one icon button
-into `ActivityFlowDialog` (`src/components/activity-flow-dialog.tsx`): a wallet with a bolt
-(`WalletSigningIcon`, tooltip "Action required") while a call waits in `AwaitingWallet`, an eye
-(tooltip "View details") otherwise. The dialog says where the activity stands and whether the
-user must act, keeps the ten steps behind a "See more details" pane that opens closed, where a
-step's reference shows abbreviated with its meaning in a tip, a copy button and a block
+into `ActivityFlowDialog` (`src/components/activity-flow-dialog.tsx`), an eye with the tooltip
+"View details". The dialog says where the activity stands and keeps the ten steps behind a
+"See more details" pane that opens closed, where a step signed in the page carries a wallet
+with a bolt (`WalletSigningIcon`) and a step's reference shows abbreviated with its meaning in a tip, a copy button and a block
 explorer link: an Ethereum transaction opens in the chain's explorer
 (`ethereumExplorerOf()` in `src/lib/config/ethereum-explorer.ts`: Otterscan from `compose.yaml`
 on the local stack, which `isLocalEnvironment()` recognises by its undeployed Midnight network
@@ -1553,12 +1549,7 @@ that holds it in Polkadot.js Apps once the ledger has recorded it (`midnightExpl
 public site over the configured node elsewhere), and a Sig Network request opens its lifecycle
 in the sig.network explorer (`signetExplorerOf()` in `src/lib/config/signet-explorer.ts`: the
 copy from `compose.yaml` on the local stack, <https://sig-net.github.io/explorer/> elsewhere,
-the network named in the URL), and has
-a footer only while it is the wallet's turn: its "Sign with wallet" button reads the
-transaction afresh through `listTransactions`, has the wallet balance, sign and finalise its
-`unboundTx` with `Wallet.finalize()`, and hands the result to `submitTransaction`. A type in
-`IN_PAGE_TYPES` never offers that turn, since its calls are committed bound and never wait in
-`AwaitingWallet`. The completion needs no click: the completion circuit proves the caller's
+the network named in the URL). The completion needs no click: the completion circuit proves the caller's
 secret as its witness, and the browser is the one place that holds it, so `ActivitySection`
 completes every activity the view shows in `AwaitingCompletion`, once per row per thirty
 seconds (`activitiesDueForCompletion()` in `src/lib/activity/completions-due.ts`). A deposit
@@ -1602,11 +1593,9 @@ wallet components read its types and the connection status label.
 - `wallet.ts` defines `WALLET_KINDS` (only `seed` today), `WalletMetadata`, the `Wallet`
   interface with its optional transaction, funding and recovery capabilities, and
   `WalletAddressSnapshot`, the public addresses a wallet publishes before it has synchronised.
-  A wallet signs a caller's call one of two ways: `finalize` balances it with the wallet's own
-  coins and DUST, signs and finalises it for `submitTransaction`, and `balanceWithoutFee`
-  balances it with the wallet's coins alone, signs and binds it, for the relayer wallet to pay
-  the fee. The page binds the deposit's two caller calls with `balanceWithoutFee` and every
-  other operation's caller calls with `finalize` (see [Midnight transactions](#midnight-transactions)).
+  A wallet signs a caller's call with `balanceWithoutFee`, which balances it with the wallet's
+  coins alone, signs and binds it, for the relayer wallet to pay the fee. The page binds every
+  operation's two caller calls this way (see [Midnight transactions](#midnight-transactions)).
 - `connection-status.ts` defines `WalletConnectionStatus`, the status label the wallet components
   show, and derives it from the provider's state.
 - `seed-wallet.ts` is the seed implementation: it derives account-zero keys from a hex seed,
@@ -1831,24 +1820,22 @@ display order (every vault-signed action needs the relayer's DUST and the vault 
 ETH). The requirements are the sweep's gas budget (`gasBudget(SWEEP_GAS)` in
 `sweep-gas.ts`, gas limit times fee ceiling, 0.003 ETH), the costliest vault-signed envelope
 read from the ledger (`vaultGasEnvelope()` over every kind, so one check serves them all), and
-two pinned DUST minimums, `CALLER_DUST_MINIMUM` (1 DUST) and `RELAYER_DUST_MINIMUM` (5 DUST).
-The prep repository prices each transaction with the wallet facade as it is built, so no
-estimate exists before a transaction does; the minimums leave several times the local chain's
-per-transaction overhead and are the values to recalibrate once a fee log says otherwise.
+the relayer's pinned DUST minimum, `RELAYER_DUST_MINIMUM` (5 DUST). The prep repository prices
+each transaction with the wallet facade as it is built, so no estimate exists before a
+transaction does. The minimum leaves several times the local chain's per-transaction overhead
+and is the value to recalibrate once a fee log says otherwise.
 
 `ReadinessService.getVaultReadiness(caller, {})` (`readiness-service.ts`, implemented in
 `readiness-service-impl.ts`) reads the three checks the backend can see: the relayer's DUST
 through `RelayerWallet.dustBalance()`, and both ETH balances through the `EthereumAccountReader`
 port (`src/lib/ethereum/account-reader.ts`, ethers in `account-reader-ethers-impl.ts`). The
 `getVaultReadiness` action in `src/server/actions/readiness-actions.ts` hands them to the
-browser. The caller's own DUST is read in the browser from the connected wallet, the only place
-it exists.
+browser. The caller's wallet pays no fee, so no check reads it.
 
-`VaultReadinessProvider` (`src/components/contexts/VaultReadinessContext.tsx`) owns both reads
-through React Query and exposes `checks`, `checking` and `recheck()`. Each read runs once its
-input exists (a connected wallet, a set identity secret) and again only on `recheck()`, since
-every read is a chain or wallet round trip; a check whose read cannot run yet is unavailable with
-the reason. `ReadinessChecklist` and `ReadinessRecheckButton` (`src/components/`) render the
+`VaultReadinessProvider` (`src/components/contexts/VaultReadinessContext.tsx`) owns that read
+through React Query and exposes `checks`, `checking` and `recheck()`. The read runs once the
+identity secret is set and again only on `recheck()`, since every read is a chain round trip,
+and a check whose read cannot run yet is unavailable with the reason. `ReadinessChecklist` and `ReadinessRecheckButton` (`src/components/`) render the
 lines and the control. The deposit dialog rechecks as it opens, reports "Ready to deposit" or
 "Not ready to deposit" with the failing lines under it, and keeps each fund's deposit control
 disabled while a check fails. The Settings popover shows every check as the vault's health.

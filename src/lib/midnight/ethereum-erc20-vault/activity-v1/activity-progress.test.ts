@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest'
 
-import type {
-  ActivityTransaction,
-  ActivityType,
-  DepositActivity,
+import {
+  ACTIVITY_TYPES,
+  type ActivityTransaction,
+  type DepositActivity,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import {
   activityFixture,
@@ -15,14 +15,7 @@ import {
   type ActivityStepStatus,
   activityStepsOf,
   ACTIVITY_STEPS_BY_TYPE,
-  type WalletTurn,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-progress'
-
-const WALLET_TRANSACTION = {
-  name: `${activityFixture().name.split('/').slice(0, 2).join('/')}/midnight-transactions/11111111-1111-4111-8111-111111111111`,
-  circuit: 'startDeposit',
-  expireTime: new Date('2026-01-01T01:00:00Z'),
-}
 
 function transaction(
   lifecycleState: ActivityTransaction['lifecycleState'],
@@ -40,19 +33,9 @@ function transaction(
 describe('activityActionOf', () => {
   const cases: { name: string; activity: Partial<DepositActivity>; expected: ActivityAction }[] = [
     {
-      name: 'a waiting wallet transaction asks for balancing',
-      activity: { walletTransaction: WALLET_TRANSACTION },
-      expected: { kind: 'balance', transaction: WALLET_TRANSACTION },
-    },
-    {
       name: 'a deposit awaiting completion asks for the completion',
       activity: { resourceState: 'AwaitingCompletion' },
       expected: { kind: 'complete' },
-    },
-    {
-      name: 'balancing comes before completion when both apply',
-      activity: { resourceState: 'AwaitingCompletion', walletTransaction: WALLET_TRANSACTION },
-      expected: { kind: 'balance', transaction: WALLET_TRANSACTION },
     },
     {
       name: 'the backend at work asks for nothing',
@@ -161,30 +144,19 @@ describe('activityStepsOf', () => {
   ]
   test.each(cases)('$name', ({ activity, expected }) => {
     const steps = activityStepsOf(activityFixture(activity))
-    expect(steps.map(({ label, walletTurn }) => ({ label, walletTurn }))).toEqual(
-      ACTIVITY_STEPS_BY_TYPE.Deposit.map(({ label, walletTurn }) => ({ label, walletTurn })),
+    expect(steps.map(({ label, signedInPage }) => ({ label, signedInPage }))).toEqual(
+      ACTIVITY_STEPS_BY_TYPE.Deposit.map(({ label, signedInPage }) => ({ label, signedInPage })),
     )
     expect(steps.map((step) => letters[step.status]).join('')).toBe(expected)
   })
 
-  const walletTurns: { type: ActivityType; expected: WalletTurn }[] = [
-    { type: 'Deposit', expected: 'inPage' },
-    { type: 'Withdraw', expected: 'inPage' },
-    { type: 'Swap', expected: 'inPage' },
-    { type: 'Supply', expected: 'inPage' },
-    { type: 'Redeem', expected: 'inPage' },
-    { type: 'Approval', expected: 'inPage' },
-  ]
-  test.each(walletTurns)(
-    'a $type has the wallet sign its start and completion as $expected',
-    ({ type, expected }) => {
-      const turns = ACTIVITY_STEPS_BY_TYPE[type].flatMap((step, index) =>
-        step.walletTurn === null ? [] : [{ index, walletTurn: step.walletTurn }],
+  test.each(ACTIVITY_TYPES)(
+    'a %s has the wallet sign its start and completion in the page',
+    (type) => {
+      const signed = ACTIVITY_STEPS_BY_TYPE[type].flatMap((step, index) =>
+        step.signedInPage ? [index] : [],
       )
-      expect(turns).toEqual([
-        { index: 0, walletTurn: expected },
-        { index: 8, walletTurn: expected },
-      ])
+      expect(signed).toEqual([0, 8])
     },
   )
 

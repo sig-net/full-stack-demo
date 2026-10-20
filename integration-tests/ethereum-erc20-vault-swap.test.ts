@@ -84,9 +84,6 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         if (!approval.ok) throw new Error(approval.error)
         created.push(['midnight_ethereum_erc20_vault_approvals_v1', approval.approval.name])
         await driveOperation(
-          backend,
-          callerSecret,
-          user,
           {
             name: approval.approval.name,
             state: async () => (await approvalV1.repository.get(approval.approval.name))?.state,
@@ -112,9 +109,6 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         amount: AMOUNT_IN,
       })
       await driveOperation(
-        backend,
-        callerSecret,
-        user,
         {
           name: deposit.deposit.name,
           state: async () => (await depositV1.repository.get(deposit.deposit.name))?.state,
@@ -232,9 +226,6 @@ describe('ERC20 vault swap round trip over the local stack', () => {
       expect(start?.boundTx).toMatch(/^[0-9a-f]+$/)
 
       await driveOperation(
-        backend,
-        callerSecret,
-        user,
         {
           name: swap.swap.name,
           state: async () => (await swapV1.repository.get(swap.swap.name))?.state,

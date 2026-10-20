@@ -6,7 +6,7 @@ import {
   type CompleteOperationArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
 import { type Swap, swapNameSchema } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
-import type { CommittedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
+import type { BoundCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 
 /**
  * The only writer of a swap's state: the caller operation's transitions over the swap row,
@@ -26,7 +26,7 @@ export interface StartSwapArgs extends Omit<
   'state' | 'outcome' | 'failure' | 'error' | 'createTime' | 'updateTime'
 > {
   /** The start circuit call, built with the swap's assigned fields. */
-  call: CommittedCall
+  call: BoundCall
 }
 
 export type CompleteSwapArgs = CompleteOperationArgs

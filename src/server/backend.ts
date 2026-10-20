@@ -807,7 +807,7 @@ function createMidnightTransactionV1(
     db.unitOfWork,
     logger.child({ component: 'MidnightTransactionStateResolverImpl' }),
   )
-  const service = new TransactionServiceImpl(repository, stateController)
+  const service = new TransactionServiceImpl(repository)
   return {
     repository,
     stateController,
@@ -820,7 +820,6 @@ function createMidnightTransactionV1(
     service,
     adaptor: new TransactionServiceAdaptor(
       service,
-      db.unitOfWork,
       logger.child({ component: 'TransactionServiceAdaptor' }),
     ),
   }

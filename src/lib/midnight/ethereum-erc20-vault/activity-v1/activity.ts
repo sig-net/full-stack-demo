@@ -27,12 +27,7 @@ import {
   withdrawNameSchema,
   withdrawOutcomeSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw'
-import {
-  midnightTransactionNameSchema,
-  type MidnightTransactionSigner,
-  type MidnightTransactionState,
-  midnightTransactionStateSchema,
-} from '@/lib/midnight/transaction-v1/transaction'
+import { midnightTransactionStateSchema } from '@/lib/midnight/transaction-v1/transaction'
 import {
   amountSchema,
   evmAddressSchema,
@@ -94,20 +89,6 @@ export const activityTransactionSchema = z.object({
 
 export type ActivityTransaction = z.infer<typeof activityTransactionSchema>
 
-/** The state and signer of a Midnight transaction the caller's wallet must balance, as the view selects it. */
-export const ACTIVITY_WALLET_TRANSACTION_STATE = 'AwaitingWallet' satisfies MidnightTransactionState
-export const ACTIVITY_WALLET_TRANSACTION_SIGNER = 'caller' satisfies MidnightTransactionSigner
-
-/** The caller's Midnight transaction waiting for the wallet, with the circuit it carries and its deadline. */
-export const activityWalletTransactionSchema = z.object({
-  name: midnightTransactionNameSchema,
-  circuit: z.string(),
-  /** The view carries it through JSON as text, so the schema accepts both forms. */
-  expireTime: z.coerce.date().nullable(),
-})
-
-export type ActivityWalletTransaction = z.infer<typeof activityWalletTransactionSchema>
-
 /**
  * The fields every activity row carries: the projected operation with its newest children.
  * `erc20Address` and `amount` are what the operation surrenders or moves, the out side, the
@@ -124,8 +105,6 @@ const activityFieldsSchema = z.object({
   vaultRequestState: vaultRequestStateSchema.nullable(),
   /** The id the MPC recorded the newest vault request under, null until the request is sent. */
   vaultRequestId: hex32BytesSchema.nullable(),
-  /** The newest caller transaction the wallet must balance now, null when none waits. */
-  walletTransaction: activityWalletTransactionSchema.nullable(),
   /** The caller's call that put the request on the vault. */
   startTransaction: activityTransactionSchema.nullable(),
   /** The MPC-signed transaction on the foreign chain. */

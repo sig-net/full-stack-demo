@@ -92,9 +92,6 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
       })
       const name = deposit.name
       await driveOperation(
-        backend,
-        callerSecret,
-        user,
         {
           name,
           state: async () => (await depositV1.repository.get(name))?.state,
@@ -251,9 +248,6 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
       expect(start?.boundTx).toMatch(/^[0-9a-f]+$/)
 
       await driveOperation(
-        backend,
-        callerSecret,
-        user,
         {
           name: withdraw.name,
           state: async () => (await withdrawV1.repository.get(withdraw.name))?.state,

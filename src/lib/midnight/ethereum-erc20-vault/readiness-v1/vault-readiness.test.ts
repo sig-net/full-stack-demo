@@ -5,8 +5,8 @@ import {
   type ReadinessAction,
   type ReadinessCheck,
   type ReadinessCheckId,
-  type ReadinessChecks,
   readReadinessCheck,
+  type VaultReadiness,
 } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 
 const OK: ReadinessCheck = {
@@ -25,9 +25,8 @@ const SHORT: ReadinessCheck = {
 }
 const UNREAD: ReadinessCheck = { status: 'unavailable', asset: 'DUST', account: 'mn1', reason: 'x' }
 
-function checks(overrides: Partial<ReadinessChecks> = {}): ReadinessChecks {
+function checks(overrides: Partial<VaultReadiness> = {}): VaultReadiness {
   return {
-    callerDust: OK,
     relayerDust: OK,
     depositAccountEth: OK,
     vaultAccountEth: OK,
@@ -39,7 +38,7 @@ describe('missingReadiness', () => {
   const cases: {
     name: string
     action: ReadinessAction
-    checks: ReadinessChecks
+    checks: VaultReadiness
     expected: ReadinessCheckId[]
   }[] = [
     {
@@ -53,12 +52,6 @@ describe('missingReadiness', () => {
       action: 'deposit',
       checks: checks({ relayerDust: UNREAD, depositAccountEth: SHORT }),
       expected: ['relayerDust', 'depositAccountEth'],
-    },
-    {
-      name: 'a deposit ignores the caller DUST, since the relayer pays its fees',
-      action: 'deposit',
-      checks: checks({ callerDust: SHORT }),
-      expected: [],
     },
     {
       name: 'a deposit ignores the vault account',
@@ -79,34 +72,16 @@ describe('missingReadiness', () => {
       expected: ['vaultAccountEth'],
     },
     {
-      name: 'a withdraw ignores the caller DUST, since the relayer pays its fees',
-      action: 'withdraw',
-      checks: checks({ callerDust: SHORT }),
-      expected: [],
-    },
-    {
       name: 'a supply needs the relayer and the vault account and ignores the deposit account',
       action: 'supply',
       checks: checks({ relayerDust: SHORT, depositAccountEth: SHORT, vaultAccountEth: UNREAD }),
       expected: ['relayerDust', 'vaultAccountEth'],
     },
     {
-      name: 'a supply ignores the caller DUST, since the relayer pays its fees',
-      action: 'supply',
-      checks: checks({ callerDust: SHORT }),
-      expected: [],
-    },
-    {
       name: 'a redeem needs the vault account and ignores the deposit account',
       action: 'redeem',
       checks: checks({ depositAccountEth: SHORT, vaultAccountEth: SHORT }),
       expected: ['vaultAccountEth'],
-    },
-    {
-      name: 'a redeem ignores the caller DUST, since the relayer pays its fees',
-      action: 'redeem',
-      checks: checks({ callerDust: SHORT }),
-      expected: [],
     },
     {
       name: 'a swap needs the relayer and the vault account and ignores the deposit account',
@@ -119,18 +94,6 @@ describe('missingReadiness', () => {
       action: 'approve',
       checks: checks({ relayerDust: SHORT, depositAccountEth: SHORT, vaultAccountEth: UNREAD }),
       expected: ['relayerDust', 'vaultAccountEth'],
-    },
-    {
-      name: 'a swap ignores the caller DUST, since the relayer pays its fees',
-      action: 'swap',
-      checks: checks({ callerDust: SHORT }),
-      expected: [],
-    },
-    {
-      name: 'an approval ignores the caller DUST, since the relayer pays its fees',
-      action: 'approve',
-      checks: checks({ callerDust: SHORT }),
-      expected: [],
     },
   ]
 

@@ -60,9 +60,9 @@ export const midnightTransactionFailureSchema = z.enum(MIDNIGHT_TRANSACTION_FAIL
 export type MidnightTransactionFailure = z.infer<typeof midnightTransactionFailureSchema>
 
 /**
- * Whose wallet balances and signs the call: the caller's browser wallet, or the backend's relayer
- * wallet for a permissionless circuit. `AwaitingWallet` is that wallet's to-do, and the relayer
- * pays the fee of a bound commit.
+ * Whose wallet balances and signs the call: the caller's browser wallet, which binds it without a
+ * fee for the relayer to pay, or the backend's relayer wallet for a permissionless circuit, whose
+ * to-do is `AwaitingWallet`.
  */
 export const MIDNIGHT_TRANSACTION_SIGNERS = ['caller', 'relayer'] as const
 

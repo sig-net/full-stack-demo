@@ -2,66 +2,31 @@ import type {
   Activity,
   ActivityTransaction,
   ActivityType,
-  ActivityWalletTransaction,
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import type { CallerOperationState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
 import type { VaultRequestState } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 
 /**
- * What the caller must do next for an activity, read from its row alone: balance a proved call
- * with the wallet, start the completion, or nothing while the backend works.
+ * What the caller must do next for an activity, read from its row alone: start the completion,
+ * or nothing while the backend works.
  */
-export type ActivityAction =
-  | { readonly kind: 'balance'; readonly transaction: ActivityWalletTransaction }
-  | { readonly kind: 'complete' }
-  | { readonly kind: 'none' }
+export type ActivityAction = { readonly kind: 'complete' } | { readonly kind: 'none' }
 
 export function activityActionOf(activity: Activity): ActivityAction {
-  if (activity.walletTransaction !== null) {
-    return { kind: 'balance', transaction: activity.walletTransaction }
-  }
-  if (activity.resourceState === 'AwaitingCompletion') return { kind: 'complete' }
-  return { kind: 'none' }
+  return activity.resourceState === 'AwaitingCompletion' ? { kind: 'complete' } : { kind: 'none' }
 }
 
 /** One step of an activity's flow, in order, with where the activity stands against it. */
 export interface ActivityStep {
   readonly label: string
-  /** How the caller's wallet takes the step by balancing and signing a call, null for a step it takes no part in. */
-  readonly walletTurn: WalletTurn | null
+  /** True for a step whose call the page builds, proves and signs with the caller's wallet. */
+  readonly signedInPage: boolean
   readonly status: ActivityStepStatus
   /** The identifier the step leaves on a chain or at the MPC, for a step that leaves one. */
   readonly reference: ActivityReference | null
 }
 
 export type ActivityStepStatus = 'done' | 'current' | 'pending' | 'failed'
-
-/**
- * `signTurn`: the user signs a call the backend proved, from the activity's sign turn.
- * `inPage`: the page builds, proves and signs the call with the wallet unprompted, as it starts
- * or completes the operation.
- */
-export type WalletTurn = 'signTurn' | 'inPage'
-
-/** The types whose two caller calls the page builds, proves and signs by itself, for the relayer to pay. */
-export const IN_PAGE_TYPES = [
-  'Deposit',
-  'Withdraw',
-  'Supply',
-  'Redeem',
-  'Swap',
-  'Approval',
-] as const satisfies readonly ActivityType[]
-
-export type InPageType = (typeof IN_PAGE_TYPES)[number]
-
-export function completesInPage(type: ActivityType): type is InPageType {
-  return IN_PAGE_TYPES.some((inPage) => inPage === type)
-}
-
-function walletTurnOf(type: ActivityType): WalletTurn {
-  return completesInPage(type) ? 'inPage' : 'signTurn'
-}
 
 /** An identifier a step leaves behind, with `id` null until the step assigns it, and the block that holds it once a chain recorded it. */
 export interface ActivityReference {
@@ -75,7 +40,7 @@ export type ActivityReferenceKind = 'midnightTransaction' | 'vaultRequest' | 'et
 /** A step as the list declares it, with the reference's reader when the step leaves one. */
 export interface ActivityStepDefinition {
   readonly label: string
-  readonly walletTurn: WalletTurn | null
+  readonly signedInPage: boolean
   readonly reference: {
     readonly kind: ActivityReferenceKind
     readonly idOf: (activity: Activity) => string | null
@@ -85,44 +50,37 @@ export interface ActivityStepDefinition {
 
 /**
  * Every activity type runs the same ten steps, as every caller operation does: the three
- * steps the MPC and Ethereum take are named for what the type's request does there, and the
- * wallet signs an in-page type's calls in the page and every other type's from its sign turn.
+ * steps the MPC and Ethereum take are named for what the type's request does there.
  */
 export const ACTIVITY_STEPS_BY_TYPE: Readonly<
   Record<ActivityType, readonly ActivityStepDefinition[]>
 > = {
   Deposit: operationSteps(
-    'Deposit',
     'Sweep signed by the MPC',
     'Funds swept on Ethereum',
     'Sweep attested by the MPC',
   ),
   Withdraw: operationSteps(
-    'Withdraw',
     'Transfer signed by the MPC',
     'Tokens sent on Ethereum',
     'Transfer attested by the MPC',
   ),
   Swap: operationSteps(
-    'Swap',
     'Trade signed by the MPC',
     'Tokens traded on Ethereum',
     'Trade attested by the MPC',
   ),
   Supply: operationSteps(
-    'Supply',
     'Deposit signed by the MPC',
     'Tokens supplied on Ethereum',
     'Deposit attested by the MPC',
   ),
   Redeem: operationSteps(
-    'Redeem',
     'Redeem signed by the MPC',
     'Shares redeemed on Ethereum',
     'Redeem attested by the MPC',
   ),
   Approval: operationSteps(
-    'Approval',
     'Approval signed by the MPC',
     'Allowance granted on Ethereum',
     'Approval attested by the MPC',
@@ -130,49 +88,47 @@ export const ACTIVITY_STEPS_BY_TYPE: Readonly<
 }
 
 function operationSteps(
-  type: ActivityType,
   signed: string,
   executed: string,
   attested: string,
 ): readonly ActivityStepDefinition[] {
-  const walletTurn = walletTurnOf(type)
   return [
-    { label: 'Start call signed by your wallet', walletTurn, reference: null },
+    { label: 'Start call signed by your wallet', signedInPage: true, reference: null },
     {
       label: 'Start call included on Midnight',
-      walletTurn: null,
+      signedInPage: false,
       reference: {
         kind: 'midnightTransaction',
         idOf: (activity) => activity.startTransaction?.hash ?? null,
         blockNumberOf: (activity) => activity.startTransaction?.blockNumber ?? null,
       },
     },
-    { label: 'Request flushed to the vault queue', walletTurn: null, reference: null },
+    { label: 'Request flushed to the vault queue', signedInPage: false, reference: null },
     {
       label: 'Request sent to the MPC',
-      walletTurn: null,
+      signedInPage: false,
       reference: {
         kind: 'vaultRequest',
         idOf: (activity) => activity.vaultRequestId,
         blockNumberOf: () => null,
       },
     },
-    { label: signed, walletTurn: null, reference: null },
+    { label: signed, signedInPage: false, reference: null },
     {
       label: executed,
-      walletTurn: null,
+      signedInPage: false,
       reference: {
         kind: 'ethereumTransaction',
         idOf: (activity) => activity.foreignChainTransaction?.hash ?? null,
         blockNumberOf: (activity) => activity.foreignChainTransaction?.blockNumber ?? null,
       },
     },
-    { label: attested, walletTurn: null, reference: null },
-    { label: 'Attestation flushed to the vault', walletTurn: null, reference: null },
-    { label: 'Completion signed by your wallet', walletTurn, reference: null },
+    { label: attested, signedInPage: false, reference: null },
+    { label: 'Attestation flushed to the vault', signedInPage: false, reference: null },
+    { label: 'Completion signed by your wallet', signedInPage: true, reference: null },
     {
       label: 'Completion included on Midnight',
-      walletTurn: null,
+      signedInPage: false,
       reference: {
         kind: 'midnightTransaction',
         idOf: (activity) => activity.completeTransaction?.hash ?? null,
@@ -184,9 +140,9 @@ function operationSteps(
 
 export function activityStepsOf(activity: Activity): ActivityStep[] {
   const { current, failed } = operationProgress(activity)
-  return ACTIVITY_STEPS_BY_TYPE[activity.type].map(({ label, walletTurn, reference }, index) => ({
+  return ACTIVITY_STEPS_BY_TYPE[activity.type].map(({ label, signedInPage, reference }, index) => ({
     label,
-    walletTurn,
+    signedInPage,
     status: index < current ? 'done' : index > current ? 'pending' : failed ? 'failed' : 'current',
     reference:
       reference === null

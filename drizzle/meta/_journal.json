@@ -169,6 +169,13 @@
       "when": 1792170593062,
       "tag": "0023_transaction_bound_tx",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792521415335,
+      "tag": "0024_activity_drop_wallet_transaction",
+      "breakpoints": true
     }
   ]
 }

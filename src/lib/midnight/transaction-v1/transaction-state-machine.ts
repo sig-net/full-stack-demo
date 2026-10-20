@@ -44,7 +44,13 @@ const TRANSITIONS: Record<
 }
 
 /** The bytes a call is committed with: unproven from the backend's builder, or bound by the caller's wallet without a fee. */
-export type CommittedCall = { unprovenTx: string } | { boundTx: string }
+export type CommittedCall = UnprovenCall | BoundCall
+
+/** A call the backend built for the relayer's wallet, which the resolver proves, balances and signs. */
+export type UnprovenCall = { unprovenTx: string }
+
+/** A call the caller's wallet proved and bound without a fee, for the relayer to pay. */
+export type BoundCall = { boundTx: string }
 
 /** The state a committed call enters, by the bytes it arrives with: unproven bytes wait for the proof, bound bytes wait for the relayer's fee. */
 export const ENTRY_STATE_BY_CALL: Record<CommittedCallKind, MidnightTransactionState> = {
@@ -99,8 +105,9 @@ type StepField =
 /**
  * What each state holds. A field in neither list is free: a failure keeps whatever the step
  * before it produced, and from `AwaitingSubmission` on a call holds `unboundTx` when the backend
- * proved it or `boundTx` when the caller's wallet bound it. `unprovenTx` embeds the private
- * transcript and is deleted on leaving `AwaitingProof`.
+ * proved it for the relayer's wallet, the one signer whose rows reach `AwaitingWallet`, or
+ * `boundTx` when the caller's wallet bound it. `unprovenTx` embeds the private transcript and is
+ * deleted on leaving `AwaitingProof`.
  */
 const FIELDS_BY_STATE: Record<
   MidnightTransactionState,

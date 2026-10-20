@@ -3,31 +3,12 @@ import { z } from 'zod'
 
 import { messageOf } from '@/lib/message-of'
 
-/**
- * The checks the backend reads for a caller. The caller's own DUST is read by the browser that
- * holds the wallet, so `ReadinessChecks` is complete only there.
- */
-export type VaultReadiness = Pick<ReadinessChecks, BackendReadinessCheckId>
+/** One check per payer of an action's fees, keyed by what it pays with, as the backend reads them for a caller. */
+export type VaultReadiness = Readonly<Record<ReadinessCheckId, ReadinessCheck>>
 
-/** One check per payer of an action's fees, keyed by what it pays with. */
-export type ReadinessChecks = Readonly<Record<ReadinessCheckId, ReadinessCheck>>
-
-export const READINESS_CHECK_IDS = [
-  'callerDust',
-  'relayerDust',
-  'depositAccountEth',
-  'vaultAccountEth',
-] as const
+export const READINESS_CHECK_IDS = ['relayerDust', 'depositAccountEth', 'vaultAccountEth'] as const
 
 export type ReadinessCheckId = (typeof READINESS_CHECK_IDS)[number]
-
-export const BACKEND_READINESS_CHECK_IDS = [
-  'relayerDust',
-  'depositAccountEth',
-  'vaultAccountEth',
-] as const satisfies readonly ReadinessCheckId[]
-
-export type BackendReadinessCheckId = (typeof BACKEND_READINESS_CHECK_IDS)[number]
 
 export const READINESS_ASSETS = ['DUST', 'ETH'] as const
 
@@ -70,7 +51,7 @@ export type ReadinessAction = 'deposit' | VaultGasKind
 /** The checks `action` needs that do not pass, in the order a warning lists them: empty when ready. */
 export function missingReadiness(
   action: ReadinessAction,
-  checks: ReadinessChecks,
+  checks: VaultReadiness,
 ): ReadinessCheckId[] {
   return READINESS_CHECKS_BY_ACTION[action].filter((id) => checks[id].status !== 'ok')
 }
@@ -109,10 +90,9 @@ export async function readReadinessCheck(
 }
 
 /**
- * The DUST a payer must hold before an action starts, in SPECK. An action whose caller calls the
- * page builds costs the relayer the fees of the caller's two transactions, two flushes, a send
- * and an attestation, and the local chain's fee overhead alone is 0.05 DUST per transaction, so
- * both minimums leave several times that.
+ * The DUST the relayer must hold before an action starts, in SPECK. An action costs the relayer
+ * the fees of the caller's two transactions, two flushes, a send and an attestation, and the
+ * local chain's fee overhead alone is 0.05 DUST per transaction, so the minimum leaves several
+ * times that.
  */
-export const CALLER_DUST_MINIMUM = 1_000_000_000_000_000n
 export const RELAYER_DUST_MINIMUM = 5_000_000_000_000_000n

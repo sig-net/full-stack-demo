@@ -280,7 +280,6 @@ describe('The activity view over Postgres', () => {
       resourceState: 'AwaitingCompleteTransaction',
       vaultRequestState: 'AwaitingAttestation',
       vaultRequestId: '22'.repeat(32),
-      walletTransaction: null,
       startTransaction: {
         hash: 'start-2',
         blockNumber: 120,
@@ -347,9 +346,9 @@ describe('The activity view over Postgres', () => {
     const granted = await approvalV1.repository.create(approval())
     await midnight.transactionV1.repository.create(
       midnightTransaction(granted.name, 'startApproveStata', {
-        state: 'AwaitingWallet',
+        state: 'AwaitingFee',
         unprovenTx: null,
-        unboundTx: 'bb',
+        boundTx: 'bb',
         expireTime: at(40),
         createTime: at(31),
         updateTime: at(31),
@@ -406,12 +405,11 @@ describe('The activity view over Postgres', () => {
       erc20Address: granted.erc20Address,
       amount: null,
       spender: granted.spender,
-      walletTransaction: { circuit: 'startApproveStata', expireTime: at(40) },
       startTransaction: {
         hash: null,
         blockNumber: null,
         state: 'Pending',
-        lifecycleState: 'AwaitingWallet',
+        lifecycleState: 'AwaitingFee',
       },
     })
     const listed = await activityV1.repository.search({
