@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 
 import { ACTIVITIES_QUERY_KEY } from '@/components/activity-section'
 import { useCaller } from '@/components/contexts/CallerContext'
+import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import type { SupportedBalance } from '@/lib/balances/supported-balances'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
 import {
   missingReadiness,
   type ReadinessCheckId,
@@ -23,8 +25,8 @@ import {
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
 import type { TokenInfo } from '@/lib/tokens/token-info'
-import { startRedeem } from '@/server/actions/redeem-actions'
-import { getSupplyTarget, startSupply } from '@/server/actions/supply-actions'
+import { prepareStartRedeem, startRedeem } from '@/server/actions/redeem-actions'
+import { getSupplyTarget, prepareStartSupply, startSupply } from '@/server/actions/supply-actions'
 
 const AMOUNT_INPUT = /^\d*\.?\d*$/
 
@@ -36,11 +38,14 @@ const TARGET_REFETCH_INTERVAL_MS = 30_000
  * of the wrapper's underlying into it from the vault account, which keeps the shares and mints
  * them to the wallet as the wrapper's vault token. Redeem burns those shares for the underlying
  * the wrapper pays the vault account, minted back to the wallet. Both read the pinned pair from
- * the supply target, and only Supply needs its allowance.
+ * the supply target, and only Supply needs its allowance. The page builds, proves and binds a
+ * supply's start call with the wallet's coin of the underlying, and the server records it for
+ * the relayer to pay and submit.
  */
 export function LendPanel(): ReactNode {
   const { callerSecret, callerName } = useCaller()
   const { wallet } = useMidnightWallet()
+  const config = useConfig()
   const registry = useTokenInfoRegistry()
   const { checks } = useVaultReadiness()
   const balances = useMidnightBalances()
@@ -48,6 +53,8 @@ export function LendPanel(): ReactNode {
   const queryClient = useQueryClient()
   const [supplyText, setSupplyText] = useState('')
   const [redeemText, setRedeemText] = useState('')
+  const [supplyStage, setSupplyStage] = useState<CallerCallStage | null>(null)
+  const [redeemStage, setRedeemStage] = useState<CallerCallStage | null>(null)
 
   const target = useQuery({
     queryKey: ['supply-target', callerName],
@@ -82,16 +89,21 @@ export function LendPanel(): ReactNode {
       if (callerSecret === null) throw new Error('The identity secret is not set.')
       if (wallet === null) throw new Error('No Midnight wallet is connected.')
       if (supplyAmount.value === null) throw new Error('No amount to supply.')
-      const result = await startSupply(callerSecret, {
+      // Loaded on first use, so a visitor who never supplies never downloads the call builder and the contract.
+      const calls =
+        await import('@/lib/midnight/ethereum-erc20-vault/supply-v1/browser-supply-calls')
+      return calls.startSupplyInBrowser({
+        actions: { prepareStartSupply, startSupply },
+        builder: calls.browserSupplyCallBuilder(config, window.location.origin),
+        wallet,
+        callerSecret,
         supplyRequest: { amount: supplyAmount.value },
-        wallet: wallet.publicKeys,
+        onStage: setSupplyStage,
       })
-      if (!result.ok) throw new Error(result.error)
-      return result.supply
     },
     onSuccess: async () => {
       toast.success(
-        `Supply of ${supplyText} ${underlying?.symbol ?? ''} started. Sign its start call from the Activity row once it is proved.`,
+        `Supply of ${supplyText} ${underlying?.symbol ?? ''} started: the backend is paying for its start call and submitting it.`,
       )
       setSupplyText('')
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
@@ -99,28 +111,39 @@ export function LendPanel(): ReactNode {
     onError: (error) => {
       toast.error(`Starting the supply failed: ${error.message}`)
     },
+    onSettled: () => {
+      setSupplyStage(null)
+    },
   })
   const redeeming = useMutation({
     mutationFn: async () => {
       if (callerSecret === null) throw new Error('The identity secret is not set.')
       if (wallet === null) throw new Error('No Midnight wallet is connected.')
       if (redeemAmount.value === null) throw new Error('No shares to redeem.')
-      const result = await startRedeem(callerSecret, {
+      // Loaded on first use, so a visitor who never redeems never downloads the call builder and the contract.
+      const calls =
+        await import('@/lib/midnight/ethereum-erc20-vault/redeem-v1/browser-redeem-calls')
+      return calls.startRedeemInBrowser({
+        actions: { prepareStartRedeem, startRedeem },
+        builder: calls.browserRedeemCallBuilder(config, window.location.origin),
+        wallet,
+        callerSecret,
         redeemRequest: { shares: redeemAmount.value },
-        wallet: wallet.publicKeys,
+        onStage: setRedeemStage,
       })
-      if (!result.ok) throw new Error(result.error)
-      return result.redeem
     },
     onSuccess: async () => {
       toast.success(
-        `Redeem of ${redeemText} ${stata?.symbol ?? ''} started. Sign its start call from the Activity row once it is proved.`,
+        `Redeem of ${redeemText} ${stata?.symbol ?? ''} started: the backend is paying for its start call and submitting it.`,
       )
       setRedeemText('')
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
     },
     onError: (error) => {
       toast.error(`Starting the redeem failed: ${error.message}`)
+    },
+    onSettled: () => {
+      setRedeemStage(null)
     },
   })
 
@@ -173,6 +196,7 @@ export function LendPanel(): ReactNode {
           ready={supplyAmount.value !== null}
           busy={supplying.isPending}
           busyLabel="Starting the supply…"
+          stage={supplyStage === null ? null : SUPPLY_STAGE_LABELS[supplyStage]}
           onStart={() => {
             supplying.mutate()
           }}
@@ -195,6 +219,7 @@ export function LendPanel(): ReactNode {
           ready={redeemAmount.value !== null}
           busy={redeeming.isPending}
           busyLabel="Starting the redeem…"
+          stage={redeemStage === null ? null : REDEEM_STAGE_LABELS[redeemStage]}
           onStart={() => {
             redeeming.mutate()
           }}
@@ -222,6 +247,8 @@ interface LendActionProps {
   ready: boolean
   busy: boolean
   busyLabel: string
+  /** The step a busy start is at, reported while the page builds its call. */
+  stage: string | null
   onStart: () => void
 }
 
@@ -240,6 +267,7 @@ function LendAction({
   ready,
   busy,
   busyLabel,
+  stage,
   onStart,
 }: LendActionProps): ReactNode {
   return (
@@ -275,6 +303,11 @@ function LendAction({
           <ReadinessChecklist checkIds={missing} />
         </div>
       )}
+      {busy && stage !== null && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {stage}
+        </p>
+      )}
       <Button
         variant="pink"
         size="xl"
@@ -287,6 +320,20 @@ function LendAction({
       </Button>
     </div>
   )
+}
+
+const SUPPLY_STAGE_LABELS: Record<CallerCallStage, string> = {
+  preparing: 'Preparing the supply',
+  building: 'Building and proving the start call',
+  signing: 'Signing with your wallet',
+  recording: 'Recording the supply',
+}
+
+const REDEEM_STAGE_LABELS: Record<CallerCallStage, string> = {
+  preparing: 'Preparing the redeem',
+  building: 'Building and proving the start call',
+  signing: 'Signing with your wallet',
+  recording: 'Recording the redeem',
 }
 
 /** The typed amount in base units, or why it cannot be moved yet. */

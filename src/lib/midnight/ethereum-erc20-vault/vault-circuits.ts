@@ -9,8 +9,8 @@ import type { CallerCircuitArgs } from '@/lib/midnight/ethereum-erc20-vault/vaul
  * serialisation, for a Midnight transaction row to carry through its lifecycle. Building reads
  * the contract's state from the indexer, so each call takes a moment and is made outside any
  * database transaction. The caller circuits take the caller's secret as the witness, and the
- * permissionless ones prove under any private state. The deposit's and the withdrawal's caller
- * circuits are built in the browser by their call builders over `vault-call.ts`.
+ * permissionless ones prove under any private state. A caller circuit absent here is built in
+ * the browser by its operation's call builder over `vault-call.ts`.
  */
 export interface VaultCircuits {
   sendDeposit(args: SendRequestCircuitArgs): Promise<string>
@@ -19,13 +19,7 @@ export interface VaultCircuits {
   startSwap(args: StartSwapCircuitArgs): Promise<string>
   completeSwap(args: CompleteSwapCircuitArgs): Promise<string>
   sendSwap(args: SendRequestCircuitArgs): Promise<string>
-  /** Surrenders a fresh coin of the stata underlying worth exactly `amount`, which the caller's wallet funds when it balances the call. */
-  startSupply(args: StartSupplyCircuitArgs): Promise<string>
-  completeSupply(args: CompleteSupplyCircuitArgs): Promise<string>
   sendSupply(args: SendRequestCircuitArgs): Promise<string>
-  /** Surrenders a fresh coin of the wrapper's vault token worth exactly `shares`, which the caller's wallet funds when it balances the call. */
-  startRedeem(args: StartRedeemCircuitArgs): Promise<string>
-  completeRedeem(args: CompleteRedeemCircuitArgs): Promise<string>
   sendRedeem(args: SendRequestCircuitArgs): Promise<string>
   /** Deployer-gated: the contract refuses any other caller's secret at build time. */
   startApproveRouter(args: StartApproveRouterCircuitArgs): Promise<string>
@@ -57,36 +51,6 @@ export interface CompleteSwapCircuitArgs extends CallerCircuitArgs {
   /** 32 random bytes each, fresh per call and different from each other. */
   readonly mintNonce: Uint8Array
   readonly changeNonce: Uint8Array
-}
-
-export interface StartSupplyCircuitArgs extends CallerCircuitArgs {
-  readonly inIndex: bigint
-  readonly amount: bigint
-  /** The shielded token type of the stata underlying's vault coin, in hex. */
-  readonly coinType: string
-}
-
-export interface CompleteSupplyCircuitArgs extends CallerCircuitArgs {
-  readonly requestId: Uint8Array
-  /** 32 bytes: the attested shares for an executed deposit, ignored for the other verdicts. */
-  readonly serializedOutput: Uint8Array
-  /** 32 random bytes, fresh per call. */
-  readonly mintNonce: Uint8Array
-}
-
-export interface StartRedeemCircuitArgs extends CallerCircuitArgs {
-  readonly inIndex: bigint
-  readonly shares: bigint
-  /** The shielded token type of the wrapper's vault coin, in hex. */
-  readonly coinType: string
-}
-
-export interface CompleteRedeemCircuitArgs extends CallerCircuitArgs {
-  readonly requestId: Uint8Array
-  /** 32 bytes: the attested assets paid out for an executed redeem, ignored for the other verdicts. */
-  readonly serializedOutput: Uint8Array
-  /** 32 random bytes, fresh per call. */
-  readonly mintNonce: Uint8Array
 }
 
 export interface StartApproveRouterCircuitArgs extends CallerCircuitArgs {

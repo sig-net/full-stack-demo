@@ -19,12 +19,20 @@ const SHIELDED_SPEND_ADMITTED: Readonly<Record<SponsoredCircuit, boolean>> = {
   completeDeposit: false,
   startWithdraw: true,
   completeWithdraw: false,
+  startSupply: true,
+  completeSupply: false,
+  startRedeem: true,
+  completeRedeem: false,
 }
 const SPONSORED_CIRCUITS: readonly SponsoredCircuit[] = [
   'startDeposit',
   'completeDeposit',
   'startWithdraw',
   'completeWithdraw',
+  'startSupply',
+  'completeSupply',
+  'startRedeem',
+  'completeRedeem',
 ]
 
 const vaultCall = (circuit: string): BoundContractAction => ({
@@ -67,6 +75,23 @@ const realBytes: ReadonlyArray<{ circuit: SponsoredCircuit; contents: BoundTrans
     {
       circuit: 'completeWithdraw',
       contents: contentsOf([vaultCall('completeWithdraw')], { shieldedOutputs: 1 }),
+    },
+    // The input count follows the wallet's coin selection: one coin here, two in the withdraw rows.
+    {
+      circuit: 'startSupply',
+      contents: contentsOf([vaultCall('startSupply')], {
+        shieldedInputs: 1,
+        shieldedTransients: 1,
+        shieldedOutputs: 2,
+      }),
+    },
+    {
+      circuit: 'startRedeem',
+      contents: contentsOf([vaultCall('startRedeem')], {
+        shieldedInputs: 1,
+        shieldedTransients: 1,
+        shieldedOutputs: 2,
+      }),
     },
   ]
 

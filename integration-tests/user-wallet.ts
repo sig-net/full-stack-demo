@@ -151,6 +151,13 @@ export async function startUserWallet(
   }
 }
 
+/** One bound transaction in hex holding both: a contract call and a transfer merge, two contract calls do not. */
+export function mergedBoundTx(boundA: string, boundB: string): string {
+  return Buffer.from(
+    boundTransactionOf(boundA).merge(boundTransactionOf(boundB)).serialize(),
+  ).toString('hex')
+}
+
 function boundTransactionOf(boundTx: string): Transaction<SignatureEnabled, Proof, Binding> {
   return Transaction.deserialize<SignatureEnabled, Proof, Binding>(
     'signature',

@@ -1,13 +1,24 @@
-import { deriveVaultEvmAddress } from '@sig-net/midnight-examples-erc20-vault-contract'
+import { nativeToken } from '@midnightntwrk/ledger-v9'
+import { rawTokenType } from '@midnight-ntwrk/compact-runtime'
+import {
+  deriveVaultEvmAddress,
+  evmAddressBytes,
+  pureCircuits,
+} from '@sig-net/midnight-examples-erc20-vault-contract'
 import { Interface, JsonRpcProvider, toBigInt } from 'ethers'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
+import type { Redeem } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
 import type { Backend } from '@/server/backend'
 
+import { ensureAaveReserveAcceptsDeposits } from './aave-reserve'
 import { testBackend } from './backend'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
+import { secretKeyOf } from './user-caller-call'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
-import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
+import { completeSupplyAsUser, startSupplyAsUser } from './user-supply'
+import { completeRedeemAsUser, startRedeemAsUser } from './user-redeem'
+import { mergedBoundTx, startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 60 * 60_000
 /** Whole underlying deposited and supplied, whose shares are then redeemed. */
@@ -16,16 +27,23 @@ const AMOUNT = 1_500_000n
 /**
  * One redeem from `startRedeem` to `Completed` over the whole local stack: the caller deposits
  * the stata underlying, supplies it to Aave's static wrapper (approving the wrapper first when
- * the vault account lacks the allowance), then redeems the shares that supply minted. The
- * vault account's balances on the fork before and after prove the redeem the MPC signed
- * executed, and the attested output is the underlying the wrapper paid out.
+ * the vault account lacks the allowance), then redeems the shares that supply minted. This test
+ * plays the browser, which builds, proves and binds the deposit's and the redeem's caller calls
+ * without a fee, with the wallet's own coin of the shares funding the redeem's start call, and
+ * the relayer pays each call's fee. The vault account's balances on the fork before and after
+ * prove the redeem the MPC signed executed, and the attested output is the underlying the
+ * wrapper paid out. Between the supply and the redeem, bound bytes the relayer must not pay for
+ * are offered to the server with the caller's real shares and refused.
  */
 describe('ERC20 vault redeem round trip over the local stack', () => {
   let backend: Backend
   let user: UserWallet
   let evm: JsonRpcProvider
+  let vaultAccount: string
   const callerSecret = userWalletSeed()
   const created: [string, string][] = []
+  let pair: Pick<Redeem, 'underlyingErc20Address' | 'stataErc20Address'> | undefined
+  let shares: bigint | undefined
 
   beforeAll(async () => {
     backend = await testBackend()
@@ -34,6 +52,11 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
       cacheTimeout: -1,
     })
     user = await startUserWallet(userWalletSeed(), backend.config.client.midnightNetwork)
+    const { midnightSignet, midnightEthereumErc20Vault } = backend.config.client
+    vaultAccount = deriveVaultEvmAddress(
+      midnightSignet.mpcRootPublicKey,
+      midnightEthereumErc20Vault.contractAddress,
+    ).toLowerCase()
   }, ROUND_TRIP_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -44,20 +67,15 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
   }, ROUND_TRIP_TIMEOUT_MS)
 
   test(
-    'shares of the Aave wrapper in the vault are redeemed for the underlying',
+    'a deposit and a supply give the caller the shares it will redeem',
     async () => {
-      const { midnight, ethereum } = backend
-      const { approvalV1, depositV1, supplyV1, redeemV1 } = midnight.ethereumErc20Vault
-      const { midnightSignet, midnightEthereumErc20Vault } = backend.config.client
-      const vaultAccount = deriveVaultEvmAddress(
-        midnightSignet.mpcRootPublicKey,
-        midnightEthereumErc20Vault.contractAddress,
-      ).toLowerCase()
+      const { approvalV1, depositV1, supplyV1 } = backend.midnight.ethereumErc20Vault
       const wallet = user.publicKeys
 
       const targeted = await supplyV1.adaptor.getSupplyTarget(callerSecret, {})
       if (!targeted.ok) throw new Error(targeted.error)
       const { underlyingErc20Address, stataErc20Address } = targeted.target
+      await ensureAaveReserveAcceptsDeposits(evm, stataErc20Address)
       if (targeted.target.allowance === 0n) {
         log('the wrapper holds no allowance on the underlying: approving first')
         const approval = await approvalV1.adaptor.startApproval(callerSecret, {
@@ -89,7 +107,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
       })
       if (!deposit.ok) throw new Error(deposit.error)
       created.push(['midnight_ethereum_erc20_vault_deposits_v1', deposit.deposit.name])
-      const faucet = ethereum.localFaucetV1.service
+      const faucet = backend.ethereum.localFaucetV1.service
       if (faucet === null) throw new Error('the redeem test needs the local stack and its faucet')
       await faucet.fundAccount({ account: deposit.deposit.depositAccount })
       await faucet.fundErc20({
@@ -111,10 +129,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
       expect((await depositV1.repository.get(deposit.deposit.name))?.outcome).toBe('minted')
 
       const sharesBeforeSupply = await balanceOf(evm, stataErc20Address, vaultAccount)
-      const supply = await supplyV1.adaptor.startSupply(callerSecret, {
-        supplyRequest: { amount: AMOUNT },
-        wallet,
-      })
+      const supply = await startSupplyAsUser(backend, callerSecret, user, { amount: AMOUNT })
       if (!supply.ok) throw new Error(supply.error)
       created.push(['midnight_ethereum_erc20_vault_supplies_v1', supply.supply.name])
       await driveOperation(
@@ -124,29 +139,105 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
         {
           name: supply.supply.name,
           state: async () => (await supplyV1.repository.get(supply.supply.name))?.state,
-          complete: () =>
-            supplyV1.adaptor.completeSupply(callerSecret, { name: supply.supply.name, wallet }),
+          complete: () => completeSupplyAsUser(backend, callerSecret, user, supply.supply.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )
       expect((await supplyV1.repository.get(supply.supply.name))?.outcome).toBe('supplied')
-      const shares = (await balanceOf(evm, stataErc20Address, vaultAccount)) - sharesBeforeSupply
-      expect(shares).toBeGreaterThan(0n)
+      const minted = (await balanceOf(evm, stataErc20Address, vaultAccount)) - sharesBeforeSupply
+      expect(minted).toBeGreaterThan(0n)
+      expect(await user.shieldedBalance(sharesCoinType(stataErc20Address))).toBeGreaterThanOrEqual(
+        minted,
+      )
+      pair = { underlyingErc20Address, stataErc20Address }
+      shares = minted
+    },
+    ROUND_TRIP_TIMEOUT_MS,
+  )
+
+  test(
+    'bound bytes the relayer must not pay for are refused and write nothing',
+    async () => {
+      if (shares === undefined) throw new Error('the supply did not run')
+      const { redeemV1 } = backend.midnight.ethereumErc20Vault
+      const redeemRequest = { shares }
+      const before = await redeemV1.adaptor.listRedeems(callerSecret, {})
+      const prepared = await redeemV1.adaptor.prepareStartRedeem(callerSecret, { redeemRequest })
+      if (!prepared.ok) throw new Error(prepared.error)
+      const unboundStart = await redeemV1.callBuilder.buildStart({
+        secretKey: secretKeyOf(callerSecret),
+        wallet: user.publicKeys,
+        inIndex: prepared.inputs.inIndex,
+        stataErc20Address: prepared.inputs.stataErc20Address,
+        shares,
+      })
+      const refused = {
+        ok: false,
+        error:
+          'the bound bytes must be exactly one startRedeem call to the vault, spending shielded coins alone',
+      }
+
+      // The user's wallet pays the fee itself, so the bytes carry a DUST spend.
+      const withFee = await user.balance(unboundStart)
+      expect(
+        await redeemV1.adaptor.startRedeem(callerSecret, {
+          redeemRequest,
+          inIndex: prepared.inputs.inIndex,
+          boundTx: withFee,
+        }),
+      ).toEqual(refused)
+      await user.revert(withFee)
+
+      // The call bound without a fee, with an unshielded NIGHT transfer merged beside it.
+      const withoutFee = await user.balanceWithoutFee(unboundStart)
+      const night = await user.selfTransfer('unshielded', nativeToken().raw, 1n)
+      expect(
+        await redeemV1.adaptor.startRedeem(callerSecret, {
+          redeemRequest,
+          inIndex: prepared.inputs.inIndex,
+          boundTx: mergedBoundTx(withoutFee, night),
+        }),
+      ).toEqual(refused)
+      await user.revert(night)
+      await user.revert(withoutFee)
+
+      expect(await redeemV1.adaptor.listRedeems(callerSecret, {})).toEqual(before)
+    },
+    ROUND_TRIP_TIMEOUT_MS,
+  )
+
+  test(
+    'shares of the Aave wrapper in the vault are redeemed for the underlying',
+    async () => {
+      if (pair === undefined || shares === undefined) throw new Error('the supply did not run')
+      const { underlyingErc20Address, stataErc20Address } = pair
+      const { midnight } = backend
+      const { redeemV1 } = midnight.ethereumErc20Vault
+      const coinType = sharesCoinType(stataErc20Address)
 
       const underlyingBefore = await balanceOf(evm, underlyingErc20Address, vaultAccount)
       const sharesBefore = await balanceOf(evm, stataErc20Address, vaultAccount)
+      const coinsBefore = await user.shieldedBalance(coinType)
       log(`redeeming ${shares.toString()} shares of ${stataErc20Address} for the underlying`)
-      const redeem = await redeemV1.adaptor.startRedeem(callerSecret, {
-        redeemRequest: { shares },
-        wallet,
-      })
+      const redeem = await startRedeemAsUser(backend, callerSecret, user, { shares })
       if (!redeem.ok) throw new Error(redeem.error)
       created.push(['midnight_ethereum_erc20_vault_redeems_v1', redeem.redeem.name])
       expect(redeem.redeem).toMatchObject({
         stataErc20Address,
         underlyingErc20Address,
+        shares,
+        state: 'AwaitingStartTransaction',
         vaultAccount,
+        outcome: null,
+        failure: null,
+        error: null,
       })
+      const [start] = await midnight.transactionV1.repository.search({
+        criteria: [{ type: 'exact-text', field: 'parent', text: redeem.redeem.name }],
+      })
+      expect(start).toMatchObject({ circuit: 'startRedeem', signer: 'caller', unprovenTx: null })
+      expect(start?.boundTx).toMatch(/^[0-9a-f]+$/)
+
       await driveOperation(
         backend,
         callerSecret,
@@ -154,14 +245,14 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
         {
           name: redeem.redeem.name,
           state: async () => (await redeemV1.repository.get(redeem.redeem.name))?.state,
-          complete: () =>
-            redeemV1.adaptor.completeRedeem(callerSecret, { name: redeem.redeem.name, wallet }),
+          complete: () => completeRedeemAsUser(backend, callerSecret, user, redeem.redeem.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )
 
       expect((await redeemV1.repository.get(redeem.redeem.name))?.outcome).toBe('redeemed')
       expect(sharesBefore - (await balanceOf(evm, stataErc20Address, vaultAccount))).toBe(shares)
+      expect(coinsBefore - (await user.shieldedBalance(coinType))).toBe(shares)
       const assetsPaid =
         (await balanceOf(evm, underlyingErc20Address, vaultAccount)) - underlyingBefore
       expect(assetsPaid).toBeGreaterThan(0n)
@@ -186,9 +277,49 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
         erc20Address: stataErc20Address,
         destination: underlyingErc20Address,
       })
+
+      // Both caller calls were bound by the user and paid by the relayer, never signed from a sign turn.
+      const transactions = await midnight.transactionV1.repository.search({
+        criteria: [{ type: 'exact-text', field: 'parent', text: redeem.redeem.name }],
+        order: { field: 'createTime', direction: 'asc' },
+      })
+      expect(
+        transactions.map(({ circuit, signer, state, unprovenTx }) => ({
+          circuit,
+          signer,
+          state,
+          unprovenTx,
+        })),
+      ).toEqual([
+        { circuit: 'startRedeem', signer: 'caller', state: 'Succeeded', unprovenTx: null },
+        { circuit: 'completeRedeem', signer: 'caller', state: 'Succeeded', unprovenTx: null },
+      ])
+      const entries = await backend.event.outboxEntryV1.repository.search({
+        criteria: [],
+        order: { field: 'createdAt', direction: 'asc' },
+      })
+      for (const transaction of transactions) {
+        const trail = entries
+          .filter((entry) => new TextDecoder().decode(entry.data).includes(transaction.name))
+          .map((entry) => entry.type.slice(entry.type.lastIndexOf('.') + 1))
+        expect(trail).toEqual([
+          'awaiting-fee',
+          'awaiting-submission',
+          'awaiting-inclusion',
+          'succeeded',
+        ])
+      }
     },
     ROUND_TRIP_TIMEOUT_MS,
   )
+
+  /** Mirrors `vaultTokenType` in `vault-token-infos.ts`, which the boundary rule keeps out of a test. */
+  function sharesCoinType(stataErc20Address: string): string {
+    return rawTokenType(
+      pureCircuits.vaultTokenDomainSeparator(evmAddressBytes(stataErc20Address)),
+      backend.config.client.midnightEthereumErc20Vault.contractAddress,
+    )
+  }
 })
 
 const ERC20 = new Interface(['function balanceOf(address) view returns (uint256)'])

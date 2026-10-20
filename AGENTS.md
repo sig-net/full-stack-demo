@@ -310,8 +310,8 @@ Keep setup instructions and application reference material in README.md and docs
   `integration-tests/` folder, run with `yarn test:integration` against the local services. A
   `*.test.ts` under `src` that opens a socket is in the wrong folder.
 - `integration-tests/ethereum-erc20-vault-deposit.test.ts` is the end-to-end deposit. It runs
-  inside `yarn test:integration` (45 to 48 minutes for the suite of 20 files, since each of the six
-  operation round trips takes four to ten), needs the whole local stack, and needs no dev server running
+  inside `yarn test:integration` (45 to 55 minutes for the suite of 20 files, since each of the six
+  operation round trips takes four to fifteen), needs the whole local stack, and needs no dev server running
   (`ps aux | grep "[n]ext dev"` finds nothing), since a dev server joins the same Kafka consumer
   group. Run the suite whenever a change touches a state machine, a state controller, a
   resolver, a ledger implementation, the flusher, the sweep or the composition root. One file

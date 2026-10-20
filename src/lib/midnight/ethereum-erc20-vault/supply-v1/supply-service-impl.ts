@@ -2,7 +2,7 @@ import 'server-only'
 
 import { randomUUID } from 'node:crypto'
 
-import { bytesToHex, hexToBytes } from '@sig-net/midnight'
+import { bytesToHex } from '@sig-net/midnight'
 import { newInputIndex } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
@@ -11,9 +11,12 @@ import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
+import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import {
   type Supply,
+  type SupplyCompleteInputs,
   supplyName,
+  type SupplyStartInputs,
   type SupplyTarget,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply'
 import type { SupplyRepository } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-repository'
@@ -22,6 +25,8 @@ import type {
   GetSupplyArgs,
   GetSupplyTargetArgs,
   ListSuppliesArgs,
+  PrepareCompleteSupplyArgs,
+  PrepareStartSupplyArgs,
   StartSupplyArgs,
   SupplyService,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service'
@@ -30,47 +35,44 @@ import {
   SupplyStateConflict,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-controller'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
-import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import {
   type AttestedRequestFields,
   attestedRequestFields,
-  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
-import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
 
 export class SupplyServiceImpl implements SupplyService {
   private readonly supplyRepository: SupplyRepository
   private readonly supplyStateController: SupplyStateController
   private readonly vaultRequestRepository: VaultRequestRepository
-  private readonly circuits: VaultCircuits
   private readonly ledger: SpenderLedger
   private readonly erc20Reader: Erc20Reader
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
+  private readonly guard: SponsoredCallGuard
 
   constructor(
     supplyRepository: SupplyRepository,
     supplyStateController: SupplyStateController,
     vaultRequestRepository: VaultRequestRepository,
-    circuits: VaultCircuits,
     ledger: SpenderLedger,
     erc20Reader: Erc20Reader,
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
+    guard: SponsoredCallGuard,
   ) {
     this.supplyRepository = supplyRepository
     this.supplyStateController = supplyStateController
     this.vaultRequestRepository = vaultRequestRepository
-    this.circuits = circuits
     this.ledger = ledger
     this.erc20Reader = erc20Reader
     this.unitOfWork = unitOfWork
     this.signet = signet
     this.vault = vault
+    this.guard = guard
   }
 
   async getSupplyTarget(_caller: Caller, _args: GetSupplyTargetArgs): Promise<SupplyTarget> {
@@ -85,16 +87,20 @@ export class SupplyServiceImpl implements SupplyService {
     }
   }
 
-  async startSupply(caller: Caller, { supplyRequest, wallet }: StartSupplyArgs): Promise<Supply> {
+  async prepareStartSupply(
+    _caller: Caller,
+    _args: PrepareStartSupplyArgs,
+  ): Promise<SupplyStartInputs> {
+    const { underlyingErc20Address } = await this.stataPair()
+    return { inIndex: newInputIndex(), underlyingErc20Address }
+  }
+
+  async startSupply(
+    caller: Caller,
+    { supplyRequest, inIndex, boundTx }: StartSupplyArgs,
+  ): Promise<Supply> {
+    this.guard.assertSponsoredCall(boundTx, 'startSupply')
     const pair = await this.stataPair()
-    const inIndex = newInputIndex()
-    const unprovenTx = await this.circuits.startSupply({
-      secretKey: caller.secretKey,
-      wallet,
-      inIndex,
-      amount: supplyRequest.amount,
-      coinType: vaultTokenType(pair.underlyingErc20Address, this.vault.contractAddress),
-    })
     return this.unitOfWork.runInTransaction(() =>
       this.supplyStateController.startSupply({
         name: supplyName(caller.name, randomUUID()),
@@ -102,27 +108,26 @@ export class SupplyServiceImpl implements SupplyService {
         amount: supplyRequest.amount,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        call: { unprovenTx },
+        call: { boundTx },
       }),
     )
   }
 
-  /** The state table is asked before the slow build, and the controller asks it again under the lock. */
-  async completeSupply(caller: Caller, { name, wallet }: CompleteSupplyArgs): Promise<Supply> {
-    const supply = await this.ownSupply(caller, name)
-    if (nextState(supply.state, 'complete') === undefined) {
-      throw new SupplyStateConflict(name, supply.state, 'complete')
-    }
-    const request = await this.attestedRequestOf(name)
-    const unprovenTx = await this.circuits.completeSupply({
-      secretKey: caller.secretKey,
-      wallet,
-      requestId: hexToBytes(request.requestId),
-      serializedOutput: completionOutput(request, 32),
-      mintNonce: crypto.getRandomValues(new Uint8Array(32)),
-    })
+  async prepareCompleteSupply(
+    caller: Caller,
+    { name }: PrepareCompleteSupplyArgs,
+  ): Promise<SupplyCompleteInputs> {
+    await this.assertCompletable(caller, name)
+    const { requestId, attestationOutputKind, attestationOutput } =
+      await this.attestedRequestOf(name)
+    return { requestId, attestationOutputKind, attestationOutput }
+  }
+
+  async completeSupply(caller: Caller, { name, boundTx }: CompleteSupplyArgs): Promise<Supply> {
+    this.guard.assertSponsoredCall(boundTx, 'completeSupply')
+    await this.assertCompletable(caller, name)
     return this.unitOfWork.runInTransaction(() =>
-      this.supplyStateController.completeSupply({ name, call: { unprovenTx } }),
+      this.supplyStateController.completeSupply({ name, call: { boundTx } }),
     )
   }
 
@@ -146,6 +151,14 @@ export class SupplyServiceImpl implements SupplyService {
     return {
       underlyingErc20Address: `0x${bytesToHex(state.stataUnderlying)}`,
       stataErc20Address: `0x${bytesToHex(state.stataToken)}`,
+    }
+  }
+
+  /** The state table is asked here, outside the lock, and the controller asks it again under it. */
+  private async assertCompletable(caller: Caller, name: string): Promise<void> {
+    const supply = await this.ownSupply(caller, name)
+    if (nextState(supply.state, 'complete') === undefined) {
+      throw new SupplyStateConflict(name, supply.state, 'complete')
     }
   }
 

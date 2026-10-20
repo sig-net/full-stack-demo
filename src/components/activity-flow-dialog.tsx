@@ -218,10 +218,6 @@ function callLabel(transaction: ActivityWalletTransaction): string {
 const CIRCUIT_LABELS: Record<string, string> = {
   startSwap: 'start',
   completeSwap: 'completion',
-  startSupply: 'start',
-  completeSupply: 'completion',
-  startRedeem: 'start',
-  completeRedeem: 'completion',
   startApproveRouter: 'start',
   startApproveStata: 'start',
   completeApprove: 'completion',

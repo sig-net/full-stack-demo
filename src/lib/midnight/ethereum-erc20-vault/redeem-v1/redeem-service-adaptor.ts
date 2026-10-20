@@ -4,21 +4,27 @@ import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
 import { CallerOperationStateConflict } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
-import type { Redeem } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
+import type {
+  Redeem,
+  RedeemCompleteInputs,
+  RedeemStartInputs,
+} from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
 import {
   completeRedeemArgsSchema,
   getRedeemArgsSchema,
   listRedeemsArgsSchema,
-  startRedeemArgsSchema,
+  prepareCompleteRedeemArgsSchema,
+  prepareStartRedeemArgsSchema,
   type RedeemService,
+  startRedeemArgsSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service'
-import { circuitAssertMessage } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
+import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import type { Logger } from '@/lib/logging/logger'
 
 /**
  * Adapts the redeem service to the wire: the caller secret stands in for the caller, the
  * arguments are untrusted until parsed, and every outcome the caller can act on is a result.
- * The service opens the transaction of each user action itself, after the circuit build.
+ * The service opens the transaction of each user action itself, after its reads.
  */
 export class RedeemServiceAdaptor {
   private readonly redeemService: RedeemService
@@ -29,6 +35,16 @@ export class RedeemServiceAdaptor {
     this.logger = logger
   }
 
+  async prepareStartRedeem(callerSecret: string, args: unknown): Promise<RedeemStartInputsResult> {
+    const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'prepareStartRedeem', caller: caller.name })
+    const parsed = prepareStartRedeemArgsSchema.safeParse(args)
+    if (!parsed.success) {
+      return { ok: false, error: z.prettifyError(parsed.error) }
+    }
+    return { ok: true, inputs: await this.redeemService.prepareStartRedeem(caller, parsed.data) }
+  }
+
   async startRedeem(callerSecret: string, args: unknown): Promise<RedeemResult> {
     const caller = resolveCaller(callerSecret)
     this.logger.debug('method called', { method: 'startRedeem', caller: caller.name })
@@ -36,7 +52,26 @@ export class RedeemServiceAdaptor {
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
     }
-    return outcomeOf(() => this.redeemService.startRedeem(caller, parsed.data))
+    return outcomeOf<RedeemResult>(async () => ({
+      ok: true,
+      redeem: await this.redeemService.startRedeem(caller, parsed.data),
+    }))
+  }
+
+  async prepareCompleteRedeem(
+    callerSecret: string,
+    args: unknown,
+  ): Promise<RedeemCompleteInputsResult> {
+    const caller = resolveCaller(callerSecret)
+    this.logger.debug('method called', { method: 'prepareCompleteRedeem', caller: caller.name })
+    const parsed = prepareCompleteRedeemArgsSchema.safeParse(args)
+    if (!parsed.success) {
+      return { ok: false, error: z.prettifyError(parsed.error) }
+    }
+    return outcomeOf<RedeemCompleteInputsResult>(async () => ({
+      ok: true,
+      inputs: await this.redeemService.prepareCompleteRedeem(caller, parsed.data),
+    }))
   }
 
   async completeRedeem(callerSecret: string, args: unknown): Promise<RedeemResult> {
@@ -46,7 +81,10 @@ export class RedeemServiceAdaptor {
     if (!parsed.success) {
       return { ok: false, error: z.prettifyError(parsed.error) }
     }
-    return outcomeOf(() => this.redeemService.completeRedeem(caller, parsed.data))
+    return outcomeOf<RedeemResult>(async () => ({
+      ok: true,
+      redeem: await this.redeemService.completeRedeem(caller, parsed.data),
+    }))
   }
 
   async getRedeem(callerSecret: string, args: unknown): Promise<RedeemResult> {
@@ -74,22 +112,28 @@ export class RedeemServiceAdaptor {
   }
 }
 
-export type RedeemResult =
-  | { readonly ok: true; readonly redeem: Redeem }
-  | { readonly ok: false; readonly error: string }
+export type RedeemResult = { readonly ok: true; readonly redeem: Redeem } | Refused
 
-export type RedeemListResult =
-  | { readonly ok: true; readonly redeems: Redeem[] }
-  | { readonly ok: false; readonly error: string }
+export type RedeemListResult = { readonly ok: true; readonly redeems: Redeem[] } | Refused
 
-/** A state conflict and a contract assert firing at build time are the vault refusing the call, which the caller can act on. */
-async function outcomeOf(action: () => Promise<Redeem>): Promise<RedeemResult> {
+export type RedeemStartInputsResult =
+  | { readonly ok: true; readonly inputs: RedeemStartInputs }
+  | Refused
+
+export type RedeemCompleteInputsResult =
+  | { readonly ok: true; readonly inputs: RedeemCompleteInputs }
+  | Refused
+
+type Refused = { readonly ok: false; readonly error: string }
+
+/** A state conflict and bound bytes that are not the expected vault call are refusals the caller can act on. */
+async function outcomeOf<Result>(action: () => Promise<Result>): Promise<Result | Refused> {
   try {
-    return { ok: true, redeem: await action() }
+    return await action()
   } catch (error: unknown) {
-    if (error instanceof CallerOperationStateConflict) return { ok: false, error: error.message }
-    const refusal = circuitAssertMessage(error)
-    if (refusal !== undefined) return { ok: false, error: refusal }
+    if (error instanceof CallerOperationStateConflict || error instanceof SponsoredCallMismatch) {
+      return { ok: false, error: error.message }
+    }
     throw error
   }
 }

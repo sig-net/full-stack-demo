@@ -9,34 +9,33 @@ import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import type { Redeem } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
 import {
-  STATA_ERC20_ADDRESS,
   redeemFixture,
+  STATA_ERC20_ADDRESS,
   UNDERLYING_ERC20_ADDRESS,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-fixtures'
 import { RedeemServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service-impl'
 import {
   type CompleteRedeemArgs,
-  type StartRedeemArgs,
   RedeemStateConflict,
   type RedeemStateController,
+  type StartRedeemArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-controller'
+import {
+  type SponsoredCallGuard,
+  SponsoredCallMismatch,
+  type SponsoredCircuit,
+} from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
-import type {
-  CompleteRedeemCircuitArgs,
-  StartRedeemCircuitArgs,
-  VaultCircuits,
-} from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import { ledgerSet } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import {
-  REQUEST_ID,
+  REQUEST_ID_HEX,
   VAULT_REQUEST_IN_STATE,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
-import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
 import { MemoryRepository } from '@/lib/repository/repository-memory-impl'
 import { mock } from '@/lib/testing/mock'
-import { UUID } from '@/lib/value-schemas'
+import { UINT64_MAX, UUID } from '@/lib/value-schemas'
 
 /** A throwaway MPC root key: the derivation needs a point on the curve, not the stack's key. */
 const SIGNET: MidnightSignetConfig = {
@@ -47,26 +46,27 @@ const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(3
 
 const caller: Caller = resolveCaller('ab'.repeat(32))
 const stranger: Caller = resolveCaller('cd'.repeat(32))
-const WALLET = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const REQUEST = { shares: 300_000n }
 const ASSETS_OUTPUT = `40420f${'00'.repeat(29)}`
+const BOUND_TX = 'b0bd'
 
+/** What the service read, wrote and asked the guard, so a test can see that a refusal writes nothing and a commit opens one transaction. */
 interface Recorded {
   steps: string[]
-  startBuilds: StartRedeemCircuitArgs[]
-  completeBuilds: CompleteRedeemCircuitArgs[]
+  guarded: SponsoredCircuit[]
   started: StartRedeemArgs[]
   completed: CompleteRedeemArgs[]
 }
 
-function serviceOver(options: { redeems?: Redeem[]; requests?: VaultRequest[] }) {
-  const recorded: Recorded = {
-    steps: [],
-    startBuilds: [],
-    completeBuilds: [],
-    started: [],
-    completed: [],
-  }
+const NOTHING_RECORDED: Recorded = { steps: [], guarded: [], started: [], completed: [] }
+
+function serviceOver(options: {
+  redeems?: Redeem[]
+  requests?: VaultRequest[]
+  /** Whether the guard refuses the bound bytes, admitting them when absent. */
+  refusesCall?: boolean
+}) {
+  const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const redeemRepository = new MemoryRepository<Redeem>()
   const vaultRequestRepository = new MemoryRepository<VaultRequest>()
   const ready = Promise.all([
@@ -87,18 +87,6 @@ function serviceOver(options: { redeems?: Redeem[]; requests?: VaultRequest[] })
       },
     }),
     vaultRequestRepository,
-    mock<VaultCircuits>('VaultCircuits', {
-      startRedeem: async (args) => {
-        recorded.steps.push('build')
-        recorded.startBuilds.push(args)
-        return 'start-call'
-      },
-      completeRedeem: async (args) => {
-        recorded.steps.push('build')
-        recorded.completeBuilds.push(args)
-        return 'complete-call'
-      },
-    }),
     mock<SpenderLedger>('SpenderLedger', {
       state: async () => {
         recorded.steps.push('ledger')
@@ -118,6 +106,14 @@ function serviceOver(options: { redeems?: Redeem[]; requests?: VaultRequest[] })
     }),
     SIGNET,
     VAULT,
+    mock<SponsoredCallGuard>('SponsoredCallGuard', {
+      assertSponsoredCall: (boundTx, circuit) => {
+        expect(boundTx).toBe(BOUND_TX)
+        recorded.steps.push('guard')
+        recorded.guarded.push(circuit)
+        if (options.refusesCall === true) throw new SponsoredCallMismatch(circuit)
+      },
+    }),
   )
   return { service, recorded, ready }
 }
@@ -136,95 +132,247 @@ const attestedUnder = (parent: string, overrides: Partial<VaultRequest> = {}) =>
   ...overrides,
 })
 
-describe('RedeemServiceImpl.startRedeem', () => {
-  test('reads the pair, builds the start call with a coin of the wrapper, then stores the redeem under the vault account', async () => {
+describe('RedeemServiceImpl.prepareStartRedeem', () => {
+  test('reads the pinned wrapper and assigns a fresh slot on every call, and nothing is written', async () => {
     const { service, recorded } = serviceOver({})
-    const redeem = await service.startRedeem(caller, { redeemRequest: REQUEST, wallet: WALLET })
-    expect(recorded.steps).toEqual(['ledger', 'build', 'transaction'])
-    expect(recorded.startBuilds).toEqual([
-      {
-        secretKey: caller.secretKey,
-        wallet: WALLET,
-        inIndex: redeem.inIndex,
-        shares: REQUEST.shares,
-        coinType: vaultTokenType(STATA_ERC20_ADDRESS, VAULT.contractAddress),
-      },
-    ])
-    expect(recorded.started).toEqual([
-      {
-        name: expect.stringMatching(
-          new RegExp(`^${caller.name}/ethereum-erc20-vault-redeems/${UUID}$`),
-        ),
-        stataErc20Address: STATA_ERC20_ADDRESS,
-        underlyingErc20Address: UNDERLYING_ERC20_ADDRESS,
-        shares: REQUEST.shares,
-        inIndex: redeem.inIndex,
-        vaultAccount: vaultAccountOf(SIGNET, VAULT),
-        call: { unprovenTx: 'start-call' },
-      },
-    ])
-    expect(redeem.inIndex).toBeGreaterThan(0n)
+    const first = await service.prepareStartRedeem(caller, { redeemRequest: REQUEST })
+    const second = await service.prepareStartRedeem(caller, { redeemRequest: REQUEST })
+    for (const inputs of [first, second]) {
+      expect(inputs.stataErc20Address).toBe(STATA_ERC20_ADDRESS)
+      expect(inputs.inIndex).toBeGreaterThanOrEqual(0n)
+      expect(inputs.inIndex).toBeLessThanOrEqual(UINT64_MAX)
+    }
+    expect(first.inIndex).not.toBe(second.inIndex)
+    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['ledger', 'ledger'] })
   })
+})
+
+describe('RedeemServiceImpl.startRedeem', () => {
+  test('guards the bound call, reads the pair again, then commits it under the vault account in one transaction', async () => {
+    const { service, recorded } = serviceOver({})
+    const redeem = await service.startRedeem(caller, {
+      redeemRequest: REQUEST,
+      inIndex: 42n,
+      boundTx: BOUND_TX,
+    })
+    expect(redeem.name).toMatch(new RegExp(`^${caller.name}/ethereum-erc20-vault-redeems/${UUID}$`))
+    expect(redeem).toMatchObject({
+      stataErc20Address: STATA_ERC20_ADDRESS,
+      underlyingErc20Address: UNDERLYING_ERC20_ADDRESS,
+      shares: REQUEST.shares,
+      state: 'AwaitingStartTransaction',
+      inIndex: 42n,
+      vaultAccount: vaultAccountOf(SIGNET, VAULT),
+      outcome: null,
+      failure: null,
+      error: null,
+    })
+    expect(recorded).toEqual({
+      steps: ['guard', 'ledger', 'transaction'],
+      guarded: ['startRedeem'],
+      started: [
+        {
+          name: redeem.name,
+          stataErc20Address: STATA_ERC20_ADDRESS,
+          underlyingErc20Address: UNDERLYING_ERC20_ADDRESS,
+          shares: REQUEST.shares,
+          inIndex: 42n,
+          vaultAccount: vaultAccountOf(SIGNET, VAULT),
+          call: { boundTx: BOUND_TX },
+        },
+      ],
+      completed: [],
+    })
+  })
+
+  test('bound bytes the guard refuses are refused before the pair is read and nothing is written', async () => {
+    const { service, recorded } = serviceOver({ refusesCall: true })
+    const starting = service.startRedeem(caller, {
+      redeemRequest: REQUEST,
+      inIndex: 42n,
+      boundTx: BOUND_TX,
+    })
+    await expect(starting).rejects.toBeInstanceOf(SponsoredCallMismatch)
+    await expect(starting).rejects.toThrow(
+      'the bound bytes must be exactly one startRedeem call to the vault',
+    )
+    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['guard'], guarded: ['startRedeem'] })
+  })
+})
+
+const awaiting = ownRedeem({ state: 'AwaitingCompletion' })
+
+interface Refusal {
+  name: string
+  by: Caller
+  redeems: Redeem[]
+  requests: VaultRequest[]
+  expectError: string | typeof RedeemStateConflict
+}
+
+/** What both completion methods refuse before anything is read from the request. */
+const refusedCompletions: readonly Refusal[] = [
+  {
+    name: "another caller's redeem does not exist for this caller",
+    by: stranger,
+    redeems: [awaiting],
+    requests: [attestedUnder(awaiting.name)],
+    expectError: 'does not exist',
+  },
+  {
+    name: 'a redeem that was never started',
+    by: caller,
+    redeems: [],
+    requests: [],
+    expectError: 'does not exist',
+  },
+  {
+    name: 'a redeem still waiting for its request',
+    by: caller,
+    redeems: [ownRedeem({ state: 'AwaitingVaultRequest' })],
+    requests: [attestedUnder(awaiting.name)],
+    expectError: RedeemStateConflict,
+  },
+  {
+    name: 'a redeem already completing',
+    by: caller,
+    redeems: [ownRedeem({ state: 'AwaitingCompleteTransaction' })],
+    requests: [attestedUnder(awaiting.name)],
+    expectError: RedeemStateConflict,
+  },
+]
+
+/** What the request read refuses, which only the prepare method makes. */
+const refusedPreparations: readonly Refusal[] = [
+  {
+    name: 'a redeem whose request holds no attestation',
+    by: caller,
+    redeems: [awaiting],
+    requests: [
+      attestedUnder(awaiting.name, {
+        state: 'AwaitingBroadcast',
+        attestationBlockHeight: null,
+        attestationOutputKind: null,
+        attestationDigest: null,
+        attestationSignature: null,
+        attestationOutput: null,
+      }),
+    ],
+    expectError: 'holds no attestation',
+  },
+  {
+    name: 'a redeem without a request row',
+    by: caller,
+    redeems: [awaiting],
+    requests: [],
+    expectError: 'has no vault request',
+  },
+]
+
+async function expectRefusal(
+  refused: Promise<unknown>,
+  expectError: Refusal['expectError'],
+): Promise<void> {
+  if (typeof expectError === 'string') await expect(refused).rejects.toThrow(expectError)
+  else await expect(refused).rejects.toBeInstanceOf(expectError)
+}
+
+describe('RedeemServiceImpl.prepareCompleteRedeem', () => {
+  const inputs: ReadonlyArray<{
+    name: string
+    request: VaultRequest
+    expectKind: 'executed' | 'failed' | 'unviable'
+    expectOutput: string
+  }> = [
+    {
+      name: "an executed redeem's attested assets",
+      request: attestedUnder(awaiting.name),
+      expectKind: 'executed',
+      expectOutput: ASSETS_OUTPUT,
+    },
+    {
+      name: 'a failed redeem, whose output is empty',
+      request: attestedUnder(awaiting.name, {
+        attestationOutputKind: 'failed',
+        attestationOutput: '',
+      }),
+      expectKind: 'failed',
+      expectOutput: '',
+    },
+  ]
+
+  test.each(inputs)(
+    "returns the attested request's fields for $name, and nothing is written",
+    async ({ request, expectKind, expectOutput }) => {
+      const { service, recorded, ready } = serviceOver({ redeems: [awaiting], requests: [request] })
+      await ready
+      expect(await service.prepareCompleteRedeem(caller, { name: awaiting.name })).toEqual({
+        requestId: REQUEST_ID_HEX,
+        attestationOutputKind: expectKind,
+        attestationOutput: expectOutput,
+      })
+      expect(recorded).toEqual(NOTHING_RECORDED)
+    },
+  )
+
+  test.each([...refusedCompletions, ...refusedPreparations])(
+    '$name: nothing is written',
+    async ({ by, redeems, requests, expectError }) => {
+      const { service, recorded, ready } = serviceOver({ redeems, requests })
+      await ready
+      await expectRefusal(service.prepareCompleteRedeem(by, { name: awaiting.name }), expectError)
+      expect(recorded).toEqual(NOTHING_RECORDED)
+    },
+  )
 })
 
 describe('RedeemServiceImpl.completeRedeem', () => {
-  test('builds the complete call from the attested assets with a fresh nonce, then records it', async () => {
-    const stored = ownRedeem({ state: 'AwaitingCompletion' })
+  test('commits the bound call in one transaction after the state check', async () => {
     const { service, recorded, ready } = serviceOver({
-      redeems: [stored],
-      requests: [attestedUnder(stored.name)],
+      redeems: [awaiting],
+      requests: [attestedUnder(awaiting.name)],
     })
     await ready
-    const redeem = await service.completeRedeem(caller, { name: stored.name, wallet: WALLET })
+    const redeem = await service.completeRedeem(caller, { name: awaiting.name, boundTx: BOUND_TX })
     expect(redeem.state).toBe('AwaitingCompleteTransaction')
-    expect(recorded.steps).toEqual(['build', 'transaction'])
-    const [build] = recorded.completeBuilds
-    expect(build).toMatchObject({
-      secretKey: caller.secretKey,
-      wallet: WALLET,
-      requestId: REQUEST_ID,
-      serializedOutput: hexToBytes(ASSETS_OUTPUT),
+    expect(recorded).toEqual({
+      steps: ['guard', 'transaction'],
+      guarded: ['completeRedeem'],
+      started: [],
+      completed: [{ name: awaiting.name, call: { boundTx: BOUND_TX } }],
     })
-    expect(build?.mintNonce).toHaveLength(32)
-    expect(recorded.completed).toEqual([
-      { name: stored.name, call: { unprovenTx: 'complete-call' } },
-    ])
   })
 
-  test('a failed redeem completes over 32 zero bytes, which the circuit ignores', async () => {
-    const stored = ownRedeem({ state: 'AwaitingCompletion' })
-    const { service, recorded, ready } = serviceOver({
-      redeems: [stored],
-      requests: [
-        attestedUnder(stored.name, { attestationOutputKind: 'failed', attestationOutput: '' }),
-      ],
-    })
-    await ready
-    await service.completeRedeem(caller, { name: stored.name, wallet: WALLET })
-    expect(recorded.completeBuilds[0]?.serializedOutput).toEqual(new Uint8Array(32))
-  })
+  test.each(refusedCompletions)(
+    '$name: nothing is written',
+    async ({ by, redeems, requests, expectError }) => {
+      const { service, recorded, ready } = serviceOver({ redeems, requests })
+      await ready
+      await expectRefusal(
+        service.completeRedeem(by, { name: awaiting.name, boundTx: BOUND_TX }),
+        expectError,
+      )
+      expect(recorded).toEqual({
+        ...NOTHING_RECORDED,
+        steps: ['guard'],
+        guarded: ['completeRedeem'],
+      })
+    },
+  )
 
-  test('refuses before the build when the state does not allow a completion', async () => {
-    const stored = ownRedeem({ state: 'AwaitingVaultRequest' })
-    const { service, recorded, ready } = serviceOver({ redeems: [stored] })
-    await ready
-    await expect(
-      service.completeRedeem(caller, { name: stored.name, wallet: WALLET }),
-    ).rejects.toThrow(RedeemStateConflict)
-    expect(recorded.steps).toEqual([])
-  })
-
-  test("refuses another caller's redeem as missing", async () => {
-    const stored = ownRedeem({ state: 'AwaitingCompletion' })
-    const { service, ready } = serviceOver({ redeems: [stored] })
-    await ready
-    await expect(
-      service.completeRedeem(stranger, { name: stored.name, wallet: WALLET }),
-    ).rejects.toThrow('does not exist')
+  test('bound bytes the guard refuses are refused before the redeem is read and nothing is written', async () => {
+    // No redeem is stored, so a refusal of the call shows the guard ran first.
+    const { service, recorded } = serviceOver({ refusesCall: true })
+    const completing = service.completeRedeem(caller, { name: awaiting.name, boundTx: BOUND_TX })
+    await expect(completing).rejects.toBeInstanceOf(SponsoredCallMismatch)
+    await expect(completing).rejects.toThrow(
+      'the bound bytes must be exactly one completeRedeem call to the vault',
+    )
+    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['guard'], guarded: ['completeRedeem'] })
   })
 })
 
-describe('RedeemServiceImpl listing', () => {
+describe('RedeemServiceImpl reads', () => {
   test("lists the caller's redeems newest first and gets only its own", async () => {
     const older = ownRedeem({ createTime: new Date('2026-01-01T00:00:00Z') })
     const newer = ownRedeem({

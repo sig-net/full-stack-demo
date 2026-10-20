@@ -201,6 +201,90 @@ export interface CompleteWithdrawCircuitArgs extends CallerCircuitArgs {
   readonly mintNonce: Uint8Array
 }
 
+/** The surrendered coin is a fresh coin of the stata underlying's vault coin type worth exactly `amount`, which the caller's wallet funds when it balances the call. */
+export function startSupplyCallOptions(
+  providers: VaultCallProviders,
+  args: StartSupplyCircuitArgs,
+): CallTxOptions<VaultContract, 'startSupply'> {
+  return vaultCallOptions(providers, 'startSupply', [
+    args.inIndex,
+    { amount: args.amount },
+    {
+      nonce: crypto.getRandomValues(new Uint8Array(32)),
+      color: hexToBytes(vaultTokenType(args.underlyingErc20Address, providers.vaultAddress)),
+      value: args.amount,
+    },
+  ])
+}
+
+export interface StartSupplyCircuitArgs extends CallerCircuitArgs {
+  readonly inIndex: bigint
+  readonly amount: bigint
+  /** The underlying the vault pins, `0x` plus 40 hex characters: the surrendered coin is its vault coin. */
+  readonly underlyingErc20Address: string
+}
+
+export function completeSupplyCallOptions(
+  providers: VaultCallProviders,
+  args: CompleteSupplyCircuitArgs,
+): CallTxOptions<VaultContract, 'completeSupply'> {
+  return vaultCallOptions(providers, 'completeSupply', [
+    args.requestId,
+    args.serializedOutput,
+    args.mintNonce,
+  ])
+}
+
+export interface CompleteSupplyCircuitArgs extends CallerCircuitArgs {
+  readonly requestId: Uint8Array
+  /** 32 bytes: the attested shares for an executed deposit, ignored for the other verdicts. */
+  readonly serializedOutput: Uint8Array
+  /** 32 random bytes, fresh per call. */
+  readonly mintNonce: Uint8Array
+}
+
+/** The surrendered coin is a fresh coin of the wrapper's vault coin type worth exactly `shares`, which the caller's wallet funds when it balances the call. */
+export function startRedeemCallOptions(
+  providers: VaultCallProviders,
+  args: StartRedeemCircuitArgs,
+): CallTxOptions<VaultContract, 'startRedeem'> {
+  return vaultCallOptions(providers, 'startRedeem', [
+    args.inIndex,
+    { shares: args.shares },
+    {
+      nonce: crypto.getRandomValues(new Uint8Array(32)),
+      color: hexToBytes(vaultTokenType(args.stataErc20Address, providers.vaultAddress)),
+      value: args.shares,
+    },
+  ])
+}
+
+export interface StartRedeemCircuitArgs extends CallerCircuitArgs {
+  readonly inIndex: bigint
+  /** The wrapper the vault pins, `0x` plus 40 hex characters: its vault coin is the one surrendered. */
+  readonly stataErc20Address: string
+  readonly shares: bigint
+}
+
+export function completeRedeemCallOptions(
+  providers: VaultCallProviders,
+  args: CompleteRedeemCircuitArgs,
+): CallTxOptions<VaultContract, 'completeRedeem'> {
+  return vaultCallOptions(providers, 'completeRedeem', [
+    args.requestId,
+    args.serializedOutput,
+    args.mintNonce,
+  ])
+}
+
+export interface CompleteRedeemCircuitArgs extends CallerCircuitArgs {
+  readonly requestId: Uint8Array
+  /** 32 bytes: the attested assets paid out for an executed redeem, ignored for the other verdicts. */
+  readonly serializedOutput: Uint8Array
+  /** 32 random bytes, fresh per call. */
+  readonly mintNonce: Uint8Array
+}
+
 /** `completeDeposit` mints to the caller's own public key when no recipient is named. */
 const NO_RECIPIENT = {
   is_some: false,

@@ -84,7 +84,31 @@ describe('missingReadiness', () => {
       checks: checks({ callerDust: SHORT }),
       expected: [],
     },
-    ...(['approve', 'swap', 'supply', 'redeem'] as const).map((action) => ({
+    {
+      name: 'a supply needs the relayer and the vault account and ignores the deposit account',
+      action: 'supply',
+      checks: checks({ relayerDust: SHORT, depositAccountEth: SHORT, vaultAccountEth: UNREAD }),
+      expected: ['relayerDust', 'vaultAccountEth'],
+    },
+    {
+      name: 'a supply ignores the caller DUST, since the relayer pays its fees',
+      action: 'supply',
+      checks: checks({ callerDust: SHORT }),
+      expected: [],
+    },
+    {
+      name: 'a redeem needs the vault account and ignores the deposit account',
+      action: 'redeem',
+      checks: checks({ depositAccountEth: SHORT, vaultAccountEth: SHORT }),
+      expected: ['vaultAccountEth'],
+    },
+    {
+      name: 'a redeem ignores the caller DUST, since the relayer pays its fees',
+      action: 'redeem',
+      checks: checks({ callerDust: SHORT }),
+      expected: [],
+    },
+    ...(['approve', 'swap'] as const).map((action) => ({
       name: `${action} is vault signed and its caller pays its own calls`,
       action,
       checks: checks({ callerDust: UNREAD, relayerDust: SHORT, vaultAccountEth: UNREAD }),

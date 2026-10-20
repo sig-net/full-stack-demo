@@ -2,7 +2,7 @@ import 'server-only'
 
 import { randomUUID } from 'node:crypto'
 
-import { bytesToHex, hexToBytes } from '@sig-net/midnight'
+import { bytesToHex } from '@sig-net/midnight'
 import { newInputIndex } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
@@ -10,70 +10,79 @@ import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-eth
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
-import { type Redeem, redeemName } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
+import {
+  type Redeem,
+  type RedeemCompleteInputs,
+  redeemName,
+  type RedeemStartInputs,
+} from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
 import type { RedeemRepository } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-repository'
 import type {
   CompleteRedeemArgs,
   GetRedeemArgs,
   ListRedeemsArgs,
-  StartRedeemArgs,
+  PrepareCompleteRedeemArgs,
+  PrepareStartRedeemArgs,
   RedeemService,
+  StartRedeemArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service'
 import {
   type RedeemStateController,
   RedeemStateConflict,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-controller'
+import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
-import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import {
   type AttestedRequestFields,
   attestedRequestFields,
-  completionOutput,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
-import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
 
 export class RedeemServiceImpl implements RedeemService {
   private readonly redeemRepository: RedeemRepository
   private readonly redeemStateController: RedeemStateController
   private readonly vaultRequestRepository: VaultRequestRepository
-  private readonly circuits: VaultCircuits
   private readonly ledger: SpenderLedger
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
+  private readonly guard: SponsoredCallGuard
 
   constructor(
     redeemRepository: RedeemRepository,
     redeemStateController: RedeemStateController,
     vaultRequestRepository: VaultRequestRepository,
-    circuits: VaultCircuits,
     ledger: SpenderLedger,
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
+    guard: SponsoredCallGuard,
   ) {
     this.redeemRepository = redeemRepository
     this.redeemStateController = redeemStateController
     this.vaultRequestRepository = vaultRequestRepository
-    this.circuits = circuits
     this.ledger = ledger
     this.unitOfWork = unitOfWork
     this.signet = signet
     this.vault = vault
+    this.guard = guard
   }
 
-  async startRedeem(caller: Caller, { redeemRequest, wallet }: StartRedeemArgs): Promise<Redeem> {
+  async prepareStartRedeem(
+    _caller: Caller,
+    _args: PrepareStartRedeemArgs,
+  ): Promise<RedeemStartInputs> {
+    const { stataErc20Address } = await this.stataPair()
+    return { inIndex: newInputIndex(), stataErc20Address }
+  }
+
+  async startRedeem(
+    caller: Caller,
+    { redeemRequest, inIndex, boundTx }: StartRedeemArgs,
+  ): Promise<Redeem> {
+    this.guard.assertSponsoredCall(boundTx, 'startRedeem')
     const pair = await this.stataPair()
-    const inIndex = newInputIndex()
-    const unprovenTx = await this.circuits.startRedeem({
-      secretKey: caller.secretKey,
-      wallet,
-      inIndex,
-      shares: redeemRequest.shares,
-      coinType: vaultTokenType(pair.stataErc20Address, this.vault.contractAddress),
-    })
     return this.unitOfWork.runInTransaction(() =>
       this.redeemStateController.startRedeem({
         name: redeemName(caller.name, randomUUID()),
@@ -81,27 +90,26 @@ export class RedeemServiceImpl implements RedeemService {
         shares: redeemRequest.shares,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        call: { unprovenTx },
+        call: { boundTx },
       }),
     )
   }
 
-  /** The state table is asked before the slow build, and the controller asks it again under the lock. */
-  async completeRedeem(caller: Caller, { name, wallet }: CompleteRedeemArgs): Promise<Redeem> {
-    const redeem = await this.ownRedeem(caller, name)
-    if (nextState(redeem.state, 'complete') === undefined) {
-      throw new RedeemStateConflict(name, redeem.state, 'complete')
-    }
-    const request = await this.attestedRequestOf(name)
-    const unprovenTx = await this.circuits.completeRedeem({
-      secretKey: caller.secretKey,
-      wallet,
-      requestId: hexToBytes(request.requestId),
-      serializedOutput: completionOutput(request, 32),
-      mintNonce: crypto.getRandomValues(new Uint8Array(32)),
-    })
+  async prepareCompleteRedeem(
+    caller: Caller,
+    { name }: PrepareCompleteRedeemArgs,
+  ): Promise<RedeemCompleteInputs> {
+    await this.assertCompletable(caller, name)
+    const { requestId, attestationOutputKind, attestationOutput } =
+      await this.attestedRequestOf(name)
+    return { requestId, attestationOutputKind, attestationOutput }
+  }
+
+  async completeRedeem(caller: Caller, { name, boundTx }: CompleteRedeemArgs): Promise<Redeem> {
+    this.guard.assertSponsoredCall(boundTx, 'completeRedeem')
+    await this.assertCompletable(caller, name)
     return this.unitOfWork.runInTransaction(() =>
-      this.redeemStateController.completeRedeem({ name, call: { unprovenTx } }),
+      this.redeemStateController.completeRedeem({ name, call: { boundTx } }),
     )
   }
 
@@ -123,6 +131,14 @@ export class RedeemServiceImpl implements RedeemService {
     return {
       underlyingErc20Address: `0x${bytesToHex(state.stataUnderlying)}`,
       stataErc20Address: `0x${bytesToHex(state.stataToken)}`,
+    }
+  }
+
+  /** The state table is asked here, outside the lock, and the controller asks it again under it. */
+  private async assertCompletable(caller: Caller, name: string): Promise<void> {
+    const redeem = await this.ownRedeem(caller, name)
+    if (nextState(redeem.state, 'complete') === undefined) {
+      throw new RedeemStateConflict(name, redeem.state, 'complete')
     }
   }
 

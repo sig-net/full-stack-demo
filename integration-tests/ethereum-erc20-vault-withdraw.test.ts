@@ -1,12 +1,6 @@
 import { randomBytes } from 'node:crypto'
 
-import {
-  type Binding,
-  nativeToken,
-  type Proof,
-  type SignatureEnabled,
-  Transaction,
-} from '@midnightntwrk/ledger-v9'
+import { nativeToken } from '@midnightntwrk/ledger-v9'
 import { rawTokenType } from '@midnight-ntwrk/compact-runtime'
 import { bytesToHex } from '@sig-net/midnight'
 import {
@@ -26,7 +20,7 @@ import { CIRCLE_USDC } from './sepolia-tokens'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
 import { secretKeyOf } from './user-caller-call'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
-import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
+import { mergedBoundTx, startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 import { completeWithdrawAsUser, startWithdrawAsUser } from './user-withdraw'
 
 const ROUND_TRIP_TIMEOUT_MS = 45 * 60_000
@@ -161,7 +155,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
         await withdrawV1.adaptor.startWithdraw(callerSecret, {
           withdrawRequest,
           inIndex: prepared.inputs.inIndex,
-          boundTx: merged(withoutFee, night),
+          boundTx: mergedBoundTx(withoutFee, night),
         }),
       ).toEqual({
         ok: false,
@@ -196,7 +190,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
           wallet: user.publicKeys,
           inIndex: preparedDeposit.inputs.inIndex,
           evmNonce: preparedDeposit.inputs.evmNonce,
-          boundTx: merged(depositStart, coin),
+          boundTx: mergedBoundTx(depositStart, coin),
         }),
       ).toEqual({
         ok: false,
@@ -326,20 +320,6 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
     ROUND_TRIP_TIMEOUT_MS,
   )
 })
-
-/** One bound transaction holding both: a contract call and a transfer merge, two contract calls do not. */
-function merged(boundA: string, boundB: string): string {
-  return bytesToHex(boundTransactionOf(boundA).merge(boundTransactionOf(boundB)).serialize())
-}
-
-function boundTransactionOf(boundTx: string): Transaction<SignatureEnabled, Proof, Binding> {
-  return Transaction.deserialize<SignatureEnabled, Proof, Binding>(
-    'signature',
-    'proof',
-    'binding',
-    Uint8Array.from(Buffer.from(boundTx, 'hex')),
-  )
-}
 
 const ERC20 = new Interface(['function balanceOf(address) view returns (uint256)'])
 

@@ -1,37 +1,59 @@
 import { z } from 'zod'
 
 import type { Caller } from '@/lib/caller/caller'
-import { walletPublicKeysSchema } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 import {
   type Redeem,
+  type RedeemCompleteInputs,
   redeemNameSchema,
   redeemRequestSchema,
+  type RedeemStartInputs,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
+import { hexBytesSchema, uint64Schema } from '@/lib/value-schemas'
 
 /**
- * The redeem API's methods, independent of the transport that exposes them. The two user
- * actions build the caller's circuit call, which reads the indexer and runs the circuit, and
- * then open the one transaction that stores the redeem's step and the call.
+ * The redeem API's methods, independent of the transport that exposes them. The browser builds,
+ * proves and binds the caller's two circuit calls from the inputs the prepare methods return,
+ * and the two user actions commit the bound bytes. The server checks that the bound bytes are
+ * exactly one call to the vault's expected circuit under that circuit's coin policy, since the
+ * relayer pays their fee, and does not inspect the inputs the call carries.
  */
 export interface RedeemService {
-  /** Reads the pair, assigns the server-chosen fields, builds the start call and stores the redeem in `AwaitingStartTransaction`. */
+  /** The start circuit's server-decided slot, assigned afresh on every call, and the pinned wrapper, with nothing written. */
+  prepareStartRedeem(caller: Caller, args: PrepareStartRedeemArgs): Promise<RedeemStartInputs>
+  /** Reads the pinned pair and stores the redeem in `AwaitingStartTransaction` under the vault account with the bound start call under it. */
   startRedeem(caller: Caller, args: StartRedeemArgs): Promise<Redeem>
-  /** Builds the complete call for the redeem's attested request and moves it to `AwaitingCompleteTransaction`. */
+  /** The attested request's fields the complete circuit takes, after the state check `completeRedeem` repeats. */
+  prepareCompleteRedeem(
+    caller: Caller,
+    args: PrepareCompleteRedeemArgs,
+  ): Promise<RedeemCompleteInputs>
+  /** Moves the redeem to `AwaitingCompleteTransaction` with the bound complete call under it. */
   completeRedeem(caller: Caller, args: CompleteRedeemArgs): Promise<Redeem>
   getRedeem(caller: Caller, args: GetRedeemArgs): Promise<Redeem | undefined>
   /** The caller's redeems, newest first. */
   listRedeems(caller: Caller, args: ListRedeemsArgs): Promise<Redeem[]>
 }
 
-export const startRedeemArgsSchema = z.object({
+/** The browser's wallet keys go into the call the browser builds and nowhere else, so no method takes them. */
+export const prepareStartRedeemArgsSchema = z.object({
   redeemRequest: redeemRequestSchema,
-  wallet: walletPublicKeysSchema,
+})
+export type PrepareStartRedeemArgs = z.infer<typeof prepareStartRedeemArgsSchema>
+
+/** The slot the browser baked into the call travels with it, and the bound bytes are hex in the ledger's serialisation. */
+export const startRedeemArgsSchema = prepareStartRedeemArgsSchema.extend({
+  inIndex: uint64Schema,
+  boundTx: hexBytesSchema,
 })
 export type StartRedeemArgs = z.infer<typeof startRedeemArgsSchema>
 
-export const completeRedeemArgsSchema = z.object({
+export const prepareCompleteRedeemArgsSchema = z.object({
   name: redeemNameSchema,
-  wallet: walletPublicKeysSchema,
+})
+export type PrepareCompleteRedeemArgs = z.infer<typeof prepareCompleteRedeemArgsSchema>
+
+export const completeRedeemArgsSchema = prepareCompleteRedeemArgsSchema.extend({
+  boundTx: hexBytesSchema,
 })
 export type CompleteRedeemArgs = z.infer<typeof completeRedeemArgsSchema>
 

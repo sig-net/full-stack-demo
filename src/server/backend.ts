@@ -103,6 +103,7 @@ import type { ApprovalStateController } from '@/lib/midnight/ethereum-erc20-vaul
 import { ApprovalStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-controller-impl'
 import type { ApprovalStateResolver } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-resolver'
 import { ApprovalStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-resolver-impl'
+import { RedeemCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-call-builder'
 import { RedeemEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-event-consumer'
 import type { RedeemRepository } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-repository'
 import { RedeemRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-repository-sql-impl'
@@ -113,6 +114,7 @@ import type { RedeemStateController } from '@/lib/midnight/ethereum-erc20-vault/
 import { RedeemStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-controller-impl'
 import type { RedeemStateResolver } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-resolver'
 import { RedeemStateResolverImpl } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-resolver-impl'
+import { SupplyCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-call-builder'
 import { SupplyEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-event-consumer'
 import type { SupplyRepository } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-repository'
 import { SupplyRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-repository-sql-impl'
@@ -369,6 +371,8 @@ export interface MidnightBackend {
       readonly eventConsumer: SupplyEventConsumer
       readonly service: SupplyService
       readonly adaptor: SupplyServiceAdaptor
+      /** The browser's side of a supply call, over the backend's own providers. */
+      readonly callBuilder: SupplyCallBuilder
     }
     /** The caller's redeems: a vault coin of the wrapper's shares burnt for a redemption the vault account signs, paid out as the underlying. */
     readonly redeemV1: {
@@ -378,6 +382,8 @@ export interface MidnightBackend {
       readonly eventConsumer: RedeemEventConsumer
       readonly service: RedeemService
       readonly adaptor: RedeemServiceAdaptor
+      /** The browser's side of a redeem call, over the backend's own providers. */
+      readonly callBuilder: RedeemCallBuilder
     }
     /** The deployer's approvals of the vault's spenders, the gate the swap's router spends under. */
     readonly approvalV1: {
@@ -848,6 +854,8 @@ function createMidnightEthereumErc20Vault(
   const callProviders = { publicDataProvider, zkConfigProvider, compiledContract, vaultAddress }
   const depositCallBuilder = new DepositCallBuilder(callProviders, proofProvider)
   const withdrawCallBuilder = new WithdrawCallBuilder(callProviders, proofProvider)
+  const supplyCallBuilder = new SupplyCallBuilder(callProviders, proofProvider)
+  const redeemCallBuilder = new RedeemCallBuilder(callProviders, proofProvider)
   const sponsoredCallGuard = new SponsoredCallGuard(vaultAddress, inspectBoundTransaction)
   const ledger = new VaultLedgerIndexerImpl(publicDataProvider, vaultAddress)
   const readers = signetReaders({
@@ -932,7 +940,9 @@ function createMidnightEthereumErc20Vault(
       config,
       transactionV1,
       vaultRequestV1,
-      { circuits, ledger },
+      { ledger },
+      supplyCallBuilder,
+      sponsoredCallGuard,
       logger,
     ),
     redeemV1: createMidnightEthereumErc20VaultRedeemV1(
@@ -941,10 +951,9 @@ function createMidnightEthereumErc20Vault(
       config,
       transactionV1,
       vaultRequestV1,
-      {
-        circuits,
-        ledger,
-      },
+      { ledger },
+      redeemCallBuilder,
+      sponsoredCallGuard,
       logger,
     ),
     approvalV1: createMidnightEthereumErc20VaultApprovalV1(
@@ -1060,7 +1069,9 @@ function createMidnightEthereumErc20VaultSupplyV1(
   config: ServerConfig,
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
-  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
+  callBuilder: SupplyCallBuilder,
+  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['supplyV1'] {
   const repository = new SupplyRepositorySQLImpl(db.database)
@@ -1084,12 +1095,12 @@ function createMidnightEthereumErc20VaultSupplyV1(
     repository,
     stateController,
     vaultRequestV1.repository,
-    vault.circuits,
     vault.ledger,
     new Erc20ReaderEthersImpl(ethereum.provider),
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
+    guard,
   )
   return {
     repository,
@@ -1101,6 +1112,7 @@ function createMidnightEthereumErc20VaultSupplyV1(
     ),
     service,
     adaptor: new SupplyServiceAdaptor(service, logger.child({ component: 'SupplyServiceAdaptor' })),
+    callBuilder,
   }
 }
 
@@ -1110,7 +1122,9 @@ function createMidnightEthereumErc20VaultRedeemV1(
   config: ServerConfig,
   transactionV1: MidnightBackend['transactionV1'],
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
-  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'circuits' | 'ledger'>,
+  vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
+  callBuilder: RedeemCallBuilder,
+  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['redeemV1'] {
   const repository = new RedeemRepositorySQLImpl(db.database)
@@ -1134,11 +1148,11 @@ function createMidnightEthereumErc20VaultRedeemV1(
     repository,
     stateController,
     vaultRequestV1.repository,
-    vault.circuits,
     vault.ledger,
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
+    guard,
   )
   return {
     repository,
@@ -1150,6 +1164,7 @@ function createMidnightEthereumErc20VaultRedeemV1(
     ),
     service,
     adaptor: new RedeemServiceAdaptor(service, logger.child({ component: 'RedeemServiceAdaptor' })),
+    callBuilder,
   }
 }
 

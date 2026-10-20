@@ -81,14 +81,14 @@ const VAULT_SIGNED_CHECKS = ['relayerDust', 'vaultAccountEth'] as const
 /** The vault-signed actions whose caller still pays the DUST of its own two calls from the sign turn. */
 const CALLER_PAID_VAULT_SIGNED_CHECKS = ['callerDust', ...VAULT_SIGNED_CHECKS] as const
 
-/** A deposit and a withdrawal need no caller DUST: the relayer pays the fees of the calls the page builds. */
+/** An action whose two caller calls the page builds needs no caller DUST: the relayer pays their fees. */
 const READINESS_CHECKS_BY_ACTION: Record<ReadinessAction, readonly ReadinessCheckId[]> = {
   deposit: ['relayerDust', 'depositAccountEth'],
   withdraw: VAULT_SIGNED_CHECKS,
   approve: CALLER_PAID_VAULT_SIGNED_CHECKS,
   swap: CALLER_PAID_VAULT_SIGNED_CHECKS,
-  supply: CALLER_PAID_VAULT_SIGNED_CHECKS,
-  redeem: CALLER_PAID_VAULT_SIGNED_CHECKS,
+  supply: VAULT_SIGNED_CHECKS,
+  redeem: VAULT_SIGNED_CHECKS,
 }
 
 /** Runs one read and turns its outcome into a check: a thrown read is reported, not treated as empty. */
@@ -112,10 +112,10 @@ export async function readReadinessCheck(
 }
 
 /**
- * The DUST a payer must hold before an action starts, in SPECK. A deposit or a withdrawal costs
- * the relayer the fees of the caller's two transactions, two flushes, a send and an attestation,
- * and the local chain's fee overhead alone is 0.05 DUST per transaction, so both minimums leave
- * several times that.
+ * The DUST a payer must hold before an action starts, in SPECK. An action whose caller calls the
+ * page builds costs the relayer the fees of the caller's two transactions, two flushes, a send
+ * and an attestation, and the local chain's fee overhead alone is 0.05 DUST per transaction, so
+ * both minimums leave several times that.
  */
 export const CALLER_DUST_MINIMUM = 1_000_000_000_000_000n
 export const RELAYER_DUST_MINIMUM = 5_000_000_000_000_000n

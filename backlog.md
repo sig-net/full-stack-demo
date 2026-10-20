@@ -40,8 +40,8 @@ The relayer attaches its DUST fee to any bound bytes that pass the sponsored cal
 `src/lib/midnight/ethereum-erc20-vault/sponsored-call-guard.ts` (exactly one call to the vault
 at the expected circuit, no unshielded offer, no DUST action, and shielded coins spent only where
 `SPONSORED_CALL_POLICY_BY_CIRCUIT` admits them). The guard bounds what the relayer pays for, not
-how often: anyone can mint a caller secret and submit valid deposit or withdraw calls, each
-costing relayer DUST, and the fee of a call that fails in the fallible phase is not refunded.
+how often: anyone can mint a caller secret and submit valid deposit, withdraw, supply or redeem calls,
+each costing relayer DUST, and the fee of a call that fails in the fallible phase is not refunded.
 
 A `startWithdraw` call surrenders a coin the caller's wallet funds, so its bound bytes carry
 shielded inputs and change by design. The shielded offer is opaque to the inspector, so the
@@ -64,7 +64,7 @@ every start circuit that takes a coin (swap, supply, redeem) as it migrates.
 
 ## Refuse a start call that claims another caller's live slot
 
-`startDeposit` and `startWithdraw` store the `inIndex` the browser sends without checking it
+`startDeposit`, `startWithdraw`, `startSupply` and `startRedeem` store the `inIndex` the browser sends without checking it
 against the bound bytes or the live rows. The backend keys its work on the stored slot, so a
 caller that claims another user's live slot gets a vault request row that tracks the victim's
 ledger entry: the relayer duplicates the victim's sends on its own DUST, and the liar's

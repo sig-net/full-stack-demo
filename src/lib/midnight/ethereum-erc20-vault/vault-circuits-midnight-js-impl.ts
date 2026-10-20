@@ -24,15 +24,11 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 import type {
   CompleteApproveCircuitArgs,
-  CompleteRedeemCircuitArgs,
-  CompleteSupplyCircuitArgs,
   CompleteSwapCircuitArgs,
   QueueAttestationCircuitArgs,
   SendRequestCircuitArgs,
   StartApproveRouterCircuitArgs,
   StartApproveStataCircuitArgs,
-  StartRedeemCircuitArgs,
-  StartSupplyCircuitArgs,
   StartSwapCircuitArgs,
   VaultCircuits,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
@@ -116,67 +112,11 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
     )
   }
 
-  startSupply(args: StartSupplyCircuitArgs): Promise<string> {
-    return this.build(
-      createVaultPrivateState(args.secretKey),
-      args.wallet,
-      vaultCallOptions(this.providers, 'startSupply', [
-        args.inIndex,
-        { amount: args.amount },
-        {
-          nonce: crypto.getRandomValues(new Uint8Array(32)),
-          color: hexToBytes(args.coinType),
-          value: args.amount,
-        },
-      ]),
-    )
-  }
-
-  completeSupply(args: CompleteSupplyCircuitArgs): Promise<string> {
-    return this.build(
-      createVaultPrivateState(args.secretKey),
-      args.wallet,
-      vaultCallOptions(this.providers, 'completeSupply', [
-        args.requestId,
-        args.serializedOutput,
-        args.mintNonce,
-      ]),
-    )
-  }
-
   sendSupply(args: SendRequestCircuitArgs): Promise<string> {
     return this.build(
       permissionlessVaultPrivateState(),
       this.relayerWallet,
       vaultCallOptions(this.providers, 'sendSupply', [args.outIndex]),
-    )
-  }
-
-  startRedeem(args: StartRedeemCircuitArgs): Promise<string> {
-    return this.build(
-      createVaultPrivateState(args.secretKey),
-      args.wallet,
-      vaultCallOptions(this.providers, 'startRedeem', [
-        args.inIndex,
-        { shares: args.shares },
-        {
-          nonce: crypto.getRandomValues(new Uint8Array(32)),
-          color: hexToBytes(args.coinType),
-          value: args.shares,
-        },
-      ]),
-    )
-  }
-
-  completeRedeem(args: CompleteRedeemCircuitArgs): Promise<string> {
-    return this.build(
-      createVaultPrivateState(args.secretKey),
-      args.wallet,
-      vaultCallOptions(this.providers, 'completeRedeem', [
-        args.requestId,
-        args.serializedOutput,
-        args.mintNonce,
-      ]),
     )
   }
 

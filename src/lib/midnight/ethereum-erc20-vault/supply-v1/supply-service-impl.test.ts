@@ -8,6 +8,11 @@ import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-eth
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
+import {
+  type SponsoredCallGuard,
+  SponsoredCallMismatch,
+  type SponsoredCircuit,
+} from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import type { Supply } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply'
 import {
   STATA_ERC20_ADDRESS,
@@ -22,22 +27,16 @@ import {
   type SupplyStateController,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-controller'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
-import type {
-  CompleteSupplyCircuitArgs,
-  StartSupplyCircuitArgs,
-  VaultCircuits,
-} from '@/lib/midnight/ethereum-erc20-vault/vault-circuits'
 import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import { ledgerSet } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import {
-  REQUEST_ID,
+  REQUEST_ID_HEX,
   VAULT_REQUEST_IN_STATE,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
-import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
 import { MemoryRepository } from '@/lib/repository/repository-memory-impl'
 import { mock } from '@/lib/testing/mock'
-import { UUID } from '@/lib/value-schemas'
+import { UINT64_MAX, UUID } from '@/lib/value-schemas'
 
 /** A throwaway MPC root key: the derivation needs a point on the curve, not the stack's key. */
 const SIGNET: MidnightSignetConfig = {
@@ -48,32 +47,35 @@ const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(3
 
 const caller: Caller = resolveCaller('ab'.repeat(32))
 const stranger: Caller = resolveCaller('cd'.repeat(32))
-const WALLET = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const REQUEST = { amount: 1_000_000n }
 const SHARES_OUTPUT = `40420f${'00'.repeat(29)}`
+const BOUND_TX = 'b0bd'
 
+/** What the service read, wrote and asked the guard, in order, so a test can see that a refusal writes nothing and a commit opens one transaction after its reads. */
 interface Recorded {
   steps: string[]
-  startBuilds: StartSupplyCircuitArgs[]
-  completeBuilds: CompleteSupplyCircuitArgs[]
+  guarded: SponsoredCircuit[]
   started: StartSupplyArgs[]
   completed: CompleteSupplyArgs[]
   allowanceReads: string[][]
+}
+
+const NOTHING_RECORDED: Recorded = {
+  steps: [],
+  guarded: [],
+  started: [],
+  completed: [],
+  allowanceReads: [],
 }
 
 function serviceOver(options: {
   supplies?: Supply[]
   requests?: VaultRequest[]
   allowance?: bigint
+  /** Whether the guard refuses the bound bytes, admitting them when absent. */
+  refusesCall?: boolean
 }) {
-  const recorded: Recorded = {
-    steps: [],
-    startBuilds: [],
-    completeBuilds: [],
-    started: [],
-    completed: [],
-    allowanceReads: [],
-  }
+  const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const supplyRepository = new MemoryRepository<Supply>()
   const vaultRequestRepository = new MemoryRepository<VaultRequest>()
   const ready = Promise.all([
@@ -94,18 +96,6 @@ function serviceOver(options: {
       },
     }),
     vaultRequestRepository,
-    mock<VaultCircuits>('VaultCircuits', {
-      startSupply: async (args) => {
-        recorded.steps.push('build')
-        recorded.startBuilds.push(args)
-        return 'start-call'
-      },
-      completeSupply: async (args) => {
-        recorded.steps.push('build')
-        recorded.completeBuilds.push(args)
-        return 'complete-call'
-      },
-    }),
     mock<SpenderLedger>('SpenderLedger', {
       state: async () => {
         recorded.steps.push('ledger')
@@ -131,6 +121,14 @@ function serviceOver(options: {
     }),
     SIGNET,
     VAULT,
+    mock<SponsoredCallGuard>('SponsoredCallGuard', {
+      assertSponsoredCall: (boundTx, circuit) => {
+        expect(boundTx).toBe(BOUND_TX)
+        recorded.steps.push('guard')
+        recorded.guarded.push(circuit)
+        if (options.refusesCall === true) throw new SponsoredCallMismatch(circuit)
+      },
+    }),
   )
   return { service, recorded, ready }
 }
@@ -163,95 +161,256 @@ describe('SupplyServiceImpl.getSupplyTarget', () => {
   })
 })
 
-describe('SupplyServiceImpl.startSupply', () => {
-  test('reads the pair, builds the start call with a coin of the underlying, then stores the supply under the vault account', async () => {
+describe('SupplyServiceImpl.prepareStartSupply', () => {
+  test('assigns a fresh slot on every call beside the pinned underlying, and nothing is written', async () => {
     const { service, recorded } = serviceOver({})
-    const supply = await service.startSupply(caller, { supplyRequest: REQUEST, wallet: WALLET })
-    expect(recorded.steps).toEqual(['ledger', 'build', 'transaction'])
-    expect(recorded.startBuilds).toEqual([
-      {
-        secretKey: caller.secretKey,
-        wallet: WALLET,
-        inIndex: supply.inIndex,
-        amount: REQUEST.amount,
-        coinType: vaultTokenType(UNDERLYING_ERC20_ADDRESS, VAULT.contractAddress),
-      },
-    ])
-    expect(recorded.started).toEqual([
-      {
-        name: expect.stringMatching(
-          new RegExp(`^${caller.name}/ethereum-erc20-vault-supplies/${UUID}$`),
-        ),
-        underlyingErc20Address: UNDERLYING_ERC20_ADDRESS,
-        stataErc20Address: STATA_ERC20_ADDRESS,
-        amount: REQUEST.amount,
-        inIndex: supply.inIndex,
-        vaultAccount: vaultAccountOf(SIGNET, VAULT),
-        call: { unprovenTx: 'start-call' },
-      },
-    ])
-    expect(supply.inIndex).toBeGreaterThan(0n)
+    const first = await service.prepareStartSupply(caller, { supplyRequest: REQUEST })
+    const second = await service.prepareStartSupply(caller, { supplyRequest: REQUEST })
+    for (const inputs of [first, second]) {
+      expect(inputs.underlyingErc20Address).toBe(UNDERLYING_ERC20_ADDRESS)
+      expect(inputs.inIndex).toBeGreaterThanOrEqual(0n)
+      expect(inputs.inIndex).toBeLessThanOrEqual(UINT64_MAX)
+    }
+    expect(first.inIndex).not.toBe(second.inIndex)
+    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['ledger', 'ledger'] })
   })
+})
+
+describe('SupplyServiceImpl.startSupply', () => {
+  test('guards the bound call, reads the pair again and commits it under the vault account in one transaction', async () => {
+    const { service, recorded } = serviceOver({})
+    const supply = await service.startSupply(caller, {
+      supplyRequest: REQUEST,
+      inIndex: 42n,
+      boundTx: BOUND_TX,
+    })
+    expect(supply.name).toMatch(
+      new RegExp(`^${caller.name}/ethereum-erc20-vault-supplies/${UUID}$`),
+    )
+    expect(supply).toMatchObject({
+      underlyingErc20Address: UNDERLYING_ERC20_ADDRESS,
+      stataErc20Address: STATA_ERC20_ADDRESS,
+      amount: REQUEST.amount,
+      state: 'AwaitingStartTransaction',
+      inIndex: 42n,
+      vaultAccount: vaultAccountOf(SIGNET, VAULT),
+      outcome: null,
+      failure: null,
+      error: null,
+    })
+    expect(recorded).toEqual({
+      ...NOTHING_RECORDED,
+      steps: ['guard', 'ledger', 'transaction'],
+      guarded: ['startSupply'],
+      started: [
+        {
+          name: supply.name,
+          underlyingErc20Address: UNDERLYING_ERC20_ADDRESS,
+          stataErc20Address: STATA_ERC20_ADDRESS,
+          amount: REQUEST.amount,
+          inIndex: 42n,
+          vaultAccount: vaultAccountOf(SIGNET, VAULT),
+          call: { boundTx: BOUND_TX },
+        },
+      ],
+    })
+  })
+
+  test('bound bytes the guard refuses are refused before the ledger is read and nothing is written', async () => {
+    const { service, recorded } = serviceOver({ refusesCall: true })
+    const starting = service.startSupply(caller, {
+      supplyRequest: REQUEST,
+      inIndex: 42n,
+      boundTx: BOUND_TX,
+    })
+    await expect(starting).rejects.toBeInstanceOf(SponsoredCallMismatch)
+    await expect(starting).rejects.toThrow(
+      'the bound bytes must be exactly one startSupply call to the vault',
+    )
+    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['guard'], guarded: ['startSupply'] })
+  })
+})
+
+const awaiting = ownSupply({ state: 'AwaitingCompletion' })
+
+interface Refusal {
+  name: string
+  by: Caller
+  supplies: Supply[]
+  requests: VaultRequest[]
+  expectError: string | typeof SupplyStateConflict
+}
+
+/** What both completion methods refuse before anything is read from the request. */
+const refusedCompletions: readonly Refusal[] = [
+  {
+    name: "another caller's supply does not exist for this caller",
+    by: stranger,
+    supplies: [awaiting],
+    requests: [attestedUnder(awaiting.name)],
+    expectError: 'does not exist',
+  },
+  {
+    name: 'a supply that was never started',
+    by: caller,
+    supplies: [],
+    requests: [],
+    expectError: 'does not exist',
+  },
+  {
+    name: 'a supply still waiting for its request',
+    by: caller,
+    supplies: [ownSupply({ state: 'AwaitingVaultRequest' })],
+    requests: [attestedUnder(awaiting.name)],
+    expectError: SupplyStateConflict,
+  },
+  {
+    name: 'a supply already completing',
+    by: caller,
+    supplies: [ownSupply({ state: 'AwaitingCompleteTransaction' })],
+    requests: [attestedUnder(awaiting.name)],
+    expectError: SupplyStateConflict,
+  },
+]
+
+/** What the request read refuses, which only the prepare method makes. */
+const refusedPreparations: readonly Refusal[] = [
+  {
+    name: 'a supply whose request holds no attestation',
+    by: caller,
+    supplies: [awaiting],
+    requests: [
+      attestedUnder(awaiting.name, {
+        state: 'AwaitingBroadcast',
+        attestationBlockHeight: null,
+        attestationOutputKind: null,
+        attestationDigest: null,
+        attestationSignature: null,
+        attestationOutput: null,
+      }),
+    ],
+    expectError: 'holds no attestation',
+  },
+  {
+    name: 'a supply without a request row',
+    by: caller,
+    supplies: [awaiting],
+    requests: [],
+    expectError: 'has no vault request',
+  },
+]
+
+async function expectRefusal(
+  refused: Promise<unknown>,
+  expectError: Refusal['expectError'],
+): Promise<void> {
+  if (typeof expectError === 'string') await expect(refused).rejects.toThrow(expectError)
+  else await expect(refused).rejects.toBeInstanceOf(expectError)
+}
+
+describe('SupplyServiceImpl.prepareCompleteSupply', () => {
+  const inputs: ReadonlyArray<{
+    name: string
+    request: VaultRequest
+    expectKind: 'executed' | 'failed' | 'unviable'
+    expectOutput: string
+  }> = [
+    {
+      name: "an executed deposit's attested shares",
+      request: attestedUnder(awaiting.name),
+      expectKind: 'executed',
+      expectOutput: SHARES_OUTPUT,
+    },
+    {
+      name: 'a failed deposit, whose output is empty',
+      request: attestedUnder(awaiting.name, {
+        attestationOutputKind: 'failed',
+        attestationOutput: '',
+      }),
+      expectKind: 'failed',
+      expectOutput: '',
+    },
+  ]
+
+  test.each(inputs)(
+    "returns the attested request's fields for $name, and nothing is written",
+    async ({ request, expectKind, expectOutput }) => {
+      const { service, recorded, ready } = serviceOver({
+        supplies: [awaiting],
+        requests: [request],
+      })
+      await ready
+      expect(await service.prepareCompleteSupply(caller, { name: awaiting.name })).toEqual({
+        requestId: REQUEST_ID_HEX,
+        attestationOutputKind: expectKind,
+        attestationOutput: expectOutput,
+      })
+      expect(recorded).toEqual(NOTHING_RECORDED)
+    },
+  )
+
+  test.each([...refusedCompletions, ...refusedPreparations])(
+    '$name: nothing is written',
+    async ({ by, supplies, requests, expectError }) => {
+      const { service, recorded, ready } = serviceOver({ supplies, requests })
+      await ready
+      await expectRefusal(service.prepareCompleteSupply(by, { name: awaiting.name }), expectError)
+      expect(recorded).toEqual(NOTHING_RECORDED)
+    },
+  )
 })
 
 describe('SupplyServiceImpl.completeSupply', () => {
-  test('builds the complete call from the attested shares with a fresh nonce, then records it', async () => {
-    const stored = ownSupply({ state: 'AwaitingCompletion' })
+  test('commits the bound call in one transaction after the state check', async () => {
     const { service, recorded, ready } = serviceOver({
-      supplies: [stored],
-      requests: [attestedUnder(stored.name)],
+      supplies: [awaiting],
+      requests: [attestedUnder(awaiting.name)],
     })
     await ready
-    const supply = await service.completeSupply(caller, { name: stored.name, wallet: WALLET })
+    const supply = await service.completeSupply(caller, { name: awaiting.name, boundTx: BOUND_TX })
     expect(supply.state).toBe('AwaitingCompleteTransaction')
-    expect(recorded.steps).toEqual(['build', 'transaction'])
-    const [build] = recorded.completeBuilds
-    expect(build).toMatchObject({
-      secretKey: caller.secretKey,
-      wallet: WALLET,
-      requestId: REQUEST_ID,
-      serializedOutput: hexToBytes(SHARES_OUTPUT),
+    expect(recorded).toEqual({
+      ...NOTHING_RECORDED,
+      steps: ['guard', 'transaction'],
+      guarded: ['completeSupply'],
+      completed: [{ name: awaiting.name, call: { boundTx: BOUND_TX } }],
     })
-    expect(build?.mintNonce).toHaveLength(32)
-    expect(recorded.completed).toEqual([
-      { name: stored.name, call: { unprovenTx: 'complete-call' } },
-    ])
   })
 
-  test('a failed deposit completes over 32 zero bytes, which the circuit ignores', async () => {
-    const stored = ownSupply({ state: 'AwaitingCompletion' })
-    const { service, recorded, ready } = serviceOver({
-      supplies: [stored],
-      requests: [
-        attestedUnder(stored.name, { attestationOutputKind: 'failed', attestationOutput: '' }),
-      ],
+  test.each(refusedCompletions)(
+    '$name: nothing is written',
+    async ({ by, supplies, requests, expectError }) => {
+      const { service, recorded, ready } = serviceOver({ supplies, requests })
+      await ready
+      await expectRefusal(
+        service.completeSupply(by, { name: awaiting.name, boundTx: BOUND_TX }),
+        expectError,
+      )
+      expect(recorded).toEqual({
+        ...NOTHING_RECORDED,
+        steps: ['guard'],
+        guarded: ['completeSupply'],
+      })
+    },
+  )
+
+  test('bound bytes the guard refuses are refused before the supply is read and nothing is written', async () => {
+    // No supply is stored, so a refusal of the call shows the guard ran first.
+    const { service, recorded } = serviceOver({ refusesCall: true })
+    const completing = service.completeSupply(caller, { name: awaiting.name, boundTx: BOUND_TX })
+    await expect(completing).rejects.toBeInstanceOf(SponsoredCallMismatch)
+    await expect(completing).rejects.toThrow(
+      'the bound bytes must be exactly one completeSupply call to the vault',
+    )
+    expect(recorded).toEqual({
+      ...NOTHING_RECORDED,
+      steps: ['guard'],
+      guarded: ['completeSupply'],
     })
-    await ready
-    await service.completeSupply(caller, { name: stored.name, wallet: WALLET })
-    expect(recorded.completeBuilds[0]?.serializedOutput).toEqual(new Uint8Array(32))
-  })
-
-  test('refuses before the build when the state does not allow a completion', async () => {
-    const stored = ownSupply({ state: 'AwaitingVaultRequest' })
-    const { service, recorded, ready } = serviceOver({ supplies: [stored] })
-    await ready
-    await expect(
-      service.completeSupply(caller, { name: stored.name, wallet: WALLET }),
-    ).rejects.toThrow(SupplyStateConflict)
-    expect(recorded.steps).toEqual([])
-  })
-
-  test("refuses another caller's supply as missing", async () => {
-    const stored = ownSupply({ state: 'AwaitingCompletion' })
-    const { service, ready } = serviceOver({ supplies: [stored] })
-    await ready
-    await expect(
-      service.completeSupply(stranger, { name: stored.name, wallet: WALLET }),
-    ).rejects.toThrow('does not exist')
   })
 })
 
-describe('SupplyServiceImpl listing', () => {
+describe('SupplyServiceImpl reads', () => {
   test("lists the caller's supplies newest first and gets only its own", async () => {
     const older = ownSupply({ createTime: new Date('2026-01-01T00:00:00Z') })
     const newer = ownSupply({

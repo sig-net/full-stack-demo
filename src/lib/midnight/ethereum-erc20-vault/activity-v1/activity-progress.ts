@@ -44,7 +44,12 @@ export type ActivityStepStatus = 'done' | 'current' | 'pending' | 'failed'
 export type WalletTurn = 'signTurn' | 'inPage'
 
 /** The types whose two caller calls the page builds, proves and signs by itself, for the relayer to pay. */
-export const IN_PAGE_TYPES = ['Deposit', 'Withdraw'] as const satisfies readonly ActivityType[]
+export const IN_PAGE_TYPES = [
+  'Deposit',
+  'Withdraw',
+  'Supply',
+  'Redeem',
+] as const satisfies readonly ActivityType[]
 
 export type InPageType = (typeof IN_PAGE_TYPES)[number]
 

@@ -171,8 +171,8 @@ describe('activityStepsOf', () => {
     { type: 'Deposit', expected: 'inPage' },
     { type: 'Withdraw', expected: 'inPage' },
     { type: 'Swap', expected: 'signTurn' },
-    { type: 'Supply', expected: 'signTurn' },
-    { type: 'Redeem', expected: 'signTurn' },
+    { type: 'Supply', expected: 'inPage' },
+    { type: 'Redeem', expected: 'inPage' },
     { type: 'Approval', expected: 'signTurn' },
   ]
   test.each(walletTurns)(

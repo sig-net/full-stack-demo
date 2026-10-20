@@ -12,6 +12,7 @@ import {
   callerOperationStateSchema,
   isTerminalCallerOperationState,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
+import type { CompletionInputs } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import {
   amountSchema,
   evmAddressSchema,
@@ -61,8 +62,9 @@ export type SupplyOutcome = z.infer<typeof supplyOutcomeSchema>
  * The supply resource: a deposit of the stata underlying into Aave's static wrapper from the
  * vault account, paid from a vault coin of the underlying worth exactly `amount` that the start
  * circuit burns. The caller supplies the amount, the server reads the pinned pair from the vault
- * ledger and assigns everything else before the `startSupply` circuit is built. The transactions
- * and the vault request behind its steps name it as their parent.
+ * ledger and assigns the slot before the browser builds the `startSupply` circuit call, and reads
+ * the pair and derives the vault account again when it commits it. The transactions and the
+ * vault request behind its steps name it as their parent.
  */
 export const supplySchema = z.object({
   name: supplyNameSchema,
@@ -93,6 +95,12 @@ export type Supply = z.infer<typeof supplySchema>
 export const supplyRequestSchema = supplySchema.pick({ amount: true })
 
 export type SupplyRequest = z.infer<typeof supplyRequestSchema>
+
+/** What the server assigns to a start call, afresh on every `prepareStartSupply`: the slot, and the pinned underlying whose vault coin the call surrenders. */
+export type SupplyStartInputs = Pick<Supply, 'inIndex' | 'underlyingErc20Address'>
+
+/** What the complete circuit takes from the supply's attested request. */
+export type SupplyCompleteInputs = CompletionInputs
 
 /** The pinned pair a supply moves between, with what the vault account has allowed the wrapper so far. */
 export const supplyTargetSchema = z.object({

@@ -12,6 +12,7 @@ import {
   callerOperationStateSchema,
   isTerminalCallerOperationState,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
+import type { CompletionInputs } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
 import {
   amountSchema,
   evmAddressSchema,
@@ -60,9 +61,10 @@ export type RedeemOutcome = z.infer<typeof redeemOutcomeSchema>
 /**
  * The redeem resource: a redemption of shares of Aave's static wrapper from the vault account,
  * paid from a vault coin of the wrapper's token worth exactly `shares` that the start circuit
- * burns. The caller supplies the shares, the server reads the pinned pair from the vault ledger
- * and assigns everything else before the `startRedeem` circuit is built. The transactions and
- * the vault request behind its steps name it as their parent.
+ * burns. The caller supplies the shares, the server assigns the slot and reads the pinned pair
+ * from the vault ledger before the browser builds the `startRedeem` circuit call, and reads the
+ * pair again when it commits it. The transactions and the vault request behind its steps name it
+ * as their parent.
  */
 export const redeemSchema = z.object({
   name: redeemNameSchema,
@@ -93,6 +95,12 @@ export type Redeem = z.infer<typeof redeemSchema>
 export const redeemRequestSchema = redeemSchema.pick({ shares: true })
 
 export type RedeemRequest = z.infer<typeof redeemRequestSchema>
+
+/** What the server assigns to a start call, afresh on every `prepareStartRedeem`: the slot, and the wrapper whose vault coin the call surrenders. */
+export type RedeemStartInputs = Pick<Redeem, 'inIndex' | 'stataErc20Address'>
+
+/** What the complete circuit takes from the redeem's attested request. */
+export type RedeemCompleteInputs = CompletionInputs
 
 export function redeemName(parent: string, id: string): string {
   return `${parent}/${REDEEM_COLLECTION}/${id}`

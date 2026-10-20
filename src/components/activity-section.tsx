@@ -26,8 +26,8 @@ import { NO_PRICES } from '@/lib/pricing/spot-price-table'
 import { completeApproval } from '@/server/actions/approval-actions'
 import { listActivities } from '@/server/actions/activity-actions'
 import { completeDeposit, prepareCompleteDeposit } from '@/server/actions/deposit-actions'
-import { completeRedeem } from '@/server/actions/redeem-actions'
-import { completeSupply } from '@/server/actions/supply-actions'
+import { completeRedeem, prepareCompleteRedeem } from '@/server/actions/redeem-actions'
+import { completeSupply, prepareCompleteSupply } from '@/server/actions/supply-actions'
 import { completeSwap } from '@/server/actions/swap-actions'
 import { completeWithdraw, prepareCompleteWithdraw } from '@/server/actions/withdraw-actions'
 
@@ -142,6 +142,26 @@ const PAGE_COMPLETE_BY_TYPE: Record<InPageType, (args: PageCompletionArgs) => Pr
       name,
     })
   },
+  Supply: async ({ config, wallet, callerSecret, name }) => {
+    const calls = await import('@/lib/midnight/ethereum-erc20-vault/supply-v1/browser-supply-calls')
+    await calls.completeSupplyInBrowser({
+      actions: { prepareCompleteSupply, completeSupply },
+      builder: calls.browserSupplyCallBuilder(config, window.location.origin),
+      wallet,
+      callerSecret,
+      name,
+    })
+  },
+  Redeem: async ({ config, wallet, callerSecret, name }) => {
+    const calls = await import('@/lib/midnight/ethereum-erc20-vault/redeem-v1/browser-redeem-calls')
+    await calls.completeRedeemInBrowser({
+      actions: { prepareCompleteRedeem, completeRedeem },
+      builder: calls.browserRedeemCallBuilder(config, window.location.origin),
+      wallet,
+      callerSecret,
+      name,
+    })
+  },
 }
 
 /** The completion action of each type whose call the server builds, all of one shape on the wire. */
@@ -153,8 +173,6 @@ const SERVER_BUILT_COMPLETE_BY_TYPE: Record<
   ) => Promise<{ ok: true } | { ok: false; error: string }>
 > = {
   Swap: completeSwap,
-  Supply: completeSupply,
-  Redeem: completeRedeem,
   Approval: completeApproval,
 }
 
