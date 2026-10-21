@@ -8,11 +8,6 @@ import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-eth
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
-import {
-  type SponsoredCallGuard,
-  SponsoredCallMismatch,
-  type SponsoredCircuit,
-} from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import type { Supply } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply'
 import {
   STATA_ERC20_ADDRESS,
@@ -49,12 +44,11 @@ const caller: Caller = resolveCaller('ab'.repeat(32))
 const stranger: Caller = resolveCaller('cd'.repeat(32))
 const REQUEST = { amount: 1_000_000n }
 const SHARES_OUTPUT = `40420f${'00'.repeat(29)}`
-const BOUND_TX = 'b0bd'
+const FINALIZED_TX = 'f1a1'
 
-/** What the service read, wrote and asked the guard, in order, so a test can see that a refusal writes nothing and a commit opens one transaction after its reads. */
+/** What the service read, wrote, in order, so a test can see that a refusal writes nothing and a commit opens one transaction after its reads. */
 interface Recorded {
   steps: string[]
-  guarded: SponsoredCircuit[]
   started: StartSupplyArgs[]
   completed: CompleteSupplyArgs[]
   allowanceReads: string[][]
@@ -62,7 +56,7 @@ interface Recorded {
 
 const NOTHING_RECORDED: Recorded = {
   steps: [],
-  guarded: [],
+
   started: [],
   completed: [],
   allowanceReads: [],
@@ -72,8 +66,6 @@ function serviceOver(options: {
   supplies?: Supply[]
   requests?: VaultRequest[]
   allowance?: bigint
-  /** Whether the guard refuses the bound bytes, admitting them when absent. */
-  refusesCall?: boolean
 }) {
   const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const supplyRepository = new MemoryRepository<Supply>()
@@ -121,14 +113,6 @@ function serviceOver(options: {
     }),
     SIGNET,
     VAULT,
-    mock<SponsoredCallGuard>('SponsoredCallGuard', {
-      assertSponsoredCall: (boundTx, circuit) => {
-        expect(boundTx).toBe(BOUND_TX)
-        recorded.steps.push('guard')
-        recorded.guarded.push(circuit)
-        if (options.refusesCall === true) throw new SponsoredCallMismatch(circuit)
-      },
-    }),
   )
   return { service, recorded, ready }
 }
@@ -177,12 +161,12 @@ describe('SupplyServiceImpl.prepareStartSupply', () => {
 })
 
 describe('SupplyServiceImpl.startSupply', () => {
-  test('guards the bound call, reads the pair again and commits it under the vault account in one transaction', async () => {
+  test('reads the pair again and commits the finalised call under the vault account in one transaction', async () => {
     const { service, recorded } = serviceOver({})
     const supply = await service.startSupply(caller, {
       supplyRequest: REQUEST,
       inIndex: 42n,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     expect(supply.name).toMatch(
       new RegExp(`^${caller.name}/ethereum-erc20-vault-supplies/${UUID}$`),
@@ -200,8 +184,7 @@ describe('SupplyServiceImpl.startSupply', () => {
     })
     expect(recorded).toEqual({
       ...NOTHING_RECORDED,
-      steps: ['guard', 'ledger', 'transaction'],
-      guarded: ['startSupply'],
+      steps: ['ledger', 'transaction'],
       started: [
         {
           name: supply.name,
@@ -210,24 +193,10 @@ describe('SupplyServiceImpl.startSupply', () => {
           amount: REQUEST.amount,
           inIndex: 42n,
           vaultAccount: vaultAccountOf(SIGNET, VAULT),
-          call: { boundTx: BOUND_TX },
+          call: { finalizedTx: FINALIZED_TX },
         },
       ],
     })
-  })
-
-  test('bound bytes the guard refuses are refused before the ledger is read and nothing is written', async () => {
-    const { service, recorded } = serviceOver({ refusesCall: true })
-    const starting = service.startSupply(caller, {
-      supplyRequest: REQUEST,
-      inIndex: 42n,
-      boundTx: BOUND_TX,
-    })
-    await expect(starting).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(starting).rejects.toThrow(
-      'the bound bytes must be exactly one startSupply call to the vault',
-    )
-    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['guard'], guarded: ['startSupply'] })
   })
 })
 
@@ -361,19 +330,21 @@ describe('SupplyServiceImpl.prepareCompleteSupply', () => {
 })
 
 describe('SupplyServiceImpl.completeSupply', () => {
-  test('commits the bound call in one transaction after the state check', async () => {
+  test('commits the finalised call in one transaction after the state check', async () => {
     const { service, recorded, ready } = serviceOver({
       supplies: [awaiting],
       requests: [attestedUnder(awaiting.name)],
     })
     await ready
-    const supply = await service.completeSupply(caller, { name: awaiting.name, boundTx: BOUND_TX })
+    const supply = await service.completeSupply(caller, {
+      name: awaiting.name,
+      finalizedTx: FINALIZED_TX,
+    })
     expect(supply.state).toBe('AwaitingCompleteTransaction')
     expect(recorded).toEqual({
       ...NOTHING_RECORDED,
-      steps: ['guard', 'transaction'],
-      guarded: ['completeSupply'],
-      completed: [{ name: awaiting.name, call: { boundTx: BOUND_TX } }],
+      steps: ['transaction'],
+      completed: [{ name: awaiting.name, call: { finalizedTx: FINALIZED_TX } }],
     })
   })
 
@@ -383,31 +354,15 @@ describe('SupplyServiceImpl.completeSupply', () => {
       const { service, recorded, ready } = serviceOver({ supplies, requests })
       await ready
       await expectRefusal(
-        service.completeSupply(by, { name: awaiting.name, boundTx: BOUND_TX }),
+        service.completeSupply(by, { name: awaiting.name, finalizedTx: FINALIZED_TX }),
         expectError,
       )
       expect(recorded).toEqual({
         ...NOTHING_RECORDED,
-        steps: ['guard'],
-        guarded: ['completeSupply'],
+        steps: [],
       })
     },
   )
-
-  test('bound bytes the guard refuses are refused before the supply is read and nothing is written', async () => {
-    // No supply is stored, so a refusal of the call shows the guard ran first.
-    const { service, recorded } = serviceOver({ refusesCall: true })
-    const completing = service.completeSupply(caller, { name: awaiting.name, boundTx: BOUND_TX })
-    await expect(completing).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(completing).rejects.toThrow(
-      'the bound bytes must be exactly one completeSupply call to the vault',
-    )
-    expect(recorded).toEqual({
-      ...NOTHING_RECORDED,
-      steps: ['guard'],
-      guarded: ['completeSupply'],
-    })
-  })
 })
 
 describe('SupplyServiceImpl reads', () => {

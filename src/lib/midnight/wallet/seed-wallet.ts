@@ -6,10 +6,11 @@ import { registerNightForDust } from '@/lib/midnight/wallet/register-night-for-d
 import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
 import {
   type AccountKeys,
-  bindWithoutFee,
   createWalletAndMidnightProvider,
   deriveAccountKeys,
+  finalizeUnboundTransaction,
   initialiseWalletFacade,
+  releaseFinalizedTransaction,
   type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
 import type {
@@ -241,9 +242,12 @@ export class SeedWallet implements Wallet {
     }
   }
 
-  balanceWithoutFee(unboundTx: string): Promise<string> {
-    const { facade, keys } = this.requireKeys()
-    return bindWithoutFee(facade, keys, unboundTx)
+  finalize(unboundTx: string): Promise<string> {
+    return finalizeUnboundTransaction(this.requireProvider(), unboundTx)
+  }
+
+  release(finalizedTx: string): Promise<void> {
+    return releaseFinalizedTransaction(this.requireKeys().facade, finalizedTx)
   }
 
   private requireKeys(): { facade: WalletFacade; keys: AccountKeys } {

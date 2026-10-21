@@ -187,7 +187,7 @@ const PROGRESS_BY_OPERATION_STATE: Record<
   }),
 }
 
-/** A call stands at its signing step until the page commits it bound, then at its inclusion step. */
+/** A call stands at its signing step until the page commits it finalised, then at its inclusion step. */
 function signingStep(transaction: ActivityTransaction | null, signing: number): number {
   return transaction === null ? signing : signing + 1
 }

@@ -3,9 +3,9 @@ import { hexToBytes } from '@sig-net/midnight'
 import type { ClientConfig } from '@/lib/config/client-config'
 import { browserVaultCallProviders } from '@/lib/midnight/ethereum-erc20-vault/browser-vault-call-providers'
 import {
-  type CallerCallStage,
-  vaultRefusalOf,
-} from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+  type CallerCallArgs,
+  runCallerCall,
+} from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import type { Redeem, RedeemRequest } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
 import { RedeemCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-call-builder'
 import type {
@@ -20,61 +20,47 @@ import type {
   RedeemStartInputsResult,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service-adaptor'
 import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
-import type { Wallet } from '@/lib/midnight/wallet/wallet'
 
-/**
- * Starts a redeem from the page: the server assigns the call's slot and names the pinned
- * wrapper, the page builds, proves and binds the start call with the caller secret as its
- * witness and the wallet's own coin of the wrapper's shares, and the server records it for the
- * relayer to pay and submit. Every refusal is thrown with the server's message.
- */
+/** Starts a redeem from the page, the wallet's own coin of the pinned wrapper's shares funding the start call. */
 export async function startRedeemInBrowser(args: StartRedeemInBrowserArgs): Promise<Redeem> {
   const { actions, builder, wallet, callerSecret, redeemRequest, onStage } = args
-  onStage?.('preparing')
-  const prepared = await actions.prepareStartRedeem(callerSecret, { redeemRequest })
-  if (!prepared.ok) throw new Error(prepared.error)
-  const { inIndex, stataErc20Address } = prepared.inputs
-  onStage?.('building')
-  const unboundTx = await vaultRefusalOf(
-    builder.buildStart({
-      secretKey: hexToBytes(callerSecret),
-      wallet: wallet.publicKeys,
+  const started = await runCallerCall({
+    operation: 'redeem',
+    wallet,
+    callerSecret,
+    onStage,
+    prepare: () => actions.prepareStartRedeem(callerSecret, { redeemRequest }),
+    circuitArgs: ({ inIndex, stataErc20Address }, caller) => ({
+      ...caller,
       inIndex,
       stataErc20Address,
       shares: redeemRequest.shares,
     }),
-    'redeem',
-  )
-  onStage?.('signing')
-  const boundTx = await wallet.balanceWithoutFee(unboundTx)
-  onStage?.('recording')
-  const started = await actions.startRedeem(callerSecret, { redeemRequest, inIndex, boundTx })
-  if (!started.ok) throw new Error(started.error)
+    build: (circuitArgs) => builder.buildStart(circuitArgs),
+    record: ({ inIndex }, finalizedTx) =>
+      actions.startRedeem(callerSecret, { redeemRequest, inIndex, finalizedTx }),
+  })
   return started.redeem
 }
 
-/** Completes an attested redeem from the page as `startRedeemInBrowser` starts one. */
+/** Completes an attested redeem from the page, under a fresh mint nonce. */
 export async function completeRedeemInBrowser(args: CompleteRedeemInBrowserArgs): Promise<Redeem> {
   const { actions, builder, wallet, callerSecret, name, onStage } = args
-  onStage?.('preparing')
-  const prepared = await actions.prepareCompleteRedeem(callerSecret, { name })
-  if (!prepared.ok) throw new Error(prepared.error)
-  onStage?.('building')
-  const unboundTx = await vaultRefusalOf(
-    builder.buildComplete({
-      secretKey: hexToBytes(callerSecret),
-      wallet: wallet.publicKeys,
-      requestId: hexToBytes(prepared.inputs.requestId),
-      serializedOutput: completionOutput(prepared.inputs, 32),
+  const completed = await runCallerCall({
+    operation: 'redeem',
+    wallet,
+    callerSecret,
+    onStage,
+    prepare: () => actions.prepareCompleteRedeem(callerSecret, { name }),
+    circuitArgs: (inputs, caller) => ({
+      ...caller,
+      requestId: hexToBytes(inputs.requestId),
+      serializedOutput: completionOutput(inputs, 32),
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
     }),
-    'redeem',
-  )
-  onStage?.('signing')
-  const boundTx = await wallet.balanceWithoutFee(unboundTx)
-  onStage?.('recording')
-  const completed = await actions.completeRedeem(callerSecret, { name, boundTx })
-  if (!completed.ok) throw new Error(completed.error)
+    build: (circuitArgs) => builder.buildComplete(circuitArgs),
+    record: (_inputs, finalizedTx) => actions.completeRedeem(callerSecret, { name, finalizedTx }),
+  })
   return completed.redeem
 }
 
@@ -98,20 +84,12 @@ export interface RedeemActions {
   completeRedeem(callerSecret: string, args: CompleteRedeemArgs): Promise<RedeemResult>
 }
 
-interface RedeemCallArgs {
-  readonly builder: RedeemCallBuilder
-  readonly wallet: Wallet
-  /** The stored identity secret, lower-case hex without `0x`, which is the call's witness. */
-  readonly callerSecret: string
-  readonly onStage?: (stage: CallerCallStage) => void
-}
-
-export interface StartRedeemInBrowserArgs extends RedeemCallArgs {
+export interface StartRedeemInBrowserArgs extends CallerCallArgs<RedeemCallBuilder> {
   readonly actions: Pick<RedeemActions, 'prepareStartRedeem' | 'startRedeem'>
   readonly redeemRequest: RedeemRequest
 }
 
-export interface CompleteRedeemInBrowserArgs extends RedeemCallArgs {
+export interface CompleteRedeemInBrowserArgs extends CallerCallArgs<RedeemCallBuilder> {
   readonly actions: Pick<RedeemActions, 'prepareCompleteRedeem' | 'completeRedeem'>
   readonly name: string
 }

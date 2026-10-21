@@ -42,10 +42,16 @@ export interface Wallet extends WalletMetadata {
   /** The keys a call is built for, known once the wallet has derived them. */
   readonly publicKeys: WalletPublicKeys
   /**
-   * Balances the wallet's own coins into the unbound bytes of a proven call, signs and binds it
-   * without a DUST fee, resolving with the bound bytes in hex for the relayer wallet to pay.
+   * Balances the wallet's own coins and DUST fee into the unbound bytes of a proven call, signs
+   * and finalises it, resolving with the finalised bytes in hex that the node receives.
    */
-  balanceWithoutFee(unboundTx: string): Promise<string>
+  finalize(unboundTx: string): Promise<string>
+  /**
+   * Releases the coins the finalised bytes hold as pending: a finalised transaction that is not
+   * submitted holds its coins until released, so a call the server refused is released before
+   * the wallet finalises the next one.
+   */
+  release(finalizedTx: string): Promise<void>
   readonly registrationUnavailable?: string
   readonly recoveryUnavailable?: string
   readonly reportedProofServerUrl?: string

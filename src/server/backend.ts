@@ -78,13 +78,11 @@ import { ActivityServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/acti
 import { ActivityServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-impl'
 import { DepositEventConsumer } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-event-consumer'
 import { DepositCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-call-builder'
-import { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { WithdrawCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-call-builder'
 import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
 import { DepositRepositorySQLImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository-sql-impl'
 import type { DepositService } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 import { DepositServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-adaptor'
-import { inspectBoundTransaction } from '@/lib/midnight/transaction-v1/inspect-bound-transaction'
 import { DepositServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-impl'
 import type { DepositStateController } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
 import { DepositStateControllerImpl } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller-impl'
@@ -852,7 +850,6 @@ function createMidnightEthereumErc20Vault(
   const redeemCallBuilder = new RedeemCallBuilder(callProviders, proofProvider)
   const swapCallBuilder = new SwapCallBuilder(callProviders, proofProvider)
   const approvalCallBuilder = new ApprovalCallBuilder(callProviders, proofProvider)
-  const sponsoredCallGuard = new SponsoredCallGuard(vaultAddress, inspectBoundTransaction)
   const ledger = new VaultLedgerIndexerImpl(publicDataProvider, vaultAddress)
   const readers = signetReaders({
     vaultAddress,
@@ -902,7 +899,6 @@ function createMidnightEthereumErc20Vault(
       vaultRequestV1,
       { ledger },
       depositCallBuilder,
-      sponsoredCallGuard,
       logger,
     ),
     withdrawV1: createMidnightEthereumErc20VaultWithdrawV1(
@@ -913,7 +909,6 @@ function createMidnightEthereumErc20Vault(
       vaultRequestV1,
       { ledger },
       withdrawCallBuilder,
-      sponsoredCallGuard,
       logger,
     ),
     swapV1: createMidnightEthereumErc20VaultSwapV1(
@@ -925,7 +920,6 @@ function createMidnightEthereumErc20Vault(
       vaultRequestV1,
       { ledger },
       swapCallBuilder,
-      sponsoredCallGuard,
       logger,
     ),
     supplyV1: createMidnightEthereumErc20VaultSupplyV1(
@@ -937,7 +931,6 @@ function createMidnightEthereumErc20Vault(
       vaultRequestV1,
       { ledger },
       supplyCallBuilder,
-      sponsoredCallGuard,
       logger,
     ),
     redeemV1: createMidnightEthereumErc20VaultRedeemV1(
@@ -948,7 +941,6 @@ function createMidnightEthereumErc20Vault(
       vaultRequestV1,
       { ledger },
       redeemCallBuilder,
-      sponsoredCallGuard,
       logger,
     ),
     approvalV1: createMidnightEthereumErc20VaultApprovalV1(
@@ -960,7 +952,6 @@ function createMidnightEthereumErc20Vault(
       vaultRequestV1,
       { ledger },
       approvalCallBuilder,
-      sponsoredCallGuard,
       logger,
     ),
     activityV1: createMidnightEthereumErc20VaultActivityV1(db, logger),
@@ -1013,7 +1004,6 @@ function createMidnightEthereumErc20VaultWithdrawV1(
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
   callBuilder: WithdrawCallBuilder,
-  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['withdrawV1'] {
   const repository = new WithdrawRepositorySQLImpl(db.database)
@@ -1040,7 +1030,6 @@ function createMidnightEthereumErc20VaultWithdrawV1(
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
-    guard,
   )
   return {
     repository,
@@ -1068,7 +1057,6 @@ function createMidnightEthereumErc20VaultSupplyV1(
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
   callBuilder: SupplyCallBuilder,
-  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['supplyV1'] {
   const repository = new SupplyRepositorySQLImpl(db.database)
@@ -1097,7 +1085,6 @@ function createMidnightEthereumErc20VaultSupplyV1(
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
-    guard,
   )
   return {
     repository,
@@ -1121,7 +1108,6 @@ function createMidnightEthereumErc20VaultRedeemV1(
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
   callBuilder: RedeemCallBuilder,
-  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['redeemV1'] {
   const repository = new RedeemRepositorySQLImpl(db.database)
@@ -1149,7 +1135,6 @@ function createMidnightEthereumErc20VaultRedeemV1(
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
-    guard,
   )
   return {
     repository,
@@ -1174,7 +1159,6 @@ function createMidnightEthereumErc20VaultSwapV1(
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
   callBuilder: SwapCallBuilder,
-  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['swapV1'] {
   const repository = new SwapRepositorySQLImpl(db.database)
@@ -1202,7 +1186,6 @@ function createMidnightEthereumErc20VaultSwapV1(
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
-    guard,
   )
   return {
     repository,
@@ -1227,7 +1210,6 @@ function createMidnightEthereumErc20VaultApprovalV1(
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
   callBuilder: ApprovalCallBuilder,
-  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['approvalV1'] {
   const repository = new ApprovalRepositorySQLImpl(db.database)
@@ -1256,7 +1238,6 @@ function createMidnightEthereumErc20VaultApprovalV1(
     db.unitOfWork,
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
-    guard,
   )
   return {
     repository,
@@ -1439,7 +1420,6 @@ function createMidnightEthereumErc20VaultDepositV1(
   vaultRequestV1: MidnightBackend['ethereumErc20Vault']['vaultRequestV1'],
   vault: Pick<MidnightBackend['ethereumErc20Vault'], 'ledger'>,
   callBuilder: DepositCallBuilder,
-  guard: SponsoredCallGuard,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['depositV1'] {
   const repository = new DepositRepositorySQLImpl(db.database)
@@ -1468,7 +1448,6 @@ function createMidnightEthereumErc20VaultDepositV1(
     config.client.midnightSignet,
     config.client.midnightEthereumErc20Vault,
     config.client.midnightNetwork,
-    guard,
   )
   return {
     repository,

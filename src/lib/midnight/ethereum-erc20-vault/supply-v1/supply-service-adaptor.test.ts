@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest'
 
-import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import type {
   SupplyCompleteInputs,
   SupplyStartInputs,
@@ -33,8 +32,8 @@ const target: SupplyTarget = {
   allowance: 1n,
 }
 const REQUEST = { amount: 1_000_000n }
-const BOUND_TX = `0x${'B0BD'.repeat(2)}`
-const PARSED_BOUND_TX = 'b0bd'.repeat(2)
+const FINALIZED_TX = `0x${'F1A1'.repeat(2)}`
+const PARSED_FINALIZED_TX = 'f1a1'.repeat(2)
 const START_INPUTS: SupplyStartInputs = {
   inIndex: 42n,
   underlyingErc20Address: UNDERLYING_ERC20_ADDRESS,
@@ -91,14 +90,14 @@ describe('SupplyServiceAdaptor parsing', () => {
       expectError: 'supplyRequest.amount',
     },
     {
-      name: 'startSupply carries the request, the slot and the bound bytes normalised',
+      name: 'startSupply carries the request, the slot and the finalised bytes normalised',
       call: (a) =>
         a.startSupply(CALLER_SECRET, {
           supplyRequest: { amount: '1000000' },
           inIndex: '42',
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
-      expectReceived: [{ supplyRequest: REQUEST, inIndex: 42n, boundTx: PARSED_BOUND_TX }],
+      expectReceived: [{ supplyRequest: REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'startSupply refuses a zero amount',
@@ -106,21 +105,22 @@ describe('SupplyServiceAdaptor parsing', () => {
         a.startSupply(CALLER_SECRET, {
           supplyRequest: { amount: 0n },
           inIndex: 42n,
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
       expectReceived: [],
       expectError: 'supplyRequest.amount',
     },
     {
-      name: 'startSupply refuses bound bytes that are not hex',
+      name: 'startSupply refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startSupply(CALLER_SECRET, { supplyRequest: REQUEST, inIndex: 42n, boundTx: 'zz' }),
+        a.startSupply(CALLER_SECRET, { supplyRequest: REQUEST, inIndex: 42n, finalizedTx: 'zz' }),
       expectReceived: [],
-      expectError: 'boundTx',
+      expectError: 'finalizedTx',
     },
     {
       name: 'startSupply refuses a missing slot',
-      call: (a) => a.startSupply(CALLER_SECRET, { supplyRequest: REQUEST, boundTx: BOUND_TX }),
+      call: (a) =>
+        a.startSupply(CALLER_SECRET, { supplyRequest: REQUEST, finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'inIndex',
     },
@@ -130,13 +130,15 @@ describe('SupplyServiceAdaptor parsing', () => {
       expectReceived: [{ name: SUPPLY_NAME }],
     },
     {
-      name: 'completeSupply passes the name and the bound bytes',
-      call: (a) => a.completeSupply(CALLER_SECRET, { name: SUPPLY_NAME, boundTx: BOUND_TX }),
-      expectReceived: [{ name: SUPPLY_NAME, boundTx: PARSED_BOUND_TX }],
+      name: 'completeSupply passes the name and the finalised bytes',
+      call: (a) =>
+        a.completeSupply(CALLER_SECRET, { name: SUPPLY_NAME, finalizedTx: FINALIZED_TX }),
+      expectReceived: [{ name: SUPPLY_NAME, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'completeSupply refuses a name that is not a supply',
-      call: (a) => a.completeSupply(CALLER_SECRET, { name: 'supplies/1', boundTx: BOUND_TX }),
+      call: (a) =>
+        a.completeSupply(CALLER_SECRET, { name: 'supplies/1', finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-supplies/{uuid}',
     },
@@ -191,15 +193,6 @@ describe('SupplyServiceAdaptor outcomes', () => {
         error: `${SUPPLY_NAME} is AwaitingVaultRequest, which does not allow complete`,
       },
     ],
-    [
-      'bound bytes that are not the expected vault call',
-      new SponsoredCallMismatch('startSupply'),
-      {
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startSupply call to the vault, spending shielded coins alone',
-      },
-    ],
     ['any other error', new Error('indexer down'), undefined],
   ]
 
@@ -215,12 +208,12 @@ describe('SupplyServiceAdaptor outcomes', () => {
     const starting = adaptor.startSupply(CALLER_SECRET, {
       supplyRequest: REQUEST,
       inIndex: 42n,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     const preparing = adaptor.prepareCompleteSupply(CALLER_SECRET, { name: SUPPLY_NAME })
     const completing = adaptor.completeSupply(CALLER_SECRET, {
       name: SUPPLY_NAME,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     for (const outcome of [starting, preparing, completing]) {
       if (expectRefusal === undefined) await expect(outcome).rejects.toThrow(error.message)

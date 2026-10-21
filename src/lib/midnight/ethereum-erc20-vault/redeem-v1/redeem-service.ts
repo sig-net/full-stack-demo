@@ -12,22 +12,22 @@ import { hexBytesSchema, uint64Schema } from '@/lib/value-schemas'
 
 /**
  * The redeem API's methods, independent of the transport that exposes them. The browser builds,
- * proves and binds the caller's two circuit calls from the inputs the prepare methods return,
- * and the two user actions commit the bound bytes. The server checks that the bound bytes are
- * exactly one call to the vault's expected circuit under that circuit's coin policy, since the
- * relayer pays their fee, and does not inspect the inputs the call carries.
+ * proves and finalises the caller's two circuit calls from the inputs the prepare methods return,
+ * and the two user actions commit the finalised bytes. The server inspects neither the bytes nor
+ * the inputs the call carries: the operation follows its child transaction's outcome, and the
+ * resolver reads the vault ledger only when a child failed.
  */
 export interface RedeemService {
   /** The start circuit's server-decided slot, assigned afresh on every call, and the pinned wrapper, with nothing written. */
   prepareStartRedeem(caller: Caller, args: PrepareStartRedeemArgs): Promise<RedeemStartInputs>
-  /** Reads the pinned pair and stores the redeem in `AwaitingStartTransaction` under the vault account with the bound start call under it. */
+  /** Reads the pinned pair and stores the redeem in `AwaitingStartTransaction` under the vault account with the finalised start call under it. */
   startRedeem(caller: Caller, args: StartRedeemArgs): Promise<Redeem>
   /** The attested request's fields the complete circuit takes, after the state check `completeRedeem` repeats. */
   prepareCompleteRedeem(
     caller: Caller,
     args: PrepareCompleteRedeemArgs,
   ): Promise<RedeemCompleteInputs>
-  /** Moves the redeem to `AwaitingCompleteTransaction` with the bound complete call under it. */
+  /** Moves the redeem to `AwaitingCompleteTransaction` with the finalised complete call under it. */
   completeRedeem(caller: Caller, args: CompleteRedeemArgs): Promise<Redeem>
   getRedeem(caller: Caller, args: GetRedeemArgs): Promise<Redeem | undefined>
   /** The caller's redeems, newest first. */
@@ -40,10 +40,10 @@ export const prepareStartRedeemArgsSchema = z.object({
 })
 export type PrepareStartRedeemArgs = z.infer<typeof prepareStartRedeemArgsSchema>
 
-/** The slot the browser baked into the call travels with it, and the bound bytes are hex in the ledger's serialisation. */
+/** The slot the browser baked into the call travels with it, and the finalised bytes are hex in the ledger's serialisation. */
 export const startRedeemArgsSchema = prepareStartRedeemArgsSchema.extend({
   inIndex: uint64Schema,
-  boundTx: hexBytesSchema,
+  finalizedTx: hexBytesSchema,
 })
 export type StartRedeemArgs = z.infer<typeof startRedeemArgsSchema>
 
@@ -53,7 +53,7 @@ export const prepareCompleteRedeemArgsSchema = z.object({
 export type PrepareCompleteRedeemArgs = z.infer<typeof prepareCompleteRedeemArgsSchema>
 
 export const completeRedeemArgsSchema = prepareCompleteRedeemArgsSchema.extend({
-  boundTx: hexBytesSchema,
+  finalizedTx: hexBytesSchema,
 })
 export type CompleteRedeemArgs = z.infer<typeof completeRedeemArgsSchema>
 

@@ -29,7 +29,7 @@ import type {
   ApprovalKind,
   ApprovalTarget,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
-import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { tokenLabel } from '@/lib/tokens/token-label'
 import { prepareStartApproval, startApproval } from '@/server/actions/approval-actions'
@@ -43,8 +43,8 @@ const KIND_LABELS: Record<ApprovalKind, string> = {
  * Every spender the vault may grant, with the allowance the vault account holds for it, and the
  * control that starts the approval the spender still lacks. The allowance is the chain's word:
  * an approval in flight shows in the Approvals list below until the chain reflects it. The page
- * builds, proves and binds the approval's start call, and the server records it for the relayer
- * to pay and submit.
+ * builds, proves and finalises the approval's start call with the wallet paying its fee, and
+ * the server records it for the backend to submit.
  */
 export function ApprovalTargets(): ReactNode {
   const { callerSecret } = useCaller()
@@ -76,7 +76,7 @@ export function ApprovalTargets(): ReactNode {
     },
     onSuccess: async (approval) => {
       toast.success(
-        `Approval of ${symbolOf(approval.erc20Address)} for ${KIND_LABELS[approval.kind]} started: the backend is paying for its start call and submitting it.`,
+        `Approval of ${symbolOf(approval.erc20Address)} for ${KIND_LABELS[approval.kind]} started: the backend is submitting its start call.`,
       )
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
     },
@@ -185,6 +185,6 @@ export function ApprovalTargets(): ReactNode {
 const START_STAGE_LABELS: Record<CallerCallStage, string> = {
   preparing: 'Preparing the approval',
   building: 'Building and proving the start call',
-  signing: 'Signing with your wallet',
+  signing: 'Paying the fee and signing with your wallet',
   recording: 'Recording the approval',
 }

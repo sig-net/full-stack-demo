@@ -15,7 +15,6 @@ import {
   ApprovalServiceAdaptor,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service-adaptor'
 import { ApprovalStateConflict } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-controller'
-import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import {
   ATTESTATION_FIELDS,
   REQUEST_ID_HEX,
@@ -27,8 +26,8 @@ const CALLER_SECRET = 'ab'.repeat(32)
 const approval = approvalFixture()
 const ROUTER_REQUEST = { kind: 'router', erc20Address: ERC20_ADDRESS } as const
 const STATA_REQUEST = { kind: 'stata' } as const
-const BOUND_TX = `0x${'B0BD'.repeat(2)}`
-const PARSED_BOUND_TX = 'b0bd'.repeat(2)
+const FINALIZED_TX = `0x${'F1A1'.repeat(2)}`
+const PARSED_FINALIZED_TX = 'f1a1'.repeat(2)
 const START_INPUTS: ApprovalStartInputs = { inIndex: 42n }
 const COMPLETE_INPUTS: ApprovalCompleteInputs = {
   requestId: REQUEST_ID_HEX,
@@ -87,24 +86,28 @@ describe('ApprovalServiceAdaptor parsing', () => {
       expectError: 'erc20Address',
     },
     {
-      name: 'startApproval of the router carries the request, the slot and the bound bytes normalised',
+      name: 'startApproval of the router carries the request, the slot and the finalised bytes normalised',
       call: (a) =>
         a.startApproval(CALLER_SECRET, {
           approvalRequest: ROUTER_REQUEST,
           inIndex: '42',
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
-      expectReceived: [{ approvalRequest: ROUTER_REQUEST, inIndex: 42n, boundTx: PARSED_BOUND_TX }],
+      expectReceived: [
+        { approvalRequest: ROUTER_REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX },
+      ],
     },
     {
-      name: 'startApproval of the wrapper carries the request, the slot and the bound bytes',
+      name: 'startApproval of the wrapper carries the request, the slot and the finalised bytes',
       call: (a) =>
         a.startApproval(CALLER_SECRET, {
           approvalRequest: STATA_REQUEST,
           inIndex: 42n,
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
-      expectReceived: [{ approvalRequest: STATA_REQUEST, inIndex: 42n, boundTx: PARSED_BOUND_TX }],
+      expectReceived: [
+        { approvalRequest: STATA_REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX },
+      ],
     },
     {
       name: 'startApproval refuses a router approval without a token',
@@ -112,26 +115,29 @@ describe('ApprovalServiceAdaptor parsing', () => {
         a.startApproval(CALLER_SECRET, {
           approvalRequest: { kind: 'router' },
           inIndex: 42n,
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
       expectReceived: [],
       expectError: 'erc20Address',
     },
     {
-      name: 'startApproval refuses bound bytes that are not hex',
+      name: 'startApproval refuses finalised bytes that are not hex',
       call: (a) =>
         a.startApproval(CALLER_SECRET, {
           approvalRequest: STATA_REQUEST,
           inIndex: 42n,
-          boundTx: 'zz',
+          finalizedTx: 'zz',
         }),
       expectReceived: [],
-      expectError: 'boundTx',
+      expectError: 'finalizedTx',
     },
     {
       name: 'startApproval refuses a missing slot',
       call: (a) =>
-        a.startApproval(CALLER_SECRET, { approvalRequest: STATA_REQUEST, boundTx: BOUND_TX }),
+        a.startApproval(CALLER_SECRET, {
+          approvalRequest: STATA_REQUEST,
+          finalizedTx: FINALIZED_TX,
+        }),
       expectReceived: [],
       expectError: 'inIndex',
     },
@@ -141,13 +147,15 @@ describe('ApprovalServiceAdaptor parsing', () => {
       expectReceived: [{ name: APPROVAL_NAME }],
     },
     {
-      name: 'completeApproval passes the name and the bound bytes',
-      call: (a) => a.completeApproval(CALLER_SECRET, { name: APPROVAL_NAME, boundTx: BOUND_TX }),
-      expectReceived: [{ name: APPROVAL_NAME, boundTx: PARSED_BOUND_TX }],
+      name: 'completeApproval passes the name and the finalised bytes',
+      call: (a) =>
+        a.completeApproval(CALLER_SECRET, { name: APPROVAL_NAME, finalizedTx: FINALIZED_TX }),
+      expectReceived: [{ name: APPROVAL_NAME, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'completeApproval refuses a name that is not an approval',
-      call: (a) => a.completeApproval(CALLER_SECRET, { name: 'approvals/1', boundTx: BOUND_TX }),
+      call: (a) =>
+        a.completeApproval(CALLER_SECRET, { name: 'approvals/1', finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-approvals/{uuid}',
     },
@@ -201,15 +209,6 @@ describe('ApprovalServiceAdaptor outcomes', () => {
         error: `${APPROVAL_NAME} is AwaitingVaultRequest, which does not allow complete`,
       },
     ],
-    [
-      'bound bytes that are not the expected vault call',
-      new SponsoredCallMismatch('startApproveStata'),
-      {
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startApproveStata call to the vault, spending no coins',
-      },
-    ],
     ['any other error', new Error('indexer down'), undefined],
   ]
 
@@ -225,12 +224,12 @@ describe('ApprovalServiceAdaptor outcomes', () => {
     const starting = adaptor.startApproval(CALLER_SECRET, {
       approvalRequest: STATA_REQUEST,
       inIndex: 42n,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     const preparing = adaptor.prepareCompleteApproval(CALLER_SECRET, { name: APPROVAL_NAME })
     const completing = adaptor.completeApproval(CALLER_SECRET, {
       name: APPROVAL_NAME,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     for (const outcome of [starting, preparing, completing]) {
       if (expectRefusal === undefined) await expect(outcome).rejects.toThrow(error.message)

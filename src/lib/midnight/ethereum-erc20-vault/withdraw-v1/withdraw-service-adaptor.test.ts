@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest'
 
-import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import {
   ATTESTATION_FIELDS,
   REQUEST_ID_HEX,
@@ -27,8 +26,8 @@ import { RecordingLogger } from '@/lib/testing/recording-logger'
 const CALLER_SECRET = 'ab'.repeat(32)
 const withdraw = withdrawFixture()
 const REQUEST = { erc20Address: ERC20_ADDRESS, amount: 1_000_000n, destEvmAddress: DESTINATION }
-const BOUND_TX = `0x${'B0BD'.repeat(2)}`
-const PARSED_BOUND_TX = 'b0bd'.repeat(2)
+const FINALIZED_TX = `0x${'F1A1'.repeat(2)}`
+const PARSED_FINALIZED_TX = 'f1a1'.repeat(2)
 const START_INPUTS: WithdrawStartInputs = { inIndex: 42n }
 const COMPLETE_INPUTS: WithdrawCompleteInputs = {
   requestId: REQUEST_ID_HEX,
@@ -73,14 +72,16 @@ describe('WithdrawServiceAdaptor parsing', () => {
       expectReceived: [{ withdrawRequest: REQUEST }],
     },
     {
-      name: 'startWithdraw carries the request, the slot and the bound bytes normalised',
+      name: 'startWithdraw carries the request, the slot and the finalised bytes normalised',
       call: (a) =>
         a.startWithdraw(CALLER_SECRET, {
           withdrawRequest: { ...REQUEST, amount: '1000000' },
           inIndex: '42',
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
-      expectReceived: [{ withdrawRequest: REQUEST, inIndex: 42n, boundTx: PARSED_BOUND_TX }],
+      expectReceived: [
+        { withdrawRequest: REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX },
+      ],
     },
     {
       name: 'startWithdraw lower-cases a checksummed destination',
@@ -91,9 +92,11 @@ describe('WithdrawServiceAdaptor parsing', () => {
             destEvmAddress: DESTINATION.toUpperCase().replace('0X', '0x'),
           },
           inIndex: 42n,
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
-      expectReceived: [{ withdrawRequest: REQUEST, inIndex: 42n, boundTx: PARSED_BOUND_TX }],
+      expectReceived: [
+        { withdrawRequest: REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX },
+      ],
     },
     {
       name: 'startWithdraw refuses a zero amount',
@@ -101,7 +104,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
         a.startWithdraw(CALLER_SECRET, {
           withdrawRequest: { ...REQUEST, amount: 0n },
           inIndex: 42n,
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
       expectReceived: [],
       expectError: 'withdrawRequest.amount',
@@ -112,21 +115,26 @@ describe('WithdrawServiceAdaptor parsing', () => {
         a.startWithdraw(CALLER_SECRET, {
           withdrawRequest: { ...REQUEST, destEvmAddress: '0x1234' },
           inIndex: 42n,
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
       expectReceived: [],
       expectError: 'withdrawRequest.destEvmAddress',
     },
     {
-      name: 'startWithdraw refuses bound bytes that are not hex',
+      name: 'startWithdraw refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startWithdraw(CALLER_SECRET, { withdrawRequest: REQUEST, inIndex: 42n, boundTx: 'zz' }),
+        a.startWithdraw(CALLER_SECRET, {
+          withdrawRequest: REQUEST,
+          inIndex: 42n,
+          finalizedTx: 'zz',
+        }),
       expectReceived: [],
-      expectError: 'boundTx',
+      expectError: 'finalizedTx',
     },
     {
       name: 'startWithdraw refuses a missing slot',
-      call: (a) => a.startWithdraw(CALLER_SECRET, { withdrawRequest: REQUEST, boundTx: BOUND_TX }),
+      call: (a) =>
+        a.startWithdraw(CALLER_SECRET, { withdrawRequest: REQUEST, finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'inIndex',
     },
@@ -136,13 +144,15 @@ describe('WithdrawServiceAdaptor parsing', () => {
       expectReceived: [{ name: WITHDRAW_NAME }],
     },
     {
-      name: 'completeWithdraw passes the name and the bound bytes',
-      call: (a) => a.completeWithdraw(CALLER_SECRET, { name: WITHDRAW_NAME, boundTx: BOUND_TX }),
-      expectReceived: [{ name: WITHDRAW_NAME, boundTx: PARSED_BOUND_TX }],
+      name: 'completeWithdraw passes the name and the finalised bytes',
+      call: (a) =>
+        a.completeWithdraw(CALLER_SECRET, { name: WITHDRAW_NAME, finalizedTx: FINALIZED_TX }),
+      expectReceived: [{ name: WITHDRAW_NAME, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'completeWithdraw refuses a name that is not a withdrawal',
-      call: (a) => a.completeWithdraw(CALLER_SECRET, { name: 'withdraws/1', boundTx: BOUND_TX }),
+      call: (a) =>
+        a.completeWithdraw(CALLER_SECRET, { name: 'withdraws/1', finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-withdraws/{uuid}',
     },
@@ -196,15 +206,6 @@ describe('WithdrawServiceAdaptor outcomes', () => {
         error: `${WITHDRAW_NAME} is AwaitingVaultRequest, which does not allow complete`,
       },
     ],
-    [
-      'bound bytes that are not the expected vault call',
-      new SponsoredCallMismatch('startWithdraw'),
-      {
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startWithdraw call to the vault, spending shielded coins alone',
-      },
-    ],
     ['any other error', new Error('indexer down'), undefined],
   ]
 
@@ -220,12 +221,12 @@ describe('WithdrawServiceAdaptor outcomes', () => {
     const starting = adaptor.startWithdraw(CALLER_SECRET, {
       withdrawRequest: REQUEST,
       inIndex: 42n,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     const preparing = adaptor.prepareCompleteWithdraw(CALLER_SECRET, { name: WITHDRAW_NAME })
     const completing = adaptor.completeWithdraw(CALLER_SECRET, {
       name: WITHDRAW_NAME,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     for (const outcome of [starting, preparing, completing]) {
       if (expectRefusal === undefined) await expect(outcome).rejects.toThrow(error.message)

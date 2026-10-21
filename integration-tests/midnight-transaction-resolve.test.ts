@@ -12,8 +12,8 @@ import { outboxTrail } from './outbox-trail'
  * A relayer transaction committed in AwaitingProof is proven by the resolver through the real
  * proof server, finalised by the relayer wallet and stored in AwaitingSubmission, with its
  * lifecycle events in the outbox. The relayer wallet is started on its own, since a started
- * backend would also submit, and the bytes are never submitted: the unsubmitted fee holds the
- * relayer's DUST, which is why the fee of a bound caller call is tested in its own process.
+ * backend would also submit, and the bytes are never submitted: the unsubmitted finalisation
+ * holds the relayer's one DUST coin until the process ends.
  */
 describe('MidnightTransactionStateResolver over Postgres, the proof server and the relayer wallet', () => {
   let backend: Backend
@@ -58,7 +58,6 @@ describe('MidnightTransactionStateResolver over Postgres, the proof server and t
     expect(proven?.state).toBe('AwaitingWallet')
     expect(proven?.unprovenTx).toBeNull()
     expect(proven?.unboundTx).toMatch(/^[0-9a-f]+$/)
-    expect(proven?.boundTx).toBeNull()
 
     await stateResolver.resolveTransaction({ name })
     const signed = await repository.get(name)

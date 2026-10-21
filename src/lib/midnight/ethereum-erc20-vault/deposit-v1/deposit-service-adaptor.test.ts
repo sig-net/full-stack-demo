@@ -21,7 +21,6 @@ import {
   DepositServiceAdaptor,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-adaptor'
 import { DepositStateConflict } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
-import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import {
   ATTESTATION_FIELDS,
   REQUEST_ID_HEX,
@@ -101,14 +100,14 @@ describe('DepositServiceAdaptor parsing', () => {
       expectError: 'depositRequest.amount',
     },
     {
-      name: 'startDeposit carries the inputs as bigints and the bound bytes without the 0x prefix',
+      name: 'startDeposit carries the inputs as bigints and the finalised bytes without the 0x prefix',
       call: (a) =>
         a.startDeposit(CALLER_SECRET, {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: '1000000' },
           wallet: WALLET,
           inIndex: '42',
           evmNonce: 7n,
-          boundTx: '0xB0BD',
+          finalizedTx: '0xF1A1',
         }),
       expectReceived: [
         {
@@ -116,7 +115,7 @@ describe('DepositServiceAdaptor parsing', () => {
           wallet: PARSED_WALLET,
           inIndex: 42n,
           evmNonce: 7n,
-          boundTx: 'b0bd',
+          finalizedTx: 'f1a1',
         },
       ],
     },
@@ -128,20 +127,20 @@ describe('DepositServiceAdaptor parsing', () => {
           wallet: { ...WALLET, coinPublicKey: 'aa' },
           inIndex: 42n,
           evmNonce: 7n,
-          boundTx: 'b0bd',
+          finalizedTx: 'f1a1',
         }),
       expectReceived: [],
       expectError: 'expected a 32-byte key in hex',
     },
     {
-      name: 'startDeposit refuses bound bytes that are not hex',
+      name: 'startDeposit refuses finalised bytes that are not hex',
       call: (a) =>
         a.startDeposit(CALLER_SECRET, {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: 1n },
           wallet: WALLET,
           inIndex: 42n,
           evmNonce: 7n,
-          boundTx: 'not hex',
+          finalizedTx: 'not hex',
         }),
       expectReceived: [],
       expectError: 'expected bytes in hex',
@@ -154,7 +153,7 @@ describe('DepositServiceAdaptor parsing', () => {
           wallet: WALLET,
           inIndex: 42n,
           evmNonce: UINT64_MAX + 1n,
-          boundTx: 'b0bd',
+          finalizedTx: 'f1a1',
         }),
       expectReceived: [],
       expectError: 'evmNonce',
@@ -166,7 +165,7 @@ describe('DepositServiceAdaptor parsing', () => {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: 1n },
           wallet: WALLET,
           evmNonce: 7n,
-          boundTx: 'b0bd',
+          finalizedTx: 'f1a1',
         }),
       expectReceived: [],
       expectError: 'inIndex',
@@ -183,16 +182,20 @@ describe('DepositServiceAdaptor parsing', () => {
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-deposits/{uuid}',
     },
     {
-      name: 'completeDeposit passes the name, the wallet and the bound bytes',
+      name: 'completeDeposit passes the name, the wallet and the finalised bytes',
       call: (a) =>
-        a.completeDeposit(CALLER_SECRET, { name: DEPOSIT_NAME, wallet: WALLET, boundTx: 'B0BD' }),
-      expectReceived: [{ name: DEPOSIT_NAME, wallet: PARSED_WALLET, boundTx: 'b0bd' }],
+        a.completeDeposit(CALLER_SECRET, {
+          name: DEPOSIT_NAME,
+          wallet: WALLET,
+          finalizedTx: 'F1A1',
+        }),
+      expectReceived: [{ name: DEPOSIT_NAME, wallet: PARSED_WALLET, finalizedTx: 'f1a1' }],
     },
     {
-      name: 'completeDeposit refuses a missing bound call',
+      name: 'completeDeposit refuses a missing finalised call',
       call: (a) => a.completeDeposit(CALLER_SECRET, { name: DEPOSIT_NAME, wallet: WALLET }),
       expectReceived: [],
-      expectError: 'boundTx',
+      expectError: 'finalizedTx',
     },
     {
       name: 'getDeposit passes the name',
@@ -275,15 +278,6 @@ describe('DepositServiceAdaptor outcomes', () => {
         reason: 'nonceConflict',
       },
     ],
-    [
-      'bound bytes that are not the expected vault call',
-      new SponsoredCallMismatch('startDeposit'),
-      {
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startDeposit call to the vault, spending no coins',
-      },
-    ],
     ['any other error', new Error('indexer down'), undefined],
   ]
 
@@ -301,7 +295,7 @@ describe('DepositServiceAdaptor outcomes', () => {
       wallet: WALLET,
       inIndex: 42n,
       evmNonce: 7n,
-      boundTx: 'b0bd',
+      finalizedTx: 'f1a1',
     })
     const preparing = adaptor.prepareCompleteDeposit(CALLER_SECRET, {
       name: DEPOSIT_NAME,
@@ -310,7 +304,7 @@ describe('DepositServiceAdaptor outcomes', () => {
     const completing = adaptor.completeDeposit(CALLER_SECRET, {
       name: DEPOSIT_NAME,
       wallet: WALLET,
-      boundTx: 'b0bd',
+      finalizedTx: 'f1a1',
     })
     for (const acting of [starting, preparing, completing]) {
       if (expectRefusal === undefined) await expect(acting).rejects.toBe(error)

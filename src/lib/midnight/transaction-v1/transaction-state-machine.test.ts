@@ -6,7 +6,7 @@ import {
   type MidnightTransactionState,
 } from '@/lib/midnight/transaction-v1/transaction'
 import {
-  CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION,
+  CALLER_TRANSACTION_AWAITING_SUBMISSION,
   TRANSACTION_IN_STATE,
   transactionFixture,
 } from '@/lib/midnight/transaction-v1/transaction-fixtures'
@@ -24,7 +24,6 @@ const ACTIONS: readonly TransactionAction[] = [
   'recordProof',
   'recordProofFailure',
   'submit',
-  'recordFee',
   'recordSubmission',
   'recordRejection',
   'recordLedgerFailure',
@@ -41,8 +40,6 @@ const ALLOWED: ReadonlyArray<
   ['AwaitingProof', 'expire', 'Failed'],
   ['AwaitingWallet', 'submit', 'AwaitingSubmission'],
   ['AwaitingWallet', 'expire', 'Failed'],
-  ['AwaitingFee', 'recordFee', 'AwaitingSubmission'],
-  ['AwaitingFee', 'expire', 'Failed'],
   ['AwaitingSubmission', 'recordSubmission', 'AwaitingInclusion'],
   ['AwaitingSubmission', 'recordRejection', 'Failed'],
   ['AwaitingSubmission', 'expire', 'Failed'],
@@ -80,7 +77,7 @@ describe('nextState', () => {
 describe('entryState', () => {
   const calls: ReadonlyArray<[string, CommittedCall, MidnightTransactionState]> = [
     ['unproven bytes wait for the proof', { unprovenTx: 'unproven' }, 'AwaitingProof'],
-    ['bound bytes wait for the relayer fee', { boundTx: 'bound' }, 'AwaitingFee'],
+    ['finalised bytes wait for the submission', { finalizedTx: 'finalized' }, 'AwaitingSubmission'],
   ]
 
   test.each(calls)('%s', (_name, call, state) => {
@@ -88,7 +85,10 @@ describe('entryState', () => {
   })
 
   test('the table names one entry state per kind of call', () => {
-    expect(ENTRY_STATE_BY_CALL).toEqual({ unprovenTx: 'AwaitingProof', boundTx: 'AwaitingFee' })
+    expect(ENTRY_STATE_BY_CALL).toEqual({
+      unprovenTx: 'AwaitingProof',
+      finalizedTx: 'AwaitingSubmission',
+    })
   })
 })
 
@@ -97,8 +97,8 @@ describe('assertConsistent', () => {
     expect(() => assertConsistent(TRANSACTION_IN_STATE[state])).not.toThrow()
   })
 
-  test('AwaitingSubmission holds a caller-bound call as it holds a backend-proved one', () => {
-    expect(() => assertConsistent(CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION)).not.toThrow()
+  test('AwaitingSubmission holds a caller-finalised call as it holds a backend-proved one', () => {
+    expect(() => assertConsistent(CALLER_TRANSACTION_AWAITING_SUBMISSION)).not.toThrow()
   })
 
   const violations: ReadonlyArray<[string, Partial<MidnightTransaction>, string]> = [
@@ -108,39 +108,24 @@ describe('assertConsistent', () => {
       { ...TRANSACTION_IN_STATE.AwaitingWallet, signer: 'caller' },
       'must be signed by the relayer',
     ],
-    [
-      'AwaitingFee signed by the relayer',
-      { ...TRANSACTION_IN_STATE.AwaitingFee, signer: 'relayer' },
-      'must be signed by the caller',
-    ],
     ['AwaitingProof without the unproven bytes', { unprovenTx: null }, 'must have unprovenTx set'],
     ['AwaitingProof without the TTL', { expireTime: null }, 'must have expireTime set'],
     ['AwaitingProof with proven bytes', { unboundTx: 'x' }, 'must have unboundTx unset'],
-    ['AwaitingProof with bound bytes', { boundTx: 'x' }, 'must have boundTx unset'],
+    ['AwaitingProof with finalised bytes', { finalizedTx: 'x' }, 'must have finalizedTx unset'],
     [
       'AwaitingWallet still holding the unproven bytes',
       { state: 'AwaitingWallet', unboundTx: 'x' },
       'must have unprovenTx unset',
     ],
     [
-      'AwaitingFee without the bound bytes',
-      { ...TRANSACTION_IN_STATE.AwaitingFee, boundTx: null },
-      'must have boundTx set',
-    ],
-    [
-      'AwaitingFee holding proven bytes',
-      { ...TRANSACTION_IN_STATE.AwaitingFee, unboundTx: 'x' },
-      'must have unboundTx unset',
-    ],
-    [
-      'AwaitingFee already paid for',
-      { ...TRANSACTION_IN_STATE.AwaitingFee, finalizedTx: 'x' },
-      'must have finalizedTx unset',
-    ],
-    [
-      'AwaitingSubmission without the paid bytes',
-      { ...CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION, finalizedTx: null },
+      'AwaitingSubmission without the finalised bytes',
+      { ...CALLER_TRANSACTION_AWAITING_SUBMISSION, finalizedTx: null },
       'must have finalizedTx set',
+    ],
+    [
+      'AwaitingSubmission still holding the unproven bytes',
+      { ...CALLER_TRANSACTION_AWAITING_SUBMISSION, unprovenTx: 'x' },
+      'must have unprovenTx unset',
     ],
     [
       'AwaitingInclusion without the id',

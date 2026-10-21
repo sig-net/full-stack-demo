@@ -18,7 +18,6 @@ export const midnightTransactionNameSchema = z
 export const MIDNIGHT_TRANSACTION_STATES = [
   'AwaitingProof',
   'AwaitingWallet',
-  'AwaitingFee',
   'AwaitingSubmission',
   'AwaitingInclusion',
   'Succeeded',
@@ -60,9 +59,9 @@ export const midnightTransactionFailureSchema = z.enum(MIDNIGHT_TRANSACTION_FAIL
 export type MidnightTransactionFailure = z.infer<typeof midnightTransactionFailureSchema>
 
 /**
- * Whose wallet balances and signs the call: the caller's browser wallet, which binds it without a
- * fee for the relayer to pay, or the backend's relayer wallet for a permissionless circuit, whose
- * to-do is `AwaitingWallet`.
+ * Whose wallet balances, pays for and signs the call: the caller's browser wallet, which commits
+ * it finalised, or the backend's relayer wallet for a permissionless circuit, whose to-do is
+ * `AwaitingWallet`.
  */
 export const MIDNIGHT_TRANSACTION_SIGNERS = ['caller', 'relayer'] as const
 
@@ -88,8 +87,6 @@ export const midnightTransactionSchema = z.object({
   unprovenTx: z.string().nullable(),
   /** Proven and unbalanced, what the wallet balances and signs. */
   unboundTx: z.string().nullable(),
-  /** Balanced and bound by the caller's wallet without a fee, what the relayer pays for. */
-  boundTx: z.string().nullable(),
   /** Balanced and signed by the wallet, what the node receives. */
   finalizedTx: z.string().nullable(),
   /** The intent's TTL, after which the node rejects the transaction. */

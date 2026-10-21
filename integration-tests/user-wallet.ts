@@ -37,18 +37,10 @@ export interface UserWallet {
   nightBalance(): Promise<bigint>
   /** The shielded coins of `tokenType` the wallet may spend, in the token's base units, from the synced state. */
   shieldedBalance(tokenType: string): Promise<bigint>
-  /** The finalized bytes in hex of the unbound bytes in hex, balanced and signed with the wallet paying the DUST fee. */
-  balance(unboundTx: string): Promise<string>
-  /** The bound bytes in hex of the unbound bytes in hex, balanced and signed without a DUST fee, as the relayer wallet's `payFee` takes them. */
-  balanceWithoutFee(unboundTx: string): Promise<string>
-  /** Releases the coins a bound transaction holds as pending, for bytes that will never be submitted. */
-  revert(boundTx: string): Promise<void>
-  /** The bound bytes in hex of a fee-less transfer of `amount` of `tokenType` on `ledger` to the wallet's own address, for merging into a call. */
-  selfTransfer(
-    ledger: 'shielded' | 'unshielded',
-    tokenType: string,
-    amount: bigint,
-  ): Promise<string>
+  /** The finalised bytes in hex of the unbound bytes in hex, balanced with the wallet's own coins and DUST fee, signed and finalised. */
+  finalize(unboundTx: string): Promise<string>
+  /** Releases the coins finalised bytes hold as pending, for bytes that will not be submitted. */
+  release(finalizedTx: string): Promise<void>
   stop(): Promise<void>
 }
 
@@ -90,10 +82,7 @@ export async function startUserWallet(
   })
   await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey)
   await facade.waitForSyncedState()
-  const bind = async (
-    unboundTx: string,
-    tokenKindsToBalance: TokenKindsToBalance,
-  ): Promise<string> => {
+  const finalize = async (unboundTx: string): Promise<string> => {
     const unbound = Transaction.deserialize<SignatureEnabled, Proof, PreBinding>(
       'signature',
       'proof',
@@ -103,7 +92,7 @@ export async function startUserWallet(
     const recipe = await facade.balanceUnboundTransaction(
       unbound,
       { shieldedSecretKeys: keys.shieldedSecretKeys, dustSecretKey: keys.dustSecretKey },
-      { ttl: new Date(Date.now() + BALANCE_TTL_MS), tokenKindsToBalance },
+      { ttl: new Date(Date.now() + BALANCE_TTL_MS) },
     )
     const signed = await facade.signRecipe(recipe, keys.unshieldedKeystore.signDataAsync)
     const finalized = await facade.finalizeRecipe(signed)
@@ -123,54 +112,19 @@ export async function startUserWallet(
       const state = await facade.waitForSyncedState()
       return state.shielded.balances[tokenType] ?? 0n
     },
-    balance: (unboundTx) => bind(unboundTx, 'all'),
-    balanceWithoutFee: (unboundTx) => bind(unboundTx, ['shielded', 'unshielded']),
-    revert: (boundTx) => facade.revertTransaction(boundTransactionOf(boundTx)),
-    async selfTransfer(ledger, tokenType, amount): Promise<string> {
-      const state = await facade.waitForSyncedState()
-      const recipe = await facade.transferTransaction(
-        [
-          ledger === 'shielded'
-            ? {
-                type: 'shielded',
-                outputs: [{ type: tokenType, receiverAddress: state.shielded.address, amount }],
-              }
-            : {
-                type: 'unshielded',
-                outputs: [{ type: tokenType, receiverAddress: state.unshielded.address, amount }],
-              },
-        ],
-        { shieldedSecretKeys: keys.shieldedSecretKeys, dustSecretKey: keys.dustSecretKey },
-        { ttl: new Date(Date.now() + BALANCE_TTL_MS), payFees: false },
-      )
-      const signed = await facade.signRecipe(recipe, keys.unshieldedKeystore.signDataAsync)
-      const finalized = await facade.finalizeRecipe(signed)
-      return Buffer.from(finalized.serialize()).toString('hex')
-    },
+    finalize,
+    release: (finalizedTx) =>
+      facade.revertTransaction(
+        Transaction.deserialize<SignatureEnabled, Proof, Binding>(
+          'signature',
+          'proof',
+          'binding',
+          Uint8Array.from(Buffer.from(finalizedTx, 'hex')),
+        ),
+      ),
     stop: () => facade.stop(),
   }
 }
-
-/** One bound transaction in hex holding both: a contract call and a transfer merge, two contract calls do not. */
-export function mergedBoundTx(boundA: string, boundB: string): string {
-  return Buffer.from(
-    boundTransactionOf(boundA).merge(boundTransactionOf(boundB)).serialize(),
-  ).toString('hex')
-}
-
-function boundTransactionOf(boundTx: string): Transaction<SignatureEnabled, Proof, Binding> {
-  return Transaction.deserialize<SignatureEnabled, Proof, Binding>(
-    'signature',
-    'proof',
-    'binding',
-    Uint8Array.from(Buffer.from(boundTx, 'hex')),
-  )
-}
-
-/** The facade keeps this option type private, so it is read off the method that takes it. */
-type TokenKindsToBalance = NonNullable<
-  Parameters<WalletFacade['balanceUnboundTransaction']>[2]['tokenKindsToBalance']
->
 
 /** The public keys of the user wallet's account zero, derived as the application's seed wallet derives them. */
 export function userWalletPublicKeys(seedHex: string): WalletPublicKeys {

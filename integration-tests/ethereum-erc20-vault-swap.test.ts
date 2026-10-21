@@ -1,4 +1,3 @@
-import { nativeToken } from '@midnightntwrk/ledger-v9'
 import { rawTokenType } from '@midnight-ntwrk/compact-runtime'
 import {
   deriveVaultEvmAddress,
@@ -13,11 +12,10 @@ import type { Backend } from '@/server/backend'
 import { testBackend } from './backend'
 import { CIRCLE_EURC, CIRCLE_USDC } from './sepolia-tokens'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
-import { secretKeyOf } from './user-caller-call'
 import { completeApprovalAsUser, startApprovalAsUser } from './user-approval'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
 import { completeSwapAsUser, startSwapAsUser } from './user-swap'
-import { mergedBoundTx, startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
+import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 45 * 60_000
 /** Whole USDC the swap may spend; the quote decides how much EURC that buys. */
@@ -27,11 +25,9 @@ const AMOUNT_IN = 2_000_000n
  * One swap from `startSwap` to `Completed` over the whole local stack: the caller first deposits
  * the USDC it will surrender, the router allowance is granted when the vault account lacks it,
  * and the swap then sells that USDC for EURC at a live quote. This test plays the browser, which
- * builds, proves and binds both caller calls of the deposit and the swap without a fee, with the
- * wallet's own USDC coin funding the swap's start call, and the relayer pays each call's fee. The
- * vault account's balances on the fork before and after prove the trade the MPC signed executed.
- * Between the two legs, bound bytes the relayer must not pay for are offered to the server with
- * the caller's real coins and refused.
+ * builds, proves and finalises both caller calls of the deposit and the swap with the user wallet
+ * paying their fees, and the wallet's own USDC coin funding the swap's start call. The vault
+ * account's balances on the fork before and after prove the trade the MPC signed executed.
  */
 describe('ERC20 vault swap round trip over the local stack', () => {
   let backend: Backend
@@ -124,62 +120,6 @@ describe('ERC20 vault swap round trip over the local stack', () => {
   )
 
   test(
-    'bound bytes the relayer must not pay for are refused and write nothing',
-    async () => {
-      if (!deposited) throw new Error('the deposit did not run')
-      const { swapV1 } = backend.midnight.ethereumErc20Vault
-      const swapRequest = {
-        erc20AddressIn: CIRCLE_USDC.toLowerCase(),
-        erc20AddressOut: CIRCLE_EURC.toLowerCase(),
-        fee: 500n,
-        amountOut: 1n,
-        amountInMaximum: AMOUNT_IN,
-      }
-      const before = await swapV1.adaptor.listSwaps(callerSecret, {})
-      const prepared = await swapV1.adaptor.prepareStartSwap(callerSecret, { swapRequest })
-      if (!prepared.ok) throw new Error(prepared.error)
-      const unboundStart = await swapV1.callBuilder.buildStart({
-        secretKey: secretKeyOf(callerSecret),
-        wallet: user.publicKeys,
-        inIndex: prepared.inputs.inIndex,
-        ...swapRequest,
-      })
-      const refusal = {
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startSwap call to the vault, spending shielded coins alone',
-      }
-
-      // The user's wallet pays the fee itself, so the bytes carry a DUST spend.
-      const withFee = await user.balance(unboundStart)
-      expect(
-        await swapV1.adaptor.startSwap(callerSecret, {
-          swapRequest,
-          inIndex: prepared.inputs.inIndex,
-          boundTx: withFee,
-        }),
-      ).toEqual(refusal)
-      await user.revert(withFee)
-
-      // The call bound without a fee, with an unshielded NIGHT transfer merged beside it.
-      const withoutFee = await user.balanceWithoutFee(unboundStart)
-      const night = await user.selfTransfer('unshielded', nativeToken().raw, 1n)
-      expect(
-        await swapV1.adaptor.startSwap(callerSecret, {
-          swapRequest,
-          inIndex: prepared.inputs.inIndex,
-          boundTx: mergedBoundTx(withoutFee, night),
-        }),
-      ).toEqual(refusal)
-      await user.revert(night)
-      await user.revert(withoutFee)
-
-      expect(await swapV1.adaptor.listSwaps(callerSecret, {})).toEqual(before)
-    },
-    ROUND_TRIP_TIMEOUT_MS,
-  )
-
-  test(
     'USDC in the vault is swapped for EURC',
     async () => {
       if (!deposited) throw new Error('the deposit did not run')
@@ -223,7 +163,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         criteria: [{ type: 'exact-text', field: 'parent', text: swap.swap.name }],
       })
       expect(start).toMatchObject({ circuit: 'startSwap', signer: 'caller', unprovenTx: null })
-      expect(start?.boundTx).toMatch(/^[0-9a-f]+$/)
+      expect(start?.finalizedTx).toMatch(/^[0-9a-f]+$/)
 
       await driveOperation(
         {
@@ -260,7 +200,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         amountOut: quote.amountOutMinimum,
       })
 
-      // Both caller calls were bound by the user and paid by the relayer.
+      // Both caller calls were finalised by the user's wallet.
       const transactions = await midnight.transactionV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: swap.swap.name }],
         order: { field: 'createTime', direction: 'asc' },
@@ -284,12 +224,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         const trail = entries
           .filter((entry) => new TextDecoder().decode(entry.data).includes(transaction.name))
           .map((entry) => entry.type.slice(entry.type.lastIndexOf('.') + 1))
-        expect(trail).toEqual([
-          'awaiting-fee',
-          'awaiting-submission',
-          'awaiting-inclusion',
-          'succeeded',
-        ])
+        expect(trail).toEqual(['awaiting-submission', 'awaiting-inclusion', 'succeeded'])
       }
     },
     ROUND_TRIP_TIMEOUT_MS,

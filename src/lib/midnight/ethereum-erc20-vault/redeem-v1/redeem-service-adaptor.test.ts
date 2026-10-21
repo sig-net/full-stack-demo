@@ -15,7 +15,6 @@ import {
   RedeemServiceAdaptor,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service-adaptor'
 import { RedeemStateConflict } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-controller'
-import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import {
   ATTESTATION_FIELDS,
   REQUEST_ID_HEX,
@@ -26,8 +25,8 @@ import { RecordingLogger } from '@/lib/testing/recording-logger'
 const CALLER_SECRET = 'ab'.repeat(32)
 const redeem = redeemFixture()
 const REQUEST = { shares: 300_000n }
-const BOUND_TX = `0x${'B0BD'.repeat(2)}`
-const PARSED_BOUND_TX = 'b0bd'.repeat(2)
+const FINALIZED_TX = `0x${'F1A1'.repeat(2)}`
+const PARSED_FINALIZED_TX = 'f1a1'.repeat(2)
 const START_INPUTS: RedeemStartInputs = { inIndex: 42n, stataErc20Address: STATA_ERC20_ADDRESS }
 const COMPLETE_INPUTS: RedeemCompleteInputs = {
   requestId: REQUEST_ID_HEX,
@@ -75,14 +74,14 @@ describe('RedeemServiceAdaptor parsing', () => {
       expectError: 'redeemRequest.shares',
     },
     {
-      name: 'startRedeem carries the shares, the slot and the bound bytes normalised',
+      name: 'startRedeem carries the shares, the slot and the finalised bytes normalised',
       call: (a) =>
         a.startRedeem(CALLER_SECRET, {
           redeemRequest: { shares: '300000' },
           inIndex: '42',
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
-      expectReceived: [{ redeemRequest: REQUEST, inIndex: 42n, boundTx: PARSED_BOUND_TX }],
+      expectReceived: [{ redeemRequest: REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'startRedeem refuses zero shares',
@@ -90,21 +89,22 @@ describe('RedeemServiceAdaptor parsing', () => {
         a.startRedeem(CALLER_SECRET, {
           redeemRequest: { shares: 0n },
           inIndex: 42n,
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
       expectReceived: [],
       expectError: 'redeemRequest.shares',
     },
     {
-      name: 'startRedeem refuses bound bytes that are not hex',
+      name: 'startRedeem refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startRedeem(CALLER_SECRET, { redeemRequest: REQUEST, inIndex: 42n, boundTx: 'zz' }),
+        a.startRedeem(CALLER_SECRET, { redeemRequest: REQUEST, inIndex: 42n, finalizedTx: 'zz' }),
       expectReceived: [],
-      expectError: 'boundTx',
+      expectError: 'finalizedTx',
     },
     {
       name: 'startRedeem refuses a missing slot',
-      call: (a) => a.startRedeem(CALLER_SECRET, { redeemRequest: REQUEST, boundTx: BOUND_TX }),
+      call: (a) =>
+        a.startRedeem(CALLER_SECRET, { redeemRequest: REQUEST, finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'inIndex',
     },
@@ -114,21 +114,23 @@ describe('RedeemServiceAdaptor parsing', () => {
       expectReceived: [{ name: REDEEM_NAME }],
     },
     {
-      name: 'completeRedeem passes the name and the bound bytes',
-      call: (a) => a.completeRedeem(CALLER_SECRET, { name: REDEEM_NAME, boundTx: BOUND_TX }),
-      expectReceived: [{ name: REDEEM_NAME, boundTx: PARSED_BOUND_TX }],
+      name: 'completeRedeem passes the name and the finalised bytes',
+      call: (a) =>
+        a.completeRedeem(CALLER_SECRET, { name: REDEEM_NAME, finalizedTx: FINALIZED_TX }),
+      expectReceived: [{ name: REDEEM_NAME, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'completeRedeem refuses a name that is not a redeem',
-      call: (a) => a.completeRedeem(CALLER_SECRET, { name: 'redeems/1', boundTx: BOUND_TX }),
+      call: (a) =>
+        a.completeRedeem(CALLER_SECRET, { name: 'redeems/1', finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-redeems/{uuid}',
     },
     {
-      name: 'completeRedeem refuses missing bound bytes',
+      name: 'completeRedeem refuses missing finalised bytes',
       call: (a) => a.completeRedeem(CALLER_SECRET, { name: REDEEM_NAME }),
       expectReceived: [],
-      expectError: 'boundTx',
+      expectError: 'finalizedTx',
     },
     {
       name: 'getRedeem passes the name',
@@ -181,15 +183,6 @@ describe('RedeemServiceAdaptor outcomes', () => {
         error: `${REDEEM_NAME} is AwaitingVaultRequest, which does not allow complete`,
       },
     ],
-    [
-      'bound bytes that are not the expected vault call',
-      new SponsoredCallMismatch('startRedeem'),
-      {
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startRedeem call to the vault, spending shielded coins alone',
-      },
-    ],
     ['any other error', new Error('indexer down'), undefined],
   ]
 
@@ -205,12 +198,12 @@ describe('RedeemServiceAdaptor outcomes', () => {
     const starting = adaptor.startRedeem(CALLER_SECRET, {
       redeemRequest: REQUEST,
       inIndex: 42n,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     const preparing = adaptor.prepareCompleteRedeem(CALLER_SECRET, { name: REDEEM_NAME })
     const completing = adaptor.completeRedeem(CALLER_SECRET, {
       name: REDEEM_NAME,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     for (const outcome of [starting, preparing, completing]) {
       if (expectRefusal === undefined) await expect(outcome).rejects.toThrow(error.message)

@@ -268,7 +268,7 @@ export function createWalletAndMidnightProvider(
 
 /**
  * Balances, signs and finalises the unbound bytes of a proven call through the provider,
- * resolving with the finalized bytes, both in hex as the transaction resource carries them.
+ * resolving with the finalised bytes, both in hex as the transaction resource carries them.
  */
 export async function finalizeUnboundTransaction(
   provider: WalletProvider,
@@ -278,46 +278,19 @@ export async function finalizeUnboundTransaction(
   return bytesToHex(finalized.serialize())
 }
 
-/**
- * Balances the wallet's own shielded and unshielded coins into the unbound bytes of a proven
- * call, signs and binds it without a DUST fee, resolving with the bound bytes in hex that
- * `payFee` takes.
- */
-export async function bindWithoutFee(
+/** Releases the coins a finalised transaction holds as pending, for bytes that will not be submitted. */
+export function releaseFinalizedTransaction(
   facade: WalletFacade,
-  keys: AccountKeys,
-  unboundTx: string,
-): Promise<string> {
-  const recipe = await facade.balanceUnboundTransaction(unboundTransactionOf(unboundTx), keys, {
-    ttl: new Date(Date.now() + BALANCE_TTL_MS),
-    tokenKindsToBalance: ['shielded', 'unshielded'],
-  })
-  const signed = await facade.signRecipe(recipe, keys.unshieldedKeystore.signDataAsync)
-  const bound = await facade.finalizeRecipe(signed)
-  return bytesToHex(bound.serialize())
-}
-
-/**
- * Attaches the wallet's DUST fee to bound bytes another wallet balanced and signed without one,
- * resolving with the finalized bytes in hex as the transaction resource carries them.
- */
-export async function payFee(
-  facade: WalletFacade,
-  keys: AccountKeys,
-  boundTx: string,
-): Promise<string> {
-  const bound = ledger.Transaction.deserialize<
-    ledger.SignatureEnabled,
-    ledger.Proof,
-    ledger.Binding
-  >('signature', 'proof', 'binding', sigNetHexToBytes(boundTx))
-  const recipe = await facade.balanceFinalizedTransaction(bound, keys, {
-    ttl: new Date(Date.now() + BALANCE_TTL_MS),
-    tokenKindsToBalance: ['dust'],
-  })
-  const signed = await facade.signRecipe(recipe, keys.unshieldedKeystore.signDataAsync)
-  const finalized = await facade.finalizeRecipe(signed)
-  return bytesToHex(finalized.serialize())
+  finalizedTx: string,
+): Promise<void> {
+  return facade.revertTransaction(
+    ledger.Transaction.deserialize<ledger.SignatureEnabled, ledger.Proof, ledger.Binding>(
+      'signature',
+      'proof',
+      'binding',
+      sigNetHexToBytes(finalizedTx),
+    ),
+  )
 }
 
 function unboundTransactionOf(unboundTx: string): UnboundTransaction {

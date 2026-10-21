@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import type { SupportedBalance } from '@/lib/balances/supported-balances'
-import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import {
   missingReadiness,
   type ReadinessCheckId,
@@ -38,9 +38,9 @@ const TARGET_REFETCH_INTERVAL_MS = 30_000
  * of the wrapper's underlying into it from the vault account, which keeps the shares and mints
  * them to the wallet as the wrapper's vault token. Redeem burns those shares for the underlying
  * the wrapper pays the vault account, minted back to the wallet. Both read the pinned pair from
- * the supply target, and only Supply needs its allowance. The page builds, proves and binds a
- * supply's start call with the wallet's coin of the underlying, and the server records it for
- * the relayer to pay and submit.
+ * the supply target, and only Supply needs its allowance. The page builds, proves and finalises
+ * a supply's start call with the wallet's coin of the underlying and its fee, and the server
+ * records it for the backend to submit.
  */
 export function LendPanel(): ReactNode {
   const { callerSecret, callerName } = useCaller()
@@ -103,7 +103,7 @@ export function LendPanel(): ReactNode {
     },
     onSuccess: async () => {
       toast.success(
-        `Supply of ${supplyText} ${underlying?.symbol ?? ''} started: the backend is paying for its start call and submitting it.`,
+        `Supply of ${supplyText} ${underlying?.symbol ?? ''} started: the backend is submitting its start call.`,
       )
       setSupplyText('')
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
@@ -134,7 +134,7 @@ export function LendPanel(): ReactNode {
     },
     onSuccess: async () => {
       toast.success(
-        `Redeem of ${redeemText} ${stata?.symbol ?? ''} started: the backend is paying for its start call and submitting it.`,
+        `Redeem of ${redeemText} ${stata?.symbol ?? ''} started: the backend is submitting its start call.`,
       )
       setRedeemText('')
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
@@ -325,14 +325,14 @@ function LendAction({
 const SUPPLY_STAGE_LABELS: Record<CallerCallStage, string> = {
   preparing: 'Preparing the supply',
   building: 'Building and proving the start call',
-  signing: 'Signing with your wallet',
+  signing: 'Paying the fee and signing with your wallet',
   recording: 'Recording the supply',
 }
 
 const REDEEM_STAGE_LABELS: Record<CallerCallStage, string> = {
   preparing: 'Preparing the redeem',
   building: 'Building and proving the start call',
-  signing: 'Signing with your wallet',
+  signing: 'Paying the fee and signing with your wallet',
   recording: 'Recording the redeem',
 }
 

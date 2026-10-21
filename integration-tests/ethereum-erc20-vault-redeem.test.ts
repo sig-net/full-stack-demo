@@ -1,4 +1,3 @@
-import { nativeToken } from '@midnightntwrk/ledger-v9'
 import { rawTokenType } from '@midnight-ntwrk/compact-runtime'
 import {
   deriveVaultEvmAddress,
@@ -14,12 +13,11 @@ import type { Backend } from '@/server/backend'
 import { ensureAaveReserveAcceptsDeposits } from './aave-reserve'
 import { testBackend } from './backend'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
-import { secretKeyOf } from './user-caller-call'
 import { completeApprovalAsUser, startApprovalAsUser } from './user-approval'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
 import { completeSupplyAsUser, startSupplyAsUser } from './user-supply'
 import { completeRedeemAsUser, startRedeemAsUser } from './user-redeem'
-import { mergedBoundTx, startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
+import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 60 * 60_000
 /** Whole underlying deposited and supplied, whose shares are then redeemed. */
@@ -29,12 +27,10 @@ const AMOUNT = 1_500_000n
  * One redeem from `startRedeem` to `Completed` over the whole local stack: the caller deposits
  * the stata underlying, supplies it to Aave's static wrapper (approving the wrapper first when
  * the vault account lacks the allowance), then redeems the shares that supply minted. This test
- * plays the browser, which builds, proves and binds the deposit's and the redeem's caller calls
- * without a fee, with the wallet's own coin of the shares funding the redeem's start call, and
- * the relayer pays each call's fee. The vault account's balances on the fork before and after
- * prove the redeem the MPC signed executed, and the attested output is the underlying the
- * wrapper paid out. Between the supply and the redeem, bound bytes the relayer must not pay for
- * are offered to the server with the caller's real shares and refused.
+ * plays the browser, which builds, proves and finalises the deposit's and the redeem's caller
+ * calls with the user wallet paying their fees, and the wallet's own coin of the shares funding
+ * the redeem's start call. The vault account's balances on the fork before and after prove the
+ * redeem the MPC signed executed, and the attested output is the underlying the wrapper paid out.
  */
 describe('ERC20 vault redeem round trip over the local stack', () => {
   let backend: Backend
@@ -141,57 +137,6 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
   )
 
   test(
-    'bound bytes the relayer must not pay for are refused and write nothing',
-    async () => {
-      if (shares === undefined) throw new Error('the supply did not run')
-      const { redeemV1 } = backend.midnight.ethereumErc20Vault
-      const redeemRequest = { shares }
-      const before = await redeemV1.adaptor.listRedeems(callerSecret, {})
-      const prepared = await redeemV1.adaptor.prepareStartRedeem(callerSecret, { redeemRequest })
-      if (!prepared.ok) throw new Error(prepared.error)
-      const unboundStart = await redeemV1.callBuilder.buildStart({
-        secretKey: secretKeyOf(callerSecret),
-        wallet: user.publicKeys,
-        inIndex: prepared.inputs.inIndex,
-        stataErc20Address: prepared.inputs.stataErc20Address,
-        shares,
-      })
-      const refused = {
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startRedeem call to the vault, spending shielded coins alone',
-      }
-
-      // The user's wallet pays the fee itself, so the bytes carry a DUST spend.
-      const withFee = await user.balance(unboundStart)
-      expect(
-        await redeemV1.adaptor.startRedeem(callerSecret, {
-          redeemRequest,
-          inIndex: prepared.inputs.inIndex,
-          boundTx: withFee,
-        }),
-      ).toEqual(refused)
-      await user.revert(withFee)
-
-      // The call bound without a fee, with an unshielded NIGHT transfer merged beside it.
-      const withoutFee = await user.balanceWithoutFee(unboundStart)
-      const night = await user.selfTransfer('unshielded', nativeToken().raw, 1n)
-      expect(
-        await redeemV1.adaptor.startRedeem(callerSecret, {
-          redeemRequest,
-          inIndex: prepared.inputs.inIndex,
-          boundTx: mergedBoundTx(withoutFee, night),
-        }),
-      ).toEqual(refused)
-      await user.revert(night)
-      await user.revert(withoutFee)
-
-      expect(await redeemV1.adaptor.listRedeems(callerSecret, {})).toEqual(before)
-    },
-    ROUND_TRIP_TIMEOUT_MS,
-  )
-
-  test(
     'shares of the Aave wrapper in the vault are redeemed for the underlying',
     async () => {
       if (pair === undefined || shares === undefined) throw new Error('the supply did not run')
@@ -221,7 +166,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
         criteria: [{ type: 'exact-text', field: 'parent', text: redeem.redeem.name }],
       })
       expect(start).toMatchObject({ circuit: 'startRedeem', signer: 'caller', unprovenTx: null })
-      expect(start?.boundTx).toMatch(/^[0-9a-f]+$/)
+      expect(start?.finalizedTx).toMatch(/^[0-9a-f]+$/)
 
       await driveOperation(
         {
@@ -260,7 +205,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
         destination: underlyingErc20Address,
       })
 
-      // Both caller calls were bound by the user and paid by the relayer.
+      // Both caller calls were finalised by the user's wallet.
       const transactions = await midnight.transactionV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: redeem.redeem.name }],
         order: { field: 'createTime', direction: 'asc' },
@@ -284,12 +229,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
         const trail = entries
           .filter((entry) => new TextDecoder().decode(entry.data).includes(transaction.name))
           .map((entry) => entry.type.slice(entry.type.lastIndexOf('.') + 1))
-        expect(trail).toEqual([
-          'awaiting-fee',
-          'awaiting-submission',
-          'awaiting-inclusion',
-          'succeeded',
-        ])
+        expect(trail).toEqual(['awaiting-submission', 'awaiting-inclusion', 'succeeded'])
       }
     },
     ROUND_TRIP_TIMEOUT_MS,

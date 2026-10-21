@@ -3,12 +3,31 @@ import { z } from 'zod'
 
 import { messageOf } from '@/lib/message-of'
 
-/** One check per payer of an action's fees, keyed by what it pays with, as the backend reads them for a caller. */
-export type VaultReadiness = Readonly<Record<ReadinessCheckId, ReadinessCheck>>
+/**
+ * The checks the backend reads for a caller. The caller's own DUST is read by the browser that
+ * holds the wallet, so `ReadinessChecks` is complete only there.
+ */
+export type VaultReadiness = Pick<ReadinessChecks, BackendReadinessCheckId>
 
-export const READINESS_CHECK_IDS = ['relayerDust', 'depositAccountEth', 'vaultAccountEth'] as const
+/** One check per payer of an action's fees, keyed by what it pays with. */
+export type ReadinessChecks = Readonly<Record<ReadinessCheckId, ReadinessCheck>>
+
+export const READINESS_CHECK_IDS = [
+  'callerDust',
+  'relayerDust',
+  'depositAccountEth',
+  'vaultAccountEth',
+] as const
 
 export type ReadinessCheckId = (typeof READINESS_CHECK_IDS)[number]
+
+export const BACKEND_READINESS_CHECK_IDS = [
+  'relayerDust',
+  'depositAccountEth',
+  'vaultAccountEth',
+] as const satisfies readonly ReadinessCheckId[]
+
+export type BackendReadinessCheckId = (typeof BACKEND_READINESS_CHECK_IDS)[number]
 
 export const READINESS_ASSETS = ['DUST', 'ETH'] as const
 
@@ -51,17 +70,17 @@ export type ReadinessAction = 'deposit' | VaultGasKind
 /** The checks `action` needs that do not pass, in the order a warning lists them: empty when ready. */
 export function missingReadiness(
   action: ReadinessAction,
-  checks: VaultReadiness,
+  checks: ReadinessChecks,
 ): ReadinessCheckId[] {
   return READINESS_CHECKS_BY_ACTION[action].filter((id) => checks[id].status !== 'ok')
 }
 
-/** What every action the vault account signs for needs: the relayer's DUST for the flushes and sends, the vault account's ETH for the gas. */
-const VAULT_SIGNED_CHECKS = ['relayerDust', 'vaultAccountEth'] as const
+/** What every action the vault account signs for needs: the caller's DUST for its two calls, the relayer's DUST for the flushes and sends, the vault account's ETH for the gas. */
+const VAULT_SIGNED_CHECKS = ['callerDust', 'relayerDust', 'vaultAccountEth'] as const
 
-/** The relayer pays every caller call's fee, so each list holds the relayer's DUST and the paying account's ETH. */
+/** The caller pays its own two calls and the relayer the vault's permissionless ones, so each list holds both DUST checks and the paying account's ETH. */
 const READINESS_CHECKS_BY_ACTION: Record<ReadinessAction, readonly ReadinessCheckId[]> = {
-  deposit: ['relayerDust', 'depositAccountEth'],
+  deposit: ['callerDust', 'relayerDust', 'depositAccountEth'],
   withdraw: VAULT_SIGNED_CHECKS,
   approve: VAULT_SIGNED_CHECKS,
   swap: VAULT_SIGNED_CHECKS,
@@ -89,10 +108,8 @@ export async function readReadinessCheck(
   }
 }
 
-/**
- * The DUST the relayer must hold before an action starts, in SPECK. An action costs the relayer
- * the fees of the caller's two transactions, two flushes, a send and an attestation, and the
- * local chain's fee overhead alone is 0.05 DUST per transaction, so the minimum leaves several
- * times that.
- */
+/** The DUST the caller's wallet must hold before an action starts, in SPECK: the fees of its two transactions, several times the local chain's overhead of 0.05 DUST per transaction. */
+export const CALLER_DUST_MINIMUM = 1_000_000_000_000_000n
+
+/** The DUST the relayer must hold before an action starts, in SPECK: the fees of two flushes, a send and an attestation, several times the local chain's overhead of 0.05 DUST per transaction. */
 export const RELAYER_DUST_MINIMUM = 5_000_000_000_000_000n

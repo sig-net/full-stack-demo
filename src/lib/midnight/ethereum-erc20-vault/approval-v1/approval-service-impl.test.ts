@@ -20,11 +20,6 @@ import {
   type StartApprovalArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-controller'
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
-import {
-  type SponsoredCallGuard,
-  SponsoredCallMismatch,
-  type SponsoredCircuit,
-} from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
 import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import { ledgerSet } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
@@ -47,7 +42,7 @@ const VAULT_ACCOUNT = vaultAccountOf(SIGNET, VAULT)
 
 const caller: Caller = resolveCaller('ab'.repeat(32))
 const stranger: Caller = resolveCaller('cd'.repeat(32))
-const BOUND_TX = 'b0bd'
+const FINALIZED_TX = 'f1a1'
 
 const TOKEN_A = new Uint8Array(20).fill(0xa1)
 const TOKEN_B = new Uint8Array(20).fill(0xb2)
@@ -56,10 +51,9 @@ const STATA_UNDERLYING = new Uint8Array(20).fill(0x0b)
 const STATA_TOKEN = new Uint8Array(20).fill(0x0c)
 const hex = (bytes: Uint8Array): string => `0x${bytesToHex(bytes)}`
 
-/** What the service read, wrote and asked the guard, in order, so a test can see that a refusal writes nothing and a commit opens one transaction after its reads. */
+/** What the service read, wrote, in order, so a test can see that a refusal writes nothing and a commit opens one transaction after its reads. */
 interface Recorded {
   steps: string[]
-  guarded: SponsoredCircuit[]
   started: StartApprovalArgs[]
   completed: CompleteApprovalArgs[]
   allowanceReads: string[][]
@@ -67,7 +61,7 @@ interface Recorded {
 
 const NOTHING_RECORDED: Recorded = {
   steps: [],
-  guarded: [],
+
   started: [],
   completed: [],
   allowanceReads: [],
@@ -77,8 +71,6 @@ function serviceOver(options: {
   approvals?: Approval[]
   requests?: VaultRequest[]
   allowances?: Record<string, bigint>
-  /** Whether the guard refuses the bound bytes, admitting them when absent. */
-  refusesCall?: boolean
 }) {
   const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const approvalRepository = new MemoryRepository<Approval>()
@@ -126,14 +118,6 @@ function serviceOver(options: {
     }),
     SIGNET,
     VAULT,
-    mock<SponsoredCallGuard>('SponsoredCallGuard', {
-      assertSponsoredCall: (boundTx, circuit) => {
-        expect(boundTx).toBe(BOUND_TX)
-        recorded.steps.push('guard')
-        recorded.guarded.push(circuit)
-        if (options.refusesCall === true) throw new SponsoredCallMismatch(circuit)
-      },
-    }),
   )
   return { service, recorded, ready }
 }
@@ -157,23 +141,20 @@ describe('ApprovalServiceImpl.listApprovalTargets', () => {
   })
 })
 
-/** Each kind of approval: the start circuit its bound call must be, and the grant the ledger pins for it. */
+/** Each kind of approval: the start circuit its finalised call must be, and the grant the ledger pins for it. */
 const kinds: ReadonlyArray<{
   name: string
   approvalRequest: ApprovalRequest
-  expectCircuit: SponsoredCircuit
   expectGrant: Pick<Approval, 'kind' | 'erc20Address' | 'spender'>
 }> = [
   {
     name: "a router approval grants the pinned router on the request's token",
     approvalRequest: { kind: 'router', erc20Address: hex(TOKEN_B) },
-    expectCircuit: 'startApproveRouter',
     expectGrant: { kind: 'router', erc20Address: hex(TOKEN_B), spender: hex(ROUTER) },
   },
   {
     name: 'a stata approval grants the pinned wrapper on its pinned underlying',
     approvalRequest: { kind: 'stata' },
-    expectCircuit: 'startApproveStata',
     expectGrant: {
       kind: 'stata',
       erc20Address: hex(STATA_UNDERLYING),
@@ -202,51 +183,29 @@ describe('ApprovalServiceImpl.prepareStartApproval', () => {
 
 describe('ApprovalServiceImpl.startApproval', () => {
   test.each(kinds)(
-    "$name: guards the kind's bound call, reads the ledger and commits it in one transaction",
-    async ({ approvalRequest, expectCircuit, expectGrant }) => {
+    "$name: reads the ledger and commits the kind's finalised call in one transaction",
+    async ({ approvalRequest, expectGrant }) => {
       const { service, recorded } = serviceOver({})
       const approval = await service.startApproval(caller, {
         approvalRequest,
         inIndex: 42n,
-        boundTx: BOUND_TX,
+        finalizedTx: FINALIZED_TX,
       })
       expect(approval.name).toMatch(
         new RegExp(`^${caller.name}/ethereum-erc20-vault-approvals/${UUID}$`),
       )
       expect(recorded).toEqual({
         ...NOTHING_RECORDED,
-        steps: ['guard', 'ledger', 'transaction'],
-        guarded: [expectCircuit],
+        steps: ['ledger', 'transaction'],
         started: [
           {
             name: approval.name,
             ...expectGrant,
             inIndex: 42n,
             vaultAccount: VAULT_ACCOUNT,
-            call: { boundTx: BOUND_TX },
+            call: { finalizedTx: FINALIZED_TX },
           },
         ],
-      })
-    },
-  )
-
-  test.each(kinds)(
-    '$name: bound bytes the guard refuses are refused before the ledger is read and nothing is written',
-    async ({ approvalRequest, expectCircuit }) => {
-      const { service, recorded } = serviceOver({ refusesCall: true })
-      const starting = service.startApproval(caller, {
-        approvalRequest,
-        inIndex: 42n,
-        boundTx: BOUND_TX,
-      })
-      await expect(starting).rejects.toBeInstanceOf(SponsoredCallMismatch)
-      await expect(starting).rejects.toThrow(
-        `the bound bytes must be exactly one ${expectCircuit} call to the vault`,
-      )
-      expect(recorded).toEqual({
-        ...NOTHING_RECORDED,
-        steps: ['guard'],
-        guarded: [expectCircuit],
       })
     },
   )
@@ -394,7 +353,7 @@ describe('ApprovalServiceImpl.prepareCompleteApproval', () => {
 })
 
 describe('ApprovalServiceImpl.completeApproval', () => {
-  test('commits the bound call in one transaction after the state check', async () => {
+  test('commits the finalised call in one transaction after the state check', async () => {
     const { service, recorded, ready } = serviceOver({
       approvals: [awaiting],
       requests: [attestedUnder(awaiting.name)],
@@ -402,14 +361,13 @@ describe('ApprovalServiceImpl.completeApproval', () => {
     await ready
     const approval = await service.completeApproval(caller, {
       name: awaiting.name,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     expect(approval.state).toBe('AwaitingCompleteTransaction')
     expect(recorded).toEqual({
       ...NOTHING_RECORDED,
-      steps: ['guard', 'transaction'],
-      guarded: ['completeApprove'],
-      completed: [{ name: awaiting.name, call: { boundTx: BOUND_TX } }],
+      steps: ['transaction'],
+      completed: [{ name: awaiting.name, call: { finalizedTx: FINALIZED_TX } }],
     })
   })
 
@@ -419,34 +377,15 @@ describe('ApprovalServiceImpl.completeApproval', () => {
       const { service, recorded, ready } = serviceOver({ approvals, requests })
       await ready
       await expectRefusal(
-        service.completeApproval(by, { name: awaiting.name, boundTx: BOUND_TX }),
+        service.completeApproval(by, { name: awaiting.name, finalizedTx: FINALIZED_TX }),
         expectError,
       )
       expect(recorded).toEqual({
         ...NOTHING_RECORDED,
-        steps: ['guard'],
-        guarded: ['completeApprove'],
+        steps: [],
       })
     },
   )
-
-  test('bound bytes the guard refuses are refused before the approval is read and nothing is written', async () => {
-    // No approval is stored, so a refusal of the call shows the guard ran first.
-    const { service, recorded } = serviceOver({ refusesCall: true })
-    const completing = service.completeApproval(caller, {
-      name: awaiting.name,
-      boundTx: BOUND_TX,
-    })
-    await expect(completing).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(completing).rejects.toThrow(
-      'the bound bytes must be exactly one completeApprove call to the vault',
-    )
-    expect(recorded).toEqual({
-      ...NOTHING_RECORDED,
-      steps: ['guard'],
-      guarded: ['completeApprove'],
-    })
-  })
 })
 
 describe('ApprovalServiceImpl reads', () => {

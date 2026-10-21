@@ -3,9 +3,9 @@ import { hexToBytes } from '@sig-net/midnight'
 import type { ClientConfig } from '@/lib/config/client-config'
 import { browserVaultCallProviders } from '@/lib/midnight/ethereum-erc20-vault/browser-vault-call-providers'
 import {
-  type CallerCallStage,
-  vaultRefusalOf,
-} from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+  type CallerCallArgs,
+  runCallerCall,
+} from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import type { Supply, SupplyRequest } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply'
 import { SupplyCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-call-builder'
 import type {
@@ -20,61 +20,47 @@ import type {
   SupplyStartInputsResult,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service-adaptor'
 import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
-import type { Wallet } from '@/lib/midnight/wallet/wallet'
 
-/**
- * Starts a supply from the page: the server assigns the call's slot and names the pinned
- * underlying, the page builds, proves and binds the start call with the caller secret as its
- * witness and the wallet's own coin of the underlying, and the server records it for the relayer
- * to pay and submit. Every refusal is thrown with the server's message.
- */
+/** Starts a supply from the page, the wallet's own coin of the pinned underlying funding the start call. */
 export async function startSupplyInBrowser(args: StartSupplyInBrowserArgs): Promise<Supply> {
   const { actions, builder, wallet, callerSecret, supplyRequest, onStage } = args
-  onStage?.('preparing')
-  const prepared = await actions.prepareStartSupply(callerSecret, { supplyRequest })
-  if (!prepared.ok) throw new Error(prepared.error)
-  const { inIndex, underlyingErc20Address } = prepared.inputs
-  onStage?.('building')
-  const unboundTx = await vaultRefusalOf(
-    builder.buildStart({
-      secretKey: hexToBytes(callerSecret),
-      wallet: wallet.publicKeys,
+  const started = await runCallerCall({
+    operation: 'supply',
+    wallet,
+    callerSecret,
+    onStage,
+    prepare: () => actions.prepareStartSupply(callerSecret, { supplyRequest }),
+    circuitArgs: ({ inIndex, underlyingErc20Address }, caller) => ({
+      ...caller,
       inIndex,
       underlyingErc20Address,
       ...supplyRequest,
     }),
-    'supply',
-  )
-  onStage?.('signing')
-  const boundTx = await wallet.balanceWithoutFee(unboundTx)
-  onStage?.('recording')
-  const started = await actions.startSupply(callerSecret, { supplyRequest, inIndex, boundTx })
-  if (!started.ok) throw new Error(started.error)
+    build: (circuitArgs) => builder.buildStart(circuitArgs),
+    record: ({ inIndex }, finalizedTx) =>
+      actions.startSupply(callerSecret, { supplyRequest, inIndex, finalizedTx }),
+  })
   return started.supply
 }
 
-/** Completes an attested supply from the page as `startSupplyInBrowser` starts one. */
+/** Completes an attested supply from the page, under a fresh mint nonce. */
 export async function completeSupplyInBrowser(args: CompleteSupplyInBrowserArgs): Promise<Supply> {
   const { actions, builder, wallet, callerSecret, name, onStage } = args
-  onStage?.('preparing')
-  const prepared = await actions.prepareCompleteSupply(callerSecret, { name })
-  if (!prepared.ok) throw new Error(prepared.error)
-  onStage?.('building')
-  const unboundTx = await vaultRefusalOf(
-    builder.buildComplete({
-      secretKey: hexToBytes(callerSecret),
-      wallet: wallet.publicKeys,
-      requestId: hexToBytes(prepared.inputs.requestId),
-      serializedOutput: completionOutput(prepared.inputs, 32),
+  const completed = await runCallerCall({
+    operation: 'supply',
+    wallet,
+    callerSecret,
+    onStage,
+    prepare: () => actions.prepareCompleteSupply(callerSecret, { name }),
+    circuitArgs: (inputs, caller) => ({
+      ...caller,
+      requestId: hexToBytes(inputs.requestId),
+      serializedOutput: completionOutput(inputs, 32),
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
     }),
-    'supply',
-  )
-  onStage?.('signing')
-  const boundTx = await wallet.balanceWithoutFee(unboundTx)
-  onStage?.('recording')
-  const completed = await actions.completeSupply(callerSecret, { name, boundTx })
-  if (!completed.ok) throw new Error(completed.error)
+    build: (circuitArgs) => builder.buildComplete(circuitArgs),
+    record: (_inputs, finalizedTx) => actions.completeSupply(callerSecret, { name, finalizedTx }),
+  })
   return completed.supply
 }
 
@@ -98,20 +84,12 @@ export interface SupplyActions {
   completeSupply(callerSecret: string, args: CompleteSupplyArgs): Promise<SupplyResult>
 }
 
-interface SupplyCallArgs {
-  readonly builder: SupplyCallBuilder
-  readonly wallet: Wallet
-  /** The stored identity secret, lower-case hex without `0x`, which is the call's witness. */
-  readonly callerSecret: string
-  readonly onStage?: (stage: CallerCallStage) => void
-}
-
-export interface StartSupplyInBrowserArgs extends SupplyCallArgs {
+export interface StartSupplyInBrowserArgs extends CallerCallArgs<SupplyCallBuilder> {
   readonly actions: Pick<SupplyActions, 'prepareStartSupply' | 'startSupply'>
   readonly supplyRequest: SupplyRequest
 }
 
-export interface CompleteSupplyInBrowserArgs extends SupplyCallArgs {
+export interface CompleteSupplyInBrowserArgs extends CallerCallArgs<SupplyCallBuilder> {
   readonly actions: Pick<SupplyActions, 'prepareCompleteSupply' | 'completeSupply'>
   readonly name: string
 }

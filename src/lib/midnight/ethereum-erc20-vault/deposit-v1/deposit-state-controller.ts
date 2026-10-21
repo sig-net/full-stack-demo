@@ -11,7 +11,7 @@ import {
   type Deposit,
   depositNameSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
-import type { BoundCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
+import type { FinalizedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 
 /**
  * The only writer of a deposit's state: the caller operation's transitions over the deposit
@@ -32,7 +32,7 @@ export interface StartDepositArgs extends Omit<
   'state' | 'outcome' | 'failure' | 'error' | 'createTime' | 'updateTime'
 > {
   /** The start circuit call, built with the deposit's assigned fields. */
-  call: BoundCall
+  call: FinalizedCall
 }
 
 export type CompleteDepositArgs = CompleteOperationArgs

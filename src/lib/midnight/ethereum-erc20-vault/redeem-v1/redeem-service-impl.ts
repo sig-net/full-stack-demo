@@ -30,7 +30,6 @@ import {
   type RedeemStateController,
   RedeemStateConflict,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-controller'
-import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
 import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import {
@@ -47,7 +46,6 @@ export class RedeemServiceImpl implements RedeemService {
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
-  private readonly guard: SponsoredCallGuard
 
   constructor(
     redeemRepository: RedeemRepository,
@@ -57,7 +55,6 @@ export class RedeemServiceImpl implements RedeemService {
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
-    guard: SponsoredCallGuard,
   ) {
     this.redeemRepository = redeemRepository
     this.redeemStateController = redeemStateController
@@ -66,7 +63,6 @@ export class RedeemServiceImpl implements RedeemService {
     this.unitOfWork = unitOfWork
     this.signet = signet
     this.vault = vault
-    this.guard = guard
   }
 
   async prepareStartRedeem(
@@ -79,9 +75,8 @@ export class RedeemServiceImpl implements RedeemService {
 
   async startRedeem(
     caller: Caller,
-    { redeemRequest, inIndex, boundTx }: StartRedeemArgs,
+    { redeemRequest, inIndex, finalizedTx }: StartRedeemArgs,
   ): Promise<Redeem> {
-    this.guard.assertSponsoredCall(boundTx, 'startRedeem')
     const pair = await this.stataPair()
     return this.unitOfWork.runInTransaction(() =>
       this.redeemStateController.startRedeem({
@@ -90,7 +85,7 @@ export class RedeemServiceImpl implements RedeemService {
         shares: redeemRequest.shares,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        call: { boundTx },
+        call: { finalizedTx },
       }),
     )
   }
@@ -105,11 +100,10 @@ export class RedeemServiceImpl implements RedeemService {
     return { requestId, attestationOutputKind, attestationOutput }
   }
 
-  async completeRedeem(caller: Caller, { name, boundTx }: CompleteRedeemArgs): Promise<Redeem> {
-    this.guard.assertSponsoredCall(boundTx, 'completeRedeem')
+  async completeRedeem(caller: Caller, { name, finalizedTx }: CompleteRedeemArgs): Promise<Redeem> {
     await this.assertCompletable(caller, name)
     return this.unitOfWork.runInTransaction(() =>
-      this.redeemStateController.completeRedeem({ name, call: { boundTx } }),
+      this.redeemStateController.completeRedeem({ name, call: { finalizedTx } }),
     )
   }
 

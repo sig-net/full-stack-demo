@@ -7,7 +7,7 @@ import {
   type MidnightTransactionState,
 } from '@/lib/midnight/transaction-v1/transaction'
 import {
-  CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION,
+  CALLER_TRANSACTION_AWAITING_SUBMISSION,
   TRANSACTION_IN_STATE,
   TRANSACTION_NAME,
   transactionFixture,
@@ -123,40 +123,6 @@ const cases: Case[] = [
     expectError: 'wallet not synced',
   },
   {
-    name: 'AwaitingFee - a row without its bound bytes is a bug that surfaces',
-    stored: { ...TRANSACTION_IN_STATE.AwaitingFee, boundTx: null },
-    ledger: {},
-    expectTransitions: [],
-    expectError: 'holds no boundTx',
-  },
-  {
-    name: 'AwaitingFee - the relayer wallet pays outside the transaction and the fee is recorded inside one',
-    stored: TRANSACTION_IN_STATE.AwaitingFee,
-    ledger: {},
-    relayerWallet: { payFee: async (boundTx) => `paid(${boundTx})` },
-    expectTransitions: [
-      { method: 'recordFee', args: { name: TRANSACTION_NAME, finalizedTx: 'paid(bound)' } },
-    ],
-  },
-  {
-    name: 'AwaitingFee - the relayer wallet fails, so nothing is recorded and the error surfaces',
-    stored: TRANSACTION_IN_STATE.AwaitingFee,
-    ledger: {},
-    relayerWallet: {
-      payFee: async () => {
-        throw new Error('wallet not synced')
-      },
-    },
-    expectTransitions: [],
-    expectError: 'wallet not synced',
-  },
-  {
-    name: 'AwaitingFee - past its TTL expires before the fee is paid',
-    stored: { ...TRANSACTION_IN_STATE.AwaitingFee, expireTime: EXPIRED },
-    ledger: {},
-    expectTransitions: [{ method: 'expireTransaction', args: { name: TRANSACTION_NAME } }],
-  },
-  {
     name: 'AwaitingSubmission - submits and records the id the node returned',
     stored: TRANSACTION_IN_STATE.AwaitingSubmission,
     ledger: { submit: async (finalizedTx) => `id(${finalizedTx})` },
@@ -165,8 +131,8 @@ const cases: Case[] = [
     ],
   },
   {
-    name: 'AwaitingSubmission - a caller-bound call submits as a backend-proved one does',
-    stored: CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION,
+    name: 'AwaitingSubmission - a caller-finalised call submits as a backend-proved one does',
+    stored: CALLER_TRANSACTION_AWAITING_SUBMISSION,
     ledger: { submit: async (finalizedTx) => `id(${finalizedTx})` },
     expectTransitions: [
       { method: 'recordSubmission', args: { name: TRANSACTION_NAME, txId: 'id(finalized)' } },
@@ -281,7 +247,6 @@ describe('MidnightTransactionStateResolverImpl.resolveTransaction', () => {
         mock<MidnightTransactionStateController>('MidnightTransactionStateController', {
           recordProof: recording('recordProof'),
           recordProofFailure: recording('recordProofFailure'),
-          recordFee: recording('recordFee'),
           recordSubmission: recording('recordSubmission'),
           recordRejection: recording('recordRejection'),
           recordLedgerFailure: recording('recordLedgerFailure'),
@@ -416,7 +381,6 @@ describe('MidnightTransactionStateResolverImpl.resolvePending', () => {
     expect(searched).toEqual([
       'AwaitingProof',
       'AwaitingWallet',
-      'AwaitingFee',
       'AwaitingSubmission',
       'AwaitingInclusion',
     ])

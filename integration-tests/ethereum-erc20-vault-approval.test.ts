@@ -1,26 +1,22 @@
-import { nativeToken } from '@midnightntwrk/ledger-v9'
 import { UNISWAP_SWAP_ROUTER_02 } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
-import type { ApprovalRequest } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
 import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
 import { CIRCLE_USDC } from './sepolia-tokens'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
 import { completeApprovalAsUser, startApprovalAsUser } from './user-approval'
-import { secretKeyOf } from './user-caller-call'
-import { mergedBoundTx, startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
+import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 30 * 60_000
 
 /**
  * One router approval from `startApproval` to `Completed` over the whole local stack, under the
  * stack's user identity, which deployed the vault. This test plays the browser, which builds,
- * proves and binds both deployer calls without a fee, and the relayer pays each call's fee. The
- * vault account's allowance on the fork is read before and after, so the test proves the approve
- * call the MPC signed took effect. Before the round trip, bound bytes the relayer must not pay
- * for are offered to the server for each kind's start circuit and refused.
+ * proves and finalises both deployer calls with the user wallet paying their fees. The vault
+ * account's allowance on the fork is read before and after, so the test proves the approve call
+ * the MPC signed took effect.
  */
 describe('ERC20 vault approval round trip over the local stack', () => {
   let backend: Backend
@@ -42,63 +38,6 @@ describe('ERC20 vault approval round trip over the local stack', () => {
     await backend.stop()
     await backend.db.pool.end()
   }, ROUND_TRIP_TIMEOUT_MS)
-
-  const kinds: ReadonlyArray<{ approvalRequest: ApprovalRequest; circuit: string }> = [
-    {
-      approvalRequest: { kind: 'router', erc20Address: CIRCLE_USDC },
-      circuit: 'startApproveRouter',
-    },
-    { approvalRequest: { kind: 'stata' }, circuit: 'startApproveStata' },
-  ]
-
-  test.each(kinds)(
-    'bound bytes the relayer must not pay for are refused for $circuit and write nothing',
-    async ({ approvalRequest, circuit }) => {
-      const { approvalV1 } = backend.midnight.ethereumErc20Vault
-      const before = await approvalV1.adaptor.listApprovals(callerSecret, {})
-      const prepared = await approvalV1.adaptor.prepareStartApproval(callerSecret, {
-        approvalRequest,
-      })
-      if (!prepared.ok) throw new Error(prepared.error)
-      const unboundStart = await approvalV1.callBuilder.buildStart({
-        secretKey: secretKeyOf(callerSecret),
-        wallet: user.publicKeys,
-        inIndex: prepared.inputs.inIndex,
-        ...approvalRequest,
-      })
-      const refusal = {
-        ok: false,
-        error: `the bound bytes must be exactly one ${circuit} call to the vault, spending no coins`,
-      }
-
-      // The user's wallet pays the fee itself, so the bytes carry a DUST spend.
-      const withFee = await user.balance(unboundStart)
-      expect(
-        await approvalV1.adaptor.startApproval(callerSecret, {
-          approvalRequest,
-          inIndex: prepared.inputs.inIndex,
-          boundTx: withFee,
-        }),
-      ).toEqual(refusal)
-      await user.revert(withFee)
-
-      // The call bound without a fee, with an unshielded NIGHT transfer merged beside it.
-      const withoutFee = await user.balanceWithoutFee(unboundStart)
-      const night = await user.selfTransfer('unshielded', nativeToken().raw, 1n)
-      expect(
-        await approvalV1.adaptor.startApproval(callerSecret, {
-          approvalRequest,
-          inIndex: prepared.inputs.inIndex,
-          boundTx: mergedBoundTx(withoutFee, night),
-        }),
-      ).toEqual(refusal)
-      await user.revert(night)
-      await user.revert(withoutFee)
-
-      expect(await approvalV1.adaptor.listApprovals(callerSecret, {})).toEqual(before)
-    },
-    ROUND_TRIP_TIMEOUT_MS,
-  )
 
   test(
     'the router is granted an allowance on USDC',
@@ -136,7 +75,7 @@ describe('ERC20 vault approval round trip over the local stack', () => {
         signer: 'caller',
         unprovenTx: null,
       })
-      expect(start?.boundTx).toMatch(/^[0-9a-f]+$/)
+      expect(start?.finalizedTx).toMatch(/^[0-9a-f]+$/)
 
       await driveOperation(
         {
@@ -164,7 +103,7 @@ describe('ERC20 vault approval round trip over the local stack', () => {
       )
       expect(activity).toMatchObject({ type: 'Approval', state: 'Complete', outcome: 'approved' })
 
-      // Both deployer calls were bound by the user and paid by the relayer.
+      // Both deployer calls were finalised by the user's wallet.
       const transactions = await midnight.transactionV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: started.approval.name }],
         order: { field: 'createTime', direction: 'asc' },
@@ -188,12 +127,7 @@ describe('ERC20 vault approval round trip over the local stack', () => {
         const trail = entries
           .filter((entry) => new TextDecoder().decode(entry.data).includes(transaction.name))
           .map((entry) => entry.type.slice(entry.type.lastIndexOf('.') + 1))
-        expect(trail).toEqual([
-          'awaiting-fee',
-          'awaiting-submission',
-          'awaiting-inclusion',
-          'succeeded',
-        ])
+        expect(trail).toEqual(['awaiting-submission', 'awaiting-inclusion', 'succeeded'])
       }
     },
     ROUND_TRIP_TIMEOUT_MS,

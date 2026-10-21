@@ -9,7 +9,12 @@ import type { SupplyResult } from '@/lib/midnight/ethereum-erc20-vault/supply-v1
 import type { Backend } from '@/server/backend'
 
 import { log } from './operation-round-trip'
-import { bindAsUser, type BoundCallerCall, completionOutput, secretKeyOf } from './user-caller-call'
+import {
+  completionOutput,
+  finalizeAsUser,
+  type FinalizedCallerCall,
+  secretKeyOf,
+} from './user-caller-call'
 import type { UserWallet } from './user-wallet'
 
 /** The start call for the server's slot and pinned underlying, with the caller secret as the witness, the user wallet's keys and its coin of the underlying. */
@@ -19,9 +24,9 @@ export function buildStartCall(
   user: UserWallet,
   supplyRequest: SupplyRequest,
   inputs: SupplyStartInputs,
-): Promise<BoundCallerCall> {
+): Promise<FinalizedCallerCall> {
   const { callBuilder } = backend.midnight.ethereumErc20Vault.supplyV1
-  return bindAsUser(user, () =>
+  return finalizeAsUser(user, () =>
     callBuilder.buildStart({
       secretKey: secretKeyOf(callerSecret),
       wallet: user.publicKeys,
@@ -38,9 +43,9 @@ export function buildCompleteCall(
   callerSecret: string,
   user: UserWallet,
   inputs: SupplyCompleteInputs,
-): Promise<BoundCallerCall> {
+): Promise<FinalizedCallerCall> {
   const { callBuilder } = backend.midnight.ethereumErc20Vault.supplyV1
-  return bindAsUser(user, () =>
+  return finalizeAsUser(user, () =>
     callBuilder.buildComplete({
       secretKey: secretKeyOf(callerSecret),
       wallet: user.publicKeys,
@@ -51,7 +56,7 @@ export function buildCompleteCall(
   )
 }
 
-/** `prepareStartSupply`, the build, the bind and `startSupply`, as the lend panel runs them: a refusal at either server call is the result. */
+/** `prepareStartSupply`, the build, the finalisation and `startSupply`, as the lend panel runs them: a refusal at either server call is the result. */
 export async function startSupplyAsUser(
   backend: Backend,
   callerSecret: string,
@@ -61,7 +66,7 @@ export async function startSupplyAsUser(
   const { adaptor } = backend.midnight.ethereumErc20Vault.supplyV1
   const prepared = await adaptor.prepareStartSupply(callerSecret, { supplyRequest })
   if (!prepared.ok) return prepared
-  const { boundTx, buildMs, bindMs } = await buildStartCall(
+  const { finalizedTx, buildMs, finalizeMs } = await buildStartCall(
     backend,
     callerSecret,
     user,
@@ -72,15 +77,15 @@ export async function startSupplyAsUser(
   const result = await adaptor.startSupply(callerSecret, {
     supplyRequest,
     inIndex: prepared.inputs.inIndex,
-    boundTx,
+    finalizedTx,
   })
   log(
-    `start call built in ${String(buildMs)} ms, bound in ${String(bindMs)} ms, startSupply answered in ${String(Date.now() - calling)} ms`,
+    `start call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, startSupply answered in ${String(Date.now() - calling)} ms`,
   )
   return result
 }
 
-/** `prepareCompleteSupply`, the build, the bind and `completeSupply`, as the activity table's completion runs them. */
+/** `prepareCompleteSupply`, the build, the finalisation and `completeSupply`, as the activity table's completion runs them. */
 export async function completeSupplyAsUser(
   backend: Backend,
   callerSecret: string,
@@ -90,16 +95,16 @@ export async function completeSupplyAsUser(
   const { adaptor } = backend.midnight.ethereumErc20Vault.supplyV1
   const prepared = await adaptor.prepareCompleteSupply(callerSecret, { name })
   if (!prepared.ok) return prepared
-  const { boundTx, buildMs, bindMs } = await buildCompleteCall(
+  const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
     callerSecret,
     user,
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeSupply(callerSecret, { name, boundTx })
+  const result = await adaptor.completeSupply(callerSecret, { name, finalizedTx })
   log(
-    `complete call built in ${String(buildMs)} ms, bound in ${String(bindMs)} ms, completeSupply answered in ${String(Date.now() - calling)} ms`,
+    `complete call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, completeSupply answered in ${String(Date.now() - calling)} ms`,
   )
   return result
 }

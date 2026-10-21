@@ -109,7 +109,7 @@ describe('DepositStateControllerImpl.startDeposit', () => {
     maxPriorityFeePerGas: 1_000_000_000n,
     depositAccount: DEPOSIT_ACCOUNT,
     recipient: RECIPIENT,
-    call: { boundTx: 'start-call' },
+    call: { finalizedTx: 'start-call' },
   }
 
   const cases: ReadonlyArray<{
@@ -219,7 +219,7 @@ describe('DepositStateControllerImpl transitions', () => {
       name: 'completeDeposit',
       from: DEPOSIT_IN_STATE.AwaitingCompletion,
       transition: (c) =>
-        c.completeDeposit({ name: DEPOSIT_NAME, call: { boundTx: 'complete-call' } }),
+        c.completeDeposit({ name: DEPOSIT_NAME, call: { finalizedTx: 'complete-call' } }),
       to: 'AwaitingCompleteTransaction',
       patch: {},
       check: (calls) => {
@@ -229,7 +229,7 @@ describe('DepositStateControllerImpl transitions', () => {
             parent: DEPOSIT_NAME,
             circuit: 'completeDeposit',
             signer: 'caller',
-            boundTx: 'complete-call',
+            finalizedTx: 'complete-call',
           },
         ])
       },
@@ -286,7 +286,7 @@ describe('DepositStateControllerImpl transitions', () => {
     {
       name: 'completeDeposit before the request is attested',
       from: DEPOSIT_IN_STATE.AwaitingVaultRequest,
-      transition: (c) => c.completeDeposit({ name: DEPOSIT_NAME, call: { boundTx: 'x' } }),
+      transition: (c) => c.completeDeposit({ name: DEPOSIT_NAME, call: { finalizedTx: 'x' } }),
     },
     {
       name: 'recordCompleted on a terminal deposit',

@@ -333,6 +333,9 @@ function implementation(
   if (!isUnder(file, LIB_DIRECTORY)) {
     return { className, reason: `declared outside src/lib, in ${displayPath(file)}` }
   }
+  if (extendsError(project, declaration)) {
+    return { className, reason: 'an error the root throws, which no container draws' }
+  }
   const implemented = classChain(project, declaration).flatMap((member) =>
     (member.heritageClauses ?? [])
       .filter((clause) => clause.token === SyntaxKind.ImplementsKeyword)
@@ -479,6 +482,14 @@ function adaptedInterface(
     return undefined
   }
   return isInterfaceDeclaration(target) || isTypeAliasDeclaration(target) ? target : undefined
+}
+
+/** Whether the class chain ends at the `Error` global, so an instance is thrown and never injected. */
+function extendsError(project: Project, declaration: ClassDeclaration): boolean {
+  const [base] = (classChain(project, declaration).at(-1)?.heritageClauses ?? [])
+    .filter((clause) => clause.token === SyntaxKind.ExtendsKeyword)
+    .flatMap((clause) => [...clause.types])
+  return base !== undefined && resolvedSymbol(project.checker, base.expression).name === 'Error'
 }
 
 /** The class, then each base class it extends, nearest first, up to the first base that is not a class declaration. */

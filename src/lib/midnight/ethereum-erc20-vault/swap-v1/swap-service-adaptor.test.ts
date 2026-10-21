@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest'
 
-import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import type {
   SwapCompleteInputs,
   SwapStartInputs,
@@ -44,8 +43,8 @@ const REQUEST = {
   amountInMaximum: 1_000_000n,
 }
 const WIRE_REQUEST = { ...REQUEST, fee: '500', amountOut: '980100', amountInMaximum: '1000000' }
-const BOUND_TX = `0x${'B0BD'.repeat(2)}`
-const PARSED_BOUND_TX = 'b0bd'.repeat(2)
+const FINALIZED_TX = `0x${'F1A1'.repeat(2)}`
+const PARSED_FINALIZED_TX = 'f1a1'.repeat(2)
 const START_INPUTS: SwapStartInputs = { inIndex: 42n }
 const COMPLETE_INPUTS: SwapCompleteInputs = {
   requestId: REQUEST_ID_HEX,
@@ -135,14 +134,14 @@ describe('SwapServiceAdaptor parsing', () => {
       expectError: 'swapRequest.fee',
     },
     {
-      name: 'startSwap carries the request, the slot and the bound bytes normalised',
+      name: 'startSwap carries the request, the slot and the finalised bytes normalised',
       call: (a) =>
         a.startSwap(CALLER_SECRET, {
           swapRequest: WIRE_REQUEST,
           inIndex: '42',
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
-      expectReceived: [{ swapRequest: REQUEST, inIndex: 42n, boundTx: PARSED_BOUND_TX }],
+      expectReceived: [{ swapRequest: REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'startSwap refuses a request without a fee tier',
@@ -150,21 +149,21 @@ describe('SwapServiceAdaptor parsing', () => {
         a.startSwap(CALLER_SECRET, {
           swapRequest: { ...REQUEST, fee: undefined },
           inIndex: 42n,
-          boundTx: BOUND_TX,
+          finalizedTx: FINALIZED_TX,
         }),
       expectReceived: [],
       expectError: 'swapRequest.fee',
     },
     {
-      name: 'startSwap refuses bound bytes that are not hex',
+      name: 'startSwap refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startSwap(CALLER_SECRET, { swapRequest: REQUEST, inIndex: 42n, boundTx: 'zz' }),
+        a.startSwap(CALLER_SECRET, { swapRequest: REQUEST, inIndex: 42n, finalizedTx: 'zz' }),
       expectReceived: [],
-      expectError: 'boundTx',
+      expectError: 'finalizedTx',
     },
     {
       name: 'startSwap refuses a missing slot',
-      call: (a) => a.startSwap(CALLER_SECRET, { swapRequest: REQUEST, boundTx: BOUND_TX }),
+      call: (a) => a.startSwap(CALLER_SECRET, { swapRequest: REQUEST, finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'inIndex',
     },
@@ -174,13 +173,13 @@ describe('SwapServiceAdaptor parsing', () => {
       expectReceived: [{ name: SWAP_NAME }],
     },
     {
-      name: 'completeSwap passes the name and the bound bytes',
-      call: (a) => a.completeSwap(CALLER_SECRET, { name: SWAP_NAME, boundTx: BOUND_TX }),
-      expectReceived: [{ name: SWAP_NAME, boundTx: PARSED_BOUND_TX }],
+      name: 'completeSwap passes the name and the finalised bytes',
+      call: (a) => a.completeSwap(CALLER_SECRET, { name: SWAP_NAME, finalizedTx: FINALIZED_TX }),
+      expectReceived: [{ name: SWAP_NAME, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'completeSwap refuses a name that is not a swap',
-      call: (a) => a.completeSwap(CALLER_SECRET, { name: 'swaps/1', boundTx: BOUND_TX }),
+      call: (a) => a.completeSwap(CALLER_SECRET, { name: 'swaps/1', finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-swaps/{uuid}',
     },
@@ -246,15 +245,6 @@ describe('SwapServiceAdaptor outcomes', () => {
         error: `${SWAP_NAME} is AwaitingVaultRequest, which does not allow complete`,
       },
     ],
-    [
-      'bound bytes that are not the expected vault call',
-      new SponsoredCallMismatch('startSwap'),
-      {
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startSwap call to the vault, spending shielded coins alone',
-      },
-    ],
     ['any other error', new Error('indexer down'), undefined],
   ]
 
@@ -270,10 +260,13 @@ describe('SwapServiceAdaptor outcomes', () => {
     const starting = adaptor.startSwap(CALLER_SECRET, {
       swapRequest: REQUEST,
       inIndex: 42n,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     const preparing = adaptor.prepareCompleteSwap(CALLER_SECRET, { name: SWAP_NAME })
-    const completing = adaptor.completeSwap(CALLER_SECRET, { name: SWAP_NAME, boundTx: BOUND_TX })
+    const completing = adaptor.completeSwap(CALLER_SECRET, {
+      name: SWAP_NAME,
+      finalizedTx: FINALIZED_TX,
+    })
     for (const outcome of [starting, preparing, completing]) {
       if (expectRefusal === undefined) await expect(outcome).rejects.toThrow(error.message)
       else expect(await outcome).toEqual(expectRefusal)

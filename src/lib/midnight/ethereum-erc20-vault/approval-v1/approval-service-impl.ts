@@ -32,10 +32,8 @@ import {
   ApprovalStateConflict,
   type ApprovalStateController,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-controller'
-import { APPROVAL_START_CIRCUIT_BY_KIND } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-state-controller-impl'
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
-import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
 import type {
   SpenderLedger,
@@ -56,7 +54,6 @@ export class ApprovalServiceImpl implements ApprovalService {
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
-  private readonly guard: SponsoredCallGuard
 
   constructor(
     approvalRepository: ApprovalRepository,
@@ -67,7 +64,6 @@ export class ApprovalServiceImpl implements ApprovalService {
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
-    guard: SponsoredCallGuard,
   ) {
     this.approvalRepository = approvalRepository
     this.approvalStateController = approvalStateController
@@ -77,7 +73,6 @@ export class ApprovalServiceImpl implements ApprovalService {
     this.unitOfWork = unitOfWork
     this.signet = signet
     this.vault = vault
-    this.guard = guard
   }
 
   /** The router on every allowed token, then the wrapper on its underlying, each with the chain's allowance. */
@@ -120,9 +115,8 @@ export class ApprovalServiceImpl implements ApprovalService {
 
   async startApproval(
     caller: Caller,
-    { approvalRequest, inIndex, boundTx }: StartApprovalArgs,
+    { approvalRequest, inIndex, finalizedTx }: StartApprovalArgs,
   ): Promise<Approval> {
-    this.guard.assertSponsoredCall(boundTx, APPROVAL_START_CIRCUIT_BY_KIND[approvalRequest.kind])
     const grant = await this.grantOf(approvalRequest)
     return this.unitOfWork.runInTransaction(() =>
       this.approvalStateController.startApproval({
@@ -130,7 +124,7 @@ export class ApprovalServiceImpl implements ApprovalService {
         ...grant,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        call: { boundTx },
+        call: { finalizedTx },
       }),
     )
   }
@@ -147,12 +141,11 @@ export class ApprovalServiceImpl implements ApprovalService {
 
   async completeApproval(
     caller: Caller,
-    { name, boundTx }: CompleteApprovalArgs,
+    { name, finalizedTx }: CompleteApprovalArgs,
   ): Promise<Approval> {
-    this.guard.assertSponsoredCall(boundTx, 'completeApprove')
     await this.assertCompletable(caller, name)
     return this.unitOfWork.runInTransaction(() =>
-      this.approvalStateController.completeApproval({ name, call: { boundTx } }),
+      this.approvalStateController.completeApproval({ name, call: { finalizedTx } }),
     )
   }
 

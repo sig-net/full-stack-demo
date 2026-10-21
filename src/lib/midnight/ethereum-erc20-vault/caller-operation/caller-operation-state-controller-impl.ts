@@ -27,7 +27,7 @@ import { vaultRequestName } from '@/lib/midnight/ethereum-erc20-vault/vault-requ
 import type { VaultRequestStateController } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-state-controller'
 import { midnightTransactionName } from '@/lib/midnight/transaction-v1/transaction'
 import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
-import type { BoundCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
+import type { FinalizedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 import type { Repository } from '@/lib/repository/repository'
 import type { Logger } from '@/lib/logging/logger'
 
@@ -111,7 +111,7 @@ export abstract class CallerOperationStateControllerImpl<
   protected async start(
     row: Resource,
     circuit: VaultCircuitId,
-    call: BoundCall,
+    call: FinalizedCall,
   ): Promise<Resource> {
     const stored = await this.repository.create(row)
     await this.eventPublisher.publishEvent(

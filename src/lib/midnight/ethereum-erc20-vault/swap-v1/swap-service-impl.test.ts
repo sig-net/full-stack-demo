@@ -7,11 +7,6 @@ import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-eth
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import type { QuoteExactInputSingleArgs, UniswapQuoter } from '@/lib/ethereum/uniswap-quoter'
-import {
-  type SponsoredCallGuard,
-  SponsoredCallMismatch,
-  type SponsoredCircuit,
-} from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import type { Swap } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import {
   ERC20_ADDRESS_IN,
@@ -47,13 +42,12 @@ const stranger: Caller = resolveCaller('cd'.repeat(32))
 const PAIR = { erc20AddressIn: ERC20_ADDRESS_IN, erc20AddressOut: ERC20_ADDRESS_OUT }
 const REQUEST = { ...PAIR, fee: 500n, amountOut: 1_000_000n, amountInMaximum: 1_100_000n }
 const AMOUNT_IN_OUTPUT = `40420f${'00'.repeat(29)}`
-const BOUND_TX = 'b0bd'
+const FINALIZED_TX = 'f1a1'
 
-/** What the service quoted, wrote and asked the guard, in order, so a test can see that a refusal writes nothing and a commit opens one transaction after its reads. */
+/** What the service quoted, wrote, in order, so a test can see that a refusal writes nothing and a commit opens one transaction after its reads. */
 interface Recorded {
   steps: string[]
   quotes: QuoteExactInputSingleArgs[]
-  guarded: SponsoredCircuit[]
   started: StartSwapArgs[]
   completed: CompleteSwapArgs[]
 }
@@ -61,7 +55,7 @@ interface Recorded {
 const NOTHING_RECORDED: Recorded = {
   steps: [],
   quotes: [],
-  guarded: [],
+
   started: [],
   completed: [],
 }
@@ -71,8 +65,6 @@ function serviceOver(options: {
   requests?: VaultRequest[]
   /** What each fee tier pays for the input, undefined for a tier with no pool. */
   quotesByFee?: Record<string, bigint | undefined>
-  /** Whether the guard refuses the bound bytes, admitting them when absent. */
-  refusesCall?: boolean
 }) {
   const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const swapRepository = new MemoryRepository<Swap>()
@@ -109,14 +101,6 @@ function serviceOver(options: {
     }),
     SIGNET,
     VAULT,
-    mock<SponsoredCallGuard>('SponsoredCallGuard', {
-      assertSponsoredCall: (boundTx, circuit) => {
-        expect(boundTx).toBe(BOUND_TX)
-        recorded.steps.push('guard')
-        recorded.guarded.push(circuit)
-        if (options.refusesCall === true) throw new SponsoredCallMismatch(circuit)
-      },
-    }),
   )
   return { service, recorded, ready }
 }
@@ -200,12 +184,12 @@ describe('SwapServiceImpl.prepareStartSwap', () => {
 })
 
 describe('SwapServiceImpl.startSwap', () => {
-  test('guards the bound call and commits it under the vault account in one transaction', async () => {
+  test('commits the finalised call under the vault account in one transaction', async () => {
     const { service, recorded } = serviceOver({})
     const swap = await service.startSwap(caller, {
       swapRequest: REQUEST,
       inIndex: 42n,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     expect(swap.name).toMatch(new RegExp(`^${caller.name}/ethereum-erc20-vault-swaps/${UUID}$`))
     expect(swap).toMatchObject({
@@ -219,32 +203,17 @@ describe('SwapServiceImpl.startSwap', () => {
     })
     expect(recorded).toEqual({
       ...NOTHING_RECORDED,
-      steps: ['guard', 'transaction'],
-      guarded: ['startSwap'],
+      steps: ['transaction'],
       started: [
         {
           name: swap.name,
           ...REQUEST,
           inIndex: 42n,
           vaultAccount: vaultAccountOf(SIGNET, VAULT),
-          call: { boundTx: BOUND_TX },
+          call: { finalizedTx: FINALIZED_TX },
         },
       ],
     })
-  })
-
-  test('bound bytes the guard refuses are refused and nothing is written', async () => {
-    const { service, recorded } = serviceOver({ refusesCall: true })
-    const starting = service.startSwap(caller, {
-      swapRequest: REQUEST,
-      inIndex: 42n,
-      boundTx: BOUND_TX,
-    })
-    await expect(starting).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(starting).rejects.toThrow(
-      'the bound bytes must be exactly one startSwap call to the vault',
-    )
-    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['guard'], guarded: ['startSwap'] })
   })
 })
 
@@ -378,19 +347,21 @@ describe('SwapServiceImpl.prepareCompleteSwap', () => {
 })
 
 describe('SwapServiceImpl.completeSwap', () => {
-  test('commits the bound call in one transaction after the state check', async () => {
+  test('commits the finalised call in one transaction after the state check', async () => {
     const { service, recorded, ready } = serviceOver({
       swaps: [awaiting],
       requests: [attestedUnder(awaiting.name)],
     })
     await ready
-    const swap = await service.completeSwap(caller, { name: awaiting.name, boundTx: BOUND_TX })
+    const swap = await service.completeSwap(caller, {
+      name: awaiting.name,
+      finalizedTx: FINALIZED_TX,
+    })
     expect(swap.state).toBe('AwaitingCompleteTransaction')
     expect(recorded).toEqual({
       ...NOTHING_RECORDED,
-      steps: ['guard', 'transaction'],
-      guarded: ['completeSwap'],
-      completed: [{ name: awaiting.name, call: { boundTx: BOUND_TX } }],
+      steps: ['transaction'],
+      completed: [{ name: awaiting.name, call: { finalizedTx: FINALIZED_TX } }],
     })
   })
 
@@ -400,31 +371,15 @@ describe('SwapServiceImpl.completeSwap', () => {
       const { service, recorded, ready } = serviceOver({ swaps, requests })
       await ready
       await expectRefusal(
-        service.completeSwap(by, { name: awaiting.name, boundTx: BOUND_TX }),
+        service.completeSwap(by, { name: awaiting.name, finalizedTx: FINALIZED_TX }),
         expectError,
       )
       expect(recorded).toEqual({
         ...NOTHING_RECORDED,
-        steps: ['guard'],
-        guarded: ['completeSwap'],
+        steps: [],
       })
     },
   )
-
-  test('bound bytes the guard refuses are refused before the swap is read and nothing is written', async () => {
-    // No swap is stored, so a refusal of the call shows the guard ran first.
-    const { service, recorded } = serviceOver({ refusesCall: true })
-    const completing = service.completeSwap(caller, { name: awaiting.name, boundTx: BOUND_TX })
-    await expect(completing).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(completing).rejects.toThrow(
-      'the bound bytes must be exactly one completeSwap call to the vault',
-    )
-    expect(recorded).toEqual({
-      ...NOTHING_RECORDED,
-      steps: ['guard'],
-      guarded: ['completeSwap'],
-    })
-  })
 })
 
 describe('SwapServiceImpl reads', () => {

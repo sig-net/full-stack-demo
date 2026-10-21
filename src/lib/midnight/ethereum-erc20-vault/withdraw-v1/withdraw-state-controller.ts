@@ -9,7 +9,7 @@ import {
   type Withdraw,
   withdrawNameSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw'
-import type { BoundCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
+import type { FinalizedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 
 /**
  * The only writer of a withdrawal's state: the caller operation's transitions over the withdraw
@@ -30,7 +30,7 @@ export interface StartWithdrawArgs extends Omit<
   'state' | 'outcome' | 'failure' | 'error' | 'createTime' | 'updateTime'
 > {
   /** The start circuit call, built with the withdrawal's assigned fields. */
-  call: BoundCall
+  call: FinalizedCall
 }
 
 export type CompleteWithdrawArgs = CompleteOperationArgs

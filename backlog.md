@@ -34,37 +34,10 @@ mechanism worked, the presentation did not.
       `activityStepsOf()` for a refunded swap, a refunded send and a reverted trade still
       awaiting its attestation flush.
 
-## Bound the relayer's DUST exposure to sponsored caller calls
-
-The relayer attaches its DUST fee to any bound bytes that pass the sponsored call guard in
-`src/lib/midnight/ethereum-erc20-vault/sponsored-call-guard.ts` (exactly one call to the vault
-at the expected circuit, no unshielded offer, no DUST action, and shielded coins spent only where
-`SPONSORED_CALL_POLICY_BY_CIRCUIT` admits them). The guard bounds what the relayer pays for, not
-how often: anyone can mint a caller secret and submit valid calls of any operation, each costing relayer DUST, and the fee of a call that fails in the fallible phase is not refunded.
-
-A `startWithdraw` call surrenders a coin the caller's wallet funds, so its bound bytes carry
-shielded inputs and change by design. The shielded offer is opaque to the inspector, so the
-guard cannot tell the coin the circuit needs from extra shielded movement a caller bundles
-beside it (a transfer to a third party, or many inputs that enlarge the bytes): the relayer
-pays the DUST fee of whatever shielded movement rides on a `startWithdraw`. The same holds for
-every other start circuit that takes a coin (`startSupply`, `startRedeem`, `startSwap`).
-
-- [ ] Decide the limit: a per-caller rate, a per-caller count of live operations, or a deposit
-      account that must hold funds before a start call is sponsored.
-- [ ] Enforce it in the start and complete methods of the deposit and withdraw services before
-      the controller call, with a refusal the adaptor reports as a result.
-- [ ] Cover it in the deposit and withdraw services' unit tests and in
-      `integration-tests/ethereum-erc20-vault-deposit-start.test.ts` and
-      `integration-tests/ethereum-erc20-vault-withdraw.test.ts`.
-- [ ] Bound the shielded movement a sponsored `startWithdraw` may carry (a ceiling on the
-      inputs and outputs the inspector counts, or a fee estimate the relayer refuses to exceed),
-      once a size the wallet's balancing never exceeds is known.
-- [ ] Apply the same limit to each operation as it moves to browser-side proving.
-
 ## Refuse a start call that claims another caller's live slot
 
 `startDeposit`, `startWithdraw`, `startSupply`, `startRedeem`, `startSwap` and `startApproval` store the `inIndex` the browser sends without checking it
-against the bound bytes or the live rows. The backend keys its work on the stored slot, so a
+against the live rows, and the finalised bytes are not inspected at all. The backend keys its work on the stored slot, so a
 caller that claims another user's live slot gets a vault request row that tracks the victim's
 ledger entry: the relayer duplicates the victim's sends on its own DUST, and the liar's
 operation is recorded `Completed` when the victim's settles. No funds move to the liar, since
@@ -75,24 +48,6 @@ the complete circuit checks the caller's commitment.
       assignment with a server secret and verify the signature at commit.
 - [ ] Cover the refusal in the deposit and withdraw services' unit tests and in the deposit-start
       and withdraw integration files.
-- [ ] Carry the check into each operation's prepare and commit methods as it migrates.
-
-## Pay a sponsored call's fee once when two resolvers race
-
-`resolveAwaitingFee` in `src/lib/midnight/transaction-v1/transaction-state-resolver-impl.ts`
-calls `RelayerWallet.payFee` outside the transaction and then writes `recordFee`. Two resolvers
-on one `AwaitingFee` row (an event and a sweep, or two processes) both pay before one loses the
-write with a `StateConflict`, so the relayer spends DUST twice for one call. The same
-single-wallet concurrency leaves two in-flight fee transactions free to double spend the
-relayer's DUST state.
-
-- [ ] Serialise fee payments per row: claim the row before `payFee` (a lease field or a
-      `search` with `lock: 'update'` and `skipLocked`), or run every relayer fee through one
-      queue per process.
-- [ ] Decide what the relayer wallet needs for fees in flight at once (a DUST UTXO per fee, or
-      one payment at a time) and document it in the README's Midnight transactions section.
-- [ ] Cover the race in `transaction-state-resolver-impl.test.ts` with two concurrent resolves of
-      one row, asserting one `payFee` call.
 
 ## Back off a rejected Ethereum broadcast
 
@@ -109,3 +64,91 @@ once, 2,244 Ethereum transaction rows in ten minutes.
 - [ ] Document in the README's stack section that a re-created fork leaves the vault account
       unfunded with nonce 0 while the vault contract's counter continues, and the cheatcodes
       that realign them (`anvil_setBalance`, `anvil_setNonce`, `anvil_dropAllTransactions`).
+
+## Read the vault ledger before believing a caller call succeeded
+
+The server records a caller's finalised bytes as the call the page names without inspecting
+them, and `caller-operation-state-resolver-impl.ts` records `recordStarted` on a `Succeeded`
+start child and `recordCompleted` on a `Succeeded` complete child from the child's outcome
+alone, reading `requestStage` only when a child failed. Any finalised transaction the node
+accepts, a self-transfer included, is therefore recorded as the step, the relayer sends and
+attests a request the vault never opened, and the operation ends `Completed` while the vault
+minted nothing.
+
+- [ ] On a `Succeeded` start child, read the ledger (`requestStage()` over the vault ledger for
+      the operation's action and `inIndex`) and record the start only when the request is
+      there, else record the start failure with a message naming what the ledger showed.
+- [ ] On a `Succeeded` complete child, route through `recordIfSettled()` so the completion is
+      recorded only when the ledger shows the request settled.
+- [ ] Decide whether a cheap circuit-identity check belongs at the adaptor (one call to the vault
+      at the named circuit, read from the finalised bytes): if it does, it is its own named
+      class with its own reason, never a reinstated sponsorship policy.
+- [ ] Cover the ledger read in the caller operation resolver's unit tests with a mocked ledger
+      (a succeeded child whose request the ledger lacks, a succeeded child the ledger settled),
+      and the refusal in one integration file over real bytes.
+- [ ] Rewrite the sentence in the six `<op>-service.ts` docs and the README's vault circuits
+      paragraph ("the operation follows its child transaction's outcome") once the ledger is
+      read for both outcomes.
+
+## Bound the relayer's cost per caller start
+
+A caller pays the DUST fee of its own two circuit calls, and nothing else: each start still
+costs the relayer a send call, an attestation queueing call and a share of the flushes, and
+costs the vault account the Ethereum gas of the sweep or transfer. A caller secret is free to
+mint, so one client can start operations until the relayer's DUST or the vault account's ETH
+runs out.
+
+- [ ] Measure what one start of each operation costs the relayer in DUST and the vault account
+      in ETH on the local stack, and record the figures in the README's readiness section.
+- [ ] Choose the bound: a cap on live operations per caller (a search under the row lock in each
+      controller's create method), a per-caller rate over a window, or a requirement that the
+      caller's deposit account funds its own sweep, which the deposit already asks of it.
+- [ ] Cover the refusal in each service's unit tests and in one integration file.
+
+## Release the wallet's fee reservation when a finalised call never reaches the record
+
+`runCallerCall()` releases the finalised bytes when the record refuses or throws, so the wallet's
+DUST coin is free for the retry and the next call. A page closed between the wallet's finalise
+and the server's record never releases, and the wallet holds the coins as pending until the
+SDK's reservation lapses or the wallet reconnects.
+
+- [ ] Measure on the local stack how long the seed wallet holds a finalised transaction it never
+      submitted, and whether a reconnect of the same seed clears it.
+- [ ] Decide whether the page should persist the finalised bytes beside the identity secret
+      until the record answers, and release them on the next load when no row carries them.
+- [ ] Walk the deposit's nonce-conflict retry through the browser pane (two tabs preparing the
+      same deposit account) and confirm the second attempt finalises after the release.
+
+## Set the caller's DUST minimum from a measured fee
+
+`CALLER_DUST_MINIMUM` in `vault-readiness.ts` is 1 DUST, chosen as several times the local
+chain's 0.05 DUST per-transaction overhead and not from the fee of a real caller call.
+
+- [ ] Log the DUST the wallet's balance step spends per caller call (`durationMs` is logged, the
+      fee is not) and measure it for the start and the complete of each operation.
+- [ ] Set the minimum from the largest measured fee with a stated margin, and name the figure in
+      the README's readiness section and the checklist's explanation.
+
+## Walk every operation through the browser pane under the caller-paid flow
+
+The deposit and the send are verified in the pane with the caller paying its fees. Supply,
+redeem, swap and approval are verified by their integration round trips only, and the
+"Paying the fee and signing with your wallet" stage label is verified by unit test only.
+
+- [ ] Start and complete a supply and a redeem from the Lend panel, a swap from the Swap panel
+      and an approval from the approval targets, with a fresh identity secret and the public
+      genesis seed, and record what each stage line and toast read.
+- [ ] Capture the signing stage label in a real browser, slowing the wallet's finalise if the
+      pane samples too slowly to see it.
+- [ ] Fix every label or toast that still describes the relayer paying.
+
+## Cache the vault's prover keys in the browser
+
+Every caller call fetches the circuit's prover key, verifier key and ZKIR from
+`/zk-assets/ethereum-erc20-vault` through `FetchZkConfigProvider`, so a start and its complete
+fetch the keys twice and a retry fetches them again.
+
+- [ ] Wrap the page's zk config provider in a bounded cache keyed by circuit, verified against
+      the asset's digest, under the specialist-cache rule in AGENTS.md.
+- [ ] Measure the build time of a start before and after on the local stack and record it in
+      the README's proving keys section.

@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto'
 
-import { nativeToken } from '@midnightntwrk/ledger-v9'
 import { rawTokenType } from '@midnight-ntwrk/compact-runtime'
 import { bytesToHex } from '@sig-net/midnight'
 import {
@@ -18,28 +17,21 @@ import type { Backend } from '@/server/backend'
 import { testBackend } from './backend'
 import { CIRCLE_USDC } from './sepolia-tokens'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
-import { secretKeyOf } from './user-caller-call'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
-import { mergedBoundTx, startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
+import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 import { completeWithdrawAsUser, startWithdrawAsUser } from './user-withdraw'
 
 const ROUND_TRIP_TIMEOUT_MS = 45 * 60_000
 /** Whole USDC deposited and then sent back out. */
 const AMOUNT = 1_500_000n
-const SWEEP_GAS = {
-  gasLimit: 100_000n,
-  maxFeePerGas: 30_000_000_000n,
-  maxPriorityFeePerGas: 1_000_000_000n,
-}
 
 /**
  * One withdrawal from `startWithdraw` to `Completed` over the whole local stack: the caller
  * first deposits the USDC it will send, then sends it from the vault account to a fresh
- * destination on the fork. This test plays the browser, which builds, proves and binds both
- * caller calls of each operation without a fee, with the wallet's own coin of the token funding
- * the start call, and the relayer pays each call's fee. The destination's balance after proves
- * the transfer the MPC signed executed. Between the two legs, bound bytes the relayer must not
- * pay for are offered to the server with the caller's real coins and refused.
+ * destination on the fork. This test plays the browser, which builds, proves and finalises both
+ * caller calls of each operation with the user wallet paying their fees, and the wallet's own
+ * coin of the token funding the start call. The destination's balance after proves the transfer
+ * the MPC signed executed.
  */
 describe('ERC20 vault withdraw round trip over the local stack', () => {
   let backend: Backend
@@ -106,108 +98,6 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
   )
 
   test(
-    'bound bytes the relayer must not pay for are refused and write nothing',
-    async () => {
-      if (deposit === undefined) throw new Error('the deposit did not run')
-      const { depositV1, withdrawV1 } = backend.midnight.ethereumErc20Vault
-      const withdrawRequest = {
-        erc20Address: CIRCLE_USDC,
-        amount: AMOUNT,
-        destEvmAddress: `0x${bytesToHex(randomBytes(20))}`,
-      }
-      const before = await Promise.all([
-        withdrawV1.adaptor.listWithdraws(callerSecret, {}),
-        depositV1.adaptor.listDeposits(callerSecret, {}),
-      ])
-      const prepared = await withdrawV1.adaptor.prepareStartWithdraw(callerSecret, {
-        withdrawRequest,
-      })
-      if (!prepared.ok) throw new Error(prepared.error)
-      const unboundStart = await withdrawV1.callBuilder.buildStart({
-        secretKey: secretKeyOf(callerSecret),
-        wallet: user.publicKeys,
-        inIndex: prepared.inputs.inIndex,
-        ...withdrawRequest,
-      })
-
-      // The user's wallet pays the fee itself, so the bytes carry a DUST spend.
-      const withFee = await user.balance(unboundStart)
-      expect(
-        await withdrawV1.adaptor.startWithdraw(callerSecret, {
-          withdrawRequest,
-          inIndex: prepared.inputs.inIndex,
-          boundTx: withFee,
-        }),
-      ).toEqual({
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startWithdraw call to the vault, spending shielded coins alone',
-      })
-      await user.revert(withFee)
-
-      // The call bound without a fee, with an unshielded NIGHT transfer merged beside it.
-      const withoutFee = await user.balanceWithoutFee(unboundStart)
-      const night = await user.selfTransfer('unshielded', nativeToken().raw, 1n)
-      expect(
-        await withdrawV1.adaptor.startWithdraw(callerSecret, {
-          withdrawRequest,
-          inIndex: prepared.inputs.inIndex,
-          boundTx: mergedBoundTx(withoutFee, night),
-        }),
-      ).toEqual({
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startWithdraw call to the vault, spending shielded coins alone',
-      })
-      await user.revert(night)
-      await user.revert(withoutFee)
-
-      // A deposit start bound without a fee, with a shielded transfer of the vault coin merged beside it.
-      const depositRequest = { erc20Address: CIRCLE_USDC, amount: 1_000_000n }
-      const preparedDeposit = await depositV1.adaptor.prepareStartDeposit(callerSecret, {
-        depositRequest,
-        wallet: user.publicKeys,
-      })
-      if (!preparedDeposit.ok) throw new Error(preparedDeposit.error)
-      const depositStart = await user.balanceWithoutFee(
-        await depositV1.callBuilder.buildStart({
-          secretKey: secretKeyOf(callerSecret),
-          wallet: user.publicKeys,
-          inIndex: preparedDeposit.inputs.inIndex,
-          evmNonce: preparedDeposit.inputs.evmNonce,
-          gas: SWEEP_GAS,
-          erc20Address: depositRequest.erc20Address,
-          amount: depositRequest.amount,
-        }),
-      )
-      const coin = await user.selfTransfer('shielded', coinType, 1n)
-      expect(
-        await depositV1.adaptor.startDeposit(callerSecret, {
-          depositRequest,
-          wallet: user.publicKeys,
-          inIndex: preparedDeposit.inputs.inIndex,
-          evmNonce: preparedDeposit.inputs.evmNonce,
-          boundTx: mergedBoundTx(depositStart, coin),
-        }),
-      ).toEqual({
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startDeposit call to the vault, spending no coins',
-      })
-      await user.revert(coin)
-      await user.revert(depositStart)
-
-      expect(
-        await Promise.all([
-          withdrawV1.adaptor.listWithdraws(callerSecret, {}),
-          depositV1.adaptor.listDeposits(callerSecret, {}),
-        ]),
-      ).toEqual(before)
-    },
-    ROUND_TRIP_TIMEOUT_MS,
-  )
-
-  test(
     'USDC in the vault is sent to a destination on Ethereum',
     async () => {
       if (deposit === undefined) throw new Error('the deposit did not run')
@@ -245,7 +135,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
         criteria: [{ type: 'exact-text', field: 'parent', text: withdraw.name }],
       })
       expect(start).toMatchObject({ circuit: 'startWithdraw', signer: 'caller', unprovenTx: null })
-      expect(start?.boundTx).toMatch(/^[0-9a-f]+$/)
+      expect(start?.finalizedTx).toMatch(/^[0-9a-f]+$/)
 
       await driveOperation(
         {
@@ -279,7 +169,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
         destination,
       })
 
-      // Both caller calls were bound by the user and paid by the relayer.
+      // Both caller calls were finalised by the user's wallet.
       const transactions = await midnight.transactionV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: withdraw.name }],
         order: { field: 'createTime', direction: 'asc' },
@@ -303,12 +193,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
         const trail = entries
           .filter((entry) => new TextDecoder().decode(entry.data).includes(transaction.name))
           .map((entry) => entry.type.slice(entry.type.lastIndexOf('.') + 1))
-        expect(trail).toEqual([
-          'awaiting-fee',
-          'awaiting-submission',
-          'awaiting-inclusion',
-          'succeeded',
-        ])
+        expect(trail).toEqual(['awaiting-submission', 'awaiting-inclusion', 'succeeded'])
       }
     },
     ROUND_TRIP_TIMEOUT_MS,

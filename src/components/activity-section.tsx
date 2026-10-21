@@ -183,7 +183,7 @@ const PAGE_COMPLETE_BY_TYPE: Record<ActivityType, (args: PageCompletionArgs) => 
 
 /**
  * Starts the completion of every activity that awaits it, once per row per retry window. The
- * page builds, proves and binds the completion call with the connected wallet, so nothing runs
+ * page builds, proves and finalises the completion call with the connected wallet, so nothing runs
  * without one, and a refusal (the row already completing elsewhere) is reported and left to the
  * next window.
  */

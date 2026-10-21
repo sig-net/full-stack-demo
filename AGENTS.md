@@ -159,10 +159,11 @@ Keep setup instructions and application reference material in README.md and docs
 - A vault-level batch (the flush) is a process with no row. `Flusher.flush()` coalesces nudges,
   runs one flush at a time, and calls `resolveWaitingFlushes()` when a flush lands. A step that
   touches shared contract state is never a step of one request's lifecycle.
-- A transaction row names its `signer` (`caller` or `relayer`). A caller row is committed bound
-  and enters `AwaitingFee`, the relayer's fee to pay. `AwaitingWallet` is the relayer's to-do,
-  which the resolver takes through the `RelayerWallet` port, and the state machine refuses a
-  caller row in `AwaitingProof` or `AwaitingWallet` and a relayer row in `AwaitingFee`.
+- A transaction row names its `signer` (`caller` or `relayer`). A caller row is committed
+  finalised by the caller's wallet, which pays its own fee, and enters `AwaitingSubmission`
+  directly. `AwaitingWallet` is the relayer's to-do, which the resolver takes through the
+  `RelayerWallet` port, and the state machine refuses a caller row in `AwaitingProof` or
+  `AwaitingWallet`.
 - The sweep (`src/lib/sweep.ts`, every 30 seconds from `start()`) calls every resolver's
   `resolvePending()` in dependency order (Midnight transactions, Ethereum transactions, vault
   requests, deposits) and then fires `flush()` without awaiting it. Every resolver has a
@@ -311,7 +312,7 @@ Keep setup instructions and application reference material in README.md and docs
   `integration-tests/` folder, run with `yarn test:integration` against the local services. A
   `*.test.ts` under `src` that opens a socket is in the wrong folder.
 - `integration-tests/ethereum-erc20-vault-deposit.test.ts` is the end-to-end deposit. It runs
-  inside `yarn test:integration` (45 to 55 minutes for the suite of 21 files, since each of the six
+  inside `yarn test:integration` (45 to 55 minutes for the suite of 20 files, since each of the six
   operation round trips takes four to fifteen), needs the whole local stack, and needs no dev server running
   (`ps aux | grep "[n]ext dev"` finds nothing), since a dev server joins the same Kafka consumer
   group. Run the suite whenever a change touches a state machine, a state controller, a

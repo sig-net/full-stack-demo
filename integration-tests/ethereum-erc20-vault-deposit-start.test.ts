@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto'
 
-import { Transaction } from '@midnightntwrk/ledger-v9'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import type { Deposit } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
@@ -15,9 +14,9 @@ const DEPOSIT_REQUEST = { erc20Address: CIRCLE_USDC, amount: 1_000_000n }
 
 /**
  * A deposit started as the browser starts it, with a fresh caller secret and the user wallet: the
- * start call is built against the running indexer, proved through the proof server and bound
- * without a fee, the row and its caller transaction are stored, and the relayer wallet pays the
- * fee. Nothing is submitted to the chain, which the end-to-end deposit test does.
+ * start call is built against the running indexer, proved through the proof server and finalised
+ * with the user wallet paying its fee, and the row and its caller transaction are stored. Nothing
+ * is submitted to the chain, which the end-to-end deposit test does.
  */
 describe('Starting a deposit over Postgres, the indexer and the proof server', () => {
   let backend: Backend
@@ -28,7 +27,6 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
 
   beforeAll(async () => {
     backend = await testBackend()
-    await backend.midnight.relayerWallet.start()
     user = await startUserWallet(userWalletSeed(), backend.config.client.midnightNetwork)
   })
 
@@ -68,7 +66,7 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
     })
   })
 
-  test('startDeposit stores the deposit with its assigned fields and the bound start call', async () => {
+  test('startDeposit stores the deposit with its assigned fields and the finalised start call, with both events in the outbox', async () => {
     const { repository } = backend.midnight.ethereumErc20Vault.depositV1
     const result = await startDepositAsUser(backend, callerSecret, user, DEPOSIT_REQUEST)
     expect(result.ok).toBe(true)
@@ -99,30 +97,17 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
       criteria: [{ type: 'exact-text', field: 'parent', text: deposit.name }],
     })
     expect(transaction).toMatchObject({
-      state: 'AwaitingFee',
+      state: 'AwaitingSubmission',
       circuit: 'startDeposit',
       signer: 'caller',
       unprovenTx: null,
       unboundTx: null,
-      finalizedTx: null,
     })
-    expect(transaction?.boundTx).toMatch(/^[0-9a-f]+$/)
-    expect(transaction?.expireTime?.getTime()).toBeGreaterThan(Date.now() + 3_000_000)
-  })
-
-  test('the transaction resolver has the relayer wallet pay the start call fee', async () => {
-    if (deposit === undefined) throw new Error('startDeposit did not run')
-    const { repository, stateResolver } = backend.midnight.transactionV1
-    const [transaction] = await repository.search({
-      criteria: [{ type: 'exact-text', field: 'parent', text: deposit.name }],
-    })
-    if (transaction === undefined) throw new Error('no start transaction')
-
-    await stateResolver.resolveTransaction({ name: transaction.name })
-
-    const paid = await repository.get(transaction.name)
-    expect(paid?.state).toBe('AwaitingSubmission')
-    expect(paid?.finalizedTx).toMatch(/^[0-9a-f]+$/)
+    if (transaction === undefined || transaction.finalizedTx === null) {
+      throw new Error('the start call was not stored')
+    }
+    expect(transaction.finalizedTx).toMatch(/^[0-9a-f]+$/)
+    expect(transaction.expireTime?.getTime()).toBeGreaterThan(Date.now() + 3_000_000)
 
     const events = await backend.event.outboxEntryV1.repository.search({
       criteria: [],
@@ -133,9 +118,10 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
     )
     expect(ours.map((entry) => entry.type)).toEqual([
       'midnight.ethereum-erc20-vault.deposit-v1.awaiting-start-transaction',
-      'midnight.transaction-v1.awaiting-fee',
       'midnight.transaction-v1.awaiting-submission',
     ])
+    // The stored start is never submitted here, so its coins return to the wallet for the calls that follow.
+    await user.release(transaction.finalizedTx)
   })
 
   test('a start with a nonce below the assignment is refused and writes nothing', async () => {
@@ -150,40 +136,26 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
     // The live deposit holds nonce zero, so the assignment is one.
     expect(prepared.inputs.evmNonce).toBe(1n)
     const stale = { ...prepared.inputs, evmNonce: prepared.inputs.evmNonce - 1n }
-    const { boundTx } = await buildStartCall(backend, callerSecret, user, DEPOSIT_REQUEST, stale)
+    const { finalizedTx } = await buildStartCall(
+      backend,
+      callerSecret,
+      user,
+      DEPOSIT_REQUEST,
+      stale,
+    )
     const refused = await adaptor.startDeposit(callerSecret, {
       depositRequest: DEPOSIT_REQUEST,
       wallet,
       inIndex: stale.inIndex,
       evmNonce: stale.evmNonce,
-      boundTx,
+      finalizedTx,
     })
     expect(refused).toEqual({
       ok: false,
       error: `the next nonce of ${deposit.depositAccount} moved since the start call was prepared: prepare and build it again`,
       reason: 'nonceConflict',
     })
-    await expectOnlyTheStartedDeposit()
-  })
-
-  test('bound bytes that hold no vault call are refused and write nothing', async () => {
-    if (deposit === undefined) throw new Error('startDeposit did not run')
-    const { adaptor } = backend.midnight.ethereumErc20Vault.depositV1
-    const empty = Transaction.fromParts(backend.config.client.midnightNetwork.networkId)
-      .mockProve()
-      .serialize()
-    const refused = await adaptor.startDeposit(callerSecret, {
-      depositRequest: DEPOSIT_REQUEST,
-      wallet: user.publicKeys,
-      inIndex: 1n,
-      evmNonce: 1n,
-      boundTx: Buffer.from(empty).toString('hex'),
-    })
-    expect(refused).toEqual({
-      ok: false,
-      error:
-        'the bound bytes must be exactly one startDeposit call to the vault, spending no coins',
-    })
+    await user.release(finalizedTx)
     await expectOnlyTheStartedDeposit()
   })
 

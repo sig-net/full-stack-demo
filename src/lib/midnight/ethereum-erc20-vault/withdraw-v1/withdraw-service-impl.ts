@@ -9,7 +9,6 @@ import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-eth
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
-import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
 import {
   type AttestedRequestFields,
@@ -44,7 +43,6 @@ export class WithdrawServiceImpl implements WithdrawService {
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
-  private readonly guard: SponsoredCallGuard
 
   constructor(
     withdrawRepository: WithdrawRepository,
@@ -53,7 +51,6 @@ export class WithdrawServiceImpl implements WithdrawService {
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
-    guard: SponsoredCallGuard,
   ) {
     this.withdrawRepository = withdrawRepository
     this.withdrawStateController = withdrawStateController
@@ -61,7 +58,6 @@ export class WithdrawServiceImpl implements WithdrawService {
     this.unitOfWork = unitOfWork
     this.signet = signet
     this.vault = vault
-    this.guard = guard
   }
 
   async prepareStartWithdraw(
@@ -73,16 +69,15 @@ export class WithdrawServiceImpl implements WithdrawService {
 
   async startWithdraw(
     caller: Caller,
-    { withdrawRequest, inIndex, boundTx }: StartWithdrawArgs,
+    { withdrawRequest, inIndex, finalizedTx }: StartWithdrawArgs,
   ): Promise<Withdraw> {
-    this.guard.assertSponsoredCall(boundTx, 'startWithdraw')
     return this.unitOfWork.runInTransaction(() =>
       this.withdrawStateController.startWithdraw({
         name: withdrawName(caller.name, randomUUID()),
         ...withdrawRequest,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        call: { boundTx },
+        call: { finalizedTx },
       }),
     )
   }
@@ -99,12 +94,11 @@ export class WithdrawServiceImpl implements WithdrawService {
 
   async completeWithdraw(
     caller: Caller,
-    { name, boundTx }: CompleteWithdrawArgs,
+    { name, finalizedTx }: CompleteWithdrawArgs,
   ): Promise<Withdraw> {
-    this.guard.assertSponsoredCall(boundTx, 'completeWithdraw')
     await this.assertCompletable(caller, name)
     return this.unitOfWork.runInTransaction(() =>
-      this.withdrawStateController.completeWithdraw({ name, call: { boundTx } }),
+      this.withdrawStateController.completeWithdraw({ name, call: { finalizedTx } }),
     )
   }
 

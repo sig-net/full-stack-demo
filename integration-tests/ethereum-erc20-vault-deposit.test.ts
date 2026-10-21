@@ -24,10 +24,9 @@ const RETRY_AFTER_MS = 40_000
 
 /**
  * One deposit from `startDeposit` to `Completed` over the whole local stack: this test plays the
- * browser, which builds, proves and binds the two caller calls without a fee, and funds the
- * deposit account on the fork, and the backend pays each call's fee from the relayer wallet,
- * submits, flushes, sends, polls the MPC, broadcasts on the fork, queues and flushes the
- * attestation on its own.
+ * browser, which builds, proves and finalises the two caller calls with the user wallet paying
+ * their fees, and funds the deposit account on the fork, and the backend submits, flushes,
+ * sends, polls the MPC, broadcasts on the fork, queues and flushes the attestation on its own.
  */
 describe('ERC20 vault deposit round trip over the local stack', () => {
   let backend: Backend
@@ -171,7 +170,6 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
       const events = await eventTrail(backend, deposit.name)
       const expectedTrail: [Actor, string][] = [
         ['deposit', 'awaiting-start-transaction'],
-        ['start', 'awaiting-fee'],
         ['start', 'awaiting-submission'],
         ['start', 'awaiting-inclusion'],
         ['start', 'succeeded'],
@@ -186,7 +184,6 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
         ['request', 'attested'],
         ['deposit', 'awaiting-completion'],
         ['deposit', 'awaiting-complete-transaction'],
-        ['complete', 'awaiting-fee'],
         ['complete', 'awaiting-submission'],
         ['complete', 'awaiting-inclusion'],
         ['complete', 'succeeded'],

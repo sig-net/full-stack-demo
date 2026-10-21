@@ -143,7 +143,6 @@ CREATE TABLE "midnight_transactions_v1" (
 	"signer" text NOT NULL,
 	"unproven_tx" text,
 	"unbound_tx" text,
-	"bound_tx" text,
 	"finalized_tx" text,
 	"expire_time" timestamp with time zone,
 	"tx_id" text,

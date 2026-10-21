@@ -1,5 +1,5 @@
 {
-  "id": "856c916f-8dab-415b-a543-6b59f039bff3",
+  "id": "4508a8b1-aa18-4d36-acbe-a70ca3ad778c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -903,12 +903,6 @@
         },
         "unbound_tx": {
           "name": "unbound_tx",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bound_tx": {
-          "name": "bound_tx",
           "type": "text",
           "primaryKey": false,
           "notNull": false

@@ -12,7 +12,6 @@ export function transactionFixture(
     signer: 'relayer',
     unprovenTx: 'unproven',
     unboundTx: null,
-    boundTx: null,
     finalizedTx: null,
     expireTime: new Date('2100-01-01T00:00:00Z'),
     txId: null,
@@ -40,13 +39,6 @@ export const TRANSACTION_IN_STATE: Record<MidnightTransaction['state'], Midnight
     state: 'AwaitingWallet',
     unprovenTx: null,
     unboundTx: 'unbound',
-  }),
-  AwaitingFee: transactionFixture({
-    signer: 'caller',
-    circuit: 'completeDeposit',
-    state: 'AwaitingFee',
-    unprovenTx: null,
-    boundTx: 'bound',
   }),
   AwaitingSubmission: transactionFixture({
     state: 'AwaitingSubmission',
@@ -77,14 +69,11 @@ export const TRANSACTION_IN_STATE: Record<MidnightTransaction['state'], Midnight
   }),
 }
 
-/** `AwaitingSubmission` reached from `AwaitingFee`: bound by the caller's wallet, with the relayer's fee paid. */
-export const CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION: MidnightTransaction = transactionFixture(
-  {
-    signer: 'caller',
-    circuit: 'completeDeposit',
-    state: 'AwaitingSubmission',
-    unprovenTx: null,
-    boundTx: 'bound',
-    finalizedTx: 'finalized',
-  },
-)
+/** `AwaitingSubmission` as a caller call enters it: finalised by the caller's wallet, never proven by the backend. */
+export const CALLER_TRANSACTION_AWAITING_SUBMISSION: MidnightTransaction = transactionFixture({
+  signer: 'caller',
+  circuit: 'completeDeposit',
+  state: 'AwaitingSubmission',
+  unprovenTx: null,
+  finalizedTx: 'finalized',
+})

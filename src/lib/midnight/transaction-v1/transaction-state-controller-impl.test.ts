@@ -7,7 +7,7 @@ import {
   type MidnightTransaction,
 } from '@/lib/midnight/transaction-v1/transaction'
 import {
-  CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION,
+  CALLER_TRANSACTION_AWAITING_SUBMISSION,
   DEPOSIT_NAME,
   TRANSACTION_IN_STATE,
   TRANSACTION_NAME,
@@ -87,13 +87,12 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
   const storedRow = (
     stored: MidnightTransaction,
     state: MidnightTransaction['state'],
-    decided: Pick<MidnightTransaction, 'signer' | 'unprovenTx' | 'boundTx'>,
+    decided: Pick<MidnightTransaction, 'signer' | 'unprovenTx' | 'finalizedTx'>,
   ): MidnightTransaction => ({
     ...committed,
     ...decided,
     state,
     unboundTx: null,
-    finalizedTx: null,
     txId: null,
     blockHeight: null,
     expireTime: new Date(stored.createTime.getTime() + 3_600_000),
@@ -118,7 +117,7 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
           storedRow(stored, 'AwaitingProof', {
             signer: 'relayer',
             unprovenTx: 'unproven',
-            boundTx: null,
+            finalizedTx: null,
           }),
         )
         expect(stored.createTime.getTime()).toBeGreaterThanOrEqual(before)
@@ -139,22 +138,22 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
       },
     },
     {
-      name: 'bound bytes - stored in AwaitingFee and the fee event published',
-      args: { ...committed, boundTx: 'bound' },
+      name: 'finalised bytes - stored in AwaitingSubmission and the submission event published',
+      args: { ...committed, finalizedTx: 'finalized' },
       check: async (result, calls, before) => {
         const stored = await result
         expect(stored).toEqual(
-          storedRow(stored, 'AwaitingFee', {
+          storedRow(stored, 'AwaitingSubmission', {
             signer: 'caller',
             unprovenTx: null,
-            boundTx: 'bound',
+            finalizedTx: 'finalized',
           }),
         )
         expect(stored.createTime.getTime()).toBeGreaterThanOrEqual(before)
         expect(calls.created).toEqual([stored])
         expect(calls.published).toHaveLength(1)
         expect(calls.published[0]).toMatchObject({
-          type: 'midnight.transaction-v1.awaiting-fee',
+          type: 'midnight.transaction-v1.awaiting-submission',
           key: TRANSACTION_NAME,
           data: { name: TRANSACTION_NAME, parent: DEPOSIT_NAME },
         })
@@ -162,7 +161,11 @@ describe('MidnightTransactionStateControllerImpl.commitTransaction', () => {
           {
             level: 'info',
             message: 'resource created',
-            fields: { resource: TRANSACTION_NAME, parent: DEPOSIT_NAME, toState: 'AwaitingFee' },
+            fields: {
+              resource: TRANSACTION_NAME,
+              parent: DEPOSIT_NAME,
+              toState: 'AwaitingSubmission',
+            },
           },
         ])
       },
@@ -238,13 +241,6 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
       patch: { finalizedTx: 'finalized' },
     },
     {
-      name: 'recordFee',
-      from: TRANSACTION_IN_STATE.AwaitingFee,
-      transition: (c) => c.recordFee({ name: TRANSACTION_NAME, finalizedTx: 'finalized' }),
-      to: 'AwaitingSubmission',
-      patch: { finalizedTx: 'finalized' },
-    },
-    {
       name: 'recordSubmission',
       from: TRANSACTION_IN_STATE.AwaitingSubmission,
       transition: (c) => c.recordSubmission({ name: TRANSACTION_NAME, txId: 'tx-1' }),
@@ -252,8 +248,8 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
       patch: { txId: 'tx-1' },
     },
     {
-      name: 'recordSubmission of a caller-bound call',
-      from: CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION,
+      name: 'recordSubmission of a caller-finalised call',
+      from: CALLER_TRANSACTION_AWAITING_SUBMISSION,
       transition: (c) => c.recordSubmission({ name: TRANSACTION_NAME, txId: 'tx-1' }),
       to: 'AwaitingInclusion',
       patch: { txId: 'tx-1' },
@@ -293,8 +289,8 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
       patch: { failure: 'Expired', unprovenTx: null },
     },
     {
-      name: 'expireTransaction from AwaitingFee',
-      from: TRANSACTION_IN_STATE.AwaitingFee,
+      name: 'expireTransaction from AwaitingSubmission of a caller-finalised call',
+      from: CALLER_TRANSACTION_AWAITING_SUBMISSION,
       transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
       to: 'Failed',
       patch: { failure: 'Expired' },
@@ -351,11 +347,6 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
       transition: (c) => c.recordProof({ name: TRANSACTION_NAME, unboundTx: 'again' }),
     },
     {
-      name: 'submitTransaction before proving',
-      from: TRANSACTION_IN_STATE.AwaitingProof,
-      transition: (c) => c.submitTransaction({ name: TRANSACTION_NAME, finalizedTx: 'x' }),
-    },
-    {
       name: 'recordSuccess on a terminal transaction',
       from: TRANSACTION_IN_STATE.Succeeded,
       transition: (c) => c.recordSuccess({ name: TRANSACTION_NAME, blockHeight: 42 }),
@@ -365,16 +356,16 @@ describe('MidnightTransactionStateControllerImpl transitions', () => {
       from: TRANSACTION_IN_STATE.Failed,
       transition: (c) => c.expireTransaction({ name: TRANSACTION_NAME }),
     },
-    ...MIDNIGHT_TRANSACTION_STATES.filter((state) => state !== 'AwaitingFee').map((state) => ({
-      name: `recordFee from ${state}`,
+    ...MIDNIGHT_TRANSACTION_STATES.filter((state) => state !== 'AwaitingWallet').map((state) => ({
+      name: `submitTransaction from ${state}`,
       from: TRANSACTION_IN_STATE[state],
       transition: (c: MidnightTransactionStateController) =>
-        c.recordFee({ name: TRANSACTION_NAME, finalizedTx: 'paid' }),
+        c.submitTransaction({ name: TRANSACTION_NAME, finalizedTx: 'again' }),
     })),
     {
-      name: 'recordFee on a caller-bound call already paid for',
-      from: CALLER_BOUND_TRANSACTION_AWAITING_SUBMISSION,
-      transition: (c) => c.recordFee({ name: TRANSACTION_NAME, finalizedTx: 'again' }),
+      name: 'submitTransaction on a caller-finalised call',
+      from: CALLER_TRANSACTION_AWAITING_SUBMISSION,
+      transition: (c) => c.submitTransaction({ name: TRANSACTION_NAME, finalizedTx: 'again' }),
     },
   ]
 

@@ -5,8 +5,8 @@ import {
   type ReadinessAction,
   type ReadinessCheck,
   type ReadinessCheckId,
+  type ReadinessChecks,
   readReadinessCheck,
-  type VaultReadiness,
 } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 
 const OK: ReadinessCheck = {
@@ -25,8 +25,9 @@ const SHORT: ReadinessCheck = {
 }
 const UNREAD: ReadinessCheck = { status: 'unavailable', asset: 'DUST', account: 'mn1', reason: 'x' }
 
-function checks(overrides: Partial<VaultReadiness> = {}): VaultReadiness {
+function checks(overrides: Partial<ReadinessChecks> = {}): ReadinessChecks {
   return {
+    callerDust: OK,
     relayerDust: OK,
     depositAccountEth: OK,
     vaultAccountEth: OK,
@@ -38,7 +39,7 @@ describe('missingReadiness', () => {
   const cases: {
     name: string
     action: ReadinessAction
-    checks: VaultReadiness
+    checks: ReadinessChecks
     expected: ReadinessCheckId[]
   }[] = [
     {
@@ -48,10 +49,16 @@ describe('missingReadiness', () => {
       expected: [],
     },
     {
-      name: 'a deposit needs the relayer and the deposit account, in that order',
+      name: 'a deposit needs the caller, the relayer and the deposit account, in that order',
       action: 'deposit',
-      checks: checks({ relayerDust: UNREAD, depositAccountEth: SHORT }),
-      expected: ['relayerDust', 'depositAccountEth'],
+      checks: checks({ callerDust: SHORT, relayerDust: UNREAD, depositAccountEth: SHORT }),
+      expected: ['callerDust', 'relayerDust', 'depositAccountEth'],
+    },
+    {
+      name: 'a deposit needs the caller DUST alone when the rest passes',
+      action: 'deposit',
+      checks: checks({ callerDust: SHORT }),
+      expected: ['callerDust'],
     },
     {
       name: 'a deposit ignores the vault account',
@@ -72,10 +79,21 @@ describe('missingReadiness', () => {
       expected: ['vaultAccountEth'],
     },
     {
-      name: 'a supply needs the relayer and the vault account and ignores the deposit account',
+      name: 'a withdraw needs the caller DUST, since the caller pays its two calls',
+      action: 'withdraw',
+      checks: checks({ callerDust: SHORT }),
+      expected: ['callerDust'],
+    },
+    {
+      name: 'a supply needs the caller, the relayer and the vault account and ignores the deposit account',
       action: 'supply',
-      checks: checks({ relayerDust: SHORT, depositAccountEth: SHORT, vaultAccountEth: UNREAD }),
-      expected: ['relayerDust', 'vaultAccountEth'],
+      checks: checks({
+        callerDust: UNREAD,
+        relayerDust: SHORT,
+        depositAccountEth: SHORT,
+        vaultAccountEth: UNREAD,
+      }),
+      expected: ['callerDust', 'relayerDust', 'vaultAccountEth'],
     },
     {
       name: 'a redeem needs the vault account and ignores the deposit account',
@@ -84,16 +102,26 @@ describe('missingReadiness', () => {
       expected: ['vaultAccountEth'],
     },
     {
-      name: 'a swap needs the relayer and the vault account and ignores the deposit account',
+      name: 'a swap needs the caller, the relayer and the vault account and ignores the deposit account',
       action: 'swap',
-      checks: checks({ relayerDust: SHORT, depositAccountEth: SHORT, vaultAccountEth: UNREAD }),
-      expected: ['relayerDust', 'vaultAccountEth'],
+      checks: checks({
+        callerDust: SHORT,
+        relayerDust: SHORT,
+        depositAccountEth: SHORT,
+        vaultAccountEth: UNREAD,
+      }),
+      expected: ['callerDust', 'relayerDust', 'vaultAccountEth'],
     },
     {
-      name: 'an approval needs the relayer and the vault account and ignores the deposit account',
+      name: 'an approval needs the caller, the relayer and the vault account and ignores the deposit account',
       action: 'approve',
-      checks: checks({ relayerDust: SHORT, depositAccountEth: SHORT, vaultAccountEth: UNREAD }),
-      expected: ['relayerDust', 'vaultAccountEth'],
+      checks: checks({
+        callerDust: SHORT,
+        relayerDust: SHORT,
+        depositAccountEth: SHORT,
+        vaultAccountEth: UNREAD,
+      }),
+      expected: ['callerDust', 'relayerDust', 'vaultAccountEth'],
     },
   ]
 

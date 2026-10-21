@@ -3,9 +3,9 @@ import { hexToBytes } from '@sig-net/midnight'
 import type { ClientConfig } from '@/lib/config/client-config'
 import { browserVaultCallProviders } from '@/lib/midnight/ethereum-erc20-vault/browser-vault-call-providers'
 import {
-  type CallerCallStage,
-  vaultRefusalOf,
-} from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+  type CallerCallArgs,
+  runCallerCall,
+} from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import type { Swap, SwapRequest } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap'
 import { SwapCallBuilder } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-call-builder'
 import type {
@@ -20,61 +20,43 @@ import type {
   SwapStartInputsResult,
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service-adaptor'
 import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
-import type { Wallet } from '@/lib/midnight/wallet/wallet'
 
-/**
- * Starts a swap from the page: the server assigns the call's slot, the page builds, proves and
- * binds the start call with the caller secret as its witness and the wallet's own coin of the
- * sold token, and the server records it for the relayer to pay and submit. Every refusal is
- * thrown with the server's message.
- */
+/** Starts a swap from the page, the wallet's own coin of the sold token funding the start call. */
 export async function startSwapInBrowser(args: StartSwapInBrowserArgs): Promise<Swap> {
   const { actions, builder, wallet, callerSecret, swapRequest, onStage } = args
-  onStage?.('preparing')
-  const prepared = await actions.prepareStartSwap(callerSecret, { swapRequest })
-  if (!prepared.ok) throw new Error(prepared.error)
-  const { inIndex } = prepared.inputs
-  onStage?.('building')
-  const unboundTx = await vaultRefusalOf(
-    builder.buildStart({
-      secretKey: hexToBytes(callerSecret),
-      wallet: wallet.publicKeys,
-      inIndex,
-      ...swapRequest,
-    }),
-    'swap',
-  )
-  onStage?.('signing')
-  const boundTx = await wallet.balanceWithoutFee(unboundTx)
-  onStage?.('recording')
-  const started = await actions.startSwap(callerSecret, { swapRequest, inIndex, boundTx })
-  if (!started.ok) throw new Error(started.error)
+  const started = await runCallerCall({
+    operation: 'swap',
+    wallet,
+    callerSecret,
+    onStage,
+    prepare: () => actions.prepareStartSwap(callerSecret, { swapRequest }),
+    circuitArgs: ({ inIndex }, caller) => ({ ...caller, inIndex, ...swapRequest }),
+    build: (circuitArgs) => builder.buildStart(circuitArgs),
+    record: ({ inIndex }, finalizedTx) =>
+      actions.startSwap(callerSecret, { swapRequest, inIndex, finalizedTx }),
+  })
   return started.swap
 }
 
-/** Completes an attested swap from the page as `startSwapInBrowser` starts one. */
+/** Completes an attested swap from the page, under a fresh mint nonce and a fresh change nonce. */
 export async function completeSwapInBrowser(args: CompleteSwapInBrowserArgs): Promise<Swap> {
   const { actions, builder, wallet, callerSecret, name, onStage } = args
-  onStage?.('preparing')
-  const prepared = await actions.prepareCompleteSwap(callerSecret, { name })
-  if (!prepared.ok) throw new Error(prepared.error)
-  onStage?.('building')
-  const unboundTx = await vaultRefusalOf(
-    builder.buildComplete({
-      secretKey: hexToBytes(callerSecret),
-      wallet: wallet.publicKeys,
-      requestId: hexToBytes(prepared.inputs.requestId),
-      serializedOutput: completionOutput(prepared.inputs, 32),
+  const completed = await runCallerCall({
+    operation: 'swap',
+    wallet,
+    callerSecret,
+    onStage,
+    prepare: () => actions.prepareCompleteSwap(callerSecret, { name }),
+    circuitArgs: (inputs, caller) => ({
+      ...caller,
+      requestId: hexToBytes(inputs.requestId),
+      serializedOutput: completionOutput(inputs, 32),
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
       changeNonce: crypto.getRandomValues(new Uint8Array(32)),
     }),
-    'swap',
-  )
-  onStage?.('signing')
-  const boundTx = await wallet.balanceWithoutFee(unboundTx)
-  onStage?.('recording')
-  const completed = await actions.completeSwap(callerSecret, { name, boundTx })
-  if (!completed.ok) throw new Error(completed.error)
+    build: (circuitArgs) => builder.buildComplete(circuitArgs),
+    record: (_inputs, finalizedTx) => actions.completeSwap(callerSecret, { name, finalizedTx }),
+  })
   return completed.swap
 }
 
@@ -95,20 +77,12 @@ export interface SwapActions {
   completeSwap(callerSecret: string, args: CompleteSwapArgs): Promise<SwapResult>
 }
 
-interface SwapCallArgs {
-  readonly builder: SwapCallBuilder
-  readonly wallet: Wallet
-  /** The stored identity secret, lower-case hex without `0x`, which is the call's witness. */
-  readonly callerSecret: string
-  readonly onStage?: (stage: CallerCallStage) => void
-}
-
-export interface StartSwapInBrowserArgs extends SwapCallArgs {
+export interface StartSwapInBrowserArgs extends CallerCallArgs<SwapCallBuilder> {
   readonly actions: Pick<SwapActions, 'prepareStartSwap' | 'startSwap'>
   readonly swapRequest: SwapRequest
 }
 
-export interface CompleteSwapInBrowserArgs extends SwapCallArgs {
+export interface CompleteSwapInBrowserArgs extends CallerCallArgs<SwapCallBuilder> {
   readonly actions: Pick<SwapActions, 'prepareCompleteSwap' | 'completeSwap'>
   readonly name: string
 }

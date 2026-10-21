@@ -12,22 +12,22 @@ import { hexBytesSchema, uint64Schema } from '@/lib/value-schemas'
 
 /**
  * The deposit API's methods, independent of the transport that exposes them. The browser builds,
- * proves and binds the caller's two circuit calls from the inputs the prepare methods return,
- * and the two user actions commit the bound bytes. The server checks that the bound bytes are
- * exactly one call to the vault's expected circuit under that circuit's coin policy, since the
- * relayer pays their fee, and does not inspect the inputs the call carries.
+ * proves and finalises the caller's two circuit calls from the inputs the prepare methods return,
+ * and the two user actions commit the finalised bytes. The server inspects neither the bytes nor
+ * the inputs the call carries: the operation follows its child transaction's outcome, and the
+ * resolver reads the vault ledger only when a child failed.
  */
 export interface DepositService {
   /** The start circuit's server-decided inputs, assigned afresh on every call and verified again at `startDeposit`, with nothing written. */
   prepareStartDeposit(caller: Caller, args: PrepareStartDepositArgs): Promise<DepositStartInputs>
-  /** Stores the deposit in `AwaitingStartTransaction` with the bound start call under it, refusing a nonce the chain or a live deposit has moved past. */
+  /** Stores the deposit in `AwaitingStartTransaction` with the finalised start call under it, refusing a nonce the chain or a live deposit has moved past. */
   startDeposit(caller: Caller, args: StartDepositArgs): Promise<Deposit>
   /** The attested request's fields the complete circuit takes, after the checks `completeDeposit` repeats. */
   prepareCompleteDeposit(
     caller: Caller,
     args: PrepareCompleteDepositArgs,
   ): Promise<DepositCompleteInputs>
-  /** Moves the deposit to `AwaitingCompleteTransaction` with the bound complete call under it. */
+  /** Moves the deposit to `AwaitingCompleteTransaction` with the finalised complete call under it. */
   completeDeposit(caller: Caller, args: CompleteDepositArgs): Promise<Deposit>
   getDeposit(caller: Caller, args: GetDepositArgs): Promise<Deposit | undefined>
   /** The caller's deposits, newest first. */
@@ -69,11 +69,11 @@ export const prepareStartDepositArgsSchema = z.object({
 })
 export type PrepareStartDepositArgs = z.infer<typeof prepareStartDepositArgsSchema>
 
-/** The two inputs the browser baked into the call travel with it, and the bound bytes are hex in the ledger's serialisation. */
+/** The two inputs the browser baked into the call travel with it, and the finalised bytes are hex in the ledger's serialisation. */
 export const startDepositArgsSchema = prepareStartDepositArgsSchema.extend({
   inIndex: uint64Schema,
   evmNonce: uint64Schema,
-  boundTx: hexBytesSchema,
+  finalizedTx: hexBytesSchema,
 })
 export type StartDepositArgs = z.infer<typeof startDepositArgsSchema>
 
@@ -84,7 +84,7 @@ export const prepareCompleteDepositArgsSchema = z.object({
 export type PrepareCompleteDepositArgs = z.infer<typeof prepareCompleteDepositArgsSchema>
 
 export const completeDepositArgsSchema = prepareCompleteDepositArgsSchema.extend({
-  boundTx: hexBytesSchema,
+  finalizedTx: hexBytesSchema,
 })
 export type CompleteDepositArgs = z.infer<typeof completeDepositArgsSchema>
 

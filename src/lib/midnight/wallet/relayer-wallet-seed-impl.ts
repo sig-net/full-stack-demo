@@ -8,7 +8,6 @@ import {
   createWalletAndMidnightProvider,
   deriveAccountKeys,
   finalizeUnboundTransaction,
-  payFee,
   startSyncedSeedFacade,
   type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
@@ -50,11 +49,7 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
     return finalizeUnboundTransaction((await this.requireStarted()).provider, unboundTx)
   }
 
-  async payFee(boundTx: string): Promise<string> {
-    return payFee((await this.requireStarted()).facade, this.keys, boundTx)
-  }
-
-  /** The start in progress, refused when nothing started the wallet, so a finalise or a fee never starts a sync of its own. */
+  /** The start in progress, refused when nothing started the wallet, so a finalise never starts a sync of its own. */
   private requireStarted(): Promise<StartedWallet> {
     if (this.starting === undefined) {
       throw new Error('The relayer wallet was not started: start the backend first')

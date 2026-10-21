@@ -11,7 +11,6 @@ import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
-import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import {
   type Supply,
   type SupplyCompleteInputs,
@@ -51,7 +50,6 @@ export class SupplyServiceImpl implements SupplyService {
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
-  private readonly guard: SponsoredCallGuard
 
   constructor(
     supplyRepository: SupplyRepository,
@@ -62,7 +60,6 @@ export class SupplyServiceImpl implements SupplyService {
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
-    guard: SponsoredCallGuard,
   ) {
     this.supplyRepository = supplyRepository
     this.supplyStateController = supplyStateController
@@ -72,7 +69,6 @@ export class SupplyServiceImpl implements SupplyService {
     this.unitOfWork = unitOfWork
     this.signet = signet
     this.vault = vault
-    this.guard = guard
   }
 
   async getSupplyTarget(_caller: Caller, _args: GetSupplyTargetArgs): Promise<SupplyTarget> {
@@ -97,9 +93,8 @@ export class SupplyServiceImpl implements SupplyService {
 
   async startSupply(
     caller: Caller,
-    { supplyRequest, inIndex, boundTx }: StartSupplyArgs,
+    { supplyRequest, inIndex, finalizedTx }: StartSupplyArgs,
   ): Promise<Supply> {
-    this.guard.assertSponsoredCall(boundTx, 'startSupply')
     const pair = await this.stataPair()
     return this.unitOfWork.runInTransaction(() =>
       this.supplyStateController.startSupply({
@@ -108,7 +103,7 @@ export class SupplyServiceImpl implements SupplyService {
         amount: supplyRequest.amount,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        call: { boundTx },
+        call: { finalizedTx },
       }),
     )
   }
@@ -123,11 +118,10 @@ export class SupplyServiceImpl implements SupplyService {
     return { requestId, attestationOutputKind, attestationOutput }
   }
 
-  async completeSupply(caller: Caller, { name, boundTx }: CompleteSupplyArgs): Promise<Supply> {
-    this.guard.assertSponsoredCall(boundTx, 'completeSupply')
+  async completeSupply(caller: Caller, { name, finalizedTx }: CompleteSupplyArgs): Promise<Supply> {
     await this.assertCompletable(caller, name)
     return this.unitOfWork.runInTransaction(() =>
-      this.supplyStateController.completeSupply({ name, call: { boundTx } }),
+      this.supplyStateController.completeSupply({ name, call: { finalizedTx } }),
     )
   }
 

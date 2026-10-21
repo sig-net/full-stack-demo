@@ -1,7 +1,7 @@
 import { hexToBytes } from '@sig-net/midnight'
 import { describe, expect, test } from 'vitest'
 
-import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import {
   completeRedeemInBrowser,
   type RedeemActions,
@@ -54,10 +54,7 @@ const EXECUTED_INPUTS: RedeemCompleteInputs = {
 }
 const STATE_CONFLICT_ERROR = 'the redeem is not awaiting that'
 const STATE_CONFLICT: RedeemResult = { ok: false, error: STATE_CONFLICT_ERROR }
-const CALL_MISMATCH: RedeemResult = {
-  ok: false,
-  error: 'the bound bytes must be exactly one startRedeem call to the vault',
-}
+const RECORD_REFUSAL: RedeemResult = { ok: false, error: 'the vault ledger could not be read' }
 
 /** Every collaborator call and every stage reported, in order, with the arguments each call received. */
 interface Trail {
@@ -72,7 +69,7 @@ interface Received {
   readonly completeRedeem: CompleteRedeemArgs[]
   readonly buildStart: StartRedeemCircuitArgs[]
   readonly buildComplete: CompleteRedeemCircuitArgs[]
-  readonly balanceWithoutFee: string[]
+  readonly finalize: string[]
 }
 
 const NOTHING_RECEIVED: Received = {
@@ -82,7 +79,7 @@ const NOTHING_RECEIVED: Received = {
   completeRedeem: [],
   buildStart: [],
   buildComplete: [],
-  balanceWithoutFee: [],
+  finalize: [],
 }
 
 interface Doubles {
@@ -137,10 +134,13 @@ function collaborators(doubles: Doubles) {
   })
   const wallet = mock<Wallet>('Wallet', {
     publicKeys: PUBLIC_KEYS,
-    balanceWithoutFee: async (unboundTx) => {
-      trail.events.push('balanceWithoutFee')
-      trail.received.balanceWithoutFee.push(unboundTx)
-      return `bound(${unboundTx})`
+    finalize: async (unboundTx) => {
+      trail.events.push('finalize')
+      trail.received.finalize.push(unboundTx)
+      return `finalized(${unboundTx})`
+    },
+    release: async (finalizedTx) => {
+      trail.events.push(`release(${finalizedTx})`)
     },
   })
   const onStage = (stage: CallerCallStage): void => {
@@ -155,7 +155,7 @@ const START_PASS = [
   'stage:building',
   'buildStart',
   'stage:signing',
-  'balanceWithoutFee',
+  'finalize',
   'stage:recording',
   'startRedeem',
 ]
@@ -168,15 +168,15 @@ describe('startRedeemInBrowser', () => {
     expectError?: string
   }> = [
     {
-      name: 'prepares, builds, binds and records the start call once',
+      name: 'prepares, builds, finalises and records the start call once',
       doubles: {},
       expectEvents: START_PASS,
     },
     {
       name: 'a refused record surfaces without a retry',
-      doubles: { started: CALL_MISMATCH },
-      expectEvents: START_PASS,
-      expectError: 'the bound bytes must be exactly one startRedeem call to the vault',
+      doubles: { started: RECORD_REFUSAL },
+      expectEvents: [...START_PASS, 'release(finalized(unbound-start))'],
+      expectError: 'the vault ledger could not be read',
     },
     {
       name: 'a refused prepare surfaces before anything is built',
@@ -206,7 +206,7 @@ describe('startRedeemInBrowser', () => {
     expect(trail.events).toEqual(expectEvents)
   })
 
-  test('each call receives the shares, the keys, the slot, the wrapper and the bound bytes', async () => {
+  test('each call receives the shares, the keys, the slot, the wrapper and the finalised bytes', async () => {
     const { trail, args } = collaborators({})
     await startRedeemInBrowser({ ...args, redeemRequest: REDEEM_REQUEST })
     expect(trail.received).toEqual({
@@ -221,12 +221,12 @@ describe('startRedeemInBrowser', () => {
           shares: REDEEM_REQUEST.shares,
         },
       ],
-      balanceWithoutFee: ['unbound-start'],
+      finalize: ['unbound-start'],
       startRedeem: [
         {
           redeemRequest: REDEEM_REQUEST,
           inIndex: START_INPUTS.inIndex,
-          boundTx: 'bound(unbound-start)',
+          finalizedTx: 'finalized(unbound-start)',
         },
       ],
     })
@@ -249,7 +249,7 @@ const COMPLETE_PASS = [
   'stage:building',
   'buildComplete',
   'stage:signing',
-  'balanceWithoutFee',
+  'finalize',
   'stage:recording',
   'completeRedeem',
 ]
@@ -262,7 +262,7 @@ describe('completeRedeemInBrowser', () => {
     expectError?: string
   }> = [
     {
-      name: 'prepares, builds, binds and records the complete call once',
+      name: 'prepares, builds, finalises and records the complete call once',
       doubles: {},
       expectEvents: COMPLETE_PASS,
     },
@@ -275,7 +275,7 @@ describe('completeRedeemInBrowser', () => {
     {
       name: 'a refused record surfaces without a retry',
       doubles: { completed: STATE_CONFLICT },
-      expectEvents: COMPLETE_PASS,
+      expectEvents: [...COMPLETE_PASS, 'release(finalized(unbound-complete))'],
       expectError: STATE_CONFLICT_ERROR,
     },
     {
@@ -312,7 +312,7 @@ describe('completeRedeemInBrowser', () => {
   ]
 
   test.each(outputs)(
-    'each call receives the name, the keys, $name and the bound bytes',
+    'each call receives the name, the keys, $name and the finalised bytes',
     async ({ inputs, expectOutput }) => {
       const { trail, args } = collaborators({ prepareComplete: { ok: true, inputs } })
       await completeRedeemInBrowser({ ...args, name: REDEEM_NAME })
@@ -328,8 +328,8 @@ describe('completeRedeemInBrowser', () => {
             mintNonce: expect.any(Uint8Array),
           },
         ],
-        balanceWithoutFee: ['unbound-complete'],
-        completeRedeem: [{ name: REDEEM_NAME, boundTx: 'bound(unbound-complete)' }],
+        finalize: ['unbound-complete'],
+        completeRedeem: [{ name: REDEEM_NAME, finalizedTx: 'finalized(unbound-complete)' }],
       })
     },
   )

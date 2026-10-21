@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import {
   completeDepositInBrowser,
   type DepositActions,
@@ -80,7 +80,7 @@ interface Received {
   readonly completeDeposit: CompleteDepositArgs[]
   readonly buildStart: StartDepositCircuitArgs[]
   readonly buildComplete: CompleteDepositCircuitArgs[]
-  readonly balanceWithoutFee: string[]
+  readonly finalize: string[]
 }
 
 const NOTHING_RECEIVED: Received = {
@@ -90,7 +90,7 @@ const NOTHING_RECEIVED: Received = {
   completeDeposit: [],
   buildStart: [],
   buildComplete: [],
-  balanceWithoutFee: [],
+  finalize: [],
 }
 
 interface Doubles {
@@ -150,10 +150,13 @@ function collaborators(doubles: Doubles) {
   })
   const wallet = mock<Wallet>('Wallet', {
     publicKeys: PUBLIC_KEYS,
-    balanceWithoutFee: async (unboundTx) => {
-      trail.events.push('balanceWithoutFee')
-      trail.received.balanceWithoutFee.push(unboundTx)
-      return `bound(${unboundTx})`
+    finalize: async (unboundTx) => {
+      trail.events.push('finalize')
+      trail.received.finalize.push(unboundTx)
+      return `finalized(${unboundTx})`
+    },
+    release: async (finalizedTx) => {
+      trail.events.push(`release(${finalizedTx})`)
     },
   })
   const onStage = (stage: CallerCallStage): void => {
@@ -168,7 +171,7 @@ const START_PASS = [
   'stage:building',
   'buildStart',
   'stage:signing',
-  'balanceWithoutFee',
+  'finalize',
   'stage:recording',
   'startDeposit',
 ]
@@ -181,25 +184,30 @@ describe('startDepositInBrowser', () => {
     expectError?: string
   }> = [
     {
-      name: 'prepares, builds, binds and records the start call once',
+      name: 'prepares, builds, finalises and records the start call once',
       doubles: {},
       expectEvents: START_PASS,
     },
     {
-      name: 'a nonce conflict is prepared and built once more',
+      name: 'a nonce conflict releases the finalised bytes, then is prepared and built once more',
       doubles: { started: [NONCE_CONFLICT, { ok: true, deposit }] },
-      expectEvents: [...START_PASS, ...START_PASS],
+      expectEvents: [...START_PASS, 'release(finalized(unbound-start))', ...START_PASS],
     },
     {
       name: 'a second nonce conflict surfaces',
       doubles: { started: [NONCE_CONFLICT, NONCE_CONFLICT] },
-      expectEvents: [...START_PASS, ...START_PASS],
+      expectEvents: [
+        ...START_PASS,
+        'release(finalized(unbound-start))',
+        ...START_PASS,
+        'release(finalized(unbound-start))',
+      ],
       expectError: NONCE_CONFLICT_ERROR,
     },
     {
       name: 'any other refusal of the record surfaces without a retry',
       doubles: { started: [STATE_CONFLICT, { ok: true, deposit }] },
-      expectEvents: START_PASS,
+      expectEvents: [...START_PASS, 'release(finalized(unbound-start))'],
       expectError: STATE_CONFLICT_ERROR,
     },
     {
@@ -230,7 +238,7 @@ describe('startDepositInBrowser', () => {
     expect(trail.events).toEqual(expectEvents)
   })
 
-  test('each call receives the request, the keys, the assignment and the bound bytes', async () => {
+  test('each call receives the request, the keys, the assignment and the finalised bytes', async () => {
     const { trail, args } = collaborators({})
     await startDepositInBrowser({ ...args, depositRequest: DEPOSIT_REQUEST })
     expect(trail.received).toEqual({
@@ -251,14 +259,14 @@ describe('startDepositInBrowser', () => {
           amount: DEPOSIT_REQUEST.amount,
         },
       ],
-      balanceWithoutFee: ['unbound-start'],
+      finalize: ['unbound-start'],
       startDeposit: [
         {
           depositRequest: DEPOSIT_REQUEST,
           wallet: PUBLIC_KEYS,
           inIndex: START_INPUTS.inIndex,
           evmNonce: START_INPUTS.evmNonce,
-          boundTx: 'bound(unbound-start)',
+          finalizedTx: 'finalized(unbound-start)',
         },
       ],
     })
@@ -281,7 +289,7 @@ const COMPLETE_PASS = [
   'stage:building',
   'buildComplete',
   'stage:signing',
-  'balanceWithoutFee',
+  'finalize',
   'stage:recording',
   'completeDeposit',
 ]
@@ -294,20 +302,20 @@ describe('completeDepositInBrowser', () => {
     expectError?: string
   }> = [
     {
-      name: 'prepares, builds, binds and records the complete call once',
+      name: 'prepares, builds, finalises and records the complete call once',
       doubles: {},
       expectEvents: COMPLETE_PASS,
     },
     {
       name: 'a nonce conflict reason is not retried for a completion',
       doubles: { completed: NONCE_CONFLICT },
-      expectEvents: COMPLETE_PASS,
+      expectEvents: [...COMPLETE_PASS, 'release(finalized(unbound-complete))'],
       expectError: NONCE_CONFLICT_ERROR,
     },
     {
       name: 'a refused record surfaces without a retry',
       doubles: { completed: STATE_CONFLICT },
-      expectEvents: COMPLETE_PASS,
+      expectEvents: [...COMPLETE_PASS, 'release(finalized(unbound-complete))'],
       expectError: STATE_CONFLICT_ERROR,
     },
     {
@@ -326,7 +334,7 @@ describe('completeDepositInBrowser', () => {
     expect(trail.events).toEqual(expectEvents)
   })
 
-  test('each call receives the name, the keys, the attested inputs and the bound bytes', async () => {
+  test('each call receives the name, the keys, the attested inputs and the finalised bytes', async () => {
     const { trail, args } = collaborators({})
     await completeDepositInBrowser({ ...args, name: DEPOSIT_NAME })
     expect(trail.received).toEqual({
@@ -341,9 +349,9 @@ describe('completeDepositInBrowser', () => {
           mintNonce: expect.any(Uint8Array),
         },
       ],
-      balanceWithoutFee: ['unbound-complete'],
+      finalize: ['unbound-complete'],
       completeDeposit: [
-        { name: DEPOSIT_NAME, wallet: PUBLIC_KEYS, boundTx: 'bound(unbound-complete)' },
+        { name: DEPOSIT_NAME, wallet: PUBLIC_KEYS, finalizedTx: 'finalized(unbound-complete)' },
       ],
     })
   })

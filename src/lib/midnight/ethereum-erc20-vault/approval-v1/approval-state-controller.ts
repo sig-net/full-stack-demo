@@ -9,7 +9,7 @@ import {
   type CallerOperationStateController,
   type CompleteOperationArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
-import type { BoundCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
+import type { FinalizedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 
 /**
  * The only writer of an approval's state: the caller operation's transitions over the approval
@@ -30,7 +30,7 @@ export interface StartApprovalArgs extends Omit<
   'state' | 'outcome' | 'failure' | 'error' | 'createTime' | 'updateTime'
 > {
   /** The start circuit call, built with the approval's assigned fields. */
-  call: BoundCall
+  call: FinalizedCall
 }
 
 export type CompleteApprovalArgs = CompleteOperationArgs

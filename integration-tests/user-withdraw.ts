@@ -9,7 +9,12 @@ import type { WithdrawResult } from '@/lib/midnight/ethereum-erc20-vault/withdra
 import type { Backend } from '@/server/backend'
 
 import { log } from './operation-round-trip'
-import { bindAsUser, type BoundCallerCall, completionOutput, secretKeyOf } from './user-caller-call'
+import {
+  completionOutput,
+  finalizeAsUser,
+  type FinalizedCallerCall,
+  secretKeyOf,
+} from './user-caller-call'
 import type { UserWallet } from './user-wallet'
 
 /** The start call for the server's slot, with the caller secret as the witness, the user wallet's keys and its coin of the sent token. */
@@ -19,9 +24,9 @@ export function buildStartCall(
   user: UserWallet,
   withdrawRequest: WithdrawRequest,
   inputs: WithdrawStartInputs,
-): Promise<BoundCallerCall> {
+): Promise<FinalizedCallerCall> {
   const { callBuilder } = backend.midnight.ethereumErc20Vault.withdrawV1
-  return bindAsUser(user, () =>
+  return finalizeAsUser(user, () =>
     callBuilder.buildStart({
       secretKey: secretKeyOf(callerSecret),
       wallet: user.publicKeys,
@@ -37,9 +42,9 @@ export function buildCompleteCall(
   callerSecret: string,
   user: UserWallet,
   inputs: WithdrawCompleteInputs,
-): Promise<BoundCallerCall> {
+): Promise<FinalizedCallerCall> {
   const { callBuilder } = backend.midnight.ethereumErc20Vault.withdrawV1
-  return bindAsUser(user, () =>
+  return finalizeAsUser(user, () =>
     callBuilder.buildComplete({
       secretKey: secretKeyOf(callerSecret),
       wallet: user.publicKeys,
@@ -50,7 +55,7 @@ export function buildCompleteCall(
   )
 }
 
-/** `prepareStartWithdraw`, the build, the bind and `startWithdraw`, as the send dialog runs them: a refusal at either server call is the result. */
+/** `prepareStartWithdraw`, the build, the finalisation and `startWithdraw`, as the send dialog runs them: a refusal at either server call is the result. */
 export async function startWithdrawAsUser(
   backend: Backend,
   callerSecret: string,
@@ -60,7 +65,7 @@ export async function startWithdrawAsUser(
   const { adaptor } = backend.midnight.ethereumErc20Vault.withdrawV1
   const prepared = await adaptor.prepareStartWithdraw(callerSecret, { withdrawRequest })
   if (!prepared.ok) return prepared
-  const { boundTx, buildMs, bindMs } = await buildStartCall(
+  const { finalizedTx, buildMs, finalizeMs } = await buildStartCall(
     backend,
     callerSecret,
     user,
@@ -71,15 +76,15 @@ export async function startWithdrawAsUser(
   const result = await adaptor.startWithdraw(callerSecret, {
     withdrawRequest,
     inIndex: prepared.inputs.inIndex,
-    boundTx,
+    finalizedTx,
   })
   log(
-    `start call built in ${String(buildMs)} ms, bound in ${String(bindMs)} ms, startWithdraw answered in ${String(Date.now() - calling)} ms`,
+    `start call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, startWithdraw answered in ${String(Date.now() - calling)} ms`,
   )
   return result
 }
 
-/** `prepareCompleteWithdraw`, the build, the bind and `completeWithdraw`, as the activity table's completion runs them. */
+/** `prepareCompleteWithdraw`, the build, the finalisation and `completeWithdraw`, as the activity table's completion runs them. */
 export async function completeWithdrawAsUser(
   backend: Backend,
   callerSecret: string,
@@ -89,16 +94,16 @@ export async function completeWithdrawAsUser(
   const { adaptor } = backend.midnight.ethereumErc20Vault.withdrawV1
   const prepared = await adaptor.prepareCompleteWithdraw(callerSecret, { name })
   if (!prepared.ok) return prepared
-  const { boundTx, buildMs, bindMs } = await buildCompleteCall(
+  const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
     callerSecret,
     user,
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeWithdraw(callerSecret, { name, boundTx })
+  const result = await adaptor.completeWithdraw(callerSecret, { name, finalizedTx })
   log(
-    `complete call built in ${String(buildMs)} ms, bound in ${String(bindMs)} ms, completeWithdraw answered in ${String(Date.now() - calling)} ms`,
+    `complete call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, completeWithdraw answered in ${String(Date.now() - calling)} ms`,
   )
   return result
 }

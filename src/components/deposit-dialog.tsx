@@ -43,7 +43,7 @@ import { abbreviateHex } from '@/lib/abbreviate-hex'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { fundLabel } from '@/lib/tokens/fund-label'
-import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import type { DepositAccountFund } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/deposit-account-fund'
 import { ORIGIN_NETWORKS } from '@/lib/tokens/token-info'
 import { prepareStartDeposit, startDeposit } from '@/server/actions/deposit-actions'
@@ -133,8 +133,9 @@ const LOGO_FRACTION = 0.22
 /**
  * The scan of the deposit account: a status line with a check-again control, then one line per
  * fund with the control that deposits the whole fund. Starting a deposit is the dialog's one
- * action: the page builds, proves and binds the start call, the server records the deposit for
- * the relayer to pay and submit, and the activity row takes it from there.
+ * action: the page builds, proves and finalises the start call with the wallet paying its fee,
+ * the server records the deposit for the backend to submit, and the activity row takes it
+ * from there.
  */
 function DepositAccountFunds({
   address,
@@ -180,9 +181,7 @@ function DepositAccountFunds({
         info === undefined
           ? deposit.amount.toString()
           : `${formatTokenAmount(deposit.amount, info.decimals)} ${info.symbol}`
-      toast.success(
-        `Deposit of ${amount} started: the backend is paying for its start call and submitting it.`,
-      )
+      toast.success(`Deposit of ${amount} started: the backend is submitting its start call.`)
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
       onBusyChange(false)
       onDeposited()
@@ -321,7 +320,7 @@ function DepositAccountFunds({
 const START_STAGE_LABELS: Record<CallerCallStage, string> = {
   preparing: 'Preparing the deposit',
   building: 'Building and proving the start call',
-  signing: 'Signing with your wallet',
+  signing: 'Paying the fee and signing with your wallet',
   recording: 'Recording the deposit',
 }
 

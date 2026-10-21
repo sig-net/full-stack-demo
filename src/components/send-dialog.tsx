@@ -30,7 +30,7 @@ import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
 import { type SupportedBalance, supportedBalancesOf } from '@/lib/balances/supported-balances'
-import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
@@ -49,9 +49,9 @@ interface SendDialogProps {
  * Sends a vault token the wallet holds to an address on Ethereum: the amount is surrendered
  * whole on Midnight and the vault account pays the destination. The token can be changed to any
  * other supported balance, and the destination is pasted, never connected. Starting the send is
- * the dialog's one action: the page builds, proves and binds the start call with the wallet's
- * coin, the server records the withdrawal for the relayer to pay and submit, and the activity
- * row takes it from there. While a send is being started the dialog is inert: nothing closes it
+ * the dialog's one action: the page builds, proves and finalises the start call with the
+ * wallet's coin and fee, the server records the withdrawal for the backend to submit, and the
+ * activity row takes it from there. While a send is being started the dialog is inert: nothing closes it
  * and no other control answers.
  */
 export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): ReactNode {
@@ -105,7 +105,7 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
     },
     onSuccess: async () => {
       toast.success(
-        `Send of ${amountText} ${source?.token.symbol ?? ''} to ${abbreviateHex(destination)} started: the backend is paying for its start call and submitting it.`,
+        `Send of ${amountText} ${source?.token.symbol ?? ''} to ${abbreviateHex(destination)} started: the backend is submitting its start call.`,
       )
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
       onOpenChange(false)
@@ -259,7 +259,7 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
 const START_STAGE_LABELS: Record<CallerCallStage, string> = {
   preparing: 'Preparing the send',
   building: 'Building and proving the start call',
-  signing: 'Signing with your wallet',
+  signing: 'Paying the fee and signing with your wallet',
   recording: 'Recording the send',
 }
 

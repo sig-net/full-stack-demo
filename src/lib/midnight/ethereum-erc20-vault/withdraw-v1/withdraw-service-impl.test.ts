@@ -6,11 +6,6 @@ import { resolveCaller } from '@/lib/caller/resolve-caller'
 import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
-import {
-  type SponsoredCallGuard,
-  SponsoredCallMismatch,
-  type SponsoredCircuit,
-} from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import {
@@ -45,24 +40,18 @@ const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(3
 const caller: Caller = resolveCaller('ab'.repeat(32))
 const stranger: Caller = resolveCaller('cd'.repeat(32))
 const REQUEST = { erc20Address: ERC20_ADDRESS, amount: 1_000_000n, destEvmAddress: DESTINATION }
-const BOUND_TX = 'b0bd'
+const FINALIZED_TX = 'f1a1'
 
-/** What the service wrote and asked the guard, so a test can see that a refusal writes nothing and a commit opens one transaction. */
+/** What the service wrote, so a test can see that a refusal writes nothing and a commit opens one transaction. */
 interface Recorded {
   transactions: number
-  guarded: SponsoredCircuit[]
   started: StartWithdrawArgs[]
   completed: CompleteWithdrawArgs[]
 }
 
-const NOTHING_RECORDED: Recorded = { transactions: 0, guarded: [], started: [], completed: [] }
+const NOTHING_RECORDED: Recorded = { transactions: 0, started: [], completed: [] }
 
-function serviceOver(options: {
-  withdraws?: Withdraw[]
-  requests?: VaultRequest[]
-  /** Whether the guard refuses the bound bytes, admitting them when absent. */
-  refusesCall?: boolean
-}) {
+function serviceOver(options: { withdraws?: Withdraw[]; requests?: VaultRequest[] }) {
   const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const withdrawRepository = new MemoryRepository<Withdraw>()
   const vaultRequestRepository = new MemoryRepository<VaultRequest>()
@@ -92,13 +81,6 @@ function serviceOver(options: {
     }),
     SIGNET,
     VAULT,
-    mock<SponsoredCallGuard>('SponsoredCallGuard', {
-      assertSponsoredCall: (boundTx, circuit) => {
-        expect(boundTx).toBe(BOUND_TX)
-        recorded.guarded.push(circuit)
-        if (options.refusesCall === true) throw new SponsoredCallMismatch(circuit)
-      },
-    }),
   )
   return { service, recorded, ready }
 }
@@ -131,12 +113,12 @@ describe('WithdrawServiceImpl.prepareStartWithdraw', () => {
 })
 
 describe('WithdrawServiceImpl.startWithdraw', () => {
-  test('commits the bound start call under the vault account in one transaction', async () => {
+  test('commits the finalised start call under the vault account in one transaction', async () => {
     const { service, recorded } = serviceOver({})
     const withdraw = await service.startWithdraw(caller, {
       withdrawRequest: REQUEST,
       inIndex: 42n,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     expect(withdraw.name).toMatch(
       new RegExp(`^${caller.name}/ethereum-erc20-vault-withdraws/${UUID}$`),
@@ -152,32 +134,17 @@ describe('WithdrawServiceImpl.startWithdraw', () => {
     })
     expect(recorded).toEqual({
       transactions: 1,
-      guarded: ['startWithdraw'],
       started: [
         {
           name: withdraw.name,
           ...REQUEST,
           inIndex: 42n,
           vaultAccount: vaultAccountOf(SIGNET, VAULT),
-          call: { boundTx: BOUND_TX },
+          call: { finalizedTx: FINALIZED_TX },
         },
       ],
       completed: [],
     })
-  })
-
-  test('bound bytes the guard refuses are refused and nothing is written', async () => {
-    const { service, recorded } = serviceOver({ refusesCall: true })
-    const starting = service.startWithdraw(caller, {
-      withdrawRequest: REQUEST,
-      inIndex: 42n,
-      boundTx: BOUND_TX,
-    })
-    await expect(starting).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(starting).rejects.toThrow(
-      'the bound bytes must be exactly one startWithdraw call to the vault',
-    )
-    expect(recorded).toEqual({ ...NOTHING_RECORDED, guarded: ['startWithdraw'] })
   })
 })
 
@@ -311,7 +278,7 @@ describe('WithdrawServiceImpl.prepareCompleteWithdraw', () => {
 })
 
 describe('WithdrawServiceImpl.completeWithdraw', () => {
-  test('commits the bound call in one transaction after the state check', async () => {
+  test('commits the finalised call in one transaction after the state check', async () => {
     const { service, recorded, ready } = serviceOver({
       withdraws: [awaiting],
       requests: [attestedUnder(awaiting.name)],
@@ -319,14 +286,13 @@ describe('WithdrawServiceImpl.completeWithdraw', () => {
     await ready
     const withdraw = await service.completeWithdraw(caller, {
       name: awaiting.name,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     expect(withdraw.state).toBe('AwaitingCompleteTransaction')
     expect(recorded).toEqual({
       transactions: 1,
-      guarded: ['completeWithdraw'],
       started: [],
-      completed: [{ name: awaiting.name, call: { boundTx: BOUND_TX } }],
+      completed: [{ name: awaiting.name, call: { finalizedTx: FINALIZED_TX } }],
     })
   })
 
@@ -336,26 +302,12 @@ describe('WithdrawServiceImpl.completeWithdraw', () => {
       const { service, recorded, ready } = serviceOver({ withdraws, requests })
       await ready
       await expectRefusal(
-        service.completeWithdraw(by, { name: awaiting.name, boundTx: BOUND_TX }),
+        service.completeWithdraw(by, { name: awaiting.name, finalizedTx: FINALIZED_TX }),
         expectError,
       )
-      expect(recorded).toEqual({ ...NOTHING_RECORDED, guarded: ['completeWithdraw'] })
+      expect(recorded).toEqual(NOTHING_RECORDED)
     },
   )
-
-  test('bound bytes the guard refuses are refused before the withdrawal is read and nothing is written', async () => {
-    // No withdrawal is stored, so a refusal of the call shows the guard ran first.
-    const { service, recorded } = serviceOver({ refusesCall: true })
-    const completing = service.completeWithdraw(caller, {
-      name: awaiting.name,
-      boundTx: BOUND_TX,
-    })
-    await expect(completing).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(completing).rejects.toThrow(
-      'the bound bytes must be exactly one completeWithdraw call to the vault',
-    )
-    expect(recorded).toEqual({ ...NOTHING_RECORDED, guarded: ['completeWithdraw'] })
-  })
 })
 
 describe('WithdrawServiceImpl reads', () => {

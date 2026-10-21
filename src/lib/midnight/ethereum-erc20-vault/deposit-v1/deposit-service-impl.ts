@@ -36,7 +36,6 @@ import {
   DepositStateConflict,
   type DepositStateController,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
-import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { SWEEP_GAS } from '@/lib/midnight/ethereum-erc20-vault/sweep-gas'
 import {
   type AttestedRequestFields,
@@ -54,7 +53,6 @@ export class DepositServiceImpl implements DepositService {
   private readonly signet: MidnightSignetConfig
   private readonly midnightNetwork: MidnightNetworkConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
-  private readonly guard: SponsoredCallGuard
 
   constructor(
     depositRepository: DepositRepository,
@@ -65,10 +63,8 @@ export class DepositServiceImpl implements DepositService {
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
     midnightNetwork: MidnightNetworkConfig,
-    guard: SponsoredCallGuard,
   ) {
     this.midnightNetwork = midnightNetwork
-    this.guard = guard
     this.depositRepository = depositRepository
     this.depositStateController = depositStateController
     this.vaultRequestRepository = vaultRequestRepository
@@ -93,9 +89,8 @@ export class DepositServiceImpl implements DepositService {
   /** The nonce is read from the chain before the transaction opens, so two starts of one caller racing past the check commit the same nonce. */
   async startDeposit(
     caller: Caller,
-    { depositRequest, wallet, inIndex, evmNonce, boundTx }: StartDepositArgs,
+    { depositRequest, wallet, inIndex, evmNonce, finalizedTx }: StartDepositArgs,
   ): Promise<Deposit> {
-    this.guard.assertSponsoredCall(boundTx, 'startDeposit')
     const depositAccount = depositAccountOf(caller, this.signet, this.vault)
     if (evmNonce !== (await this.nextEvmNonce(depositAccount))) {
       throw new DepositNonceConflict(depositAccount)
@@ -110,7 +105,7 @@ export class DepositServiceImpl implements DepositService {
         recipient: shieldedAddressOf(wallet, this.midnightNetwork.networkId),
         ...SWEEP_GAS,
         depositAccount,
-        call: { boundTx },
+        call: { finalizedTx },
       }),
     )
   }
@@ -127,12 +122,11 @@ export class DepositServiceImpl implements DepositService {
 
   async completeDeposit(
     caller: Caller,
-    { name, wallet, boundTx }: CompleteDepositArgs,
+    { name, wallet, finalizedTx }: CompleteDepositArgs,
   ): Promise<Deposit> {
-    this.guard.assertSponsoredCall(boundTx, 'completeDeposit')
     await this.assertCompletable(caller, name, wallet)
     return this.unitOfWork.runInTransaction(() =>
-      this.depositStateController.completeDeposit({ name, call: { boundTx } }),
+      this.depositStateController.completeDeposit({ name, call: { finalizedTx } }),
     )
   }
 

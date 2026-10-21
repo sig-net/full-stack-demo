@@ -20,7 +20,6 @@ import {
   startApprovalArgsSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service'
 import { CallerOperationStateConflict } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
-import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import type { Logger } from '@/lib/logging/logger'
 
 /**
@@ -154,12 +153,12 @@ export type ApprovalCompleteInputsResult =
 
 type Refused = { readonly ok: false; readonly error: string }
 
-/** A state conflict and bound bytes that are not the expected vault call are refusals the caller can act on. */
+/** A state conflict is a refusal the caller can act on. */
 async function outcomeOf<Result>(action: () => Promise<Result>): Promise<Result | Refused> {
   try {
     return await action()
   } catch (error: unknown) {
-    if (error instanceof CallerOperationStateConflict || error instanceof SponsoredCallMismatch) {
+    if (error instanceof CallerOperationStateConflict) {
       return { ok: false, error: error.message }
     }
     throw error

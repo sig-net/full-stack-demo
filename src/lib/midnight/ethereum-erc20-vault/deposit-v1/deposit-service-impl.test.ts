@@ -25,11 +25,6 @@ import {
   type DepositStateController,
   type StartDepositArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
-import {
-  type SponsoredCallGuard,
-  SponsoredCallMismatch,
-  type SponsoredCircuit,
-} from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import {
   ATTESTATION_FIELDS,
@@ -73,24 +68,21 @@ const GAS = {
   maxPriorityFeePerGas: 1_000_000_000n,
 }
 const DEPOSIT_REQUEST = { erc20Address: ERC20_ADDRESS, amount: 1_000_000n }
-const BOUND_TX = 'b0bd'
+const FINALIZED_TX = 'f1a1'
 
-/** What the service wrote and asked the guard, so a test can see that a refusal writes nothing and a commit opens one transaction. */
+/** What the service wrote, so a test can see that a refusal writes nothing and a commit opens one transaction. */
 interface Recorded {
   transactions: number
-  guarded: SponsoredCircuit[]
   started: StartDepositArgs[]
   completed: CompleteDepositArgs[]
 }
 
-const NOTHING_RECORDED: Recorded = { transactions: 0, guarded: [], started: [], completed: [] }
+const NOTHING_RECORDED: Recorded = { transactions: 0, started: [], completed: [] }
 
 function serviceOver(options: {
   deposits?: Deposit[]
   requests?: VaultRequest[]
   pendingCount?: number
-  /** Whether the guard refuses the bound bytes, admitting them when absent. */
-  refusesCall?: boolean
 }) {
   const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const depositRepository = new MemoryRepository<Deposit>()
@@ -129,13 +121,6 @@ function serviceOver(options: {
     SIGNET,
     VAULT,
     NETWORK,
-    mock<SponsoredCallGuard>('SponsoredCallGuard', {
-      assertSponsoredCall: (boundTx, circuit) => {
-        expect(boundTx).toBe(BOUND_TX)
-        recorded.guarded.push(circuit)
-        if (options.refusesCall === true) throw new SponsoredCallMismatch(circuit)
-      },
-    }),
   )
   return { service, recorded, ready }
 }
@@ -231,7 +216,7 @@ describe('DepositServiceImpl.prepareStartDeposit', () => {
 
 describe('DepositServiceImpl.startDeposit', () => {
   test.each(assignments)(
-    'the assigned nonce ($name) commits the bound call in one transaction',
+    'the assigned nonce ($name) commits the finalised call in one transaction',
     async ({ pendingCount, deposits, expectNonce }) => {
       const { service, recorded, ready } = serviceOver({ pendingCount, deposits })
       await ready
@@ -240,7 +225,7 @@ describe('DepositServiceImpl.startDeposit', () => {
         wallet: WALLET,
         inIndex: 42n,
         evmNonce: expectNonce,
-        boundTx: BOUND_TX,
+        finalizedTx: FINALIZED_TX,
       })
       expect(deposit.name).toMatch(
         new RegExp(`^${caller.name}/ethereum-erc20-vault-deposits/${UUID}$`),
@@ -259,7 +244,6 @@ describe('DepositServiceImpl.startDeposit', () => {
         error: null,
       })
       expect(recorded.transactions).toBe(1)
-      expect(recorded.guarded).toEqual(['startDeposit'])
       expect(recorded.started).toEqual([
         {
           name: deposit.name,
@@ -270,7 +254,7 @@ describe('DepositServiceImpl.startDeposit', () => {
           ...GAS,
           depositAccount: CALLER_ACCOUNT,
           recipient: shieldedAddressOf(WALLET, NETWORK.networkId),
-          call: { boundTx: BOUND_TX },
+          call: { finalizedTx: FINALIZED_TX },
         },
       ])
     },
@@ -308,31 +292,13 @@ describe('DepositServiceImpl.startDeposit', () => {
         wallet: WALLET,
         inIndex: 42n,
         evmNonce,
-        boundTx: BOUND_TX,
+        finalizedTx: FINALIZED_TX,
       })
       await expect(starting).rejects.toBeInstanceOf(DepositNonceConflict)
       await expect(starting).rejects.toThrow(CALLER_ACCOUNT)
-      expect(recorded).toEqual({ ...NOTHING_RECORDED, guarded: ['startDeposit'] })
+      expect(recorded).toEqual(NOTHING_RECORDED)
     },
   )
-
-  test('bound bytes the guard refuses are refused before the nonce check and nothing is written', async () => {
-    const { service, recorded, ready } = serviceOver({ refusesCall: true })
-    await ready
-    const starting = service.startDeposit(caller, {
-      depositRequest: DEPOSIT_REQUEST,
-      wallet: WALLET,
-      inIndex: 42n,
-      // A stale nonce, so a refusal of the call shows the guard ran first.
-      evmNonce: 7n,
-      boundTx: BOUND_TX,
-    })
-    await expect(starting).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(starting).rejects.toThrow(
-      'the bound bytes must be exactly one startDeposit call to the vault',
-    )
-    expect(recorded).toEqual({ ...NOTHING_RECORDED, guarded: ['startDeposit'] })
-  })
 })
 
 const awaiting = ownDeposit({ state: 'AwaitingCompletion' })
@@ -498,7 +464,7 @@ describe('DepositServiceImpl.prepareCompleteDeposit', () => {
 })
 
 describe('DepositServiceImpl.completeDeposit', () => {
-  test('commits the bound call in one transaction after the checks', async () => {
+  test('commits the finalised call in one transaction after the checks', async () => {
     const { service, recorded, ready } = serviceOver({
       deposits: [awaiting],
       requests: [attestedUnder(awaiting.name)],
@@ -507,14 +473,13 @@ describe('DepositServiceImpl.completeDeposit', () => {
     const deposit = await service.completeDeposit(caller, {
       name: awaiting.name,
       wallet: WALLET,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     expect(deposit.state).toBe('AwaitingCompleteTransaction')
     expect(recorded).toEqual({
       transactions: 1,
-      guarded: ['completeDeposit'],
       started: [],
-      completed: [{ name: awaiting.name, call: { boundTx: BOUND_TX } }],
+      completed: [{ name: awaiting.name, call: { finalizedTx: FINALIZED_TX } }],
     })
   })
 
@@ -524,28 +489,12 @@ describe('DepositServiceImpl.completeDeposit', () => {
       const { service, recorded, ready } = serviceOver({ deposits, requests })
       await ready
       await expectRefusal(
-        service.completeDeposit(by, { name: awaiting.name, wallet, boundTx: BOUND_TX }),
+        service.completeDeposit(by, { name: awaiting.name, wallet, finalizedTx: FINALIZED_TX }),
         expectError,
       )
-      expect(recorded).toEqual({ ...NOTHING_RECORDED, guarded: ['completeDeposit'] })
+      expect(recorded).toEqual(NOTHING_RECORDED)
     },
   )
-
-  test('bound bytes the guard refuses are refused before the deposit is read and nothing is written', async () => {
-    // No deposit is stored, so a refusal of the call shows the guard ran first.
-    const { service, recorded, ready } = serviceOver({ refusesCall: true })
-    await ready
-    const completing = service.completeDeposit(caller, {
-      name: awaiting.name,
-      wallet: WALLET,
-      boundTx: BOUND_TX,
-    })
-    await expect(completing).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(completing).rejects.toThrow(
-      'the bound bytes must be exactly one completeDeposit call to the vault',
-    )
-    expect(recorded).toEqual({ ...NOTHING_RECORDED, guarded: ['completeDeposit'] })
-  })
 })
 
 describe('DepositServiceImpl reads', () => {

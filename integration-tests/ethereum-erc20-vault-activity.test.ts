@@ -139,7 +139,6 @@ describe('The activity view over Postgres', () => {
     signer: 'relayer',
     unprovenTx: 'aa',
     unboundTx: null,
-    boundTx: null,
     finalizedTx: null,
     expireTime: null,
     txId: null,
@@ -346,9 +345,9 @@ describe('The activity view over Postgres', () => {
     const granted = await approvalV1.repository.create(approval())
     await midnight.transactionV1.repository.create(
       midnightTransaction(granted.name, 'startApproveStata', {
-        state: 'AwaitingFee',
+        state: 'AwaitingSubmission',
         unprovenTx: null,
-        boundTx: 'bb',
+        finalizedTx: 'bb',
         expireTime: at(40),
         createTime: at(31),
         updateTime: at(31),
@@ -409,7 +408,7 @@ describe('The activity view over Postgres', () => {
         hash: null,
         blockNumber: null,
         state: 'Pending',
-        lifecycleState: 'AwaitingFee',
+        lifecycleState: 'AwaitingSubmission',
       },
     })
     const listed = await activityV1.repository.search({

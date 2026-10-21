@@ -6,7 +6,7 @@ import {
   type CompleteOperationArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
 import { type Supply, supplyNameSchema } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply'
-import type { BoundCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
+import type { FinalizedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
 
 /**
  * The only writer of a supply's state: the caller operation's transitions over the supply row,
@@ -26,7 +26,7 @@ export interface StartSupplyArgs extends Omit<
   'state' | 'outcome' | 'failure' | 'error' | 'createTime' | 'updateTime'
 > {
   /** The start circuit call, built with the supply's assigned fields. */
-  call: BoundCall
+  call: FinalizedCall
 }
 
 export type CompleteSupplyArgs = CompleteOperationArgs

@@ -20,11 +20,6 @@ import {
   type RedeemStateController,
   type StartRedeemArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-controller'
-import {
-  type SponsoredCallGuard,
-  SponsoredCallMismatch,
-  type SponsoredCircuit,
-} from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
 import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import { ledgerSet } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
@@ -48,24 +43,18 @@ const caller: Caller = resolveCaller('ab'.repeat(32))
 const stranger: Caller = resolveCaller('cd'.repeat(32))
 const REQUEST = { shares: 300_000n }
 const ASSETS_OUTPUT = `40420f${'00'.repeat(29)}`
-const BOUND_TX = 'b0bd'
+const FINALIZED_TX = 'f1a1'
 
-/** What the service read, wrote and asked the guard, so a test can see that a refusal writes nothing and a commit opens one transaction. */
+/** What the service read, wrote, so a test can see that a refusal writes nothing and a commit opens one transaction. */
 interface Recorded {
   steps: string[]
-  guarded: SponsoredCircuit[]
   started: StartRedeemArgs[]
   completed: CompleteRedeemArgs[]
 }
 
-const NOTHING_RECORDED: Recorded = { steps: [], guarded: [], started: [], completed: [] }
+const NOTHING_RECORDED: Recorded = { steps: [], started: [], completed: [] }
 
-function serviceOver(options: {
-  redeems?: Redeem[]
-  requests?: VaultRequest[]
-  /** Whether the guard refuses the bound bytes, admitting them when absent. */
-  refusesCall?: boolean
-}) {
+function serviceOver(options: { redeems?: Redeem[]; requests?: VaultRequest[] }) {
   const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const redeemRepository = new MemoryRepository<Redeem>()
   const vaultRequestRepository = new MemoryRepository<VaultRequest>()
@@ -106,14 +95,6 @@ function serviceOver(options: {
     }),
     SIGNET,
     VAULT,
-    mock<SponsoredCallGuard>('SponsoredCallGuard', {
-      assertSponsoredCall: (boundTx, circuit) => {
-        expect(boundTx).toBe(BOUND_TX)
-        recorded.steps.push('guard')
-        recorded.guarded.push(circuit)
-        if (options.refusesCall === true) throw new SponsoredCallMismatch(circuit)
-      },
-    }),
   )
   return { service, recorded, ready }
 }
@@ -148,12 +129,12 @@ describe('RedeemServiceImpl.prepareStartRedeem', () => {
 })
 
 describe('RedeemServiceImpl.startRedeem', () => {
-  test('guards the bound call, reads the pair again, then commits it under the vault account in one transaction', async () => {
+  test('reads the pair again, then commits the finalised call under the vault account in one transaction', async () => {
     const { service, recorded } = serviceOver({})
     const redeem = await service.startRedeem(caller, {
       redeemRequest: REQUEST,
       inIndex: 42n,
-      boundTx: BOUND_TX,
+      finalizedTx: FINALIZED_TX,
     })
     expect(redeem.name).toMatch(new RegExp(`^${caller.name}/ethereum-erc20-vault-redeems/${UUID}$`))
     expect(redeem).toMatchObject({
@@ -168,8 +149,7 @@ describe('RedeemServiceImpl.startRedeem', () => {
       error: null,
     })
     expect(recorded).toEqual({
-      steps: ['guard', 'ledger', 'transaction'],
-      guarded: ['startRedeem'],
+      steps: ['ledger', 'transaction'],
       started: [
         {
           name: redeem.name,
@@ -178,25 +158,11 @@ describe('RedeemServiceImpl.startRedeem', () => {
           shares: REQUEST.shares,
           inIndex: 42n,
           vaultAccount: vaultAccountOf(SIGNET, VAULT),
-          call: { boundTx: BOUND_TX },
+          call: { finalizedTx: FINALIZED_TX },
         },
       ],
       completed: [],
     })
-  })
-
-  test('bound bytes the guard refuses are refused before the pair is read and nothing is written', async () => {
-    const { service, recorded } = serviceOver({ refusesCall: true })
-    const starting = service.startRedeem(caller, {
-      redeemRequest: REQUEST,
-      inIndex: 42n,
-      boundTx: BOUND_TX,
-    })
-    await expect(starting).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(starting).rejects.toThrow(
-      'the bound bytes must be exactly one startRedeem call to the vault',
-    )
-    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['guard'], guarded: ['startRedeem'] })
   })
 })
 
@@ -327,19 +293,21 @@ describe('RedeemServiceImpl.prepareCompleteRedeem', () => {
 })
 
 describe('RedeemServiceImpl.completeRedeem', () => {
-  test('commits the bound call in one transaction after the state check', async () => {
+  test('commits the finalised call in one transaction after the state check', async () => {
     const { service, recorded, ready } = serviceOver({
       redeems: [awaiting],
       requests: [attestedUnder(awaiting.name)],
     })
     await ready
-    const redeem = await service.completeRedeem(caller, { name: awaiting.name, boundTx: BOUND_TX })
+    const redeem = await service.completeRedeem(caller, {
+      name: awaiting.name,
+      finalizedTx: FINALIZED_TX,
+    })
     expect(redeem.state).toBe('AwaitingCompleteTransaction')
     expect(recorded).toEqual({
-      steps: ['guard', 'transaction'],
-      guarded: ['completeRedeem'],
+      steps: ['transaction'],
       started: [],
-      completed: [{ name: awaiting.name, call: { boundTx: BOUND_TX } }],
+      completed: [{ name: awaiting.name, call: { finalizedTx: FINALIZED_TX } }],
     })
   })
 
@@ -349,27 +317,15 @@ describe('RedeemServiceImpl.completeRedeem', () => {
       const { service, recorded, ready } = serviceOver({ redeems, requests })
       await ready
       await expectRefusal(
-        service.completeRedeem(by, { name: awaiting.name, boundTx: BOUND_TX }),
+        service.completeRedeem(by, { name: awaiting.name, finalizedTx: FINALIZED_TX }),
         expectError,
       )
       expect(recorded).toEqual({
         ...NOTHING_RECORDED,
-        steps: ['guard'],
-        guarded: ['completeRedeem'],
+        steps: [],
       })
     },
   )
-
-  test('bound bytes the guard refuses are refused before the redeem is read and nothing is written', async () => {
-    // No redeem is stored, so a refusal of the call shows the guard ran first.
-    const { service, recorded } = serviceOver({ refusesCall: true })
-    const completing = service.completeRedeem(caller, { name: awaiting.name, boundTx: BOUND_TX })
-    await expect(completing).rejects.toBeInstanceOf(SponsoredCallMismatch)
-    await expect(completing).rejects.toThrow(
-      'the bound bytes must be exactly one completeRedeem call to the vault',
-    )
-    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['guard'], guarded: ['completeRedeem'] })
-  })
 })
 
 describe('RedeemServiceImpl reads', () => {

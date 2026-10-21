@@ -1,4 +1,3 @@
-import { nativeToken } from '@midnightntwrk/ledger-v9'
 import { rawTokenType } from '@midnight-ntwrk/compact-runtime'
 import {
   deriveVaultEvmAddress,
@@ -14,11 +13,10 @@ import type { Backend } from '@/server/backend'
 import { ensureAaveReserveAcceptsDeposits } from './aave-reserve'
 import { testBackend } from './backend'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
-import { secretKeyOf } from './user-caller-call'
 import { completeApprovalAsUser, startApprovalAsUser } from './user-approval'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
 import { completeSupplyAsUser, startSupplyAsUser } from './user-supply'
-import { mergedBoundTx, startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
+import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 60 * 60_000
 /** Whole underlying deposited and then supplied to the wrapper. */
@@ -28,13 +26,11 @@ const AMOUNT = 1_500_000n
  * One supply from `startSupply` to `Completed` over the whole local stack: the caller first
  * deposits the stata underlying it will supply, the wrapper's allowance is granted when the
  * vault account lacks it, and the supply then deposits that underlying into Aave's static
- * wrapper from the vault account. This test plays the browser, which builds, proves and binds
- * both caller calls of the deposit and the supply without a fee, with the wallet's own coin of
- * the underlying funding the supply's start call, and the relayer pays each call's fee. The
- * vault account's balances on the fork before and after prove the deposit the MPC signed
- * executed, and the attested output is the shares it minted. Between the two legs, bound bytes
- * the relayer must not pay for are offered to the server with the caller's real coins and
- * refused.
+ * wrapper from the vault account. This test plays the browser, which builds, proves and
+ * finalises both caller calls of the deposit and the supply with the user wallet paying their
+ * fees, and the wallet's own coin of the underlying funding the supply's start call. The vault
+ * account's balances on the fork before and after prove the deposit the MPC signed executed, and
+ * the attested output is the shares it minted.
  */
 describe('ERC20 vault supply round trip over the local stack', () => {
   let backend: Backend
@@ -126,58 +122,6 @@ describe('ERC20 vault supply round trip over the local stack', () => {
   )
 
   test(
-    'bound bytes the relayer must not pay for are refused and write nothing',
-    async () => {
-      if (!deposited) throw new Error('the deposit did not run')
-      const { supplyV1 } = backend.midnight.ethereumErc20Vault
-      const supplyRequest = { amount: AMOUNT }
-      const before = await supplyV1.adaptor.listSupplies(callerSecret, {})
-      const prepared = await supplyV1.adaptor.prepareStartSupply(callerSecret, { supplyRequest })
-      if (!prepared.ok) throw new Error(prepared.error)
-      expect(prepared.inputs.underlyingErc20Address).toBe(target.underlyingErc20Address)
-      const unboundStart = await supplyV1.callBuilder.buildStart({
-        secretKey: secretKeyOf(callerSecret),
-        wallet: user.publicKeys,
-        inIndex: prepared.inputs.inIndex,
-        underlyingErc20Address: prepared.inputs.underlyingErc20Address,
-        ...supplyRequest,
-      })
-      const refusal = {
-        ok: false,
-        error:
-          'the bound bytes must be exactly one startSupply call to the vault, spending shielded coins alone',
-      }
-
-      // The user's wallet pays the fee itself, so the bytes carry a DUST spend.
-      const withFee = await user.balance(unboundStart)
-      expect(
-        await supplyV1.adaptor.startSupply(callerSecret, {
-          supplyRequest,
-          inIndex: prepared.inputs.inIndex,
-          boundTx: withFee,
-        }),
-      ).toEqual(refusal)
-      await user.revert(withFee)
-
-      // The call bound without a fee, with an unshielded NIGHT transfer merged beside it.
-      const withoutFee = await user.balanceWithoutFee(unboundStart)
-      const night = await user.selfTransfer('unshielded', nativeToken().raw, 1n)
-      expect(
-        await supplyV1.adaptor.startSupply(callerSecret, {
-          supplyRequest,
-          inIndex: prepared.inputs.inIndex,
-          boundTx: mergedBoundTx(withoutFee, night),
-        }),
-      ).toEqual(refusal)
-      await user.revert(night)
-      await user.revert(withoutFee)
-
-      expect(await supplyV1.adaptor.listSupplies(callerSecret, {})).toEqual(before)
-    },
-    ROUND_TRIP_TIMEOUT_MS,
-  )
-
-  test(
     'the underlying in the vault is supplied to the Aave wrapper',
     async () => {
       if (!deposited) throw new Error('the deposit did not run')
@@ -208,7 +152,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
         criteria: [{ type: 'exact-text', field: 'parent', text: supply.supply.name }],
       })
       expect(start).toMatchObject({ circuit: 'startSupply', signer: 'caller', unprovenTx: null })
-      expect(start?.boundTx).toMatch(/^[0-9a-f]+$/)
+      expect(start?.finalizedTx).toMatch(/^[0-9a-f]+$/)
 
       await driveOperation(
         {
@@ -248,7 +192,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
         destination: stataErc20Address,
       })
 
-      // Both caller calls were bound by the user and paid by the relayer.
+      // Both caller calls were finalised by the user's wallet.
       const transactions = await midnight.transactionV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: supply.supply.name }],
         order: { field: 'createTime', direction: 'asc' },
@@ -272,12 +216,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
         const trail = entries
           .filter((entry) => new TextDecoder().decode(entry.data).includes(transaction.name))
           .map((entry) => entry.type.slice(entry.type.lastIndexOf('.') + 1))
-        expect(trail).toEqual([
-          'awaiting-fee',
-          'awaiting-submission',
-          'awaiting-inclusion',
-          'succeeded',
-        ])
+        expect(trail).toEqual(['awaiting-submission', 'awaiting-inclusion', 'succeeded'])
       }
     },
     ROUND_TRIP_TIMEOUT_MS,

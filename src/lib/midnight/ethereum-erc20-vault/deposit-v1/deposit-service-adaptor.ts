@@ -20,7 +20,6 @@ import {
   startDepositArgsSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
 import { DepositStateConflict } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
-import { SponsoredCallMismatch } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import type { Logger } from '@/lib/logging/logger'
 
 /**
@@ -138,7 +137,7 @@ type Refused = {
   readonly reason?: DepositRefusalReason
 }
 
-/** A state conflict, a recipient mismatch, a moved nonce and bound bytes that are not the expected vault call are refusals the caller can act on. */
+/** A state conflict, a recipient mismatch and a moved nonce are refusals the caller can act on. */
 async function outcomeOf<Result>(action: () => Promise<Result>): Promise<Result | Refused> {
   try {
     return await action()
@@ -146,11 +145,7 @@ async function outcomeOf<Result>(action: () => Promise<Result>): Promise<Result 
     if (error instanceof DepositNonceConflict) {
       return { ok: false, error: error.message, reason: 'nonceConflict' }
     }
-    if (
-      error instanceof DepositStateConflict ||
-      error instanceof DepositRecipientMismatch ||
-      error instanceof SponsoredCallMismatch
-    ) {
+    if (error instanceof DepositStateConflict || error instanceof DepositRecipientMismatch) {
       return { ok: false, error: error.message }
     }
     throw error

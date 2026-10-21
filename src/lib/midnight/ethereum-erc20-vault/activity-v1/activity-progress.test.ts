@@ -68,8 +68,8 @@ describe('activityStepsOf', () => {
       expected: 'cppppppppp',
     },
     {
-      name: 'a bound start call awaiting its fee stands at inclusion',
-      activity: { startTransaction: transaction('AwaitingFee', null) },
+      name: 'a finalised start call awaiting its submission stands at inclusion',
+      activity: { startTransaction: transaction('AwaitingSubmission', null) },
       expected: 'dcpppppppp',
     },
     {

@@ -24,7 +24,7 @@ import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import { supportedBalancesOf } from '@/lib/balances/supported-balances'
 import { routerAllowanceOf } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
-import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { SWAP_MAX_SLIPPAGE_BPS } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-quote'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
@@ -58,8 +58,8 @@ interface SwapPanelProps {
  * Sells vault tokens the wallet holds for another token the vault admits, at a live quote. The
  * From amount is what the swap may spend at most and is surrendered whole, the To amount is the
  * least the trade accepts, and whatever the trade does not spend comes back as change. The page
- * builds, proves and binds a swap's start call with the wallet's coin of the sold token, and the
- * server records it for the relayer to pay and submit.
+ * builds, proves and finalises a swap's start call with the wallet's coin of the sold token and
+ * its fee, and the server records it for the backend to submit.
  */
 export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   const { callerSecret, callerName } = useCaller()
@@ -157,7 +157,7 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
     },
     onSuccess: async () => {
       toast.success(
-        `Swap of ${fromAmount} ${fromToken?.symbol ?? ''} started: the backend is paying for its start call and submitting it.`,
+        `Swap of ${fromAmount} ${fromToken?.symbol ?? ''} started: the backend is submitting its start call.`,
       )
       setFromAmount('')
       await queryClient.invalidateQueries({ queryKey: [ACTIVITIES_QUERY_KEY] })
@@ -347,7 +347,7 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
 const START_STAGE_LABELS: Record<CallerCallStage, string> = {
   preparing: 'Preparing the swap',
   building: 'Building and proving the start call',
-  signing: 'Signing with your wallet',
+  signing: 'Paying the fee and signing with your wallet',
   recording: 'Recording the swap',
 }
 

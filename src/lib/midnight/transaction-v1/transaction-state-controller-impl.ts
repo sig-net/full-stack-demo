@@ -6,7 +6,6 @@ import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v
 import {
   type CommitTransactionArgs,
   type ExpireTransactionArgs,
-  type RecordFeeArgs,
   type RecordProofArgs,
   type RecordProofFailureArgs,
   type RecordLedgerFailureArgs,
@@ -48,8 +47,7 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
       state: entryState(args),
       unprovenTx: 'unprovenTx' in args ? args.unprovenTx : null,
       unboundTx: null,
-      boundTx: 'boundTx' in args ? args.boundTx : null,
-      finalizedTx: null,
+      finalizedTx: 'finalizedTx' in args ? args.finalizedTx : null,
       txId: null,
       blockHeight: null,
       expireTime: new Date(now.getTime() + TRANSACTION_TTL_MS),
@@ -88,10 +86,6 @@ export class MidnightTransactionStateControllerImpl implements MidnightTransacti
 
   submitTransaction({ name, finalizedTx }: SubmitTransactionArgs): Promise<MidnightTransaction> {
     return this.transition(name, 'submit', { finalizedTx })
-  }
-
-  recordFee({ name, finalizedTx }: RecordFeeArgs): Promise<MidnightTransaction> {
-    return this.transition(name, 'recordFee', { finalizedTx })
   }
 
   recordSubmission({ name, txId }: RecordSubmissionArgs): Promise<MidnightTransaction> {

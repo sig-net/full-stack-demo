@@ -77,7 +77,7 @@ One verb, one meaning, everywhere an edge label or note describes an action:
 | Records   | a state controller method | writes the outcome of a chain step (a transaction id, a failure)                 |
 | Publishes | a state controller method | emits the lifecycle event of the state entered                                   |
 | Proves    | the resolver              | sends the unproven transaction to the proof server                               |
-| Submits   | the resolver              | sends the finalized transaction to the node                                      |
+| Submits   | the resolver              | sends the finalised transaction to the node                                      |
 | Watches   | the resolver              | polls the indexer for the transaction's inclusion                                |
 | Expires   | the expiry sweep          | ends a transaction whose `expireTime` passed                                     |
 | Creates   | an adaptor or service     | opens a resource row in its first state                                          |
@@ -146,10 +146,9 @@ bus. The stages are the deposit's, and the palette card carries their swatches:
 | ----- | --------- | ------------------------------------------------------------------------------------------ |
 | 1     | `#E68310` | the user calls `startDeposit`, which creates the deposit and its start transaction         |
 | 2     | `#11A579` | the outbox relays the lifecycle events to Kafka and the consumer hub dispatches them       |
-| 3     | `#D62728` | the resolver has the relayer wallet pay the fee of the call the user's wallet bound        |
-| 4     | `#00A2B8` | the resolver submits the transaction to the node and watches the indexer for its inclusion |
-| 5     | `#8C564B` | the vault request is flushed, sent, signed by the MPC, broadcast on Ethereum and attested  |
-| 6     | `#B8A000` | the user calls `completeDeposit`, and the completion transaction runs to `Completed`       |
+| 3     | `#00A2B8` | the resolver submits the transaction to the node and watches the indexer for its inclusion |
+| 4     | `#8C564B` | the vault request is flushed, sent, signed by the MPC, broadcast on Ethereum and attested  |
+| 5     | `#B8A000` | the user calls `completeDeposit`, and the completion transaction runs to `Completed`       |
 
 ### Provider and entity formats
 
@@ -232,9 +231,10 @@ they are never edited by hand:
   `EventConsumer` container from `LifecycleEventConsumer`. A base class no root
   builds gets no container of its own, and an alias the class implements
   (`DepositRepository`) stands for the generic interface its base class implements
-  (`Repository`). A class declared outside `src/lib` (`JsonRpcProvider`, `NodeZkConfigProvider`)
-  and a class a root builds through a factory method with no `new` expression
-  (`MemoryPrivateStateProvider.holding()`) have no container. When several
+  (`Repository`). A class declared outside `src/lib` (`JsonRpcProvider`, `NodeZkConfigProvider`),
+  a class a root builds through a factory method with no `new` expression
+  (`MemoryPrivateStateProvider.holding()`) and a class extending the `Error` global, which code
+  the root reaches throws (`CallRefused`), have no container. When several
   classes implement one interface, each container id carries a qualifier taken from its
   class name less the interface name and `Impl` (`provider-event-publisher-kafka`,
   `provider-event-consumer-midnight-transaction`).

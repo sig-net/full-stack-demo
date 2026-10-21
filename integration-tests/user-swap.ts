@@ -9,7 +9,12 @@ import type { SwapResult } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swa
 import type { Backend } from '@/server/backend'
 
 import { log } from './operation-round-trip'
-import { bindAsUser, type BoundCallerCall, completionOutput, secretKeyOf } from './user-caller-call'
+import {
+  completionOutput,
+  finalizeAsUser,
+  type FinalizedCallerCall,
+  secretKeyOf,
+} from './user-caller-call'
 import type { UserWallet } from './user-wallet'
 
 /** The start call for the server's slot, with the caller secret as the witness, the user wallet's keys and its coin of the sold token. */
@@ -19,9 +24,9 @@ export function buildStartCall(
   user: UserWallet,
   swapRequest: SwapRequest,
   inputs: SwapStartInputs,
-): Promise<BoundCallerCall> {
+): Promise<FinalizedCallerCall> {
   const { callBuilder } = backend.midnight.ethereumErc20Vault.swapV1
-  return bindAsUser(user, () =>
+  return finalizeAsUser(user, () =>
     callBuilder.buildStart({
       secretKey: secretKeyOf(callerSecret),
       wallet: user.publicKeys,
@@ -37,9 +42,9 @@ export function buildCompleteCall(
   callerSecret: string,
   user: UserWallet,
   inputs: SwapCompleteInputs,
-): Promise<BoundCallerCall> {
+): Promise<FinalizedCallerCall> {
   const { callBuilder } = backend.midnight.ethereumErc20Vault.swapV1
-  return bindAsUser(user, () =>
+  return finalizeAsUser(user, () =>
     callBuilder.buildComplete({
       secretKey: secretKeyOf(callerSecret),
       wallet: user.publicKeys,
@@ -51,7 +56,7 @@ export function buildCompleteCall(
   )
 }
 
-/** `prepareStartSwap`, the build, the bind and `startSwap`, as the swap panel runs them: a refusal at either server call is the result. */
+/** `prepareStartSwap`, the build, the finalisation and `startSwap`, as the swap panel runs them: a refusal at either server call is the result. */
 export async function startSwapAsUser(
   backend: Backend,
   callerSecret: string,
@@ -61,7 +66,7 @@ export async function startSwapAsUser(
   const { adaptor } = backend.midnight.ethereumErc20Vault.swapV1
   const prepared = await adaptor.prepareStartSwap(callerSecret, { swapRequest })
   if (!prepared.ok) return prepared
-  const { boundTx, buildMs, bindMs } = await buildStartCall(
+  const { finalizedTx, buildMs, finalizeMs } = await buildStartCall(
     backend,
     callerSecret,
     user,
@@ -72,15 +77,15 @@ export async function startSwapAsUser(
   const result = await adaptor.startSwap(callerSecret, {
     swapRequest,
     inIndex: prepared.inputs.inIndex,
-    boundTx,
+    finalizedTx,
   })
   log(
-    `start call built in ${String(buildMs)} ms, bound in ${String(bindMs)} ms, startSwap answered in ${String(Date.now() - calling)} ms`,
+    `start call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, startSwap answered in ${String(Date.now() - calling)} ms`,
   )
   return result
 }
 
-/** `prepareCompleteSwap`, the build, the bind and `completeSwap`, as the activity table's completion runs them. */
+/** `prepareCompleteSwap`, the build, the finalisation and `completeSwap`, as the activity table's completion runs them. */
 export async function completeSwapAsUser(
   backend: Backend,
   callerSecret: string,
@@ -90,16 +95,16 @@ export async function completeSwapAsUser(
   const { adaptor } = backend.midnight.ethereumErc20Vault.swapV1
   const prepared = await adaptor.prepareCompleteSwap(callerSecret, { name })
   if (!prepared.ok) return prepared
-  const { boundTx, buildMs, bindMs } = await buildCompleteCall(
+  const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
     callerSecret,
     user,
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeSwap(callerSecret, { name, boundTx })
+  const result = await adaptor.completeSwap(callerSecret, { name, finalizedTx })
   log(
-    `complete call built in ${String(buildMs)} ms, bound in ${String(bindMs)} ms, completeSwap answered in ${String(Date.now() - calling)} ms`,
+    `complete call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, completeSwap answered in ${String(Date.now() - calling)} ms`,
   )
   return result
 }

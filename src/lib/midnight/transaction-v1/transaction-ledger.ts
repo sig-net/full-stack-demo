@@ -8,7 +8,7 @@ export interface MidnightTransactionLedger {
   /** Proves the unproven transaction and resolves with the unbound (proven, unbalanced) bytes. */
   prove(unprovenTx: string): Promise<string>
   /**
-   * Sends the finalized bytes to the node and resolves with their ledger id once they reached
+   * Sends the finalised bytes to the node and resolves with their ledger id once they reached
    * it, an acknowledgement lost after the send included: the inclusion watch and the TTL then
    * decide. It throws only when the node refused the bytes with a reason or they never left.
    */

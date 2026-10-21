@@ -30,7 +30,7 @@ import {
   completeApprovalInBrowser,
   startApprovalInBrowser,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/browser-approval-calls'
-import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import type { CompleteApproveCircuitArgs } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 import {
   REQUEST_ID,
@@ -53,10 +53,7 @@ const EXECUTED_INPUTS: ApprovalCompleteInputs = {
 }
 const STATE_CONFLICT_ERROR = 'the approval is not awaiting that'
 const STATE_CONFLICT: ApprovalResult = { ok: false, error: STATE_CONFLICT_ERROR }
-const CALL_MISMATCH: ApprovalResult = {
-  ok: false,
-  error: 'the bound bytes must be exactly one startApproveRouter call to the vault',
-}
+const RECORD_REFUSAL: ApprovalResult = { ok: false, error: 'the vault ledger could not be read' }
 
 /** Every collaborator call and every stage reported, in order, with the arguments each call received. */
 interface Trail {
@@ -71,7 +68,7 @@ interface Received {
   readonly completeApproval: CompleteApprovalArgs[]
   readonly buildStart: StartApprovalCircuitArgs[]
   readonly buildComplete: CompleteApproveCircuitArgs[]
-  readonly balanceWithoutFee: string[]
+  readonly finalize: string[]
 }
 
 const NOTHING_RECEIVED: Received = {
@@ -81,7 +78,7 @@ const NOTHING_RECEIVED: Received = {
   completeApproval: [],
   buildStart: [],
   buildComplete: [],
-  balanceWithoutFee: [],
+  finalize: [],
 }
 
 interface Doubles {
@@ -136,10 +133,13 @@ function collaborators(doubles: Doubles) {
   })
   const wallet = mock<Wallet>('Wallet', {
     publicKeys: PUBLIC_KEYS,
-    balanceWithoutFee: async (unboundTx) => {
-      trail.events.push('balanceWithoutFee')
-      trail.received.balanceWithoutFee.push(unboundTx)
-      return `bound(${unboundTx})`
+    finalize: async (unboundTx) => {
+      trail.events.push('finalize')
+      trail.received.finalize.push(unboundTx)
+      return `finalized(${unboundTx})`
+    },
+    release: async (finalizedTx) => {
+      trail.events.push(`release(${finalizedTx})`)
     },
   })
   const onStage = (stage: CallerCallStage): void => {
@@ -154,7 +154,7 @@ const START_PASS = [
   'stage:building',
   'buildStart',
   'stage:signing',
-  'balanceWithoutFee',
+  'finalize',
   'stage:recording',
   'startApproval',
 ]
@@ -167,15 +167,15 @@ describe('startApprovalInBrowser', () => {
     expectError?: string
   }> = [
     {
-      name: 'prepares, builds, binds and records the start call once',
+      name: 'prepares, builds, finalises and records the start call once',
       doubles: {},
       expectEvents: START_PASS,
     },
     {
       name: 'a refused record surfaces without a retry',
-      doubles: { started: CALL_MISMATCH },
-      expectEvents: START_PASS,
-      expectError: 'the bound bytes must be exactly one startApproveRouter call to the vault',
+      doubles: { started: RECORD_REFUSAL },
+      expectEvents: [...START_PASS, 'release(finalized(unbound-start))'],
+      expectError: 'the vault ledger could not be read',
     },
     {
       name: 'a refused prepare surfaces before anything is built',
@@ -234,7 +234,7 @@ describe('startApprovalInBrowser', () => {
   ]
 
   test.each(kinds)(
-    '$name, and each call receives the request, the slot and the bound bytes',
+    '$name, and each call receives the request, the slot and the finalised bytes',
     async ({ approvalRequest, expectBuilt }) => {
       const { trail, args } = collaborators({})
       await startApprovalInBrowser({ ...args, approvalRequest })
@@ -242,12 +242,12 @@ describe('startApprovalInBrowser', () => {
         ...NOTHING_RECEIVED,
         prepareStartApproval: [{ approvalRequest }],
         buildStart: [expectBuilt],
-        balanceWithoutFee: ['unbound-start'],
+        finalize: ['unbound-start'],
         startApproval: [
           {
             approvalRequest,
             inIndex: START_INPUTS.inIndex,
-            boundTx: 'bound(unbound-start)',
+            finalizedTx: 'finalized(unbound-start)',
           },
         ],
       })
@@ -271,7 +271,7 @@ const COMPLETE_PASS = [
   'stage:building',
   'buildComplete',
   'stage:signing',
-  'balanceWithoutFee',
+  'finalize',
   'stage:recording',
   'completeApproval',
 ]
@@ -284,14 +284,14 @@ describe('completeApprovalInBrowser', () => {
     expectError?: string
   }> = [
     {
-      name: 'prepares, builds, binds and records the complete call once',
+      name: 'prepares, builds, finalises and records the complete call once',
       doubles: {},
       expectEvents: COMPLETE_PASS,
     },
     {
       name: 'a refused record surfaces without a retry',
       doubles: { completed: STATE_CONFLICT },
-      expectEvents: COMPLETE_PASS,
+      expectEvents: [...COMPLETE_PASS, 'release(finalized(unbound-complete))'],
       expectError: STATE_CONFLICT_ERROR,
     },
     {
@@ -334,7 +334,7 @@ describe('completeApprovalInBrowser', () => {
   ]
 
   test.each(outputs)(
-    'each call receives the name, the keys, $name and the bound bytes, and no nonce',
+    'each call receives the name, the keys, $name and the finalised bytes, and no nonce',
     async ({ inputs, expectOutput }) => {
       const { trail, args } = collaborators({ prepareComplete: { ok: true, inputs } })
       await completeApprovalInBrowser({ ...args, name: APPROVAL_NAME })
@@ -349,8 +349,8 @@ describe('completeApprovalInBrowser', () => {
             serializedOutput: expectOutput,
           },
         ],
-        balanceWithoutFee: ['unbound-complete'],
-        completeApproval: [{ name: APPROVAL_NAME, boundTx: 'bound(unbound-complete)' }],
+        finalize: ['unbound-complete'],
+        completeApproval: [{ name: APPROVAL_NAME, finalizedTx: 'finalized(unbound-complete)' }],
       })
     },
   )

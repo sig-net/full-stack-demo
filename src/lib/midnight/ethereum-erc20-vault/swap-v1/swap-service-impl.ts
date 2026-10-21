@@ -10,7 +10,6 @@ import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
 import type { UniswapQuoter } from '@/lib/ethereum/uniswap-quoter'
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
-import type { SponsoredCallGuard } from '@/lib/midnight/ethereum-erc20-vault/sponsored-call-guard'
 import {
   type Swap,
   type SwapCompleteInputs,
@@ -52,7 +51,6 @@ export class SwapServiceImpl implements SwapService {
   private readonly unitOfWork: UnitOfWork
   private readonly signet: MidnightSignetConfig
   private readonly vault: MidnightEthereumErc20VaultConfig
-  private readonly guard: SponsoredCallGuard
 
   constructor(
     swapRepository: SwapRepository,
@@ -62,7 +60,6 @@ export class SwapServiceImpl implements SwapService {
     unitOfWork: UnitOfWork,
     signet: MidnightSignetConfig,
     vault: MidnightEthereumErc20VaultConfig,
-    guard: SponsoredCallGuard,
   ) {
     this.swapRepository = swapRepository
     this.swapStateController = swapStateController
@@ -71,7 +68,6 @@ export class SwapServiceImpl implements SwapService {
     this.unitOfWork = unitOfWork
     this.signet = signet
     this.vault = vault
-    this.guard = guard
   }
 
   /** Every tier is asked and the one paying most wins, so a pair with one thin pool still quotes. */
@@ -102,15 +98,17 @@ export class SwapServiceImpl implements SwapService {
     return { inIndex: newInputIndex() }
   }
 
-  async startSwap(caller: Caller, { swapRequest, inIndex, boundTx }: StartSwapArgs): Promise<Swap> {
-    this.guard.assertSponsoredCall(boundTx, 'startSwap')
+  async startSwap(
+    caller: Caller,
+    { swapRequest, inIndex, finalizedTx }: StartSwapArgs,
+  ): Promise<Swap> {
     return this.unitOfWork.runInTransaction(() =>
       this.swapStateController.startSwap({
         name: swapName(caller.name, randomUUID()),
         ...swapRequest,
         inIndex,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
-        call: { boundTx },
+        call: { finalizedTx },
       }),
     )
   }
@@ -125,11 +123,10 @@ export class SwapServiceImpl implements SwapService {
     return { requestId, attestationOutputKind, attestationOutput }
   }
 
-  async completeSwap(caller: Caller, { name, boundTx }: CompleteSwapArgs): Promise<Swap> {
-    this.guard.assertSponsoredCall(boundTx, 'completeSwap')
+  async completeSwap(caller: Caller, { name, finalizedTx }: CompleteSwapArgs): Promise<Swap> {
     await this.assertCompletable(caller, name)
     return this.unitOfWork.runInTransaction(() =>
-      this.swapStateController.completeSwap({ name, call: { boundTx } }),
+      this.swapStateController.completeSwap({ name, call: { finalizedTx } }),
     )
   }
 

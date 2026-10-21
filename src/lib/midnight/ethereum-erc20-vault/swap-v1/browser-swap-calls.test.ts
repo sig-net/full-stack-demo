@@ -1,7 +1,7 @@
 import { hexToBytes } from '@sig-net/midnight'
 import { describe, expect, test } from 'vitest'
 
-import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/browser-caller-calls'
+import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import {
   completeSwapInBrowser,
   startSwapInBrowser,
@@ -60,10 +60,7 @@ const EXECUTED_INPUTS: SwapCompleteInputs = {
 }
 const STATE_CONFLICT_ERROR = 'the swap is not awaiting that'
 const STATE_CONFLICT: SwapResult = { ok: false, error: STATE_CONFLICT_ERROR }
-const CALL_MISMATCH: SwapResult = {
-  ok: false,
-  error: 'the bound bytes must be exactly one startSwap call to the vault',
-}
+const RECORD_REFUSAL: SwapResult = { ok: false, error: 'the vault ledger could not be read' }
 
 /** Every collaborator call and every stage reported, in order, with the arguments each call received. */
 interface Trail {
@@ -78,7 +75,7 @@ interface Received {
   readonly completeSwap: CompleteSwapArgs[]
   readonly buildStart: StartSwapCircuitArgs[]
   readonly buildComplete: CompleteSwapCircuitArgs[]
-  readonly balanceWithoutFee: string[]
+  readonly finalize: string[]
 }
 
 const NOTHING_RECEIVED: Received = {
@@ -88,7 +85,7 @@ const NOTHING_RECEIVED: Received = {
   completeSwap: [],
   buildStart: [],
   buildComplete: [],
-  balanceWithoutFee: [],
+  finalize: [],
 }
 
 interface Doubles {
@@ -143,10 +140,13 @@ function collaborators(doubles: Doubles) {
   })
   const wallet = mock<Wallet>('Wallet', {
     publicKeys: PUBLIC_KEYS,
-    balanceWithoutFee: async (unboundTx) => {
-      trail.events.push('balanceWithoutFee')
-      trail.received.balanceWithoutFee.push(unboundTx)
-      return `bound(${unboundTx})`
+    finalize: async (unboundTx) => {
+      trail.events.push('finalize')
+      trail.received.finalize.push(unboundTx)
+      return `finalized(${unboundTx})`
+    },
+    release: async (finalizedTx) => {
+      trail.events.push(`release(${finalizedTx})`)
     },
   })
   const onStage = (stage: CallerCallStage): void => {
@@ -161,7 +161,7 @@ const START_PASS = [
   'stage:building',
   'buildStart',
   'stage:signing',
-  'balanceWithoutFee',
+  'finalize',
   'stage:recording',
   'startSwap',
 ]
@@ -174,15 +174,15 @@ describe('startSwapInBrowser', () => {
     expectError?: string
   }> = [
     {
-      name: 'prepares, builds, binds and records the start call once',
+      name: 'prepares, builds, finalises and records the start call once',
       doubles: {},
       expectEvents: START_PASS,
     },
     {
       name: 'a refused record surfaces without a retry',
-      doubles: { started: CALL_MISMATCH },
-      expectEvents: START_PASS,
-      expectError: 'the bound bytes must be exactly one startSwap call to the vault',
+      doubles: { started: RECORD_REFUSAL },
+      expectEvents: [...START_PASS, 'release(finalized(unbound-start))'],
+      expectError: 'the vault ledger could not be read',
     },
     {
       name: 'a refused prepare surfaces before anything is built',
@@ -212,7 +212,7 @@ describe('startSwapInBrowser', () => {
     expect(trail.events).toEqual(expectEvents)
   })
 
-  test('each call receives the request, the keys, the slot and the bound bytes', async () => {
+  test('each call receives the request, the keys, the slot and the finalised bytes', async () => {
     const { trail, args } = collaborators({})
     await startSwapInBrowser({ ...args, swapRequest: SWAP_REQUEST })
     expect(trail.received).toEqual({
@@ -226,12 +226,12 @@ describe('startSwapInBrowser', () => {
           ...SWAP_REQUEST,
         },
       ],
-      balanceWithoutFee: ['unbound-start'],
+      finalize: ['unbound-start'],
       startSwap: [
         {
           swapRequest: SWAP_REQUEST,
           inIndex: START_INPUTS.inIndex,
-          boundTx: 'bound(unbound-start)',
+          finalizedTx: 'finalized(unbound-start)',
         },
       ],
     })
@@ -254,7 +254,7 @@ const COMPLETE_PASS = [
   'stage:building',
   'buildComplete',
   'stage:signing',
-  'balanceWithoutFee',
+  'finalize',
   'stage:recording',
   'completeSwap',
 ]
@@ -267,7 +267,7 @@ describe('completeSwapInBrowser', () => {
     expectError?: string
   }> = [
     {
-      name: 'prepares, builds, binds and records the complete call once',
+      name: 'prepares, builds, finalises and records the complete call once',
       doubles: {},
       expectEvents: COMPLETE_PASS,
     },
@@ -280,7 +280,7 @@ describe('completeSwapInBrowser', () => {
     {
       name: 'a refused record surfaces without a retry',
       doubles: { completed: STATE_CONFLICT },
-      expectEvents: COMPLETE_PASS,
+      expectEvents: [...COMPLETE_PASS, 'release(finalized(unbound-complete))'],
       expectError: STATE_CONFLICT_ERROR,
     },
     {
@@ -317,7 +317,7 @@ describe('completeSwapInBrowser', () => {
   ]
 
   test.each(outputs)(
-    'each call receives the name, the keys, $name and the bound bytes',
+    'each call receives the name, the keys, $name and the finalised bytes',
     async ({ inputs, expectOutput }) => {
       const { trail, args } = collaborators({ prepareComplete: { ok: true, inputs } })
       await completeSwapInBrowser({ ...args, name: SWAP_NAME })
@@ -334,8 +334,8 @@ describe('completeSwapInBrowser', () => {
             changeNonce: expect.any(Uint8Array),
           },
         ],
-        balanceWithoutFee: ['unbound-complete'],
-        completeSwap: [{ name: SWAP_NAME, boundTx: 'bound(unbound-complete)' }],
+        finalize: ['unbound-complete'],
+        completeSwap: [{ name: SWAP_NAME, finalizedTx: 'finalized(unbound-complete)' }],
       })
     },
   )
