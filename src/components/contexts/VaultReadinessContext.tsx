@@ -7,15 +7,15 @@ import { useCaller } from '@/components/contexts/CallerContext'
 import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import {
+  type BalanceCheck,
   CALLER_DUST_MINIMUM,
-  type ReadinessCheck,
   type ReadinessChecks,
-  readReadinessCheck,
+  readBalanceCheck,
 } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
-import { getVaultReadiness } from '@/server/actions/readiness-actions'
+import { getVaultInitialisation, getVaultReadiness } from '@/server/actions/readiness-actions'
 
 export interface VaultReadinessContextValue {
-  /** Every payer's check. A check whose read has not run, or cannot run yet, is unavailable with the reason. */
+  /** The vault's initialisation and every payer's check. A check whose read has not run, or cannot run yet, is unavailable with the reason. */
   readonly checks: ReadinessChecks
   /** True while any check is being read. */
   readonly checking: boolean
@@ -37,13 +37,28 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
   const { wallet, addresses, generation } = useMidnightWallet()
   const { callerSecret, callerName } = useCaller()
   const dustAccount = addresses?.unshieldedAddress
+  const initialisation = useQuery({
+    queryKey: ['vault-initialisation', midnightNetwork.networkId, callerName],
+    queryFn:
+      callerSecret === null
+        ? skipToken
+        : async () => {
+            const result = await getVaultInitialisation(callerSecret, {})
+            if (!result.ok) throw new Error(result.error)
+            return result.initialisation
+          },
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  })
   const callerDust = useQuery({
     queryKey: ['caller-dust', midnightNetwork.networkId, generation],
     queryFn:
       wallet === null || dustAccount === undefined
         ? skipToken
         : () =>
-            readReadinessCheck('DUST', dustAccount, async () => ({
+            readBalanceCheck('DUST', dustAccount, async () => ({
               available: await wallet.getDustBalance(),
               required: CALLER_DUST_MINIMUM,
             })),
@@ -74,6 +89,15 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
         ? backend.error.message
         : NOT_CHECKED
   const checks: ReadinessChecks = {
+    vaultInitialised: initialisation.data ?? {
+      status: 'unavailable',
+      reason:
+        callerSecret === null
+          ? 'No identity secret is set.'
+          : initialisation.status === 'error'
+            ? initialisation.error.message
+            : NOT_CHECKED,
+    },
     callerDust:
       callerDust.data ??
       unavailable(
@@ -93,14 +117,19 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
     await Promise.all([
       wallet === null || dustAccount === undefined ? undefined : callerDust.refetch(),
       callerSecret === null ? undefined : backend.refetch(),
+      callerSecret === null ? undefined : initialisation.refetch(),
     ])
   }
   return (
     <VaultReadinessContext
       value={{
         checks,
-        checking: callerDust.isFetching || backend.isFetching,
-        checkedAt: latestReadAt(callerDust.dataUpdatedAt, backend.dataUpdatedAt),
+        checking: callerDust.isFetching || backend.isFetching || initialisation.isFetching,
+        checkedAt: latestReadAt(
+          callerDust.dataUpdatedAt,
+          backend.dataUpdatedAt,
+          initialisation.dataUpdatedAt,
+        ),
         recheck,
       }}
     >
@@ -117,7 +146,7 @@ function latestReadAt(...updatedAt: number[]): number | null {
   return latest === 0 ? null : latest
 }
 
-function unavailable(asset: ReadinessCheck['asset'], reason: string): ReadinessCheck {
+function unavailable(asset: BalanceCheck['asset'], reason: string): BalanceCheck {
   return { status: 'unavailable', asset, account: '', reason }
 }
 

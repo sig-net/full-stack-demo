@@ -35,9 +35,10 @@ import {
 import { nextState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-machine'
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
-import type {
-  SpenderLedger,
-  SpenderLedgerState,
+import {
+  assertVaultInitialised,
+  type SpenderLedger,
+  type SpenderLedgerState,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import {
   type AttestedRequestFields,
@@ -81,6 +82,7 @@ export class ApprovalServiceImpl implements ApprovalService {
     _args: ListApprovalTargetsArgs,
   ): Promise<ApprovalTarget[]> {
     const state = await this.ledger.state()
+    assertVaultInitialised(state)
     const vaultAccount = vaultAccountOf(this.signet, this.vault)
     const spenders: Pick<ApprovalTarget, 'kind' | 'erc20Address' | 'spender'>[] = [
       ...[...state.allowedTokens].map((token) => ({
@@ -166,6 +168,7 @@ export class ApprovalServiceImpl implements ApprovalService {
     approvalRequest: ApprovalRequest,
   ): Promise<Pick<Approval, 'kind' | 'erc20Address' | 'spender'>> {
     const state = await this.ledger.state()
+    assertVaultInitialised(state)
     return approvalRequest.kind === 'router'
       ? {
           kind: approvalRequest.kind,

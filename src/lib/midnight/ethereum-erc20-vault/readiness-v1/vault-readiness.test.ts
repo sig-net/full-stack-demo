@@ -3,30 +3,33 @@ import { describe, expect, test } from 'vitest'
 import {
   missingReadiness,
   type ReadinessAction,
-  type ReadinessCheck,
+  type BalanceCheck,
+  type InitialisationCheck,
   type ReadinessCheckId,
   type ReadinessChecks,
-  readReadinessCheck,
+  readBalanceCheck,
+  readInitialisationCheck,
 } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 
-const OK: ReadinessCheck = {
+const OK: BalanceCheck = {
   status: 'ok',
   asset: 'ETH',
   account: '0x1',
   available: 2n,
   required: 1n,
 }
-const SHORT: ReadinessCheck = {
+const SHORT: BalanceCheck = {
   status: 'insufficient',
   asset: 'DUST',
   account: 'mn1',
   available: 0n,
   required: 1n,
 }
-const UNREAD: ReadinessCheck = { status: 'unavailable', asset: 'DUST', account: 'mn1', reason: 'x' }
+const UNREAD: BalanceCheck = { status: 'unavailable', asset: 'DUST', account: 'mn1', reason: 'x' }
 
 function checks(overrides: Partial<ReadinessChecks> = {}): ReadinessChecks {
   return {
+    vaultInitialised: { status: 'ok' },
     callerDust: OK,
     relayerDust: OK,
     depositAccountEth: OK,
@@ -123,6 +126,24 @@ describe('missingReadiness', () => {
       }),
       expected: ['callerDust', 'relayerDust', 'vaultAccountEth'],
     },
+    {
+      name: 'an uninitialised vault blocks a deposit first, ahead of its payers',
+      action: 'deposit',
+      checks: checks({ vaultInitialised: { status: 'uninitialised' }, callerDust: SHORT }),
+      expected: ['vaultInitialised', 'callerDust'],
+    },
+    {
+      name: 'an uninitialised vault blocks every vault-signed action',
+      action: 'approve',
+      checks: checks({ vaultInitialised: { status: 'uninitialised' } }),
+      expected: ['vaultInitialised'],
+    },
+    {
+      name: 'an unread initialisation counts as not ready',
+      action: 'swap',
+      checks: checks({ vaultInitialised: { status: 'unavailable', reason: 'indexer down' } }),
+      expected: ['vaultInitialised'],
+    },
   ]
 
   test.each(cases)('$name', ({ action, checks: state, expected }) => {
@@ -130,7 +151,7 @@ describe('missingReadiness', () => {
   })
 })
 
-describe('readReadinessCheck', () => {
+describe('readBalanceCheck', () => {
   test.each([
     {
       name: 'a balance at the requirement is ok',
@@ -159,6 +180,32 @@ describe('readReadinessCheck', () => {
       },
     },
   ])('$name', async ({ read, expected }) => {
-    await expect(readReadinessCheck('ETH', '0x1', read)).resolves.toEqual(expected)
+    await expect(readBalanceCheck('ETH', '0x1', read)).resolves.toEqual(expected)
+  })
+})
+
+describe('readInitialisationCheck', () => {
+  test.each<{
+    name: string
+    read: () => Promise<{ initialised: boolean }>
+    expected: InitialisationCheck
+  }>([
+    {
+      name: 'an initialised ledger is ok',
+      read: () => Promise.resolve({ initialised: true }),
+      expected: { status: 'ok' },
+    },
+    {
+      name: 'a ledger whose initialise has not run is uninitialised',
+      read: () => Promise.resolve({ initialised: false }),
+      expected: { status: 'uninitialised' },
+    },
+    {
+      name: 'a failed read is unavailable with the deepest message, never uninitialised',
+      read: () => Promise.reject(new Error('indexer down', { cause: new Error('ECONNREFUSED') })),
+      expected: { status: 'unavailable', reason: 'indexer down: ECONNREFUSED' },
+    },
+  ])('$name', async ({ read, expected }) => {
+    await expect(readInitialisationCheck(read)).resolves.toEqual(expected)
   })
 })

@@ -31,7 +31,10 @@ import {
   RedeemStateConflict,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-state-controller'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
-import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
+import {
+  assertVaultInitialised,
+  type SpenderLedger,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import {
   type AttestedRequestFields,
   attestedRequestFields,
@@ -122,6 +125,7 @@ export class RedeemServiceImpl implements RedeemService {
   /** The pair the deployer pinned at initialisation, which every redeem moves between. */
   private async stataPair(): Promise<Pick<Redeem, 'stataErc20Address' | 'underlyingErc20Address'>> {
     const state = await this.ledger.state()
+    assertVaultInitialised(state)
     return {
       underlyingErc20Address: `0x${bytesToHex(state.stataUnderlying)}`,
       stataErc20Address: `0x${bytesToHex(state.stataToken)}`,

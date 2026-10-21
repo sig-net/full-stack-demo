@@ -34,7 +34,10 @@ import {
   SupplyStateConflict,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-controller'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
-import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
+import {
+  assertVaultInitialised,
+  type SpenderLedger,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
 import {
   type AttestedRequestFields,
   attestedRequestFields,
@@ -142,6 +145,7 @@ export class SupplyServiceImpl implements SupplyService {
     Pick<SupplyTarget, 'underlyingErc20Address' | 'stataErc20Address'>
   > {
     const state = await this.ledger.state()
+    assertVaultInitialised(state)
     return {
       underlyingErc20Address: `0x${bytesToHex(state.stataUnderlying)}`,
       stataErc20Address: `0x${bytesToHex(state.stataToken)}`,

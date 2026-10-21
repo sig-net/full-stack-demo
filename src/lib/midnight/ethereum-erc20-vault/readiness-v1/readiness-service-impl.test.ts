@@ -9,6 +9,7 @@ import type { EthereumAccountReader } from '@/lib/ethereum/account-reader'
 import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
 import { ReadinessServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/readiness-service-impl'
 import {
+  type InitialisationCheck,
   RELAYER_DUST_MINIMUM,
   type VaultReadiness,
 } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
@@ -33,6 +34,7 @@ const RELAYER_ADDRESS = 'mn_addr_undeployed1relayer'
 
 /** The contract's defaults: 150 gwei ceiling, and swap the costliest kind at 700 000 gas. */
 const GAS_STATE: VaultGasLedgerState = {
+  initialised: true,
   vaultMaxFeePerGas: 150_000_000_000n,
   vaultMaxPriorityFeePerGas: 1_000_000_000n,
   vaultGasLimits: {
@@ -52,11 +54,12 @@ function serviceOver(doubles: {
   dust?: bigint
   dustError?: Error
   ledgerError?: Error
+  initialised?: boolean
 }): ReadinessServiceImpl {
   const ledger = mock<VaultGasLedger>('VaultGasLedger', {
     state: () =>
       doubles.ledgerError === undefined
-        ? Promise.resolve(GAS_STATE)
+        ? Promise.resolve({ ...GAS_STATE, initialised: doubles.initialised ?? true })
         : Promise.reject(doubles.ledgerError),
   })
   const reader = mock<EthereumAccountReader>('EthereumAccountReader', {
@@ -189,8 +192,64 @@ describe('ReadinessServiceImpl.getVaultReadiness', () => {
           },
         },
       },
+      {
+        name: 'an uninitialised vault leaves the vault account unchecked, since its gas envelope reads as zero',
+        doubles: {
+          initialised: false,
+          dust: RELAYER_DUST_MINIMUM,
+          balances: { [DEPOSIT_ACCOUNT]: SWEEP_BUDGET, [VAULT_ACCOUNT]: LARGEST_VAULT_BUDGET },
+        },
+        expected: {
+          relayerDust: {
+            status: 'ok',
+            asset: 'DUST',
+            account: RELAYER_ADDRESS,
+            available: RELAYER_DUST_MINIMUM,
+            required: RELAYER_DUST_MINIMUM,
+          },
+          depositAccountEth: {
+            status: 'ok',
+            asset: 'ETH',
+            account: DEPOSIT_ACCOUNT,
+            available: SWEEP_BUDGET,
+            required: SWEEP_BUDGET,
+          },
+          vaultAccountEth: {
+            status: 'unavailable',
+            asset: 'ETH',
+            account: VAULT_ACCOUNT,
+            reason: 'The vault is not initialised: its deployer has not run initialise.',
+          },
+        },
+      },
     ],
   )('$name', async ({ doubles, expected }) => {
     await expect(serviceOver(doubles).getVaultReadiness(caller, {})).resolves.toEqual(expected)
+  })
+})
+
+describe('ReadinessServiceImpl.getVaultInitialisation', () => {
+  test.each<{
+    name: string
+    doubles: Parameters<typeof serviceOver>[0]
+    expected: InitialisationCheck
+  }>([
+    {
+      name: 'an initialised ledger is ok, without waiting on the relayer',
+      doubles: { dustError: new Error('Wallet is still synchronising.') },
+      expected: { status: 'ok' },
+    },
+    {
+      name: 'a ledger whose initialise has not run is uninitialised',
+      doubles: { initialised: false },
+      expected: { status: 'uninitialised' },
+    },
+    {
+      name: 'an unreadable ledger is unavailable with the reason',
+      doubles: { ledgerError: new Error('indexer down') },
+      expected: { status: 'unavailable', reason: 'indexer down' },
+    },
+  ])('$name', async ({ doubles, expected }) => {
+    await expect(serviceOver(doubles).getVaultInitialisation(caller, {})).resolves.toEqual(expected)
   })
 })

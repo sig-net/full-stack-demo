@@ -105,9 +105,14 @@ export function ApprovalTargets(): ReactNode {
         <ReadinessRecheckButton />
       </div>
       {wallet === null ? (
-        <p role="status" className="text-muted-foreground">
-          Connect the deployer's Midnight wallet to approve a spender.
-        </p>
+        <>
+          <p role="status" className="text-muted-foreground">
+            Connect the deployer's Midnight wallet to approve a spender.
+          </p>
+          {checks.vaultInitialised.status !== 'ok' && (
+            <ReadinessChecklist checkIds={['vaultInitialised']} />
+          )}
+        </>
       ) : (
         missing.length > 0 && <ReadinessChecklist checkIds={missing} />
       )}
@@ -116,7 +121,7 @@ export function ApprovalTargets(): ReactNode {
           {START_STAGE_LABELS[stage]}
         </p>
       )}
-      {targets.isError ? (
+      {checks.vaultInitialised.status !== 'ok' ? null : targets.isError ? (
         <p role="alert" className="text-destructive">
           {targets.error.message}
         </p>

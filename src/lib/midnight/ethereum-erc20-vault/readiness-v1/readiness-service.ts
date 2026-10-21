@@ -1,13 +1,24 @@
 import { z } from 'zod'
 
 import type { Caller } from '@/lib/caller/caller'
-import type { VaultReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
+import type {
+  InitialisationCheck,
+  VaultReadiness,
+} from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 
-/** Whether the payers the backend can see hold what an action costs them. */
+/** Whether the vault is initialised and the payers the backend can see hold what an action costs them. */
 export interface ReadinessService {
   /** The relayer's DUST, the caller's deposit account's ETH and the vault account's ETH, each read afresh. */
   getVaultReadiness(caller: Caller, args: GetVaultReadinessArgs): Promise<VaultReadiness>
+  /** Whether the vault ledger records its deployer's initialise call, read afresh from the indexer alone. */
+  getVaultInitialisation(
+    caller: Caller,
+    args: GetVaultInitialisationArgs,
+  ): Promise<InitialisationCheck>
 }
 
 export const getVaultReadinessArgsSchema = z.object({})
 export type GetVaultReadinessArgs = z.infer<typeof getVaultReadinessArgsSchema>
+
+export const getVaultInitialisationArgsSchema = z.object({})
+export type GetVaultInitialisationArgs = z.infer<typeof getVaultInitialisationArgsSchema>

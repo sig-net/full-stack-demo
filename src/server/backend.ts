@@ -207,6 +207,7 @@ import { LocalMidnightFaucetServiceAdaptor } from '@/lib/midnight/local-faucet-v
 import { LocalMidnightFaucetServiceSeedImpl } from '@/lib/midnight/local-faucet-v1/local-midnight-faucet-service-seed-impl'
 import type { RelayerWallet } from '@/lib/midnight/wallet/relayer-wallet'
 import { RelayerWalletSeedImpl } from '@/lib/midnight/wallet/relayer-wallet-seed-impl'
+import { startSyncedSeedFacade } from '@/lib/midnight/wallet/seed-wallet-facade'
 import { sweep, type SweepTask } from '@/lib/sweep'
 
 /**
@@ -716,6 +717,7 @@ function createMidnight(
   const relayerWallet = new RelayerWalletSeedImpl(
     midnightNetwork,
     config.serverOnly.midnightRelayer.seed,
+    startSyncedSeedFacade,
   )
   const publicDataProvider = indexerPublicDataProvider({
     queryURL: midnightNetwork.indexerURL,

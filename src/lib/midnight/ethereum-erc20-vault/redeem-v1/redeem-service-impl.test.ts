@@ -54,7 +54,11 @@ interface Recorded {
 
 const NOTHING_RECORDED: Recorded = { steps: [], started: [], completed: [] }
 
-function serviceOver(options: { redeems?: Redeem[]; requests?: VaultRequest[] }) {
+function serviceOver(options: {
+  redeems?: Redeem[]
+  requests?: VaultRequest[]
+  initialised?: boolean
+}) {
   const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const redeemRepository = new MemoryRepository<Redeem>()
   const vaultRequestRepository = new MemoryRepository<VaultRequest>()
@@ -80,6 +84,7 @@ function serviceOver(options: { redeems?: Redeem[]; requests?: VaultRequest[] })
       state: async () => {
         recorded.steps.push('ledger')
         return {
+          initialised: options.initialised ?? true,
           allowedTokens: ledgerSet([]),
           uniswapRouter: new Uint8Array(20),
           stataUnderlying: hexToBytes(UNDERLYING_ERC20_ADDRESS.slice(2)),
@@ -125,6 +130,30 @@ describe('RedeemServiceImpl.prepareStartRedeem', () => {
     }
     expect(first.inIndex).not.toBe(second.inIndex)
     expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['ledger', 'ledger'] })
+  })
+})
+
+describe('RedeemServiceImpl on an uninitialised vault', () => {
+  test.each<{ name: string; call: (service: RedeemServiceImpl) => Promise<unknown> }>([
+    {
+      name: 'prepareStartRedeem refuses before assigning a slot',
+      call: (service) => service.prepareStartRedeem(caller, { redeemRequest: REQUEST }),
+    },
+    {
+      name: 'startRedeem refuses before committing a pair of zero addresses',
+      call: (service) =>
+        service.startRedeem(caller, {
+          redeemRequest: REQUEST,
+          inIndex: 42n,
+          finalizedTx: FINALIZED_TX,
+        }),
+    },
+  ])('$name', async ({ call }) => {
+    const { service, recorded } = serviceOver({ initialised: false })
+    await expect(call(service)).rejects.toThrow(
+      'The vault is not initialised: its deployer has not run initialise.',
+    )
+    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['ledger'] })
   })
 })
 

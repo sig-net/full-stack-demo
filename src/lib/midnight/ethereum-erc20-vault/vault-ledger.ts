@@ -23,7 +23,7 @@ export interface SpenderLedger {
 /** The pinned spenders and the tokens they may be granted: the router on any allowed token, the wrapper on its underlying. */
 export type SpenderLedgerState = Pick<
   VaultLedgerState,
-  'allowedTokens' | 'uniswapRouter' | 'stataUnderlying' | 'stataToken'
+  'initialised' | 'allowedTokens' | 'uniswapRouter' | 'stataUnderlying' | 'stataToken'
 >
 
 /** The part of the ledger a request resolver reads, so a unit test builds that and nothing else. */
@@ -47,7 +47,7 @@ export interface VaultGasLedger {
 /** The gas envelope fields the deployer sets, which every vault-signed start circuit copies. */
 export type VaultGasLedgerState = Pick<
   VaultLedgerState,
-  'vaultGasLimits' | 'vaultMaxFeePerGas' | 'vaultMaxPriorityFeePerGas'
+  'initialised' | 'vaultGasLimits' | 'vaultMaxFeePerGas' | 'vaultMaxPriorityFeePerGas'
 >
 
 /** Every kind the vault account signs, as the SDK's `VaultGasKind` lists them. */
@@ -68,6 +68,13 @@ export function vaultGasEnvelope(state: VaultGasLedgerState, kind: VaultGasKind)
     gasLimit: state.vaultGasLimits[kind],
     maxFeePerGas: state.vaultMaxFeePerGas,
     maxPriorityFeePerGas: state.vaultMaxPriorityFeePerGas,
+  }
+}
+
+/** Refuses a ledger whose deployer has not run `initialise`, since every field it pins reads as zero until then. */
+export function assertVaultInitialised(state: Pick<VaultLedgerState, 'initialised'>): void {
+  if (!state.initialised) {
+    throw new Error('The vault is not initialised: its deployer has not run initialise.')
   }
 }
 

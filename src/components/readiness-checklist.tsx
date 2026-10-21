@@ -11,17 +11,19 @@ import { StatusDot } from '@/components/status-dot'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
 import {
+  type BalanceCheck,
+  type BalanceCheckId,
+  type InitialisationCheck,
   READINESS_ASSET_DECIMALS,
   type ReadinessAsset,
-  type ReadinessCheck,
   type ReadinessCheckId,
 } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 
 /**
- * One bullet per check: its outcome in words, red unless it passes, an info tip naming the payer,
- * the amounts and the account, a link to an ETH account on the chain's explorer, and on the
- * local stack a faucet wand for it.
+ * One bullet per check: its outcome in words, red unless it passes, and an info tip explaining
+ * it. A balance check's tip also names the payer, the amounts and the account, with a link to an
+ * ETH account on the chain's explorer and, on the local stack, a faucet wand for it.
  */
 export function ReadinessChecklist({
   checkIds,
@@ -33,67 +35,108 @@ export function ReadinessChecklist({
     <TooltipProvider>
       {/* A flex row keeps the dot, the text and the taller controls on one centred axis, which a list marker cannot. */}
       <ul role="list" className="flex flex-col gap-1">
-        {checkIds.map((id) => {
-          const check = checks[id]
-          return (
-            <li
-              key={id}
-              className={cn(
-                'flex items-center gap-1.5',
-                check.status !== 'ok' && 'text-destructive',
-              )}
-            >
-              <StatusDot tone="current" />
-              <span>{outcome(id, check)}</span>
-              <Tooltip>
-                <TooltipTrigger
-                  render={<span tabIndex={0} className="inline-flex rounded-md" />}
-                  aria-label={`About the ${READINESS_ITEMS[id].subject} check`}
-                >
-                  <Info aria-hidden className="size-3.5" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <ReadinessDetail id={id} check={check} />
-                </TooltipContent>
-              </Tooltip>
-              {check.asset === 'ETH' && check.account !== '' && (
-                <>
-                  <EthereumAccountLink
-                    account={check.account}
-                    label={READINESS_ITEMS[id].subject}
-                  />
-                  <LocalEthFaucetButton account={check.account} />
-                </>
-              )}
-            </li>
-          )
-        })}
+        {checkIds.map((id) =>
+          id === 'vaultInitialised' ? (
+            <InitialisationItem key={id} check={checks.vaultInitialised} />
+          ) : (
+            <BalanceItem key={id} id={id} check={checks[id]} />
+          ),
+        )}
       </ul>
     </TooltipProvider>
   )
 }
 
-function outcome(id: ReadinessCheckId, check: ReadinessCheck): string {
-  return `${READINESS_ITEMS[id].subject} ${OUTCOME_BY_STATUS[check.status](check.asset)}`
+function InitialisationItem({ check }: { check: InitialisationCheck }): ReactNode {
+  return (
+    <ChecklistItem
+      passed={check.status === 'ok'}
+      outcome={INITIALISATION_OUTCOME_BY_STATUS[check.status]}
+      subject="vault initialisation"
+    >
+      <div className="flex flex-col gap-1">
+        <p>
+          The deployer's initialise call pins the vault's Ethereum account, chain, allowed tokens,
+          spenders and gas envelope. No vault action can start before it runs.
+        </p>
+        {check.status === 'unavailable' && <p>{check.reason}</p>}
+      </div>
+    </ChecklistItem>
+  )
 }
 
-const OUTCOME_BY_STATUS: Record<ReadinessCheck['status'], (asset: ReadinessAsset) => string> = {
-  ok: (asset) => `has enough ${asset}`,
-  insufficient: (asset) => `has insufficient ${asset}`,
-  unavailable: (asset) => `${asset} could not be checked`,
+const INITIALISATION_OUTCOME_BY_STATUS: Record<InitialisationCheck['status'], string> = {
+  ok: 'vault is initialised',
+  uninitialised: 'vault is not initialised',
+  unavailable: 'vault initialisation could not be checked',
 }
 
-function ReadinessDetail({
-  id,
-  check,
+function BalanceItem({ id, check }: { id: BalanceCheckId; check: BalanceCheck }): ReactNode {
+  return (
+    <ChecklistItem
+      passed={check.status === 'ok'}
+      outcome={`${BALANCE_ITEMS[id].subject} ${BALANCE_OUTCOME_BY_STATUS[check.status](check.asset)}`}
+      subject={BALANCE_ITEMS[id].subject}
+      controls={
+        check.asset === 'ETH' &&
+        check.account !== '' && (
+          <>
+            <EthereumAccountLink account={check.account} label={BALANCE_ITEMS[id].subject} />
+            <LocalEthFaucetButton account={check.account} />
+          </>
+        )
+      }
+    >
+      <BalanceDetail id={id} check={check} />
+    </ChecklistItem>
+  )
+}
+
+function ChecklistItem({
+  passed,
+  outcome,
+  subject,
+  controls,
+  children,
 }: {
-  id: ReadinessCheckId
-  check: ReadinessCheck
+  passed: boolean
+  outcome: string
+  /** What the info tip's accessible name says the check is about. */
+  subject: string
+  controls?: ReactNode
+  /** The info tip's content. */
+  children: ReactNode
 }): ReactNode {
+  return (
+    <li className={cn('flex items-center gap-1.5', !passed && 'text-destructive')}>
+      <StatusDot tone="current" />
+      <span>{outcome}</span>
+      <Tooltip>
+        <TooltipTrigger
+          render={<span tabIndex={0} className="inline-flex rounded-md" />}
+          aria-label={`About the ${subject} check`}
+        >
+          <Info aria-hidden className="size-3.5" />
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">{children}</TooltipContent>
+      </Tooltip>
+      {controls}
+    </li>
+  )
+}
+
+const BALANCE_OUTCOME_BY_STATUS: Record<BalanceCheck['status'], (asset: ReadinessAsset) => string> =
+  {
+    ok: (asset) => `has enough ${asset}`,
+    insufficient: (asset) => `has insufficient ${asset}`,
+    unavailable: (asset) => `${asset} could not be checked`,
+  }
+
+function BalanceDetail({ id, check }: { id: BalanceCheckId; check: BalanceCheck }): ReactNode {
   const decimals = READINESS_ASSET_DECIMALS[check.asset]
   return (
     <div className="flex flex-col gap-1">
-      <p>{READINESS_ITEMS[id].explanation}</p>
+      <p>{BALANCE_ITEMS[id].explanation}</p>
       {check.status === 'unavailable' ? (
         <p>{check.reason}</p>
       ) : (
@@ -111,7 +154,7 @@ function ReadinessDetail({
   )
 }
 
-const READINESS_ITEMS: Record<ReadinessCheckId, { subject: string; explanation: string }> = {
+const BALANCE_ITEMS: Record<BalanceCheckId, { subject: string; explanation: string }> = {
   callerDust: {
     subject: 'Midnight wallet',
     explanation: 'Your Midnight wallet pays the DUST fees of the two vault calls it signs.',

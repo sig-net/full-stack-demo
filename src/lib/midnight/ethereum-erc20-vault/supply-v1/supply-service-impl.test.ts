@@ -66,6 +66,7 @@ function serviceOver(options: {
   supplies?: Supply[]
   requests?: VaultRequest[]
   allowance?: bigint
+  initialised?: boolean
 }) {
   const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const supplyRepository = new MemoryRepository<Supply>()
@@ -92,6 +93,7 @@ function serviceOver(options: {
       state: async () => {
         recorded.steps.push('ledger')
         return {
+          initialised: options.initialised ?? true,
           allowedTokens: ledgerSet([]),
           uniswapRouter: new Uint8Array(20),
           stataUnderlying: hexToBytes(UNDERLYING_ERC20_ADDRESS.slice(2)),
@@ -142,6 +144,34 @@ describe('SupplyServiceImpl.getSupplyTarget', () => {
     expect(recorded.allowanceReads).toEqual([
       [UNDERLYING_ERC20_ADDRESS, vaultAccountOf(SIGNET, VAULT), STATA_ERC20_ADDRESS],
     ])
+  })
+})
+
+describe('SupplyServiceImpl on an uninitialised vault', () => {
+  test.each<{ name: string; call: (service: SupplyServiceImpl) => Promise<unknown> }>([
+    {
+      name: 'getSupplyTarget refuses before reading an allowance at a zero address',
+      call: (service) => service.getSupplyTarget(caller, {}),
+    },
+    {
+      name: 'prepareStartSupply refuses before assigning a slot',
+      call: (service) => service.prepareStartSupply(caller, { supplyRequest: REQUEST }),
+    },
+    {
+      name: 'startSupply refuses before committing a pair of zero addresses',
+      call: (service) =>
+        service.startSupply(caller, {
+          supplyRequest: REQUEST,
+          inIndex: 42n,
+          finalizedTx: FINALIZED_TX,
+        }),
+    },
+  ])('$name', async ({ call }) => {
+    const { service, recorded } = serviceOver({ initialised: false })
+    await expect(call(service)).rejects.toThrow(
+      'The vault is not initialised: its deployer has not run initialise.',
+    )
+    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps: ['ledger'] })
   })
 })
 

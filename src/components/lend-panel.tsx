@@ -59,7 +59,7 @@ export function LendPanel(): ReactNode {
   const target = useQuery({
     queryKey: ['supply-target', callerName],
     queryFn:
-      callerSecret === null
+      callerSecret === null || checks.vaultInitialised.status !== 'ok'
         ? skipToken
         : async () => {
             const result = await getSupplyTarget(callerSecret, {})
@@ -152,13 +152,17 @@ export function LendPanel(): ReactNode {
       ? 'Set the identity secret first.'
       : wallet === null
         ? 'Connect a Midnight wallet first.'
-        : target.isError
-          ? target.error.message
-          : target.data === undefined
-            ? 'Reading the lending pair from the vault…'
-            : underlying === undefined || stata === undefined
-              ? 'The vault pins a lending pair the registry does not know.'
-              : null
+        : checks.vaultInitialised.status === 'uninitialised'
+          ? 'The vault is not initialised: its deployer has not pinned a lending pair yet.'
+          : checks.vaultInitialised.status === 'unavailable'
+            ? `The vault's initialisation could not be checked: ${checks.vaultInitialised.reason}`
+            : target.isError
+              ? target.error.message
+              : target.data === undefined
+                ? 'Reading the lending pair from the vault…'
+                : underlying === undefined || stata === undefined
+                  ? 'The vault pins a lending pair the registry does not know.'
+                  : null
   const supplyBlocker =
     pairBlocker ??
     (target.data !== undefined && target.data.allowance === 0n

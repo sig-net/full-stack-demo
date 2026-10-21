@@ -71,6 +71,7 @@ function serviceOver(options: {
   approvals?: Approval[]
   requests?: VaultRequest[]
   allowances?: Record<string, bigint>
+  initialised?: boolean
 }) {
   const recorded: Recorded = structuredClone(NOTHING_RECORDED)
   const approvalRepository = new MemoryRepository<Approval>()
@@ -97,6 +98,7 @@ function serviceOver(options: {
       state: async () => {
         recorded.steps.push('ledger')
         return {
+          initialised: options.initialised ?? true,
           allowedTokens: ledgerSet([TOKEN_A, TOKEN_B]),
           uniswapRouter: ROUTER,
           stataUnderlying: STATA_UNDERLYING,
@@ -138,6 +140,36 @@ describe('ApprovalServiceImpl.listApprovalTargets', () => {
       },
     ])
     expect(recorded.allowanceReads.every(([, owner]) => owner === VAULT_ACCOUNT)).toBe(true)
+  })
+})
+
+describe('ApprovalServiceImpl on an uninitialised vault', () => {
+  test.each<{
+    name: string
+    call: (service: ApprovalServiceImpl) => Promise<unknown>
+    steps: string[]
+  }>([
+    {
+      name: 'listApprovalTargets refuses before reading an allowance at a zero address',
+      call: (service) => service.listApprovalTargets(caller, {}),
+      steps: ['ledger'],
+    },
+    {
+      name: 'startApproval refuses before committing a grant of zero addresses',
+      call: (service) =>
+        service.startApproval(caller, {
+          approvalRequest: { kind: 'stata' },
+          inIndex: 42n,
+          finalizedTx: FINALIZED_TX,
+        }),
+      steps: ['ledger'],
+    },
+  ])('$name', async ({ call, steps }) => {
+    const { service, recorded } = serviceOver({ initialised: false })
+    await expect(call(service)).rejects.toThrow(
+      'The vault is not initialised: its deployer has not run initialise.',
+    )
+    expect(recorded).toEqual({ ...NOTHING_RECORDED, steps })
   })
 })
 
