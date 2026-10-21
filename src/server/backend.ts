@@ -714,10 +714,14 @@ function createMidnight(
   logger: Logger,
 ): MidnightBackend {
   const { midnightNetwork } = config.client
-  const relayerWallet = new RelayerWalletSeedImpl(
-    midnightNetwork,
-    config.serverOnly.midnightRelayer.seed,
-    startSyncedSeedFacade,
+  const relayerWallet = processRelayerWallet(
+    () =>
+      new RelayerWalletSeedImpl(
+        midnightNetwork,
+        config.serverOnly.midnightRelayer.seed,
+        startSyncedSeedFacade,
+        logger.child({ component: 'RelayerWalletSeedImpl' }),
+      ),
   )
   const publicDataProvider = indexerPublicDataProvider({
     queryURL: midnightNetwork.indexerURL,
@@ -771,6 +775,20 @@ function createMidnight(
       logger,
     ),
   }
+}
+
+/**
+ * One relayer wallet per server process, since each module graph builds its own backend and a
+ * wallet syncs the whole chain. Instrumentation's graph builds it first, so another graph may only
+ * call methods that exchange plain values (`dustBalance()`), never pass it its own SDK objects.
+ */
+function processRelayerWallet(create: () => RelayerWallet): RelayerWallet {
+  globalThis.relayerWalletOfProcess ??= create()
+  return globalThis.relayerWalletOfProcess
+}
+
+declare global {
+  var relayerWalletOfProcess: RelayerWallet | undefined
 }
 
 function createMidnightTransactionV1(

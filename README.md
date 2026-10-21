@@ -677,10 +677,13 @@ ledger before it believes a failed start or complete (see
 [Midnight transactions](#midnight-transactions)). One instance syncs per
 process: the backend's `start()` starts it the moment the server starts, since a sync can take
 minutes on a long chain (the local stack's short chain syncs in a second or two, which the
-`relayer wallet synced` line reports in its `durationMs`), a `finalize` that arrives mid-sync
-waits on that start, and an instance that was never started refuses it. Next.js evaluates the
-request graph separately, and its backend never starts the wallet, so the one started from
-instrumentation is the one the process uses.
+`relayer wallet synced` line reports in its `durationMs`, and a `relayer wallet syncing` line
+reports each of its three wallets' position at most every 10 seconds until then), a `finalize`
+that arrives mid-sync waits on that start, and an instance that was never started refuses it.
+Next.js evaluates instrumentation and request code as separate module graphs, each with its own
+backend, so `createBackend()` keeps the wallet in a process-wide slot: instrumentation's backend,
+built before any request is served, builds and starts it, and the request graph's backend reuses
+it, so readiness reads the DUST of the one wallet that syncs.
 `provider()` hands the synced wallet to the SDK as the wallet and midnight provider slots of a
 midnight-js provider set, so the SDK balances and submits a call itself, and it starts the wallet
 when nothing has. The wallet's public keys go into every permissionless circuit call it will later
@@ -951,6 +954,7 @@ caller:
 | `circuit call built`                                                                                                           | debug        | The vault circuits, with `circuit` and `durationMs`.                                   |
 | `flush started`, `flush landed`, `nothing to flush`, `flush lost a race, running again`, `flush failed`                        | debug, error | The flusher. Only a failed flush is an error.                                          |
 | `sweep task ran`, `sweep pass ended`, `sweep task failed`                                                                      | debug, error | The sweep, with `task` and `durationMs`.                                               |
+| `relayer wallet syncing`                                                                                                       | info         | `RelayerWalletSeedImpl` while its first sync runs, with each wallet's position.        |
 
 A `transition applied` line is written inside the database transaction that holds the write, so a
 transition whose transaction then rolls back is followed by `transaction rolled back`.
@@ -977,6 +981,9 @@ compile:
 | `outcome`, `blockHeight`, `lastSeen`            | What a ledger read reported, and the block heights a vault queue check compared.                        |
 | `count`, `durationMs`, `intervalMs`             | How many, how long, and how often.                                                                      |
 | `networkId`, `chainId`, `logLevel`, `logFormat` | The configuration summary on `backend started`.                                                         |
+| `shieldedApplied`, `shieldedHead`               | The last indexer update id the shielded wallet applied, and the head it syncs towards.                  |
+| `unshieldedApplied`, `unshieldedHead`           | The same for the unshielded wallet.                                                                     |
+| `dustApplied`, `dustHead`                       | The same for the DUST wallet.                                                                           |
 | `err`                                           | The error the line reports.                                                                             |
 
 A line never carries a resource object, service arguments, a `Caller`, the caller secret, a seed,

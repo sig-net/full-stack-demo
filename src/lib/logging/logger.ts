@@ -64,6 +64,14 @@ export interface LogFields {
   readonly chainId?: number
   readonly logLevel?: string
   readonly logFormat?: string
+  /** The id of the last indexer update a sync applied, one field per wallet of a facade. */
+  readonly shieldedApplied?: bigint
+  readonly unshieldedApplied?: bigint
+  readonly dustApplied?: bigint
+  /** The indexer stream's latest id each wallet syncs towards, 0 until its first batch. */
+  readonly shieldedHead?: bigint
+  readonly unshieldedHead?: bigint
+  readonly dustHead?: bigint
   /** The error the line reports, serialised with its cause chain. */
   readonly err?: Error
 }

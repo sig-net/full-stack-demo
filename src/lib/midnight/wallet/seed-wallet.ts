@@ -19,6 +19,10 @@ import type {
   WalletPublicKeys,
   WalletTransactions,
 } from '@/lib/midnight/wallet/wallet'
+import {
+  type WalletSyncProgress,
+  walletSyncProgress,
+} from '@/lib/midnight/wallet/wallet-sync-progress'
 
 type State = Awaited<ReturnType<WalletFacade['waitForSyncedState']>>
 type SeedWalletProvider = ReturnType<typeof createWalletAndMidnightProvider>
@@ -80,7 +84,7 @@ export class SeedWallet implements Wallet {
    * @throws {Error} If seed derivation, synchronisation or ownership fails.
    */
   initialise(
-    onProgress: (status: string) => void = () => undefined,
+    onProgress: (progress: WalletSyncProgress) => void = () => undefined,
     onAddresses: (snapshot: WalletAddressSnapshot) => void = () => undefined,
   ): Promise<void> {
     if (this.stopped) return Promise.reject(new Error(DISCONNECTED))
@@ -100,7 +104,7 @@ export class SeedWallet implements Wallet {
   }
 
   private async start(
-    onProgress: (status: string) => void,
+    onProgress: (progress: WalletSyncProgress) => void,
     onAddresses: (snapshot: WalletAddressSnapshot) => void,
   ): Promise<void> {
     try {
@@ -129,23 +133,13 @@ export class SeedWallet implements Wallet {
       await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey)
       this.assertActive()
       this.provider = createWalletAndMidnightProvider(facade, keys)
-      onProgress('connecting to indexer…')
       await new Promise<void>((resolve, reject) => {
         this.subscription = facade.state().subscribe({
           next: (state) => {
             if (this.stopped) return
             this.latestState = state
-            const progress = state.shielded.progress
-            if (state.isSynced) {
-              onProgress('synced')
-              resolve()
-            } else {
-              onProgress(
-                progress.isConnected && progress.appliedIndex > 0n
-                  ? `syncing (${progress.appliedIndex.toString()} updates)`
-                  : 'connecting to indexer…',
-              )
-            }
+            onProgress(walletSyncProgress(state))
+            if (state.isSynced) resolve()
           },
           error: reject,
           complete: () => {

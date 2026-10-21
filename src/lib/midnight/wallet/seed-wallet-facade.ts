@@ -33,6 +33,10 @@ import { ApiPromise, WsProvider } from '@polkadot/api'
 import { Cause, Effect, Runtime } from 'effect'
 
 import type { MidnightNetworkConfig, MidnightNetworkId } from '@/lib/config/midnight-network-config'
+import {
+  type WalletSyncProgress,
+  walletSyncProgress,
+} from '@/lib/midnight/wallet/wallet-sync-progress'
 
 export type { WalletFacade } from '@midnightntwrk/wallet-sdk-facade'
 
@@ -221,10 +225,18 @@ export function initialiseWalletFacade(
 export async function startSyncedSeedFacade(
   keys: AccountKeys,
   config: MidnightNetworkConfig,
+  onProgress: (progress: WalletSyncProgress) => void = () => undefined,
 ): Promise<WalletFacade> {
   const facade = await initialiseWalletFacade(keys, config)
   await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey)
-  await facade.waitForSyncedState()
+  const subscription = facade.state().subscribe((state) => {
+    onProgress(walletSyncProgress(state))
+  })
+  try {
+    await facade.waitForSyncedState()
+  } finally {
+    subscription.unsubscribe()
+  }
   return facade
 }
 

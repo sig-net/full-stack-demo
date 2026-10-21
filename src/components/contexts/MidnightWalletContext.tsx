@@ -16,6 +16,7 @@ import {
 import { useConfig } from '@/components/contexts/ConfigContext'
 import { seedStorage } from '@/lib/midnight/wallet/seed-storage'
 import type { Wallet, WalletAddressSnapshot } from '@/lib/midnight/wallet/wallet'
+import type { WalletSyncProgress } from '@/lib/midnight/wallet/wallet-sync-progress'
 
 export interface MidnightWalletContextValue {
   readonly wallet: Wallet | null
@@ -23,7 +24,8 @@ export interface MidnightWalletContextValue {
   readonly connecting: boolean
   /** True until the stored seed has been checked on first load, and no connection may start before. */
   readonly restoring: boolean
-  readonly syncStatus: string
+  /** The connecting wallet's latest synchronisation report, null until its facade reports one. */
+  readonly syncProgress: WalletSyncProgress | null
   readonly error: string | null
   /**
    * Advances on every disconnect, and a connection is refused until the active wallet disconnects,
@@ -49,7 +51,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
   const [wallet, setWallet] = useState<Wallet | null>(null)
   const [addresses, setAddresses] = useState<WalletAddressSnapshot | null>(null)
   const [connecting, setConnecting] = useState(false)
-  const [syncStatus, setSyncStatus] = useState('')
+  const [syncProgress, setSyncProgress] = useState<WalletSyncProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [publishedGeneration, setPublishedGeneration] = useState(0)
   // Undefined only while server rendering and hydrating, before the store has been read.
@@ -73,7 +75,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
     setWallet(null)
     setAddresses(null)
     setConnecting(false)
-    setSyncStatus('')
+    setSyncProgress(null)
     setError(null)
   }
 
@@ -110,7 +112,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
     installedSeed.current = seed
     seedStorage.write(seed)
     setConnecting(true)
-    setSyncStatus('starting wallet…')
+    setSyncProgress(null)
     const promise = (async () => {
       // The wallet SDK loads on first connection, so visitors who never connect never download it.
       const { SeedWallet } = await import('@/lib/midnight/wallet/seed-wallet')
@@ -118,8 +120,8 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
       const candidate = new SeedWallet(midnightNetwork, seed)
       active.current = candidate
       await candidate.initialise(
-        (status) => {
-          if (attempt === generation.current) setSyncStatus(status)
+        (progress) => {
+          if (attempt === generation.current) setSyncProgress(progress)
         },
         (snapshot) => {
           if (attempt === generation.current && active.current === candidate) setAddresses(snapshot)
@@ -137,7 +139,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
           seedStorage.clear()
           setWallet(null)
           setAddresses(null)
-          setSyncStatus('')
+          setSyncProgress(null)
           setError(failure instanceof Error ? failure.message : 'Seed wallet connection failed.')
         }
         throw failure
@@ -179,7 +181,7 @@ export function MidnightWalletProvider({ children }: { children: ReactNode }): R
         addresses,
         connecting,
         restoring,
-        syncStatus,
+        syncProgress,
         error,
         generation: publishedGeneration,
         connectSeedWallet,
