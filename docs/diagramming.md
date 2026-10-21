@@ -140,31 +140,31 @@ coloured by stage: every edge of a stage carries that stage's colour, one number
 in that colour sits at the stage's most salient edge, edges of different stages may cross
 with a jump, and edges of one stage never cross each other. Where two calls of one stage
 leave the same provider or land on the same provider, they may meet at a junction of one
-bus. The deposit flow ([deposit.drawio.png](ethereum-erc20-vault/deposit/deposit.drawio.png))
-introduces the stages, and the palette card carries their swatches:
+bus. The stages are the deposit's, and the palette card carries their swatches:
 
-| Stage | Colour    | Meaning                                                                                                   |
-| ----- | --------- | --------------------------------------------------------------------------------------------------------- |
-| 1     | `#E68310` | the user calls `startDeposit`, which creates the deposit and its start transaction                        |
-| 2     | `#11A579` | the outbox relays the lifecycle events to Kafka, the consumer hub dispatches them, the transaction proves |
-| 3     | `#D62728` | the resolver has the relayer wallet pay the fee of the call the user's wallet bound                       |
-| 4     | `#00A2B8` | the resolver submits the transaction to the node and watches the indexer for its inclusion                |
-| 5     | `#8C564B` | the vault request is flushed, sent, signed by the MPC, broadcast on Ethereum and attested                 |
-| 6     | `#B8A000` | the user calls `completeDeposit`, and the completion transaction runs to `Completed`                      |
+| Stage | Colour    | Meaning                                                                                    |
+| ----- | --------- | ------------------------------------------------------------------------------------------ |
+| 1     | `#E68310` | the user calls `startDeposit`, which creates the deposit and its start transaction         |
+| 2     | `#11A579` | the outbox relays the lifecycle events to Kafka and the consumer hub dispatches them       |
+| 3     | `#D62728` | the resolver has the relayer wallet pay the fee of the call the user's wallet bound        |
+| 4     | `#00A2B8` | the resolver submits the transaction to the node and watches the indexer for its inclusion |
+| 5     | `#8C564B` | the vault request is flushed, sent, signed by the MPC, broadcast on Ethereum and attested  |
+| 6     | `#B8A000` | the user calls `completeDeposit`, and the completion transaction runs to `Completed`       |
 
 ### Provider and entity formats
 
 - A provider's header band is 65 units tall. Its first line is the implementation class
   name, then the interface as `<package.path.InterfaceName>`, broken after a dot so a
-  long path wraps (`<midnight.transaction-v1.` over `TransactionService>`).
+  long path wraps (`<midnight.ethereum-erc20-vault.deposit-v1.` over `DepositService>`).
 - The package path is the interface's folder under `src/lib`, with `src/lib/` dropped
-  and the slashes replaced by dots: `src/lib/midnight/transaction-v1/transaction-service.ts`
-  gives `midnight.transaction-v1`.
+  and the slashes replaced by dots:
+  `src/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service.ts` gives
+  `midnight.ethereum-erc20-vault.deposit-v1`.
 - A method row spreads the signature over lines: `methodName(`, then one line per
   parameter, indented and spelled exactly as the code spells it (`caller: Caller,` then
-  `args: GetTransactionArgs`), then the closing line `) (ReturnType)`. The return type
+  `args: GetDepositArgs`), then the closing line `) (ReturnType)`. The return type
   is the resolved type with its `Promise<...>` wrapper dropped:
-  `Promise<MidnightTransaction | undefined>` reads `(MidnightTransaction | undefined)`.
+  `Promise<Deposit | undefined>` reads `(Deposit | undefined)`.
 - A provider's property rows come before its method rows, each kind in source order. A
   property row is 30 units tall and reads `name: type`, the type spelled as the code
   spells it, and an optional member carries its `?` (`dustAddress?: string`, and on a
@@ -225,9 +225,7 @@ they are never edited by hand:
 - An action flow copies its providers and entities from the library with value and style
   byte-identical, keeping only the method rows the action calls. Every id but the title's is
   unique across the whole library, so the proof is `drawio-cli diff-cells <library file> <flow>.drawio` for
-  each package the flow draws from, for example
-  `drawio-cli diff-cells docs/diagram-library/midnight/ethereum-erc20-vault/deposit-v1/diagram-library.drawio docs/ethereum-erc20-vault/deposit/deposit-v2.drawio`:
-  every shared id must match, so the output holds no `differs` line. Its `only in A` and
+  each package the flow draws from: every shared id must match, so the output holds no `differs` line. Its `only in A` and
   `only in B` lines list the cells the flow leaves out and adds, and make it exit 1.
 - A class a root builds counts as implementing an interface under `src/lib` when it or
   any base class it extends implements one, so `MidnightTransactionEventConsumer` gets its

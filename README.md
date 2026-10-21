@@ -92,7 +92,7 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/midnight/ethereum-erc20-vault/redeem-v1`          | The redeem resource, the Redeem of the Lend tab, with the same set of pieces as the deposit, its own call builder and page module included.                                                                                                                                                     |
 | `src/lib/midnight/ethereum-erc20-vault/approval-v1`        | The approval resource and the spender targets the deployer grants, with the same set of pieces as the deposit, its own call builder and page module included.                                                                                                                                   |
 | `src/lib/midnight/ethereum-erc20-vault/supported-token-v1` | The vault's allowlist as a resource with each token's on-chain metadata, the funds a caller's deposit account holds of it, and their service and adaptor over the ledger and an ERC20 reader.                                                                                                   |
-| `src/lib/midnight/transaction-v1`                          | The Midnight transaction resource, its repository, state machine, state controller, ledger, resolver, event consumer, service and adaptor.                                                                                                                                                      |
+| `src/lib/midnight/transaction-v1`                          | The Midnight transaction resource, its repository, state machine, state controller, ledger, resolver and event consumer.                                                                                                                                                                        |
 | `src/lib/midnight/wallet`                                  | The wallet layer: the `Wallet` interface, the seed wallet and its facade, the stored seed, and the backend's relayer wallet.                                                                                                                                                                    |
 | `src/lib/pricing`                                          | Spot prices for display: the price request and price resources, the market source port with its CoinGecko implementation, the cached service and its adaptor.                                                                                                                                   |
 | `src/lib/midnight`                                         | The Midnight modules every domain shares: the address abbreviation, the browser `Buffer` shim and the in-memory private state provider.                                                                                                                                                         |
@@ -623,10 +623,6 @@ relayer's to-do: the resolver finalises a relayer transaction through the `Relay
 and moves it to `AwaitingSubmission`. A caller transaction is committed bound and enters
 `AwaitingFee`, and the state machine refuses a caller row in `AwaitingProof` or `AwaitingWallet`
 and a relayer row in `AwaitingFee`.
-
-The browser's side of a transaction is `TransactionService` (`transaction-service.ts`):
-`getTransaction(caller, { name })` reads a transaction the caller owns. The server action in
-`src/server/actions/transaction-actions.ts` forwards to `TransactionServiceAdaptor`.
 
 A call is committed with one of two kinds of bytes, and the bytes decide the state it enters
 (`ENTRY_STATE_BY_CALL` in `transaction-state-machine.ts`): `unprovenTx`, built on the backend

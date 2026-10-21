@@ -1327,7 +1327,7 @@ function escapeXml(text: string): string {
     .replaceAll('"', '&quot;')
 }
 
-/** `getTransaction` reads `get-transaction`, `SQLImpl` reads `sql-impl`. */
+/** `getDeposit` reads `get-deposit`, `SQLImpl` reads `sql-impl`. */
 function kebab(name: string): string {
   return name
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')

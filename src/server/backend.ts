@@ -190,9 +190,6 @@ import { MidnightTransactionEventConsumer } from '@/lib/midnight/transaction-v1/
 import type { MidnightTransactionLedger } from '@/lib/midnight/transaction-v1/transaction-ledger'
 import { MidnightTransactionLedgerImpl } from '@/lib/midnight/transaction-v1/transaction-ledger-midnight-impl'
 import type { MidnightTransactionRepository } from '@/lib/midnight/transaction-v1/transaction-repository'
-import type { TransactionService } from '@/lib/midnight/transaction-v1/transaction-service'
-import { TransactionServiceAdaptor } from '@/lib/midnight/transaction-v1/transaction-service-adaptor'
-import { TransactionServiceImpl } from '@/lib/midnight/transaction-v1/transaction-service-impl'
 import { MidnightTransactionRepositorySQLImpl } from '@/lib/midnight/transaction-v1/transaction-repository-sql-impl'
 import type { MidnightTransactionStateController } from '@/lib/midnight/transaction-v1/transaction-state-controller'
 import { MidnightTransactionStateControllerImpl } from '@/lib/midnight/transaction-v1/transaction-state-controller-impl'
@@ -319,8 +316,6 @@ export interface MidnightBackend {
     readonly ledger: MidnightTransactionLedger
     readonly stateResolver: MidnightTransactionStateResolver
     readonly eventConsumer: MidnightTransactionEventConsumer
-    readonly service: TransactionService
-    readonly adaptor: TransactionServiceAdaptor
   }
   readonly ethereumErc20Vault: {
     readonly circuits: VaultCircuits
@@ -807,7 +802,6 @@ function createMidnightTransactionV1(
     db.unitOfWork,
     logger.child({ component: 'MidnightTransactionStateResolverImpl' }),
   )
-  const service = new TransactionServiceImpl(repository)
   return {
     repository,
     stateController,
@@ -816,11 +810,6 @@ function createMidnightTransactionV1(
     eventConsumer: new MidnightTransactionEventConsumer(
       stateResolver,
       logger.child({ component: 'MidnightTransactionEventConsumer' }),
-    ),
-    service,
-    adaptor: new TransactionServiceAdaptor(
-      service,
-      logger.child({ component: 'TransactionServiceAdaptor' }),
     ),
   }
 }
