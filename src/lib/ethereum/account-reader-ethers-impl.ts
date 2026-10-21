@@ -3,6 +3,7 @@ import 'server-only'
 import type { Provider } from 'ethers'
 
 import type { EthereumAccountReader } from '@/lib/ethereum/account-reader'
+import { FINALIZED_BLOCK_TAG } from '@/lib/ethereum/finality'
 
 export class EthereumAccountReaderEthersImpl implements EthereumAccountReader {
   private readonly provider: Provider
@@ -12,6 +13,6 @@ export class EthereumAccountReaderEthersImpl implements EthereumAccountReader {
   }
 
   balance(account: string): Promise<bigint> {
-    return this.provider.getBalance(account)
+    return this.provider.getBalance(account, FINALIZED_BLOCK_TAG)
   }
 }

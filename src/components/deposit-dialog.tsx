@@ -24,6 +24,7 @@ import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryCon
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { CopyButton } from '@/components/copy-button'
 import { EthereumAccountLink } from '@/components/ethereum-account-link'
+import { InfoTip } from '@/components/info-tip'
 import { LocalErc20FaucetPopover } from '@/components/local-erc20-faucet-popover'
 import { QrCode } from '@/components/qr-code'
 import { ReadinessChecklist } from '@/components/readiness-checklist'
@@ -40,6 +41,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
+import { FINALITY_NOTE } from '@/lib/ethereum/finality'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
 import { fundLabel } from '@/lib/tokens/fund-label'
@@ -226,6 +228,7 @@ function DepositAccountFunds({
       <div className="flex flex-col gap-2 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
           <span role="status">{summary}</span>
+          <InfoTip label="About the ERC20 funds check">{FINALITY_NOTE}</InfoTip>
           {funds.isFetching ? (
             <LoaderCircle className="size-4 animate-spin" aria-hidden />
           ) : (

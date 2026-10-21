@@ -9,7 +9,10 @@ export interface EthereumTransactionLedger {
    * throws.
    */
   broadcast(signedTx: string): Promise<string>
-  /** What the chain shows for the hash, given the sender and nonce the signed bytes carry. */
+  /**
+   * What the chain's finalised state shows for the hash, given the sender and nonce the signed
+   * bytes carry: a transaction in a block not yet finalised is still `pending`.
+   */
   status(args: LedgerStatusArgs): Promise<EthereumLedgerTransactionStatus>
 }
 

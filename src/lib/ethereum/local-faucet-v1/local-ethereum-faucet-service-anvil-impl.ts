@@ -1,7 +1,16 @@
 import 'server-only'
 
-import { AbiCoder, Interface, type JsonRpcApiProvider, keccak256, toBeHex, toBigInt } from 'ethers'
+import {
+  AbiCoder,
+  type BlockTag,
+  Interface,
+  type JsonRpcApiProvider,
+  keccak256,
+  toBeHex,
+  toBigInt,
+} from 'ethers'
 
+import { FINALIZED_BLOCK_TAG } from '@/lib/ethereum/finality'
 import type { AccountFunding } from '@/lib/ethereum/local-faucet-v1/account-funding'
 import type { Erc20Funding } from '@/lib/ethereum/local-faucet-v1/erc20-funding'
 import {
@@ -22,7 +31,8 @@ export class LocalEthereumFaucetServiceAnvilImpl implements LocalEthereumFaucetS
   async fundAccount({ account, amount = FAUCET_AMOUNT }: FundAccountArgs): Promise<AccountFunding> {
     const before = await this.provider.getBalance(account)
     await this.provider.send('anvil_setBalance', [account, toBeHex(before + amount)])
-    return { account, balance: await this.provider.getBalance(account) }
+    await this.finalise()
+    return { account, balance: await this.provider.getBalance(account, FINALIZED_BLOCK_TAG) }
   }
 
   async fundErc20({ account, erc20Address, amount }: FundErc20Args): Promise<Erc20Funding> {
@@ -33,14 +43,29 @@ export class LocalEthereumFaucetServiceAnvilImpl implements LocalEthereumFaucetS
       location,
       toBeHex(before + amount, 32),
     ])
-    return { account, erc20Address, balance: await this.balanceOf(erc20Address, account) }
+    await this.finalise()
+    return {
+      account,
+      erc20Address,
+      balance: await this.balanceOf(erc20Address, account, FINALIZED_BLOCK_TAG),
+    }
   }
 
-  private async balanceOf(erc20Address: string, holder: string): Promise<bigint> {
+  /** Anvil finalises two blocks behind its head, so the write is in the finalised state once two more are mined. */
+  private async finalise(): Promise<void> {
+    await this.provider.send('anvil_mine', [toBeHex(ANVIL_FINALITY_DEPTH)])
+  }
+
+  private async balanceOf(
+    erc20Address: string,
+    holder: string,
+    blockTag: BlockTag = 'latest',
+  ): Promise<bigint> {
     return toBigInt(
       await this.provider.call({
         to: erc20Address,
         data: ERC20.encodeFunctionData('balanceOf', [holder]),
+        blockTag,
       }),
     )
   }
@@ -87,3 +112,5 @@ const ERC20 = new Interface(['function balanceOf(address) view returns (uint256)
 const SENTINEL = 1_337_733_113_377_331n
 
 const MAPPING_SLOTS_PROBED = 64
+
+const ANVIL_FINALITY_DEPTH = 2

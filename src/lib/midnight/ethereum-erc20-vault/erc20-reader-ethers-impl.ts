@@ -3,6 +3,7 @@ import 'server-only'
 import { Interface, type Provider } from 'ethers'
 import { z } from 'zod'
 
+import { FINALIZED_BLOCK_TAG } from '@/lib/ethereum/finality'
 import type { Erc20Metadata, Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
 
 export class Erc20ReaderEthersImpl implements Erc20Reader {
@@ -44,6 +45,7 @@ export class Erc20ReaderEthersImpl implements Erc20Reader {
     const data = await this.provider.call({
       to: erc20Address,
       data: ERC20.encodeFunctionData(method, args),
+      blockTag: FINALIZED_BLOCK_TAG,
     })
     return ERC20.decodeFunctionResult(method, data)[0]
   }

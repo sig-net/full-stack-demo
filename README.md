@@ -794,8 +794,8 @@ applied), and `EthereumTransactionEventConsumer` nudges it on every lifecycle ev
 already holds or has mined the same bytes (ethers' `NONCE_EXPIRED`, or a message in the
 "already known", "already imported", "nonce too low" family) is not an error, since the same
 signed bytes can only ever mine once, and any other refusal is recorded as `Rejected` with the
-node's message. `status` reads the sender's transaction count first and the receipt only once
-the chain holds a transaction at that nonce: a receipt means `mined` or `reverted` by its
+node's message. `status` reads the sender's transaction count at the finalised block first and
+the receipt only once a finalised block holds a transaction at that nonce: a receipt means `mined` or `reverted` by its
 status, no receipt means `nonceConsumed`, and a count at or below the nonce means `pending`.
 The resolver reads the sender and nonce from the signed bytes, so the row stores neither. The
 backend builds the provider with ethers' request cache off (`cacheTimeout: -1`), since a cached
@@ -803,6 +803,27 @@ null receipt would make a mined transaction look like a consumed nonce. As on Mi
 node's refusal and the chain's verdict are two actions: `recordRejection` applies only from
 `AwaitingSubmission` and `recordFailure` only from `AwaitingInclusion`, so a stale duplicate
 broadcast cannot write `Failed` over a transaction the node holds.
+
+### Finality
+
+Every Ethereum value the application acts on is read at the `finalized` block tag
+(`FINALIZED_BLOCK_TAG` in `src/lib/ethereum/finality.ts`), so nothing it acts on can be reorganised
+away:
+
+- ETH balances (`EthereumAccountReaderEthersImpl`): the deposit account and vault account readiness
+  checks.
+- ERC20 balances, allowances and metadata (`Erc20ReaderEthersImpl`): the deposit dialog's funds
+  line, the spenders table and the supply allowance gate.
+- Transaction outcomes (`EthereumTransactionLedgerEthersImpl.status`): a transaction mined in a
+  block not yet finalised stays `pending`, and its row stays `AwaitingInclusion`.
+
+Prices read at the head: the Uniswap quote and the ERC-4626 spot price. The deposit service reads
+the deposit account's nonce at `pending` so that it counts sweeps still in the mempool.
+
+Finality costs about 15 minutes on Sepolia, where the finalised block trails the head by roughly
+70 blocks, and two blocks (about two seconds) on the local anvil fork. A funding transaction sent
+to a deposit account therefore counts toward readiness only once its block is finalised. The page
+says so beside every finalised value (`FINALITY_NOTE`).
 
 ## Vault requests
 
@@ -1830,7 +1851,9 @@ same public configuration, renders no wand. The same faucet's `fundErc20({ accou
 erc20Address, amount })` gives an account any ERC20 by writing its balance slot through
 `anvil_setStorageAt`: the slot is found by writing a sentinel at the location each of the first
 64 mapping slots implies, in the Solidity and the Vyper layouts, reading `balanceOf` back and
-restoring the word, and a token whose balance lives elsewhere is refused with that reason. The
+restoring the word, and a token whose balance lives elsewhere is refused with that reason. Both
+calls then mine two blocks with `anvil_mine`, which moves the write into anvil's finalised state,
+and return the balance read at the finalised block, so the recheck that follows sees it. The
 deposit dialog's funds line carries a second wand on the local stack that opens a popover with
 the vault's supported tokens and an amount in whole tokens (100 by default), parsed by
 `parseTokenAmount()` (`src/lib/tokens/parse-token-amount.ts`), which refuses more decimals than

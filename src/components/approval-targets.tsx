@@ -11,6 +11,7 @@ import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
+import { InfoTip } from '@/components/info-tip'
 import { ReadinessChecklist } from '@/components/readiness-checklist'
 import { ReadinessRecheckButton } from '@/components/readiness-recheck-button'
 import { useApprovalTargets } from '@/components/use-approval-targets'
@@ -24,7 +25,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
+import { FINALITY_NOTE } from '@/lib/ethereum/finality'
 import type {
   ApprovalKind,
   ApprovalTarget,
@@ -41,10 +44,10 @@ const KIND_LABELS: Record<ApprovalKind, string> = {
 
 /**
  * Every spender the vault may grant, with the allowance the vault account holds for it, and the
- * control that starts the approval the spender still lacks. The allowance is the chain's word:
- * an approval in flight shows in the Approvals list below until the chain reflects it. The page
- * builds, proves and finalises the approval's start call with the wallet paying its fee, and
- * the server records it for the backend to submit.
+ * control that starts the approval the spender still lacks. The allowance is the chain's
+ * finalised word: an approval in flight shows in the Approvals list below until the chain
+ * reflects it. The page builds, proves and finalises the approval's start call with the wallet
+ * paying its fee, and the server records it for the backend to submit.
  */
 export function ApprovalTargets(): ReactNode {
   const { callerSecret } = useCaller()
@@ -135,7 +138,16 @@ export function ApprovalTargets(): ReactNode {
             <TableRow>
               <TableHead>Spender</TableHead>
               <TableHead>Token</TableHead>
-              <TableHead>Allowance</TableHead>
+              <TableHead>
+                <span className="inline-flex items-center gap-1">
+                  Allowance
+                  <TooltipProvider>
+                    <InfoTip label="About the allowance">
+                      What the vault account lets the spender move. {FINALITY_NOTE}
+                    </InfoTip>
+                  </TooltipProvider>
+                </span>
+              </TableHead>
               <TableHead>
                 <span className="sr-only">Approve</span>
               </TableHead>

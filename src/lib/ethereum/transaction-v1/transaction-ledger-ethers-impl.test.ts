@@ -115,25 +115,25 @@ describe('EthereumTransactionLedgerEthersImpl.status', () => {
     expected: EthereumLedgerTransactionStatus
   }> = [
     {
-      name: 'a count at the nonce is pending, with no receipt read',
+      name: 'a finalised count at the nonce is pending, with no receipt read',
       count: NONCE,
       receipts: [],
       expected: { outcome: 'pending' },
     },
     {
-      name: 'a count past the nonce with a receipt of status 1 is mined',
+      name: 'a finalised count past the nonce with a receipt of status 1 is mined',
       count: NONCE + 1,
       receipts: [receipt(1, 7)],
       expected: { outcome: 'mined', blockNumber: 7n },
     },
     {
-      name: 'a count past the nonce with a receipt of status 0 is reverted',
+      name: 'a finalised count past the nonce with a receipt of status 0 is reverted',
       count: NONCE + 1,
       receipts: [receipt(0, 9)],
       expected: { outcome: 'reverted', blockNumber: 9n },
     },
     {
-      name: 'a count past the nonce with no receipt is a consumed nonce',
+      name: 'a finalised count past the nonce with no receipt is a consumed nonce',
       count: NONCE + 1,
       receipts: [null],
       expected: { outcome: 'nonceConsumed' },
@@ -145,7 +145,7 @@ describe('EthereumTransactionLedgerEthersImpl.status', () => {
     const ledger = ledgerWith({
       getTransactionCount: async (address, blockTag) => {
         expect(address).toBe(SENDER)
-        expect(blockTag).toBe('latest')
+        expect(blockTag).toBe('finalized')
         return count
       },
       getTransactionReceipt: async (hash) => {

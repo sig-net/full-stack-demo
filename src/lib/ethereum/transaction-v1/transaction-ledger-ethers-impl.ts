@@ -2,6 +2,7 @@ import 'server-only'
 
 import { isError, type Provider, Transaction, type TransactionReceipt } from 'ethers'
 
+import { FINALIZED_BLOCK_TAG } from '@/lib/ethereum/finality'
 import type {
   EthereumLedgerTransactionStatus,
   EthereumTransactionLedger,
@@ -56,15 +57,15 @@ export class EthereumTransactionLedgerEthersImpl implements EthereumTransactionL
   }
 
   /**
-   * The count is read first, so the receipt is read only once the chain holds a transaction at
-   * that nonce: present means this one, absent means another took the slot.
+   * The finalised count is read first, so the receipt is read only once a finalised block holds a
+   * transaction at that nonce: present means this one, absent means another took the slot.
    */
   private async readStatus({
     txHash,
     from,
     nonce,
   }: LedgerStatusArgs): Promise<EthereumLedgerTransactionStatus> {
-    if ((await this.provider.getTransactionCount(from, 'latest')) <= nonce) {
+    if ((await this.provider.getTransactionCount(from, FINALIZED_BLOCK_TAG)) <= nonce) {
       return { outcome: 'pending' }
     }
     const receipt = await this.provider.getTransactionReceipt(txHash)

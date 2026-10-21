@@ -1,15 +1,16 @@
 'use client'
 
 import { cn } from 'cn'
-import { Info } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
 import { EthereumAccountLink } from '@/components/ethereum-account-link'
+import { InfoTip } from '@/components/info-tip'
 import { LocalEthFaucetButton } from '@/components/local-eth-faucet-button'
 import { StatusDot } from '@/components/status-dot'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
+import { FINALITY_NOTE } from '@/lib/ethereum/finality'
 import {
   type BalanceCheck,
   type BalanceCheckId,
@@ -111,15 +112,7 @@ function ChecklistItem({
     <li className={cn('flex items-center gap-1.5', !passed && 'text-destructive')}>
       <StatusDot tone="current" />
       <span>{outcome}</span>
-      <Tooltip>
-        <TooltipTrigger
-          render={<span tabIndex={0} className="inline-flex rounded-md" />}
-          aria-label={`About the ${subject} check`}
-        >
-          <Info aria-hidden className="size-3.5" />
-        </TooltipTrigger>
-        <TooltipContent className="max-w-xs">{children}</TooltipContent>
-      </Tooltip>
+      <InfoTip label={`About the ${subject} check`}>{children}</InfoTip>
       {controls}
     </li>
   )
@@ -145,6 +138,7 @@ function BalanceDetail({ id, check }: { id: BalanceCheckId; check: BalanceCheck 
           {formatTokenAmount(check.required, decimals)} {check.asset}.
         </p>
       )}
+      {check.asset === 'ETH' && <p>{FINALITY_NOTE}</p>}
       {check.account !== '' && (
         <p className="font-mono" title={check.account}>
           {abbreviateHex(check.account)}

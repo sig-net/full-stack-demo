@@ -16,26 +16,36 @@ describe('LocalEthereumFaucetServiceAnvilImpl.fundAccount', () => {
     { name: 'a funded account keeps what it had', before: 5n * 10n ** 18n },
   ])('$name', async ({ before }) => {
     let balance = before
+    let finalised = before
     const sent: unknown[][] = []
     const provider = mock<JsonRpcApiProvider>('JsonRpcApiProvider', {
-      getBalance: () => Promise.resolve(balance),
+      getBalance: (_account: unknown, blockTag?: unknown) =>
+        Promise.resolve(blockTag === 'finalized' ? finalised : balance),
       send: (method: string, params: unknown[]) => {
         sent.push([method, ...params])
-        balance = BigInt(String(params[1]))
+        if (method === 'anvil_mine') finalised = balance
+        else balance = BigInt(String(params[1]))
         return Promise.resolve(null)
       },
     })
     await expect(
       new LocalEthereumFaucetServiceAnvilImpl(provider).fundAccount({ account: ACCOUNT }),
     ).resolves.toEqual({ account: ACCOUNT, balance: before + FAUCET_AMOUNT })
-    expect(sent).toEqual([['anvil_setBalance', ACCOUNT, toBeHex(before + FAUCET_AMOUNT)]])
+    expect(sent).toEqual([
+      ['anvil_setBalance', ACCOUNT, toBeHex(before + FAUCET_AMOUNT)],
+      ['anvil_mine', toBeHex(2)],
+    ])
   })
 })
 
-/** A token whose balance mapping sits at `slot` in the given layout, as a storage map the provider reads and writes. */
+/**
+ * A token whose balance mapping sits at `slot` in the given layout, as a storage map the provider
+ * reads and writes, and a finalised copy of it that only `anvil_mine` brings up to date.
+ */
 function tokenOver(slot: number | null, layout: 'solidity' | 'vyper' = 'solidity') {
   const abi = AbiCoder.defaultAbiCoder()
   const storage = new Map<string, string>()
+  let finalised = new Map<string, string>()
   const balanceLocation =
     slot === null
       ? null
@@ -43,16 +53,21 @@ function tokenOver(slot: number | null, layout: 'solidity' | 'vyper' = 'solidity
         ? keccak256(abi.encode(['address', 'uint256'], [ACCOUNT, slot]))
         : keccak256(abi.encode(['uint256', 'address'], [slot, ACCOUNT]))
   const provider = mock<JsonRpcApiProvider>('JsonRpcApiProvider', {
-    call: ({ data }: { data?: string | null }) => {
+    call: ({ data, blockTag }: { data?: string | null; blockTag?: unknown }) => {
       const [holder] = ERC20.decodeFunctionData('balanceOf', String(data))
       if (String(holder).toLowerCase() !== ACCOUNT) throw new Error('unexpected holder')
+      const read = blockTag === 'finalized' ? finalised : storage
       return Promise.resolve(
-        balanceLocation === null ? ZERO_WORD : (storage.get(balanceLocation) ?? ZERO_WORD),
+        balanceLocation === null ? ZERO_WORD : (read.get(balanceLocation) ?? ZERO_WORD),
       )
     },
     getStorage: (_address: unknown, position: unknown) =>
       Promise.resolve(storage.get(String(position)) ?? ZERO_WORD),
     send: (method: string, params: unknown[]) => {
+      if (method === 'anvil_mine') {
+        finalised = new Map(storage)
+        return Promise.resolve(null)
+      }
       if (method !== 'anvil_setStorageAt') throw new Error(`unexpected ${method}`)
       const [, location, word] = params
       if (word === ZERO_WORD) storage.delete(String(location))

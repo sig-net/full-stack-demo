@@ -5,7 +5,6 @@ import {
   Circle,
   CircleCheck,
   CornerDownRight,
-  Info,
   LoaderCircle,
   SquareArrowOutUpRight,
   TriangleAlert,
@@ -15,6 +14,7 @@ import type { ReactNode } from 'react'
 
 import { useConfig } from '@/components/contexts/ConfigContext'
 import { CopyButton } from '@/components/copy-button'
+import { InfoTip } from '@/components/info-tip'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
@@ -28,6 +28,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { WalletSigningIcon } from '@/components/wallet-signing-icon'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
+import { FINALITY_NOTE } from '@/lib/ethereum/finality'
 import type { ClientConfig } from '@/lib/config/client-config'
 import { ethereumExplorerOf } from '@/lib/config/ethereum-explorer'
 import { midnightExplorerOf } from '@/lib/config/midnight-explorer'
@@ -101,6 +102,13 @@ export function ActivityFlowDialog({ entry, onOpenChange }: ActivityFlowDialogPr
                           <span>{step.label}</span>
                           <span className="sr-only">({step.status})</span>
                           {step.signedInPage && <WalletSigningIcon className="size-4" />}
+                          {step.status === 'current' &&
+                            step.reference?.kind === 'ethereumTransaction' &&
+                            step.reference.id !== null && (
+                              <span className="text-xs text-muted-foreground">
+                                waiting for a finalised block
+                              </span>
+                            )}
                         </div>
                         {step.reference !== null && (
                           <ActivityReferenceLine reference={step.reference} />
@@ -156,17 +164,9 @@ function ActivityReferenceLine({ reference }: { reference: ActivityReference }):
           {abbreviateHex(reference.id)}
         </span>
       )}
-      <Tooltip>
-        <TooltipTrigger
-          render={<span tabIndex={0} className="inline-flex rounded-md" />}
-          aria-label={`About the ${item.name}`}
-        >
-          <Info aria-hidden className="size-3.5" />
-        </TooltipTrigger>
-        <TooltipContent className="max-w-xs">
-          {reference.id === null ? item.pending : item.explanation}
-        </TooltipContent>
-      </Tooltip>
+      <InfoTip label={`About the ${item.name}`}>
+        {reference.id === null ? item.pending : item.explanation}
+      </InfoTip>
       {reference.id !== null && (
         <>
           <Tooltip>
@@ -270,8 +270,8 @@ const REFERENCE_ITEMS: Record<
   ethereumTransaction: {
     name: 'Ethereum transaction hash',
     explorer: 'the Ethereum explorer',
-    explanation: 'The hash of the sweep transaction sent from the deposit account on Ethereum.',
-    pending: 'The transaction hash appears once the sweep is broadcast on Ethereum.',
+    explanation: `The hash of the sweep transaction sent from the deposit account on Ethereum. ${FINALITY_NOTE}`,
+    pending: `The transaction hash appears once the sweep is broadcast on Ethereum. ${FINALITY_NOTE}`,
   },
 }
 

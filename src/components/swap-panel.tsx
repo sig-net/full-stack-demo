@@ -1,7 +1,7 @@
 'use client'
 
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ChevronDown, Info, LoaderCircle, SlidersHorizontal } from 'lucide-react'
+import { ArrowDown, ChevronDown, LoaderCircle, SlidersHorizontal } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -11,6 +11,7 @@ import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryContext'
 import { useVaultReadiness } from '@/components/contexts/VaultReadinessContext'
+import { InfoTip } from '@/components/info-tip'
 import { ReadinessChecklist } from '@/components/readiness-checklist'
 import { useApprovalTargets } from '@/components/use-approval-targets'
 import { TokenAmountField } from '@/components/token-amount-field'
@@ -18,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { useDebouncedValue } from '@/components/use-debounced-value'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
@@ -322,19 +323,11 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
                   />
                   <InputGroupAddon align="inline-end">%</InputGroupAddon>
                 </InputGroup>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={<span tabIndex={0} className="inline-flex rounded-md" />}
-                    aria-label="About slippage"
-                  >
-                    <Info aria-hidden className="size-4" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    How far below the quoted amount the swap still accepts. The price can move
-                    between the quote and the trade: within this allowance the trade goes through at
-                    the live price, beyond it the trade reverts and your tokens come back as change.
-                  </TooltipContent>
-                </Tooltip>
+                <InfoTip label="About slippage" size="md">
+                  How far below the quoted amount the swap still accepts. The price can move between
+                  the quote and the trade: within this allowance the trade goes through at the live
+                  price, beyond it the trade reverts and your tokens come back as change.
+                </InfoTip>
               </div>
             </TooltipProvider>
           </CollapsibleContent>
