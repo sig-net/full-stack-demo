@@ -131,8 +131,8 @@ in at build time, so one build serves every environment. `.env.example` lists th
 | `KAFKA_BROKERS`                                  | No     | Kafka bootstrap brokers as comma-separated `host:port`. Server-only: it is not part of the client configuration.                                                            |
 | `MIDNIGHT_ZK_ASSETS_ROOT`                        | No     | The root the backend's proof provider searches for every contract's prover keys and ZKIR, `zk-assets/` by default (see [Proving keys](#proving-keys)). Server-only.         |
 | `MIDNIGHT_RELAYER_SEED`                          | Yes    | 32-byte hex seed of the backend's own Midnight wallet, which finalises and pays for relayer transactions (see [The relayer wallet](#the-relayer-wallet)). Server-only.      |
-| `RESPOND_OUTPUT_SOURCE`                          | No     | Where the backend obtains the bytes an MPC attestation is verified over: `evm-node` (default, traces the mined transaction on `EVM_RPC_URL`) or `mpc-cache`. Server-only.   |
-| `MPC_OUTPUT_CACHE_URL`                           | No     | The MPC output cache, required by the `mpc-cache` source. Server-only.                                                                                                      |
+| `RESPOND_OUTPUT_SOURCE`                          | No     | Where the backend obtains the bytes an MPC attestation is verified over: `mpc-cache` (default) or `evm-node` (traces the mined transaction on `EVM_RPC_URL`). Server-only.  |
+| `MPC_OUTPUT_CACHE_URL`                           | No     | Optional override of the network's MPC output cache, which `@sig-net/midnight` publishes for Stagenet and the local fakenet serves on port 3040. Server-only.               |
 | `MIDNIGHT_USER_SEED`                             | Yes    | Tests only: the funded Midnight wallet the integration tests play the user with. The application never reads it.                                                            |
 | `LOG_LEVEL`                                      | No     | The least severe server log level written: `debug`, `info` (default), `warn` or `error` (see [Logging](#logging)). Server-only.                                             |
 | `LOG_FORMAT`                                     | No     | `json` (default when `NODE_ENV` is `production`), one Cloud Logging shaped object per line, or `pretty` (default otherwise), coloured text. Server-only.                    |
@@ -839,8 +839,8 @@ block to bound the walk by. `respond-outcome-source.ts` is the port that obtains
 attestation is verified over, which travel off chain: `RESPOND_OUTPUT_SOURCE` selects
 `RespondOutcomeSourceEvmNodeImpl`, which traces the mined transaction on `EVM_RPC_URL` with
 `debug_traceTransaction` and recomputes the bytes as the MPC does, or
-`RespondOutcomeSourceMpcCacheImpl`, which downloads the object the MPC cached under
-`MPC_OUTPUT_CACHE_URL`. Either checks each post over its candidate with the vault's pinned
+`RespondOutcomeSourceMpcCacheImpl` (the default), which downloads the object the MPC cached in
+the network's output cache. Either checks each post over its candidate with the vault's pinned
 response key and keeps the first that verifies. The row stores the verified attestation as five
 columns (`attestationBlockHeight`, `attestationOutputKind`, `attestationDigest`,
 `attestationSignature` as `bigR.x || bigR.y || s || recoveryId` in hex, `attestationOutput`),

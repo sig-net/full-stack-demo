@@ -79,7 +79,7 @@ async function loadServerConfig(): Promise<ServerConfig> {
       logging: loggingConfigFromEnv(env),
       midnightProver: midnightProverConfigFromEnv(env),
       midnightRelayer: midnightRelayerConfigFromEnv(env),
-      midnightRespondOutput: midnightRespondOutputConfigFromEnv(env),
+      midnightRespondOutput: midnightRespondOutputConfigFromEnv(midnightNetwork.networkId, env),
     },
     client: {
       midnightNetwork,
