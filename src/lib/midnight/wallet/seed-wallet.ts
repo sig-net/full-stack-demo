@@ -10,6 +10,7 @@ import {
   deriveAccountKeys,
   finalizeUnboundTransaction,
   initialiseWalletFacade,
+  SYNC_BATCH_SIZES,
   releaseFinalizedTransaction,
   type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
@@ -127,7 +128,11 @@ export class SeedWallet implements Wallet {
           dustAddress: this.dust,
         }),
       )
-      const facade = await initialiseWalletFacade(keys, this.configuration)
+      const facade = await initialiseWalletFacade(
+        keys,
+        this.configuration,
+        SYNC_BATCH_SIZES.browser,
+      )
       this.facade = facade
       this.assertActive()
       await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey)

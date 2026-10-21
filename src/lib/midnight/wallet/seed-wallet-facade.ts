@@ -9,7 +9,8 @@ import {
   InMemoryTransactionHistoryStorage,
   SerializedTransaction,
 } from '@midnightntwrk/wallet-sdk-abstractions'
-import { DustWallet } from '@midnightntwrk/wallet-sdk-dust-wallet'
+import { type DefaultDustConfiguration, DustWallet } from '@midnightntwrk/wallet-sdk-dust-wallet'
+import type { SyncService } from '@midnightntwrk/wallet-sdk-dust-wallet/v1'
 import {
   mergeWalletEntries,
   WalletEntrySchema,
@@ -56,6 +57,14 @@ const COST_PARAMETERS = {
 
 const NODE_CONNECT_TIMEOUT_MS = 120_000
 
+/**
+ * Indexer events a shielded or DUST wallet applies per batch, by the runtime that syncs it. A batch
+ * runs without yielding, so the browser's size bounds how long the page stalls: a full Stagenet
+ * sync in the page took 96 s with stalls up to about 200 ms at 100, against 232 s with stalls up to
+ * about 70 ms at the SDK's default of 10.
+ */
+export const SYNC_BATCH_SIZES = { browser: 100, server: 1000 } as const
+
 function hexToBytes(hex: string): Uint8Array {
   const compact = hex.trim().replace(/^0x/i, '')
   if (!/^[0-9a-fA-F]+$/.test(compact) || compact.length % 2 !== 0) {
@@ -98,11 +107,13 @@ export function deriveAccountKeys(seed: string, networkId: MidnightNetworkId): A
  *
  * @param keys - Memory-owned account capabilities.
  * @param config - Validated endpoints captured by the wallet generation.
+ * @param syncBatchSize - Indexer events the shielded and DUST wallets apply per batch.
  * @returns The facade whose owner starts synchronisation and closes it on disposal.
  */
 export function initialiseWalletFacade(
   keys: AccountKeys,
   config: MidnightNetworkConfig,
+  syncBatchSize: number,
 ): Promise<WalletFacade> {
   return WalletFacade.init({
     configuration: {
@@ -208,16 +219,25 @@ export function initialiseWalletFacade(
         },
       }
     },
-    shielded: (cfg) => ShieldedWallet(cfg).startWithSecretKeys(keys.shieldedSecretKeys),
+    shielded: (cfg) =>
+      ShieldedWallet({ ...cfg, batchUpdates: { size: syncBatchSize } }).startWithSecretKeys(
+        keys.shieldedSecretKeys,
+      ),
     unshielded: (cfg) =>
       UnshieldedWallet(cfg).startWithPublicKey(
         UnshieldedPublicKey.fromKeyStore(keys.unshieldedKeystore),
       ),
-    dust: (cfg) =>
-      DustWallet(cfg).startWithSecretKey(
+    dust: (cfg) => {
+      // DustWallet's declared configuration omits the sync fields its default sync reads.
+      const dustConfiguration: DefaultDustConfiguration & SyncService.DefaultSyncConfiguration = {
+        ...cfg,
+        batchUpdates: { size: syncBatchSize },
+      }
+      return DustWallet(dustConfiguration).startWithSecretKey(
         keys.dustSecretKey,
         ledger.LedgerParameters.initialParameters().dust,
-      ),
+      )
+    },
   })
 }
 
@@ -225,9 +245,10 @@ export function initialiseWalletFacade(
 export async function startSyncedSeedFacade(
   keys: AccountKeys,
   config: MidnightNetworkConfig,
+  syncBatchSize: number,
   onProgress: (progress: WalletSyncProgress) => void = () => undefined,
 ): Promise<WalletFacade> {
-  const facade = await initialiseWalletFacade(keys, config)
+  const facade = await initialiseWalletFacade(keys, config, syncBatchSize)
   await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey)
   const subscription = facade.state().subscribe((state) => {
     onProgress(walletSyncProgress(state))

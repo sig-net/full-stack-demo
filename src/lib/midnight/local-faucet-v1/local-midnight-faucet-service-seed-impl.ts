@@ -15,6 +15,7 @@ import {
   type AccountKeys,
   deriveAccountKeys,
   startSyncedSeedFacade,
+  SYNC_BATCH_SIZES,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
 import { transferNight } from '@/lib/midnight/wallet/transfer-night'
 
@@ -65,10 +66,12 @@ export class LocalMidnightFaucetServiceSeedImpl implements LocalMidnightFaucetSe
   }
 
   private started(): Promise<WalletFacade> {
-    this.starting ??= startSyncedSeedFacade(this.keys, this.config).catch((error: unknown) => {
-      this.starting = undefined
-      throw error
-    })
+    this.starting ??= startSyncedSeedFacade(this.keys, this.config, SYNC_BATCH_SIZES.server).catch(
+      (error: unknown) => {
+        this.starting = undefined
+        throw error
+      },
+    )
     return this.starting
   }
 }
