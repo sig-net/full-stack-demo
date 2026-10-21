@@ -68,8 +68,8 @@ export interface Wallet extends WalletMetadata {
   getUnregisteredNightBalance?(): Promise<bigint>
   /**
    * Registers every NIGHT coin the wallet holds unregistered for DUST generation and resolves
-   * with the NIGHT registered in STAR once the registration is in a block: zero when every coin
-   * already was.
+   * with the NIGHT registered in STAR once the wallet's own state holds the registered coins:
+   * zero when every coin already was.
    *
    * @throws {Error} If registration or session ownership fails.
    */
@@ -81,11 +81,18 @@ export interface Wallet extends WalletMetadata {
    */
   getShieldedBalances(): Promise<Record<string, bigint>>
   /**
-   * Reads unshielded token balances for the active session.
+   * Reads the unshielded token balances the active session can spend.
    *
    * @returns Token-type balances in base units.
    */
-  getUnshieldedBalances(): Promise<Record<string, bigint>>
+  getAvailableUnshieldedBalances(): Promise<Record<string, bigint>>
+  /**
+   * Reads the unshielded token balances held by coins an in-flight transaction spends, until the
+   * wallet synchronises its outcome.
+   *
+   * @returns Token-type balances in base units.
+   */
+  getPendingUnshieldedBalances(): Promise<Record<string, bigint>>
   /**
    * Reads spendable DUST for the active session.
    *

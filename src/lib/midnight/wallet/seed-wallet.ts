@@ -280,8 +280,13 @@ export class SeedWallet implements Wallet {
       state.shielded.capabilities.coinsAndBalances.getTotalBalances(state.shielded.state),
     )
   }
-  getUnshieldedBalances(): Promise<Record<string, bigint>> {
+  getAvailableUnshieldedBalances(): Promise<Record<string, bigint>> {
     return this.readState((state) => state.unshielded.balances)
+  }
+  getPendingUnshieldedBalances(): Promise<Record<string, bigint>> {
+    return this.readState((state) =>
+      state.unshielded.capabilities.coinsAndBalances.getPendingBalances(state.unshielded.state),
+    )
   }
   getDustBalance(): Promise<bigint> {
     return this.readState((state) => state.dust.balance(new Date()))
