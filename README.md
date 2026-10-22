@@ -264,6 +264,9 @@ The backend reaches Postgres through [Drizzle ORM](https://orm.drizzle.team) on 
   root builds one pool for the server process from `DB_CONNECTION_STRING`.
 - `drizzle.config.ts` configures drizzle-kit. It reads `DB_CONNECTION_STRING` from the environment,
   or from `.env.local` when that file exists.
+- `scripts/migrate.ts` applies the `drizzle` migration to the database at `DB_CONNECTION_STRING`
+  with production dependencies alone. The production image ships it with the `drizzle` folder, and
+  a deployment runs `node scripts/migrate.ts` from `/app` before the server starts.
 
 ### Transactions
 

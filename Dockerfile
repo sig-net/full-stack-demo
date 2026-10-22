@@ -1,5 +1,6 @@
-# Production image for the demo: the Next.js server, its production dependencies and every
-# contract's prover keys and ZKIR under /app/zk-assets, the default MIDNIGHT_ZK_ASSETS_ROOT.
+# Production image for the demo: the Next.js server, its production dependencies, every
+# contract's prover keys and ZKIR under /app/zk-assets, the default MIDNIGHT_ZK_ASSETS_ROOT, and
+# the database migration, which `node scripts/migrate.ts` applies before the server starts.
 # Every instruction stays within what the legacy builder supports (architecture comes from uname),
 # so the image builds with and without BuildKit.
 # All configuration, public and server-only alike, is read from the runtime environment
@@ -80,6 +81,8 @@ COPY --from=build --chown=node:node /app/package.json /app/next.config.ts ./
 COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/.next ./.next
 COPY --from=zk-assets --chown=node:node /app/zk-assets ./zk-assets
+COPY --from=build --chown=node:node /app/drizzle ./drizzle
+COPY --from=build --chown=node:node /app/scripts/migrate.ts ./scripts/migrate.ts
 USER node
 EXPOSE 3000
 CMD ["node", "node_modules/next/dist/bin/next", "start", "--hostname", "0.0.0.0"]
