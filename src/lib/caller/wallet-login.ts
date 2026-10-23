@@ -1,9 +1,12 @@
+import { z } from 'zod'
+
 import {
   type LoginCredential,
   LOGIN_WINDOW_MS,
   loginMessageOf,
 } from '@/lib/caller/login-credential'
 import type { MidnightNetworkId } from '@/lib/config/midnight-network-config'
+import { messageSignatureSchema, SIGNATURE_SCHEMES } from '@/lib/midnight/signed-message'
 import type { Wallet } from '@/lib/midnight/wallet/wallet'
 
 /** The connected wallet's login as the page holds it: the key it signs with, and a credential signed within the window. */
@@ -23,7 +26,7 @@ export interface CallerLogin {
  * only when a call asks for it, so an idle page never prompts and a call never sends a
  * credential about to expire.
  *
- * @throws {Error} When the wallet refuses the first signature, in which case there is no login.
+ * @throws {Error} When the wallet refuses the first signature or answers outside the connector's wire form, in which case there is no login.
  */
 export async function loginWithWallet(
   wallet: Pick<Wallet, 'signData'>,
@@ -57,17 +60,28 @@ async function signLogin(
   issuedAt: Date,
 ): Promise<LoginCredential> {
   const stamp = issuedAt.toISOString()
-  const signed = await wallet.signData(loginMessageOf(networkId, stamp), {
+  const answer: unknown = await wallet.signData(loginMessageOf(networkId, stamp), {
     encoding: 'text',
     keyType: 'unshielded',
   })
-  // The pinned connector (4.0.1) declares no `scheme` on `Signature`, and its specification reads an absent one as `schnorr_bip340`.
-  return {
-    issuedAt: stamp,
-    signature: {
-      scheme: 'schnorr_bip340',
-      verifyingKey: signed.verifyingKey,
-      signature: signed.signature,
-    },
+  const parsed = signDataAnswerSchema.safeParse(answer)
+  if (!parsed.success) {
+    throw new Error(
+      `The wallet's login signature is not in the connector's wire form: ${z.prettifyError(parsed.error)}`,
+    )
   }
+  return { issuedAt: stamp, signature: parsed.data }
 }
+
+/**
+ * The connector's `signData` answer, parsed at the wallet's trust boundary: an absent `scheme`
+ * reads as `schnorr_bip340`, as the connector's specification says, and the key and signature
+ * must be in the MIP-0031 wire form of that scheme.
+ */
+const signDataAnswerSchema = z
+  .object({
+    scheme: z.enum(SIGNATURE_SCHEMES).default('schnorr_bip340'),
+    verifyingKey: z.string(),
+    signature: z.string(),
+  })
+  .pipe(messageSignatureSchema)

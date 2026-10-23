@@ -5,6 +5,7 @@ import { MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk-ad
 
 import { type Caller, callerName } from '@/lib/caller/caller'
 import {
+  LOGIN_CLOCK_SKEW_MS,
   LOGIN_WINDOW_MS,
   loginCredentialSchema,
   loginMessageOf,
@@ -16,7 +17,8 @@ import { SIGNATURE_KIND_BY_SCHEME, verifyMessageSignature } from '@/lib/midnight
  * Verifies the login credential a server action received and names the caller after the key
  * that signed it, so every caller holds the unshielded key its resources are named after. The
  * message is rebuilt here from the application's network and the credential's `issuedAt`, and
- * a credential older than `LOGIN_WINDOW_MS` or dated in the future is refused whatever it signs.
+ * a credential older than `LOGIN_WINDOW_MS`, or dated more than `LOGIN_CLOCK_SKEW_MS` ahead of
+ * the server's clock, is refused whatever it signs.
  *
  * @throws {Error} When the credential is malformed, outside its window, or not a signature of this network's login message.
  */
@@ -31,7 +33,7 @@ export function resolveCaller(
   }
   const { issuedAt, signature } = parsed.data
   const age = now.getTime() - Date.parse(issuedAt)
-  if (age < 0) throw new Error('The login is dated in the future.')
+  if (age < -LOGIN_CLOCK_SKEW_MS) throw new Error('The login is dated in the future.')
   if (age > LOGIN_WINDOW_MS) throw new Error('The login has expired: sign in again.')
   const message = new TextEncoder().encode(loginMessageOf(networkId, issuedAt))
   if (!verifyMessageSignature(signature, message)) {

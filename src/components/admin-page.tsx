@@ -6,6 +6,7 @@ import { ActivitySection } from '@/components/activity-section'
 import { ApprovalTargets } from '@/components/approval-targets'
 import { useCaller } from '@/components/contexts/CallerContext'
 import { LocalEthereumFaucetPanel } from '@/components/local-ethereum-faucet-panel'
+import { loginBlockerOf } from '@/lib/caller/wallet-login-query'
 
 /**
  * The vault's administration: the deployer's approvals of the vault's spenders. Everything
@@ -13,13 +14,21 @@ import { LocalEthereumFaucetPanel } from '@/components/local-ethereum-faucet-pan
  * secret but the deployer's, so the page needs no gate of its own.
  */
 export function AdminPage(): ReactNode {
-  const { login, vaultSecret } = useCaller()
+  const { login, loginStatus, loginError, vaultSecret } = useCaller()
   if (login === null || vaultSecret === null) {
+    const blocker =
+      loginBlockerOf(
+        loginStatus,
+        loginError,
+        vaultSecret === null
+          ? 'and set the vault secret to access admin functionality'
+          : 'to access admin functionality',
+      ) ?? 'Set the vault secret to access admin functionality.'
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-2 px-5 py-20 text-center">
         <h1 className="text-xl font-semibold">Admin</h1>
         <p role="status" className="text-muted-foreground">
-          Connect a Midnight wallet and set the vault secret to access admin functionality.
+          {blocker}
         </p>
       </main>
     )

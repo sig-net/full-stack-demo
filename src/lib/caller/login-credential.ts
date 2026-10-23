@@ -23,3 +23,6 @@ export function loginMessageOf(networkId: MidnightNetworkId, issuedAt: string): 
 }
 
 export const LOGIN_WINDOW_MS = 5 * 60 * 1000
+
+/** How far ahead of the server's clock an `issuedAt` may be, for a browser whose clock runs ahead. */
+export const LOGIN_CLOCK_SKEW_MS = 60 * 1000

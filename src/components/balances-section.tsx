@@ -1,6 +1,6 @@
 'use client'
 
-import { Download, EyeOff, type LucideIcon, Wallet } from 'lucide-react'
+import { Download, EyeOff, LogIn, type LucideIcon, Wallet } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 
 import { BalanceBox } from '@/components/balance-box'
@@ -24,7 +24,7 @@ interface BalancesSectionProps {
 
 export function BalancesSection({ onSwap }: BalancesSectionProps): ReactNode {
   const connection = useMidnightWallet()
-  const { vaultSecret, depositAccount } = useCaller()
+  const { login, vaultSecret, depositAccount } = useCaller()
   const registry = useTokenInfoRegistry()
   const [depositOpen, setDepositOpen] = useState(false)
   const [sendTokenType, setSendTokenType] = useState<string | null>(null)
@@ -32,6 +32,7 @@ export function BalancesSection({ onSwap }: BalancesSectionProps): ReactNode {
   const status = walletConnectionStatus(connection)
   const missing = missingDepositPrerequisites({
     walletConnected: wallet !== null,
+    loggedIn: login !== null,
     vaultSecretSet: vaultSecret !== null,
   })
   const depositButton = (
@@ -165,5 +166,6 @@ function DepositPrerequisitesMessage({ missing }: { missing: DepositPrerequisite
 const DEPOSIT_PREREQUISITE_ITEMS: Record<DepositPrerequisite, { Icon: LucideIcon; label: string }> =
   {
     wallet: { Icon: Wallet, label: 'connect wallet' },
+    login: { Icon: LogIn, label: 'sign the login in your wallet' },
     vaultSecret: { Icon: EyeOff, label: 'set vault secret' },
   }

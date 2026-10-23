@@ -6,6 +6,7 @@ import { createContext, useContext, type ReactNode } from 'react'
 import { useCaller } from '@/components/contexts/CallerContext'
 import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
+import { loginBlockerOf } from '@/lib/caller/wallet-login-query'
 import {
   type BalanceCheck,
   CALLER_DUST_MINIMUM,
@@ -36,7 +37,8 @@ const VaultReadinessContext = createContext<VaultReadinessContextValue | null>(n
 export function VaultReadinessProvider({ children }: { children: ReactNode }): ReactNode {
   const { midnightNetwork } = useConfig()
   const { wallet, addresses, generation } = useMidnightWallet()
-  const { login, userCommitment } = useCaller()
+  const { login, loginStatus, loginError, userCommitment } = useCaller()
+  const loginBlocker = loginBlockerOf(loginStatus, loginError, 'to check the vault')
   const dustAccount = addresses?.unshieldedAddress
   const initialisation = useQuery({
     queryKey: ['vault-initialisation', midnightNetwork.networkId, login?.verifyingKey ?? null],
@@ -89,8 +91,8 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
     retry: false,
   })
   const backendReason =
-    login === null
-      ? 'No Midnight wallet is connected.'
+    loginBlocker !== null
+      ? loginBlocker
       : userCommitment === null
         ? 'No vault secret is set.'
         : backend.status === 'error'
@@ -100,8 +102,8 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
     vaultInitialised: initialisation.data ?? {
       status: 'unavailable',
       reason:
-        login === null
-          ? 'No Midnight wallet is connected.'
+        loginBlocker !== null
+          ? loginBlocker
           : initialisation.status === 'error'
             ? initialisation.error.message
             : NOT_CHECKED,

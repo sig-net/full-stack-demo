@@ -451,20 +451,24 @@ spells it (`schnorr_bip340` or `ecdsa_secp256k1_sha256`). The text the wallet si
 `full-stack-demo:login:{networkId}:{issuedAt}`, so a signature is bound to this application, one
 network and one moment. The server never reads the message from the credential: it rebuilds it
 from its own network and the credential's `issuedAt`, refuses a credential older than five
-minutes (`LOGIN_WINDOW_MS`) or dated in the future, verifies the signature with the ledger's
-`verifySignature()`, and only then derives the caller. A captured credential therefore replays
-for at most five minutes, and only at this application on this network.
+minutes (`LOGIN_WINDOW_MS`) or dated more than a minute ahead of its own clock
+(`LOGIN_CLOCK_SKEW_MS`, the allowance for a browser clock that runs ahead), verifies the
+signature with the ledger's `verifySignature()`, and only then derives the caller. A captured
+credential therefore replays for at most five minutes, and only at this application on this
+network.
 
 What the wallet signs is not that text itself. A Midnight wallet prefixes the data a DApp hands
 to `signData`, so a signed message can never be a well-formed transaction, and the exact bytes
 are specified by MIP-0031, Midnight Message Signing
 (`mips/mip-0031-message-signing/mip-0031-message-signing.md` in
-`midnightntwrk/midnight-improvement-proposals`, merged on 16 October 2026): the signed message
-is `midnight_signed_message:` followed by the payload's byte length in decimal, a colon and the
+`midnightntwrk/midnight-improvement-proposals`, status Proposed, created 2026-09-08, and given
+its number in the repository on 16 October 2026): the signed message is
+`midnight_signed_message:` followed by the payload's byte length in decimal, a colon and the
 payload, and the signature binds its SHA-256 digest under BIP-340 Schnorr or ECDSA over
-secp256k1. The DApp connector specification's Signing section states the same prefix in one
-sentence, and the installed connector package (4.0.1) says only that the data is prepended with
-the right prefix. `src/lib/midnight/signed-message.ts` holds that construction
+secp256k1. The connector's own specification (`docs/api/_media/SPECIFICATION.md` on the `main`
+branch of `midnightntwrk/midnight-dapp-connector-api`, read on 23 October 2026) states the same
+prefix in its Signing section. The installed connector package (4.0.1) ships no specification
+and says only that the data is prepended with the right prefix. `src/lib/midnight/signed-message.ts` holds that construction
 (`signedMessageOf()`), the connector's payload decoding (`signDataPayloadOf()`, which refuses
 what the declared encoding does not accept with the connector's `InvalidRequest`), the wire form
 of a signature (`messageSignatureSchema`) and the verification (`verifyMessageSignature()`, over
@@ -481,9 +485,15 @@ holds the credential in page memory only: a reload or a disconnect asks the wall
 nothing of it reaches local storage. `useCaller().login` is the `CallerLogin`: its
 `verifyingKey` is the caller's identity, which the page keys its queries on, never a credential,
 and `credential()` answers the current credential, or one signed afresh once less than a minute
-of the window remains, so a call in flight never carries one that expires on arrival. The seed
-wallet signs silently; a browser wallet extension will prompt, at most once per window and never
-while the page is idle. `useCaller().loginError` carries the wallet's refusal.
+of the window remains, so a call in flight never carries one that expires on arrival. The wallet's
+answer is parsed at that boundary: an absent `scheme` reads as `schnorr_bip340`, as the
+connector's specification says, and an answer outside the wire form fails the login with the
+reason. The seed wallet signs silently; a browser wallet extension will prompt, at most once per
+window and never while the page is idle. `useCaller().loginStatus` says whether there is no
+wallet, the wallet has still to sign, it has signed, or it refused; the gates on the page say
+"Sign the login in your wallet" while it signs and show the refusal otherwise, the wallet panel
+shows the refusal with a Retry login control beside the connection status, and
+`useCaller().retryLogin()` asks the wallet again.
 
 The vault still needs a 32-byte secret, the value of the contract's `callerSecretKey` witness,
 which the application calls the vault secret

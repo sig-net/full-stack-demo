@@ -13,6 +13,7 @@ import { useSpotPrices } from '@/components/use-spot-prices'
 import { activityEntryOf } from '@/lib/activity/activity-entries'
 import { activitiesDueForCompletion } from '@/lib/activity/completions-due'
 import type { CallerLogin } from '@/lib/caller/wallet-login'
+import { loginBlockerOf } from '@/lib/caller/wallet-login-query'
 import type { ClientConfig } from '@/lib/config/client-config'
 import type {
   Activity,
@@ -50,7 +51,7 @@ interface ActivitySectionProps {
  * built with.
  */
 export function ActivitySection({ types, title = 'Activity' }: ActivitySectionProps): ReactNode {
-  const { login } = useCaller()
+  const { login, loginStatus, loginError } = useCaller()
   const registry = useTokenInfoRegistry()
   const prices = useSpotPrices()
   const activities = useQuery({
@@ -77,9 +78,9 @@ export function ActivitySection({ types, title = 'Activity' }: ActivitySectionPr
       >
         {title}
       </h2>
-      {login === null ? (
+      {loginStatus !== 'signed' ? (
         <p role="status" className="text-muted-foreground">
-          Connect a Midnight wallet to see your activity.
+          {loginBlockerOf(loginStatus, loginError, 'to see your activity')}
         </p>
       ) : activities.isError ? (
         <p role="alert" className="text-destructive">

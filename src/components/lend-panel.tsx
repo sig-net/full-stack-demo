@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import type { SupportedBalance } from '@/lib/balances/supported-balances'
+import { loginBlockerOf } from '@/lib/caller/wallet-login-query'
 import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import {
   missingReadiness,
@@ -43,7 +44,7 @@ const TARGET_REFETCH_INTERVAL_MS = 30_000
  * records it for the backend to submit.
  */
 export function LendPanel(): ReactNode {
-  const { login, vaultSecret } = useCaller()
+  const { login, loginStatus, loginError, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -153,9 +154,10 @@ export function LendPanel(): ReactNode {
     },
   })
 
+  const loginBlocker = loginBlockerOf(loginStatus, loginError, 'first')
   const pairBlocker =
-    wallet === null
-      ? 'Connect a Midnight wallet first.'
+    loginBlocker !== null
+      ? loginBlocker
       : vaultSecret === null
         ? 'Set the vault secret first.'
         : checks.vaultInitialised.status === 'uninitialised'

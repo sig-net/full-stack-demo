@@ -13,6 +13,7 @@ import {
 } from '@/lib/caller/caller-fixtures'
 import { callerName } from '@/lib/caller/caller'
 import {
+  LOGIN_CLOCK_SKEW_MS,
   type LoginCredential,
   LOGIN_WINDOW_MS,
   loginMessageOf,
@@ -36,6 +37,20 @@ describe('resolveCaller', () => {
         CALLER_SIGNING_KEY,
         FIXTURE_NETWORK_ID,
         at(-LOGIN_WINDOW_MS),
+      ),
+      expected: CALLER.name,
+    },
+    {
+      name: 'a login dated one second ahead of the server clock',
+      credential: loginCredentialSignedBy(CALLER_SIGNING_KEY, FIXTURE_NETWORK_ID, at(1000)),
+      expected: CALLER.name,
+    },
+    {
+      name: 'a login dated at the end of the clock skew allowance',
+      credential: loginCredentialSignedBy(
+        CALLER_SIGNING_KEY,
+        FIXTURE_NETWORK_ID,
+        at(LOGIN_CLOCK_SKEW_MS),
       ),
       expected: CALLER.name,
     },
@@ -95,8 +110,12 @@ describe('resolveCaller', () => {
       error: 'has expired',
     },
     {
-      name: 'a login dated one second in the future',
-      credential: loginCredentialSignedBy(CALLER_SIGNING_KEY, FIXTURE_NETWORK_ID, at(1000)),
+      name: 'a login dated one second past the clock skew allowance',
+      credential: loginCredentialSignedBy(
+        CALLER_SIGNING_KEY,
+        FIXTURE_NETWORK_ID,
+        at(LOGIN_CLOCK_SKEW_MS + 1000),
+      ),
       error: 'in the future',
     },
     {

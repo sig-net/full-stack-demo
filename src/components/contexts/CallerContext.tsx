@@ -1,11 +1,16 @@
 'use client'
 
-import { skipToken, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from 'react'
 
 import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
-import { type CallerLogin, loginWithWallet } from '@/lib/caller/wallet-login'
+import type { CallerLogin } from '@/lib/caller/wallet-login'
+import {
+  type LoginStatus,
+  loginStatusOf,
+  walletLoginQueryOptions,
+} from '@/lib/caller/wallet-login-query'
 import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
 import {
   userCommitmentOf,
@@ -14,10 +19,13 @@ import {
 import { vaultSecretStorage } from '@/lib/midnight/ethereum-erc20-vault/vault-secret-storage'
 
 export interface CallerContextValue {
-  /** The connected wallet's login, whose credential every server action takes first. Null without a wallet, until the wallet has signed, and when it refused. */
+  /** The connected wallet's login, whose credential every server action takes first. Null unless `loginStatus` is `signed`. */
   readonly login: CallerLogin | null
+  readonly loginStatus: LoginStatus
   /** Why the connected wallet's login signature was refused, or null. */
   readonly loginError: string | null
+  /** Asks the wallet to sign again after a refusal. */
+  readonly retryLogin: () => void
   /** The vault secret every caller circuit is built with, lower-case hex without `0x`. Null until set. */
   readonly vaultSecret: string | null
   /** The contract's commitment of the vault secret in hex, which the server derives the deposit account from. Null until the secret is set. */
@@ -45,15 +53,10 @@ export function CallerProvider({ children }: { children: ReactNode }): ReactNode
   const { midnightNetwork, midnightSignet, midnightEthereumErc20Vault } = useConfig()
   const { wallet, generation } = useMidnightWallet()
   const [refusal, setRefusal] = useState<string | null>(null)
-  const login = useQuery({
-    queryKey: ['wallet-login', midnightNetwork.networkId, generation],
-    queryFn: wallet === null ? skipToken : () => loginWithWallet(wallet, midnightNetwork.networkId),
-    staleTime: Infinity,
-    gcTime: 0,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: false,
-  })
+  const loginQuery = useQuery(
+    walletLoginQueryOptions(wallet, midnightNetwork.networkId, generation),
+  )
+  const loginStatus = loginStatusOf(wallet !== null, loginQuery.status)
   // Undefined only while server rendering and hydrating, before the store has been read.
   const stored = useSyncExternalStore(
     vaultSecretStorage.subscribe,
@@ -91,8 +94,13 @@ export function CallerProvider({ children }: { children: ReactNode }): ReactNode
   return (
     <CallerContext.Provider
       value={{
-        login: wallet === null ? null : (login.data ?? null),
-        loginError: login.status === 'error' ? login.error.message : null,
+        login: loginStatus === 'signed' ? (loginQuery.data ?? null) : null,
+        loginStatus,
+        loginError: loginQuery.status === 'error' ? loginQuery.error.message : null,
+        retryLogin: () => {
+          // A query without its wallet is skipped, and refetching a skipped query is a reported error.
+          if (wallet !== null) void loginQuery.refetch()
+        },
         vaultSecret,
         userCommitment,
         depositAccount,

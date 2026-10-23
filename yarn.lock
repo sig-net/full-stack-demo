@@ -5442,6 +5442,7 @@ __metadata:
     "@sig-net/midnight": "npm:^0.25.0"
     "@sig-net/midnight-examples-erc20-vault-contract": "npm:0.5.0"
     "@tailwindcss/postcss": "npm:^4.3.3"
+    "@tanstack/query-core": "npm:5.104.1"
     "@tanstack/react-query": "npm:^5.104.1"
     "@types/node": "npm:^26.6.2"
     "@types/pg": "npm:^8.23.1"

@@ -24,6 +24,7 @@ import { useDebouncedValue } from '@/components/use-debounced-value'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import { supportedBalancesOf } from '@/lib/balances/supported-balances'
+import { loginBlockerOf } from '@/lib/caller/wallet-login-query'
 import { routerAllowanceOf } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
 import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
@@ -63,7 +64,7 @@ interface SwapPanelProps {
  * its fee, and the server records it for the backend to submit.
  */
 export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
-  const { login, vaultSecret } = useCaller()
+  const { login, loginStatus, loginError, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -187,9 +188,10 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
     quoteCurrent && toToken !== null
       ? formatTokenAmount(quote.data.amountOutMinimum, toToken.decimals)
       : ''
+  const loginBlocker = loginBlockerOf(loginStatus, loginError, 'to swap')
   const blocker =
-    wallet === null
-      ? 'Connect a Midnight wallet to swap.'
+    loginBlocker !== null
+      ? loginBlocker
       : vaultSecret === null
         ? 'Set the vault secret to swap.'
         : sources.length === 0 && balances.isSuccess

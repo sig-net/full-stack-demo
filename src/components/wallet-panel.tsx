@@ -1,9 +1,10 @@
 'use client'
 
-import { KeyRound, Unplug } from 'lucide-react'
+import { KeyRound, RotateCw, Unplug } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
 import { AddressIdentifier } from '@/components/address-identifier'
+import { useCaller } from '@/components/contexts/CallerContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { LocalNightFaucetButton } from '@/components/local-night-faucet-button'
 import { RegisterNightButton } from '@/components/register-night-button'
@@ -20,6 +21,7 @@ import { formatTokenAmountTruncated } from '@/lib/tokens/format-token-amount'
 /** Owns the seed dialog, so a host must keep the panel mounted while the dialog is open. */
 export function WalletPanel(): ReactNode {
   const connection = useMidnightWallet()
+  const { loginStatus, loginError, retryLogin } = useCaller()
   const [seedOpen, setSeedOpen] = useState(false)
   const { wallet, addresses, connecting, restoring, syncProgress, error } = connection
   const status = walletConnectionStatus(connection)
@@ -37,6 +39,18 @@ export function WalletPanel(): ReactNode {
         <p role="alert" className="text-destructive">
           {error}
         </p>
+      )}
+      {loginStatus === 'signing' && <p role="status">Sign the login in your wallet…</p>}
+      {loginStatus === 'refused' && (
+        <div className="flex flex-col gap-1">
+          <p role="alert" className="text-destructive">
+            The wallet refused the login{loginError === null ? '' : `: ${loginError}`}
+          </p>
+          <Button variant="secondary" size="sm" className="self-start" onClick={retryLogin}>
+            <RotateCw />
+            Retry login
+          </Button>
+        </div>
       )}
       {showAddresses && (
         <div className="flex flex-col gap-2">
