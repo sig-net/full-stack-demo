@@ -1,0 +1,89 @@
+name: full-stack-demo
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      # The postgres:18 image keeps its data under /var/lib/postgresql/18/docker.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready --username demo --dbname demo']
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  # A single node in KRaft mode, acting as both broker and controller.
+  kafka:
+    image: apache/kafka:4.2.2
+    # Setting any KAFKA_ variable makes the image build its whole configuration from them.
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - '127.0.0.1:9092:9092'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092',
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  # Otterscan, a block explorer for the local EVM node. The container serves a static page: the
+  # browser runs it and reads the chain itself through ERIGON_URL, so that URL is the node as
+  # the browser reaches it, and anvil answers its ots_ calls with open CORS.
+  otterscan:
+    image: otterscan/otterscan:v2.11.0
+    environment:
+      ERIGON_URL: http://127.0.0.1:8545
+    ports:
+      - '127.0.0.1:5100:80'
+
+  # Polkadot.js Apps, a block explorer for the local Midnight node, which is Substrate based.
+  # The page runs in the browser and reads the chain through WS_URL, the node as the browser
+  # reaches it. The image publishes only its latest tag and only for amd64.
+  polkadot-js-apps:
+    image: jacogr/polkadot-js-apps:latest
+    platform: linux/amd64
+    environment:
+      WS_URL: ws://127.0.0.1:9944
+    ports:
+      - '127.0.0.1:5300:80'
+
+  # The sig.network explorer, where a Sig Network request id opens on its lifecycle. The page
+  # runs in the browser against the local indexer and node, so the stack's Signet contract
+  # address and MPC root key reach it from .env.local through the interpolation below, which is
+  # why the services start with `docker compose --env-file .env.local up -d --wait`.
+  signet-explorer:
+    image: ghcr.io/sig-net/explorer:latest
+    environment:
+      VITE_MIDNIGHT_DEFAULT_NETWORK: undeployed
+      VITE_MIDNIGHT_UNDEPLOYED_SIGNET_CONTRACT_ADDRESS: ${MIDNIGHT_SIGNET_CONTRACT_ADDRESS:-}
+      VITE_MIDNIGHT_UNDEPLOYED_MPC_ROOT_PUBLIC_KEY: ${MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY:-}
+      # The local EVM node is a Sepolia fork, so it answers for Sepolia.
+      VITE_MIDNIGHT_ETHEREUM_SEPOLIA_RPC_URL: http://127.0.0.1:8545
+    ports:
+      - '127.0.0.1:5400:8080'
+
+volumes:
+  postgres-data:
+  kafka-data:

@@ -1,0 +1,115 @@
+import { z } from 'zod'
+
+import {
+  type EthereumTransaction,
+  type EthereumTransactionFailure,
+  ethereumTransactionNameSchema,
+  type EthereumTransactionState,
+} from '@/lib/ethereum/transaction-v1/transaction'
+import { defineEvent, type EventDefinition } from '@/lib/event/event'
+
+/**
+ * The only writer of a transaction's state. Each method is one transition from the state machine
+ * in `transaction-state-machine.ts`: it refuses with `EthereumTransactionStateConflict` when the
+ * transaction is not in a state the action applies to, and publishes the event of the state
+ * entered. Methods open no transaction: the caller is the write boundary.
+ */
+export interface EthereumTransactionStateController {
+  /** Stores a signed transaction the caller built, in `AwaitingSubmission`. */
+  commitTransaction(args: CommitTransactionArgs): Promise<EthereumTransaction>
+  /** `AwaitingSubmission` to `AwaitingInclusion`, with the hash the node accepted the bytes under. */
+  recordSubmission(args: RecordSubmissionArgs): Promise<EthereumTransaction>
+  /** `AwaitingInclusion` to `Succeeded`, with the block that included the transaction. */
+  recordSuccess(args: RecordSuccessArgs): Promise<EthereumTransaction>
+  /**
+   * `AwaitingSubmission` to `Failed` as `Rejected`: the node refused the bytes. Refused from any
+   * later state, so a stale duplicate broadcast cannot overwrite a transaction the node holds.
+   */
+  recordRejection(args: RecordRejectionArgs): Promise<EthereumTransaction>
+  /** `AwaitingInclusion` to `Failed` with the chain's verdict. */
+  recordFailure(args: RecordFailureArgs): Promise<EthereumTransaction>
+  /**
+   * Either waiting state to `Failed` as `Expired`, once `expireTime` has passed. A failure and an
+   * expiry racing on one row are serialised by the row lock, and the first to land is the reason
+   * recorded.
+   */
+  expireTransaction(args: ExpireTransactionArgs): Promise<EthereumTransaction>
+}
+
+/** What the committer decides. The controller sets the entry state, the fields the chain fills, and the timestamps. */
+export interface CommitTransactionArgs extends Omit<
+  EthereumTransaction,
+  'state' | 'txHash' | 'blockNumber' | 'failure' | 'error' | 'createTime' | 'updateTime'
+> {}
+
+export interface RecordSubmissionArgs {
+  name: string
+  txHash: string
+}
+
+export interface RecordSuccessArgs {
+  name: string
+  blockNumber: bigint
+}
+
+export interface RecordRejectionArgs {
+  name: string
+  /** The node's message. */
+  error: string
+}
+
+export interface RecordFailureArgs {
+  name: string
+  failure: Extract<EthereumTransactionFailure, 'Reverted' | 'NonceConsumed'>
+  /** The block that included the transaction, for a `Reverted` failure. */
+  blockNumber?: bigint
+}
+
+export interface ExpireTransactionArgs {
+  name: string
+}
+
+/** The transaction is not in a state the action applies to, so another actor got there first. */
+export class EthereumTransactionStateConflict extends Error {
+  readonly name = 'EthereumTransactionStateConflict'
+
+  /** The name of the resource whose state refused the action. */
+  readonly resource: string
+  readonly state: EthereumTransactionState
+  readonly action: string
+
+  constructor(resource: string, state: EthereumTransactionState, action: string) {
+    super(`${resource} is ${state}, which does not allow ${action}`)
+    this.resource = resource
+    this.state = state
+    this.action = action
+  }
+}
+
+/** The parent is carried so that the parent's consumer can match on it without a read. */
+export const ethereumTransactionEventDataSchema = z.object({
+  name: ethereumTransactionNameSchema,
+  parent: z.string().min(1),
+})
+
+export type EthereumTransactionEventData = z.infer<typeof ethereumTransactionEventDataSchema>
+
+/** One lifecycle event per state entered, keyed by the transaction name. */
+export const ETHEREUM_TRANSACTION_EVENT_BY_STATE: Record<
+  EthereumTransactionState,
+  EventDefinition<EthereumTransactionEventData>
+> = {
+  AwaitingSubmission: defineEvent(
+    'ethereum.transaction-v1.awaiting-submission',
+    ethereumTransactionEventDataSchema,
+  ),
+  AwaitingInclusion: defineEvent(
+    'ethereum.transaction-v1.awaiting-inclusion',
+    ethereumTransactionEventDataSchema,
+  ),
+  Succeeded: defineEvent('ethereum.transaction-v1.succeeded', ethereumTransactionEventDataSchema),
+  Failed: defineEvent('ethereum.transaction-v1.failed', ethereumTransactionEventDataSchema),
+}
+
+export const ETHEREUM_TRANSACTION_EVENTS: readonly EventDefinition<EthereumTransactionEventData>[] =
+  Object.values(ETHEREUM_TRANSACTION_EVENT_BY_STATE)

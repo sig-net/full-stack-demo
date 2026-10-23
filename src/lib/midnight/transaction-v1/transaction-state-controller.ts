@@ -1,0 +1,159 @@
+import { z } from 'zod'
+
+import { defineEvent, type EventDefinition } from '@/lib/event/event'
+import {
+  type MidnightTransaction,
+  type MidnightTransactionFailure,
+  midnightTransactionNameSchema,
+  type MidnightTransactionState,
+} from '@/lib/midnight/transaction-v1/transaction'
+import type { CommittedCall } from '@/lib/midnight/transaction-v1/transaction-state-machine'
+
+/**
+ * The only writer of a transaction's state. Each method is one transition from the state machine
+ * in `transaction-state-machine.ts`: it refuses with `MidnightTransactionStateConflict` when the
+ * transaction is not in a state the action applies to, and publishes the event of the state
+ * entered. Methods open no transaction: the caller is the write boundary.
+ */
+export interface MidnightTransactionStateController {
+  /**
+   * Stores a transaction the caller built, in the state its bytes enter: `AwaitingProof` with
+   * unproven bytes, `AwaitingSubmission` with bytes the caller's wallet finalised.
+   */
+  commitTransaction(args: CommitTransactionArgs): Promise<MidnightTransaction>
+  /** `AwaitingProof` to `AwaitingWallet`. The unproven bytes are deleted. */
+  recordProof(args: RecordProofArgs): Promise<MidnightTransaction>
+  /** `AwaitingProof` to `Failed` as `ProofFailed`. */
+  recordProofFailure(args: RecordProofFailureArgs): Promise<MidnightTransaction>
+  /** `AwaitingWallet` to `AwaitingSubmission`, with the bytes the relayer wallet balanced and signed. */
+  submitTransaction(args: SubmitTransactionArgs): Promise<MidnightTransaction>
+  /** `AwaitingSubmission` to `AwaitingInclusion`, with the id the node returned. */
+  recordSubmission(args: RecordSubmissionArgs): Promise<MidnightTransaction>
+  /**
+   * `AwaitingSubmission` to `Failed` as `Rejected`: the node refused the bytes. Refused from any
+   * later state, so a stale duplicate submission cannot overwrite a transaction the node holds.
+   */
+  recordRejection(args: RecordRejectionArgs): Promise<MidnightTransaction>
+  /** `AwaitingInclusion` to `Failed` with the ledger's verdict. */
+  recordLedgerFailure(args: RecordLedgerFailureArgs): Promise<MidnightTransaction>
+  /** `AwaitingInclusion` to `Succeeded`. */
+  recordSuccess(args: RecordSuccessArgs): Promise<MidnightTransaction>
+  /**
+   * Any waiting state to `Failed` as `Expired`, once `expireTime` has passed. A rejection and an
+   * expiry racing on one row are serialised by the row lock, and the first to land is the reason
+   * recorded.
+   */
+  expireTransaction(args: ExpireTransactionArgs): Promise<MidnightTransaction>
+}
+
+/** What the committer decides. The controller sets the entry state, the TTL, the fields later steps fill, and the timestamps. */
+export type CommitTransactionArgs = Omit<
+  MidnightTransaction,
+  | 'state'
+  | 'unprovenTx'
+  | 'unboundTx'
+  | 'finalizedTx'
+  | 'txId'
+  | 'blockHeight'
+  | 'expireTime'
+  | 'failure'
+  | 'error'
+  | 'createTime'
+  | 'updateTime'
+> &
+  CommittedCall
+
+export interface RecordProofArgs {
+  name: string
+  unboundTx: string
+}
+
+export interface RecordProofFailureArgs {
+  name: string
+  error: string
+}
+
+export interface SubmitTransactionArgs {
+  name: string
+  finalizedTx: string
+}
+
+export interface RecordSubmissionArgs {
+  name: string
+  txId: string
+}
+
+export interface RecordRejectionArgs {
+  name: string
+  error: string
+}
+
+/** A ledger failure is still a recorded transaction, so the block that holds the verdict is known. */
+export interface RecordLedgerFailureArgs {
+  name: string
+  failure: Extract<MidnightTransactionFailure, 'FailEntirely' | 'FailFallible'>
+  error: string
+  blockHeight: number
+}
+
+export interface RecordSuccessArgs {
+  name: string
+  blockHeight: number
+}
+
+export interface ExpireTransactionArgs {
+  name: string
+}
+
+/** The transaction is not in a state the action applies to, so another actor got there first. */
+export class MidnightTransactionStateConflict extends Error {
+  readonly name = 'MidnightTransactionStateConflict'
+
+  /** The name of the resource whose state refused the action. */
+  readonly resource: string
+  readonly state: MidnightTransactionState
+  readonly action: string
+
+  constructor(resource: string, state: MidnightTransactionState, action: string) {
+    super(`${resource} is ${state}, which does not allow ${action}`)
+    this.resource = resource
+    this.state = state
+    this.action = action
+  }
+}
+
+/** The parent is carried so that the parent's consumer can match on it without a read. */
+export const midnightTransactionEventDataSchema = z.object({
+  name: midnightTransactionNameSchema,
+  parent: z.string().min(1),
+})
+
+export type MidnightTransactionEventData = z.infer<typeof midnightTransactionEventDataSchema>
+
+/** One lifecycle event per state entered, keyed by the transaction name. */
+export const MIDNIGHT_TRANSACTION_EVENT_BY_STATE: Record<
+  MidnightTransactionState,
+  EventDefinition<MidnightTransactionEventData>
+> = {
+  AwaitingProof: defineEvent(
+    'midnight.transaction-v1.awaiting-proof',
+    midnightTransactionEventDataSchema,
+  ),
+  AwaitingWallet: defineEvent(
+    'midnight.transaction-v1.awaiting-wallet',
+    midnightTransactionEventDataSchema,
+  ),
+  AwaitingSubmission: defineEvent(
+    'midnight.transaction-v1.awaiting-submission',
+    midnightTransactionEventDataSchema,
+  ),
+  AwaitingInclusion: defineEvent(
+    'midnight.transaction-v1.awaiting-inclusion',
+    midnightTransactionEventDataSchema,
+  ),
+  Succeeded: defineEvent('midnight.transaction-v1.succeeded', midnightTransactionEventDataSchema),
+  Failed: defineEvent('midnight.transaction-v1.failed', midnightTransactionEventDataSchema),
+}
+
+export const MIDNIGHT_TRANSACTION_EVENTS: readonly EventDefinition<MidnightTransactionEventData>[] =
+  Object.values(MIDNIGHT_TRANSACTION_EVENT_BY_STATE)

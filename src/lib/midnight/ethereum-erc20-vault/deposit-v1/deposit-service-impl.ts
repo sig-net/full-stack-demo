@@ -1,0 +1,205 @@
+import 'server-only'
+
+import { randomUUID } from 'node:crypto'
+
+import { newInputIndex } from '@sig-net/midnight-examples-erc20-vault-contract'
+import type { Provider } from 'ethers'
+
+import { type Caller, resourceOwnedByCaller } from '@/lib/caller/caller'
+import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
+import type { MidnightNetworkConfig } from '@/lib/config/midnight-network-config'
+import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
+import type { UnitOfWork } from '@/lib/db/unit-of-work'
+import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
+import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
+import {
+  type Deposit,
+  type DepositCompleteInputs,
+  depositName,
+  type DepositStartInputs,
+  isTerminalDepositState,
+} from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import { nextState } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-machine'
+import type { DepositRepository } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-repository'
+import {
+  type CompleteDepositArgs,
+  DepositNonceConflict,
+  DepositRecipientMismatch,
+  type DepositService,
+  type GetDepositArgs,
+  type ListDepositsArgs,
+  type PrepareCompleteDepositArgs,
+  type PrepareStartDepositArgs,
+  type StartDepositArgs,
+} from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service'
+import {
+  DepositStateConflict,
+  type DepositStateController,
+} from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-state-controller'
+import { SWEEP_GAS } from '@/lib/midnight/ethereum-erc20-vault/sweep-gas'
+import {
+  type AttestedRequestFields,
+  attestedRequestFields,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
+import type { VaultRequestRepository } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-repository'
+import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
+
+export class DepositServiceImpl implements DepositService {
+  private readonly depositRepository: DepositRepository
+  private readonly depositStateController: DepositStateController
+  private readonly vaultRequestRepository: VaultRequestRepository
+  private readonly evmProvider: Provider
+  private readonly unitOfWork: UnitOfWork
+  private readonly signet: MidnightSignetConfig
+  private readonly midnightNetwork: MidnightNetworkConfig
+  private readonly vault: MidnightEthereumErc20VaultConfig
+
+  constructor(
+    depositRepository: DepositRepository,
+    depositStateController: DepositStateController,
+    vaultRequestRepository: VaultRequestRepository,
+    evmProvider: Provider,
+    unitOfWork: UnitOfWork,
+    signet: MidnightSignetConfig,
+    vault: MidnightEthereumErc20VaultConfig,
+    midnightNetwork: MidnightNetworkConfig,
+  ) {
+    this.midnightNetwork = midnightNetwork
+    this.depositRepository = depositRepository
+    this.depositStateController = depositStateController
+    this.vaultRequestRepository = vaultRequestRepository
+    this.evmProvider = evmProvider
+    this.unitOfWork = unitOfWork
+    this.signet = signet
+    this.vault = vault
+  }
+
+  async prepareStartDeposit(
+    _caller: Caller,
+    { userCommitment }: PrepareStartDepositArgs,
+  ): Promise<DepositStartInputs> {
+    const depositAccount = depositAccountOf(userCommitment, this.signet, this.vault)
+    return {
+      inIndex: newInputIndex(),
+      evmNonce: await this.nextEvmNonce(depositAccount),
+      ...SWEEP_GAS,
+    }
+  }
+
+  /** The nonce is read from the chain before the transaction opens, so two starts of one caller racing past the check commit the same nonce. */
+  async startDeposit(
+    caller: Caller,
+    { depositRequest, wallet, userCommitment, inIndex, evmNonce, finalizedTx }: StartDepositArgs,
+  ): Promise<Deposit> {
+    const depositAccount = depositAccountOf(userCommitment, this.signet, this.vault)
+    if (evmNonce !== (await this.nextEvmNonce(depositAccount))) {
+      throw new DepositNonceConflict(depositAccount)
+    }
+    return this.unitOfWork.runInTransaction(() =>
+      this.depositStateController.startDeposit({
+        name: depositName(caller.name, randomUUID()),
+        erc20Address: depositRequest.erc20Address,
+        amount: depositRequest.amount,
+        inIndex,
+        evmNonce,
+        recipient: shieldedAddressOf(wallet, this.midnightNetwork.networkId),
+        ...SWEEP_GAS,
+        depositAccount,
+        call: { finalizedTx },
+      }),
+    )
+  }
+
+  async prepareCompleteDeposit(
+    caller: Caller,
+    { name, wallet }: PrepareCompleteDepositArgs,
+  ): Promise<DepositCompleteInputs> {
+    await this.assertCompletable(caller, name, wallet)
+    const { requestId, attestationOutputKind, attestationOutput } =
+      await this.attestedRequestOf(name)
+    return { requestId, attestationOutputKind, attestationOutput }
+  }
+
+  async completeDeposit(
+    caller: Caller,
+    { name, wallet, finalizedTx }: CompleteDepositArgs,
+  ): Promise<Deposit> {
+    await this.assertCompletable(caller, name, wallet)
+    return this.unitOfWork.runInTransaction(() =>
+      this.depositStateController.completeDeposit({ name, call: { finalizedTx } }),
+    )
+  }
+
+  async getDeposit(caller: Caller, args: GetDepositArgs): Promise<Deposit | undefined> {
+    if (!resourceOwnedByCaller(args.name, caller)) return undefined
+    return this.depositRepository.get(args.name)
+  }
+
+  /** Every deposit of a caller is named under the caller, which stands in for it in the search. */
+  async listDeposits(caller: Caller, _args: ListDepositsArgs): Promise<Deposit[]> {
+    return this.depositRepository.search({
+      criteria: [{ type: 'prefix-text', field: 'name', prefix: `${caller.name}/` }],
+      order: { field: 'createTime', direction: 'desc' },
+    })
+  }
+
+  /**
+   * The chain's pending count covers every sweep broadcast so far, and one above the highest
+   * nonce a live deposit holds covers the sweeps still to come, so no two requests of the
+   * account are started with the same nonce.
+   */
+  private async nextEvmNonce(depositAccount: string): Promise<bigint> {
+    const pending = BigInt(await this.evmProvider.getTransactionCount(depositAccount, 'pending'))
+    const deposits = await this.depositRepository.search({
+      criteria: [{ type: 'exact-text', field: 'depositAccount', text: depositAccount }],
+    })
+    return deposits
+      .filter((deposit) => !isTerminalDepositState(deposit.state))
+      .reduce((highest, deposit) => bigger(highest, deposit.evmNonce + 1n), pending)
+  }
+
+  /** The state table is asked here, outside the lock, and the controller asks it again under it. */
+  private async assertCompletable(
+    caller: Caller,
+    name: string,
+    wallet: WalletPublicKeys,
+  ): Promise<void> {
+    const deposit = await this.ownDeposit(caller, name)
+    if (nextState(deposit.state, 'complete') === undefined) {
+      throw new DepositStateConflict(name, deposit.state, 'complete')
+    }
+    if (
+      deposit.recipient !== null &&
+      deposit.recipient !== shieldedAddressOf(wallet, this.midnightNetwork.networkId)
+    ) {
+      throw new DepositRecipientMismatch(name)
+    }
+  }
+
+  private async ownDeposit(caller: Caller, name: string): Promise<Deposit> {
+    const deposit = resourceOwnedByCaller(name, caller)
+      ? await this.depositRepository.get(name)
+      : undefined
+    if (deposit === undefined) {
+      throw new Error(`${name} does not exist`)
+    }
+    return deposit
+  }
+
+  /** A deposit that may be completed has an attested request under it, so its fields are read without a state check. */
+  private async attestedRequestOf(name: string): Promise<AttestedRequestFields> {
+    const [request] = await this.vaultRequestRepository.search({
+      criteria: [{ type: 'exact-text', field: 'parent', text: name }],
+      order: { field: 'createTime', direction: 'desc' },
+      limit: 1,
+    })
+    if (request === undefined) {
+      throw new Error(`${name} has no vault request`)
+    }
+    return attestedRequestFields(request)
+  }
+}
+
+function bigger(a: bigint, b: bigint): bigint {
+  return a > b ? a : b
+}

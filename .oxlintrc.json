@@ -1,0 +1,56 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc", "nextjs"],
+  "options": {
+    "typeAware": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/react-in-jsx-scope": "off",
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true
+      }
+    ],
+    "no-console": "error"
+  },
+  "overrides": [
+    {
+      "files": ["scripts/**", "integration-tests/**", "src/server/console-bridge.test.ts"],
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["src/app/**/*.tsx"],
+      "rules": {
+        "react/only-export-components": "off"
+      }
+    },
+    {
+      "files": ["src/components/ui/**/*.tsx", "src/components/contexts/**/*.tsx"],
+      "rules": {
+        "react/only-export-components": "off"
+      }
+    },
+    {
+      "files": ["src/**/*.{ts,tsx}"],
+      "excludeFiles": ["src/components/ui/**"],
+      "jsPlugins": ["eslint-plugin-better-tailwindcss"],
+      "rules": {
+        "better-tailwindcss/enforce-canonical-classes": "error"
+      }
+    }
+  ],
+  "settings": {
+    "better-tailwindcss": {
+      "entryPoint": "src/app/globals.css"
+    }
+  },
+  "ignorePatterns": [".next", "next-env.d.ts"]
+}
