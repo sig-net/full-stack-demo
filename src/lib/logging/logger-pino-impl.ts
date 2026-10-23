@@ -82,7 +82,7 @@ export function createPinoLogger(
 const MESSAGE_KEY = 'message'
 
 /** Field names that hold a secret wherever an SDK or the console puts them, one level deep. */
-const REDACTED_KEYS = ['callerSecret', 'secret', 'secretKey', 'seed']
+const REDACTED_KEYS = ['vaultSecret', 'secret', 'secretKey', 'seed']
 
 function commonOptions(config: LoggingConfig): LoggerOptions {
   return {

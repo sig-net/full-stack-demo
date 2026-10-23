@@ -36,7 +36,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
   let backend: Backend
   let user: UserWallet
   let evm: JsonRpcProvider
-  const callerSecret = userWalletSeed()
+  const vaultSecret = userWalletSeed()
   const created: [string, string][] = []
   let target: SupplyTarget
   let coinType: string
@@ -50,7 +50,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
     })
     user = await startUserWallet(userWalletSeed(), backend.config.client.midnightNetwork)
     const targeted = await backend.midnight.ethereumErc20Vault.supplyV1.adaptor.getSupplyTarget(
-      callerSecret,
+      user.unshieldedAddress,
       {},
     )
     if (!targeted.ok) throw new Error(targeted.error)
@@ -78,7 +78,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
       const { underlyingErc20Address } = target
       if (target.allowance === 0n) {
         log('the wrapper holds no allowance on the underlying: approving first')
-        const approval = await startApprovalAsUser(backend, callerSecret, user, { kind: 'stata' })
+        const approval = await startApprovalAsUser(backend, vaultSecret, user, { kind: 'stata' })
         if (!approval.ok) throw new Error(approval.error)
         created.push(['midnight_ethereum_erc20_vault_approvals_v1', approval.approval.name])
         await driveOperation(
@@ -86,13 +86,13 @@ describe('ERC20 vault supply round trip over the local stack', () => {
             name: approval.approval.name,
             state: async () => (await approvalV1.repository.get(approval.approval.name))?.state,
             complete: () =>
-              completeApprovalAsUser(backend, callerSecret, user, approval.approval.name),
+              completeApprovalAsUser(backend, vaultSecret, user, approval.approval.name),
           },
           ROUND_TRIP_TIMEOUT_MS,
         )
       }
 
-      const deposit = await startDepositAsUser(backend, callerSecret, user, {
+      const deposit = await startDepositAsUser(backend, vaultSecret, user, {
         erc20Address: underlyingErc20Address,
         amount: AMOUNT,
       })
@@ -110,7 +110,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
         {
           name: deposit.deposit.name,
           state: async () => (await depositV1.repository.get(deposit.deposit.name))?.state,
-          complete: () => completeDepositAsUser(backend, callerSecret, user, deposit.deposit.name),
+          complete: () => completeDepositAsUser(backend, vaultSecret, user, deposit.deposit.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )
@@ -138,7 +138,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
       const sharesBefore = await balanceOf(evm, stataErc20Address, vaultAccount)
       const coinsBefore = await user.shieldedBalance(coinType)
       log(`supplying ${AMOUNT.toString()} base units of ${underlyingErc20Address} to the wrapper`)
-      const supply = await startSupplyAsUser(backend, callerSecret, user, { amount: AMOUNT })
+      const supply = await startSupplyAsUser(backend, vaultSecret, user, { amount: AMOUNT })
       if (!supply.ok) throw new Error(supply.error)
       created.push(['midnight_ethereum_erc20_vault_supplies_v1', supply.supply.name])
       expect(supply.supply).toMatchObject({
@@ -158,7 +158,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
         {
           name: supply.supply.name,
           state: async () => (await supplyV1.repository.get(supply.supply.name))?.state,
-          complete: () => completeSupplyAsUser(backend, callerSecret, user, supply.supply.name),
+          complete: () => completeSupplyAsUser(backend, vaultSecret, user, supply.supply.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )

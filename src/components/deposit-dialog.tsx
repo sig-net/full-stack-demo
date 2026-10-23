@@ -150,7 +150,7 @@ function DepositAccountFunds({
   onBusyChange: (busy: boolean) => void
   onDeposited: () => void
 }): ReactNode {
-  const { callerSecret, callerName } = useCaller()
+  const { callerAddress, vaultSecret, userCommitment } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -160,8 +160,10 @@ function DepositAccountFunds({
   const [stage, setStage] = useState<CallerCallStage | null>(null)
   const depositing = useMutation({
     mutationFn: async (fund: DepositAccountFund) => {
-      if (callerSecret === null) throw new Error('The identity secret is not set.')
-      if (wallet === null) throw new Error('No Midnight wallet is connected.')
+      if (callerAddress === null || wallet === null) {
+        throw new Error('No Midnight wallet is connected.')
+      }
+      if (vaultSecret === null) throw new Error('The vault secret is not set.')
       // Loaded on first use, so a visitor who never deposits never downloads the call builder and the contract.
       const calls =
         await import('@/lib/midnight/ethereum-erc20-vault/deposit-v1/browser-deposit-calls')
@@ -169,7 +171,8 @@ function DepositAccountFunds({
         actions: { prepareStartDeposit, startDeposit },
         builder: calls.browserDepositCallBuilder(config, window.location.origin),
         wallet,
-        callerSecret,
+        callerAddress,
+        vaultSecret,
         depositRequest: { erc20Address: fund.erc20Address, amount: fund.amount },
         onStage: setStage,
       })
@@ -198,12 +201,12 @@ function DepositAccountFunds({
     },
   })
   const funds = useQuery({
-    queryKey: ['deposit-account-funds', callerName, address],
+    queryKey: ['deposit-account-funds', callerAddress, userCommitment, address],
     queryFn:
-      callerSecret === null
+      callerAddress === null || userCommitment === null
         ? skipToken
         : async () => {
-            const result = await listDepositAccountFunds(callerSecret, {})
+            const result = await listDepositAccountFunds(callerAddress, { userCommitment })
             if (!result.ok) throw new Error(result.error)
             return result.funds
           },

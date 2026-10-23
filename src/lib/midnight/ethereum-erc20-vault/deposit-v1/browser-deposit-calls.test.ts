@@ -36,9 +36,12 @@ import {
   REQUEST_ID_HEX,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
 import type { Wallet } from '@/lib/midnight/wallet/wallet'
+import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 import { mock } from '@/lib/testing/mock'
 
-const CALLER_SECRET = 'ab'.repeat(32)
+const VAULT_SECRET = 'ab'.repeat(32)
+const CALLER_ADDRESS = 'mn_addr_stagenet1caller'
+const USER_COMMITMENT = userCommitmentOf(VAULT_SECRET)
 const SECRET_KEY = new Uint8Array(32).fill(0xab)
 const PUBLIC_KEYS = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const DEPOSIT_REQUEST = { erc20Address: ERC20_ADDRESS, amount: 1_000_000n }
@@ -105,14 +108,14 @@ function collaborators(doubles: Doubles) {
   const trail: Trail = { events: [], received: structuredClone(NOTHING_RECEIVED) }
   let starts = 0
   const actions = mock<DepositActions>('DepositActions', {
-    prepareStartDeposit: async (secret, args) => {
-      expect(secret).toBe(CALLER_SECRET)
+    prepareStartDeposit: async (callerAddress, args) => {
+      expect(callerAddress).toBe(CALLER_ADDRESS)
       trail.events.push('prepareStartDeposit')
       trail.received.prepareStartDeposit.push(args)
       return doubles.prepareStartRefusal ?? { ok: true, inputs: START_INPUTS }
     },
-    startDeposit: async (secret, args) => {
-      expect(secret).toBe(CALLER_SECRET)
+    startDeposit: async (callerAddress, args) => {
+      expect(callerAddress).toBe(CALLER_ADDRESS)
       trail.events.push('startDeposit')
       trail.received.startDeposit.push(args)
       const answers = doubles.started ?? [{ ok: true, deposit }]
@@ -121,14 +124,14 @@ function collaborators(doubles: Doubles) {
       if (answer === undefined) throw new Error('the case scripts no startDeposit answer')
       return answer
     },
-    prepareCompleteDeposit: async (secret, args) => {
-      expect(secret).toBe(CALLER_SECRET)
+    prepareCompleteDeposit: async (callerAddress, args) => {
+      expect(callerAddress).toBe(CALLER_ADDRESS)
       trail.events.push('prepareCompleteDeposit')
       trail.received.prepareCompleteDeposit.push(args)
       return { ok: true, inputs: COMPLETE_INPUTS }
     },
-    completeDeposit: async (secret, args) => {
-      expect(secret).toBe(CALLER_SECRET)
+    completeDeposit: async (callerAddress, args) => {
+      expect(callerAddress).toBe(CALLER_ADDRESS)
       trail.events.push('completeDeposit')
       trail.received.completeDeposit.push(args)
       return doubles.completed ?? { ok: true, deposit }
@@ -150,19 +153,26 @@ function collaborators(doubles: Doubles) {
   })
   const wallet = mock<Wallet>('Wallet', {
     publicKeys: PUBLIC_KEYS,
-    finalize: async (unboundTx) => {
+    balanceUnsealedTransaction: async (unboundTx) => {
       trail.events.push('finalize')
       trail.received.finalize.push(unboundTx)
-      return `finalized(${unboundTx})`
-    },
-    release: async (finalizedTx) => {
-      trail.events.push(`release(${finalizedTx})`)
+      return { tx: `finalized(${unboundTx})` }
     },
   })
   const onStage = (stage: CallerCallStage): void => {
     trail.events.push(`stage:${stage}`)
   }
-  return { trail, args: { actions, builder, wallet, callerSecret: CALLER_SECRET, onStage } }
+  return {
+    trail,
+    args: {
+      actions,
+      builder,
+      wallet,
+      callerAddress: CALLER_ADDRESS,
+      vaultSecret: VAULT_SECRET,
+      onStage,
+    },
+  }
 }
 
 const START_PASS = [
@@ -189,25 +199,20 @@ describe('startDepositInBrowser', () => {
       expectEvents: START_PASS,
     },
     {
-      name: 'a nonce conflict releases the finalised bytes, then is prepared and built once more',
+      name: 'a nonce conflict is prepared and built once more',
       doubles: { started: [NONCE_CONFLICT, { ok: true, deposit }] },
-      expectEvents: [...START_PASS, 'release(finalized(unbound-start))', ...START_PASS],
+      expectEvents: [...START_PASS, ...START_PASS],
     },
     {
       name: 'a second nonce conflict surfaces',
       doubles: { started: [NONCE_CONFLICT, NONCE_CONFLICT] },
-      expectEvents: [
-        ...START_PASS,
-        'release(finalized(unbound-start))',
-        ...START_PASS,
-        'release(finalized(unbound-start))',
-      ],
+      expectEvents: [...START_PASS, ...START_PASS],
       expectError: NONCE_CONFLICT_ERROR,
     },
     {
       name: 'any other refusal of the record surfaces without a retry',
       doubles: { started: [STATE_CONFLICT, { ok: true, deposit }] },
-      expectEvents: [...START_PASS, 'release(finalized(unbound-start))'],
+      expectEvents: [...START_PASS],
       expectError: STATE_CONFLICT_ERROR,
     },
     {
@@ -243,7 +248,9 @@ describe('startDepositInBrowser', () => {
     await startDepositInBrowser({ ...args, depositRequest: DEPOSIT_REQUEST })
     expect(trail.received).toEqual({
       ...NOTHING_RECEIVED,
-      prepareStartDeposit: [{ depositRequest: DEPOSIT_REQUEST, wallet: PUBLIC_KEYS }],
+      prepareStartDeposit: [
+        { depositRequest: DEPOSIT_REQUEST, wallet: PUBLIC_KEYS, userCommitment: USER_COMMITMENT },
+      ],
       buildStart: [
         {
           secretKey: SECRET_KEY,
@@ -264,6 +271,7 @@ describe('startDepositInBrowser', () => {
         {
           depositRequest: DEPOSIT_REQUEST,
           wallet: PUBLIC_KEYS,
+          userCommitment: USER_COMMITMENT,
           inIndex: START_INPUTS.inIndex,
           evmNonce: START_INPUTS.evmNonce,
           finalizedTx: 'finalized(unbound-start)',
@@ -272,14 +280,14 @@ describe('startDepositInBrowser', () => {
     })
   })
 
-  test('no error carries the caller secret', async () => {
+  test('no error carries the vault secret', async () => {
     const { args } = collaborators({ started: [STATE_CONFLICT] })
     const error: unknown = await startDepositInBrowser({
       ...args,
       depositRequest: DEPOSIT_REQUEST,
     }).catch((failure: unknown) => failure)
     expect(error).toBeInstanceOf(Error)
-    expect(String(error)).not.toContain(CALLER_SECRET)
+    expect(String(error)).not.toContain(VAULT_SECRET)
   })
 })
 
@@ -309,13 +317,13 @@ describe('completeDepositInBrowser', () => {
     {
       name: 'a nonce conflict reason is not retried for a completion',
       doubles: { completed: NONCE_CONFLICT },
-      expectEvents: [...COMPLETE_PASS, 'release(finalized(unbound-complete))'],
+      expectEvents: [...COMPLETE_PASS],
       expectError: NONCE_CONFLICT_ERROR,
     },
     {
       name: 'a refused record surfaces without a retry',
       doubles: { completed: STATE_CONFLICT },
-      expectEvents: [...COMPLETE_PASS, 'release(finalized(unbound-complete))'],
+      expectEvents: [...COMPLETE_PASS],
       expectError: STATE_CONFLICT_ERROR,
     },
     {

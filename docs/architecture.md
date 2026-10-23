@@ -72,19 +72,31 @@ The consequences of that table drive everything below:
 
 ### Wallet contract
 
-The DApp connector v4 `ConnectedAPI` is the contract the UI needs from any wallet, and it
-needs only three of its methods:
+The DApp connector v4 `WalletConnectedAPI` (`@midnight-ntwrk/dapp-connector-api`) is the
+contract the UI needs from any wallet, and the `Wallet` interface
+(`src/lib/midnight/wallet/wallet.ts`) is a subset of it and nothing more, since the application
+moves to the browser wallet extensions the moment they support its chain version. It uses
+these of its methods:
 
 | Method                              | Used for                                                                                                                                                             |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `getShieldedAddresses()`            | The coin public key and encryption public key the backend needs to build the call (`ownPublicKey()` in Compact, and the key outputs to the caller are encrypted to). |
+| `getUnshieldedAddress()`            | The address the local NIGHT faucet funds, shown in the wallet panel.                                                                                                 |
+| `getDustAddress()`                  | Shown in the wallet panel.                                                                                                                                           |
+| `getShieldedBalances()`             | The caller's shielded vault coins, shown on the home page.                                                                                                           |
+| `getUnshieldedBalances()`           | The wallet's NIGHT, shown in the wallet panel.                                                                                                                       |
+| `getDustBalance()`                  | The wallet's DUST, shown in the wallet panel and checked for readiness.                                                                                              |
 | `balanceUnsealedTransaction(txHex)` | Step 3. Takes a serialised `Transaction<SignatureEnabled, Proof, PreBinding>`, pays fees, adds inputs and outputs, signs, binds and returns the sealed hex.          |
-| `submitTransaction(txHex)`          | Not used on the main path. The backend submits instead, so retries and tracking live in one place. It remains a fallback when the backend is unreachable.            |
+
+Submission is the backend's: it submits every finalised call, so retries and tracking live in
+one place. A type test (`src/lib/midnight/wallet/wallet.test.ts`) fails `yarn typecheck` on
+any `Wallet` member outside this set.
 
 The repository's seed wallet (`src/lib/midnight/wallet/seed-wallet-facade.ts`) implements the
 same step 3 with the wallet SDK facade: `balanceUnboundTransaction`, `signRecipe`,
 `finalizeRecipe`. That is the proof that the contract above is sufficient: the development
-wallet and a browser wallet differ only in where the keys live.
+wallet and a browser wallet differ only in where the keys live. What the connector cannot
+serve, NIGHT registration above all, is the seed wallet's own and stays off `Wallet`.
 
 On mobile there is no injected `window.midnight`. The same contract is served by an in-app
 wallet (1AM ships iOS and Android apps with a DApp browser, Kuira ships an embeddable Android
@@ -98,7 +110,7 @@ backend's proof server only ever proves the contract call.
 flowchart LR
   subgraph user [User's device]
     Wallet["Wallet<br/>keys, coins, DUST<br/>balance + sign"]
-    UI["UI<br/>identity secret, private state<br/>calls backend API"]
+    UI["UI<br/>vault secret, private state<br/>calls backend API"]
   end
   subgraph backend [Backend]
     API["API + job store<br/>Postgres, Kafka"]
@@ -122,15 +134,15 @@ flowchart LR
   Wallet --> Indexer
 ```
 
-| Component          | Owns                                                                                                                                                                                                                                                                                                                                    |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Wallet             | Every key. Coin selection, DUST fee payment, spend proofs through its own proof server, signatures and binding. Shows the approval prompt. Discovers received coins from the indexer.                                                                                                                                                   |
-| UI                 | The wallet connection. The user's vault identity secret (local storage until cleared) and the contract private state (page memory), per the engineering rules. Random inputs such as mint nonces. Starts jobs, relays the unbound transaction to the wallet and the sealed one back, applies the next private state after confirmation. |
-| API and job store  | One row per transaction job in Postgres, one Kafka topic per asynchronous stage. Idempotency, ownership and the state machine below.                                                                                                                                                                                                    |
-| Builder            | Runs the circuit with the SDK's `createUnprovenCallTx` against the indexer's view of the contract, with an in-memory private state provider seeded from the request. Produces the unproven transaction, `nextPrivateState` and `newCoins`.                                                                                              |
-| Proof server       | The Midnight proof server container, reachable only from the backend network. Proves contract calls. Never sees a wallet key.                                                                                                                                                                                                           |
-| Submitter, watcher | Submits sealed bytes to the node, resubmits identical bytes while the TTL allows, watches the indexer for inclusion and records the final status.                                                                                                                                                                                       |
-| Relayer wallet     | A backend-owned seed wallet with its own DUST. Pays for and submits the permissionless vault circuits (`flushQueue`, `sendDeposit`, `queueAttestation`) and polls the Signet singleton for MPC events. Never touches a user call.                                                                                                       |
+| Component          | Owns                                                                                                                                                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Wallet             | Every key. Coin selection, DUST fee payment, spend proofs through its own proof server, signatures and binding. Shows the approval prompt. Discovers received coins from the indexer.                                                                                                                                          |
+| UI                 | The wallet connection. The user's vault secret (local storage until cleared) and the contract private state (page memory), per the engineering rules. Random inputs such as mint nonces. Starts jobs, relays the unbound transaction to the wallet and the sealed one back, applies the next private state after confirmation. |
+| API and job store  | One row per transaction job in Postgres, one Kafka topic per asynchronous stage. Idempotency, ownership and the state machine below.                                                                                                                                                                                           |
+| Builder            | Runs the circuit with the SDK's `createUnprovenCallTx` against the indexer's view of the contract, with an in-memory private state provider seeded from the request. Produces the unproven transaction, `nextPrivateState` and `newCoins`.                                                                                     |
+| Proof server       | The Midnight proof server container, reachable only from the backend network. Proves contract calls. Never sees a wallet key.                                                                                                                                                                                                  |
+| Submitter, watcher | Submits sealed bytes to the node, resubmits identical bytes while the TTL allows, watches the indexer for inclusion and records the final status.                                                                                                                                                                              |
+| Relayer wallet     | A backend-owned seed wallet with its own DUST. Pays for and submits the permissionless vault circuits (`flushQueue`, `sendDeposit`, `queueAttestation`) and polls the Signet singleton for MPC events. Never touches a user call.                                                                                              |
 
 ## A transaction job
 
@@ -260,7 +272,7 @@ as a shielded vault token to the caller, or to an optional recipient. Its inputs
 | `serializedOutput` | Public but unauthenticated. The one-byte Borsh result of the EVM transfer, recovered by the relayer from the EVM trace or the MPC output cache. The circuit checks it against the attestation digest, so a wrong byte fails the call. |
 | `mintNonce`        | Private. Fresh random 32 bytes generated by the UI, never derived from the request id, since a derived nonce would let an observer link the minted coin to the deposit.                                                               |
 | `recipient`        | Optional. Absent means the caller's own coin public key. A third party's key also needs that party's encryption public key passed to the build, so the output is encrypted for them.                                                  |
-| `callerSecretKey`  | Witness. The 32-byte vault identity secret the UI holds. `settleRequest` recomputes the ownership commitment from it, which makes settling depositor-only.                                                                            |
+| `callerSecretKey`  | Witness. The 32-byte vault secret the UI holds. `settleRequest` recomputes the ownership commitment from it, which makes settling depositor-only.                                                                                     |
 
 The deposit protocol has ten steps. Only `startDeposit` (step 2) and `completeDeposit`
 (step 10) are the depositor's own. The flushes, the send and the attestation queue are
@@ -364,16 +376,16 @@ wallet that implements proving delegation, at the cost of the mobile story.
 
 ## Mapping onto this repository
 
-| Piece             | Where                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Entry points      | Server actions in `src/server/actions/deposit-actions.ts`, one line each reaching the deposit adaptor through `getBackend()`. The adaptor validates with zod. Every operation's commits receive the calls the browser built and bound, before any database transaction opens. Nothing proves or submits inline.                                              |
-| Job store         | One table per resource in `src/lib/db/schema.ts`, each with its state, its step fields and its failure reason. The unproven transaction, which embeds the private transcript, is a column deleted on leaving `AwaitingProof`. Witness values are never stored: the caller secret is the witness and travels with each of the two user actions.               |
-| Workers           | The event consumers `start()` registers from `src/instrumentation.ts`, one per resource, all in the `full-stack-demo.events` consumer group, each nudging its resolver, plus the sweep. Every replica joins the group and Kafka divides the partitions.                                                                                                      |
-| Builder providers | `VaultCircuitsMidnightJsImpl` (`src/lib/midnight/ethereum-erc20-vault/vault-circuits-midnight-js-impl.ts`): the indexer as public data provider, the vault's zk config provider, an in-memory private state provider that lives for one call, and the wallet's public keys passed as circuit arguments. Proving is the Midnight transaction ledger's, later. |
-| Proof server      | In the Midnight stack beside the node and the indexer, at `MIDNIGHT_PROOF_SERVER_URL`. `MidnightTransactionLedgerImpl` proves through it with the prover keys under `MIDNIGHT_ZK_ASSETS_ROOT`.                                                                                                                                                               |
-| Relayer wallet    | `RelayerWalletSeedImpl` (`src/lib/midnight/wallet/relayer-wallet-seed-impl.ts`) over the seed wallet facade, from `MIDNIGHT_RELAYER_SEED`, with its own DUST. Its work is the vault request lifecycle (send, broadcast, queue), the flusher and the sweep, each with its own resource or process.                                                            |
-| Browser wallet    | Not built. The seed wallet is the one `WalletKind`, and the end-to-end test plays the wallet from `MIDNIGHT_USER_SEED` with the same facade.                                                                                                                                                                                                                 |
-| UI                | Built for the deposit: the deposit dialog starts it and the Activity table drives every later step from the activity view, with the vault identity secret kept in local storage until cleared, as the engineering rules allow.                                                                                                                               |
+| Piece             | Where                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Entry points      | Server actions in `src/server/actions/deposit-actions.ts`, one line each reaching the deposit adaptor through `getBackend()`. The adaptor validates with zod. Every operation's commits receive the calls the browser built and bound, before any database transaction opens. Nothing proves or submits inline.                                                                |
+| Job store         | One table per resource in `src/lib/db/schema.ts`, each with its state, its step fields and its failure reason. The unproven transaction, which embeds the private transcript, is a column deleted on leaving `AwaitingProof`. Witness values are never stored and never sent: the vault secret is the witness, held by the browser, and its commitment travels with the start. |
+| Workers           | The event consumers `start()` registers from `src/instrumentation.ts`, one per resource, all in the `full-stack-demo.events` consumer group, each nudging its resolver, plus the sweep. Every replica joins the group and Kafka divides the partitions.                                                                                                                        |
+| Builder providers | `VaultCircuitsMidnightJsImpl` (`src/lib/midnight/ethereum-erc20-vault/vault-circuits-midnight-js-impl.ts`): the indexer as public data provider, the vault's zk config provider, an in-memory private state provider that lives for one call, and the wallet's public keys passed as circuit arguments. Proving is the Midnight transaction ledger's, later.                   |
+| Proof server      | In the Midnight stack beside the node and the indexer, at `MIDNIGHT_PROOF_SERVER_URL`. `MidnightTransactionLedgerImpl` proves through it with the prover keys under `MIDNIGHT_ZK_ASSETS_ROOT`.                                                                                                                                                                                 |
+| Relayer wallet    | `RelayerWalletSeedImpl` (`src/lib/midnight/wallet/relayer-wallet-seed-impl.ts`) over the seed wallet facade, from `MIDNIGHT_RELAYER_SEED`, with its own DUST. Its work is the vault request lifecycle (send, broadcast, queue), the flusher and the sweep, each with its own resource or process.                                                                              |
+| Browser wallet    | Not built. The seed wallet is the one `WalletKind`, and the end-to-end test plays the wallet from `MIDNIGHT_USER_SEED` with the same facade.                                                                                                                                                                                                                                   |
+| UI                | Built for the deposit: the deposit dialog starts it and the Activity table drives every later step from the activity view, with the vault secret kept in local storage until cleared, as the engineering rules allow.                                                                                                                                                          |
 
 ## Variant: the UI builds the unproven transaction
 
@@ -431,12 +443,12 @@ modules serve any resource that needs a call on chain. A partial unique index on
 circuit)` over the non-terminal states allows one live attempt per deposit step, so two
 resolvers racing to retry cannot both create one.
 
-`{caller}` is the application's caller id for the depositor, a SHA-256 of the vault identity
-secret under an application domain tag. The server derives it from the caller secret that every
-server action takes as its first argument (see Caller authentication in the README), so a caller
-can only name their own caller as a parent. It is independent of the contract's `userCommitment`
-of the same secret, so the application's names survive a change to the contract's hashing. Listing
-a user's deposits is a list under it.
+`{caller}` is the application's caller id for the depositor: the 32-byte user address of the
+depositor's wallet's unshielded key in hex, which the unshielded address every server action
+takes as its first argument encodes (see Caller authentication in the README), so a caller can
+only name their own caller as a parent. The vault secret and its `userCommitment` pick the
+deposit account under that caller and do not take part in the name. Listing a user's deposits is
+a list under it.
 
 ```ts
 class Deposit {

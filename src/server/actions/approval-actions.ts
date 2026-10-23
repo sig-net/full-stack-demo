@@ -19,70 +19,70 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function listApprovalTargets(
-  callerSecret: string,
+  callerAddress: string,
   args: ListApprovalTargetsArgs,
 ): Promise<ApprovalTargetListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.approvalV1.adaptor.listApprovalTargets(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function prepareStartApproval(
-  callerSecret: string,
+  callerAddress: string,
   args: PrepareStartApprovalArgs,
 ): Promise<ApprovalStartInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.approvalV1.adaptor.prepareStartApproval(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function startApproval(
-  callerSecret: string,
+  callerAddress: string,
   args: StartApprovalArgs,
 ): Promise<ApprovalResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.approvalV1.adaptor.startApproval(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function prepareCompleteApproval(
-  callerSecret: string,
+  callerAddress: string,
   args: PrepareCompleteApprovalArgs,
 ): Promise<ApprovalCompleteInputsResult> {
   return (
     await getBackend()
-  ).midnight.ethereumErc20Vault.approvalV1.adaptor.prepareCompleteApproval(callerSecret, args)
+  ).midnight.ethereumErc20Vault.approvalV1.adaptor.prepareCompleteApproval(callerAddress, args)
 }
 
 export async function completeApproval(
-  callerSecret: string,
+  callerAddress: string,
   args: CompleteApprovalArgs,
 ): Promise<ApprovalResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.approvalV1.adaptor.completeApproval(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function getApproval(
-  callerSecret: string,
+  callerAddress: string,
   args: GetApprovalArgs,
 ): Promise<ApprovalResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.approvalV1.adaptor.getApproval(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function listApprovals(
-  callerSecret: string,
+  callerAddress: string,
   args: ListApprovalsArgs,
 ): Promise<ApprovalListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.approvalV1.adaptor.listApprovals(
-    callerSecret,
+    callerAddress,
     args,
   )
 }

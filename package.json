@@ -71,6 +71,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@midnight-ntwrk/dapp-connector-api": "4.0.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.6.2",
     "@types/pg": "^8.23.1",

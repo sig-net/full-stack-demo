@@ -1,6 +1,7 @@
 import { UNISWAP_SWAP_ROUTER_02 } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
+import type { Caller } from '@/lib/caller/caller'
 import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
@@ -8,6 +9,9 @@ import { CIRCLE_USDC } from './sepolia-tokens'
 import { deleteOperation, driveOperation, log } from './operation-round-trip'
 import { completeApprovalAsUser, startApprovalAsUser } from './user-approval'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
+
+/** The approval targets are vault-level, so the service reads nothing of the caller. */
+const ANY_CALLER: Caller = { name: '', unshieldedAddress: '' }
 
 const ROUND_TRIP_TIMEOUT_MS = 30 * 60_000
 
@@ -21,7 +25,7 @@ const ROUND_TRIP_TIMEOUT_MS = 30 * 60_000
 describe('ERC20 vault approval round trip over the local stack', () => {
   let backend: Backend
   let user: UserWallet
-  const callerSecret = userWalletSeed()
+  const vaultSecret = userWalletSeed()
   const created: string[] = []
 
   beforeAll(async () => {
@@ -44,10 +48,7 @@ describe('ERC20 vault approval round trip over the local stack', () => {
     async () => {
       const { midnight } = backend
       const { service, repository } = midnight.ethereumErc20Vault.approvalV1
-      const targetsBefore = await service.listApprovalTargets(
-        { name: '', secretKey: new Uint8Array(32) },
-        {},
-      )
+      const targetsBefore = await service.listApprovalTargets(ANY_CALLER, {})
       const target = targetsBefore.find(
         (candidate) =>
           candidate.kind === 'router' && candidate.erc20Address === CIRCLE_USDC.toLowerCase(),
@@ -56,7 +57,7 @@ describe('ERC20 vault approval round trip over the local stack', () => {
       expect(target.spender).toBe(UNISWAP_SWAP_ROUTER_02.toLowerCase())
       log(`router allowance on USDC before: ${target.allowance.toString()}`)
 
-      const started = await startApprovalAsUser(backend, callerSecret, user, {
+      const started = await startApprovalAsUser(backend, vaultSecret, user, {
         kind: 'router',
         erc20Address: CIRCLE_USDC,
       })
@@ -81,18 +82,14 @@ describe('ERC20 vault approval round trip over the local stack', () => {
         {
           name: started.approval.name,
           state: async () => (await repository.get(started.approval.name))?.state,
-          complete: () =>
-            completeApprovalAsUser(backend, callerSecret, user, started.approval.name),
+          complete: () => completeApprovalAsUser(backend, vaultSecret, user, started.approval.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )
 
       const final = await repository.get(started.approval.name)
       expect(final?.outcome).toBe('approved')
-      const targetsAfter = await service.listApprovalTargets(
-        { name: '', secretKey: new Uint8Array(32) },
-        {},
-      )
+      const targetsAfter = await service.listApprovalTargets(ANY_CALLER, {})
       const granted = targetsAfter.find(
         (candidate) =>
           candidate.kind === 'router' && candidate.erc20Address === CIRCLE_USDC.toLowerCase(),

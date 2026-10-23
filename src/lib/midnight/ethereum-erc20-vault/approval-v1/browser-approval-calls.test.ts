@@ -39,7 +39,8 @@ import {
 import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
 
-const CALLER_SECRET = 'ab'.repeat(32)
+const VAULT_SECRET = 'ab'.repeat(32)
+const CALLER_ADDRESS = 'mn_addr_stagenet1caller'
 const SECRET_KEY = new Uint8Array(32).fill(0xab)
 const PUBLIC_KEYS = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const ROUTER_REQUEST: ApprovalRequest = { kind: 'router', erc20Address: ERC20_ADDRESS }
@@ -92,26 +93,26 @@ interface Doubles {
 function collaborators(doubles: Doubles) {
   const trail: Trail = { events: [], received: structuredClone(NOTHING_RECEIVED) }
   const actions = mock<ApprovalActions>('ApprovalActions', {
-    prepareStartApproval: async (secret, args) => {
-      expect(secret).toBe(CALLER_SECRET)
+    prepareStartApproval: async (callerAddress, args) => {
+      expect(callerAddress).toBe(CALLER_ADDRESS)
       trail.events.push('prepareStartApproval')
       trail.received.prepareStartApproval.push(args)
       return doubles.prepareStartRefusal ?? { ok: true, inputs: START_INPUTS }
     },
-    startApproval: async (secret, args) => {
-      expect(secret).toBe(CALLER_SECRET)
+    startApproval: async (callerAddress, args) => {
+      expect(callerAddress).toBe(CALLER_ADDRESS)
       trail.events.push('startApproval')
       trail.received.startApproval.push(args)
       return doubles.started ?? { ok: true, approval }
     },
-    prepareCompleteApproval: async (secret, args) => {
-      expect(secret).toBe(CALLER_SECRET)
+    prepareCompleteApproval: async (callerAddress, args) => {
+      expect(callerAddress).toBe(CALLER_ADDRESS)
       trail.events.push('prepareCompleteApproval')
       trail.received.prepareCompleteApproval.push(args)
       return doubles.prepareComplete ?? { ok: true, inputs: EXECUTED_INPUTS }
     },
-    completeApproval: async (secret, args) => {
-      expect(secret).toBe(CALLER_SECRET)
+    completeApproval: async (callerAddress, args) => {
+      expect(callerAddress).toBe(CALLER_ADDRESS)
       trail.events.push('completeApproval')
       trail.received.completeApproval.push(args)
       return doubles.completed ?? { ok: true, approval }
@@ -133,19 +134,26 @@ function collaborators(doubles: Doubles) {
   })
   const wallet = mock<Wallet>('Wallet', {
     publicKeys: PUBLIC_KEYS,
-    finalize: async (unboundTx) => {
+    balanceUnsealedTransaction: async (unboundTx) => {
       trail.events.push('finalize')
       trail.received.finalize.push(unboundTx)
-      return `finalized(${unboundTx})`
-    },
-    release: async (finalizedTx) => {
-      trail.events.push(`release(${finalizedTx})`)
+      return { tx: `finalized(${unboundTx})` }
     },
   })
   const onStage = (stage: CallerCallStage): void => {
     trail.events.push(`stage:${stage}`)
   }
-  return { trail, args: { actions, builder, wallet, callerSecret: CALLER_SECRET, onStage } }
+  return {
+    trail,
+    args: {
+      actions,
+      builder,
+      wallet,
+      callerAddress: CALLER_ADDRESS,
+      vaultSecret: VAULT_SECRET,
+      onStage,
+    },
+  }
 }
 
 const START_PASS = [
@@ -174,7 +182,7 @@ describe('startApprovalInBrowser', () => {
     {
       name: 'a refused record surfaces without a retry',
       doubles: { started: RECORD_REFUSAL },
-      expectEvents: [...START_PASS, 'release(finalized(unbound-start))'],
+      expectEvents: [...START_PASS],
       expectError: 'the vault ledger could not be read',
     },
     {
@@ -254,14 +262,14 @@ describe('startApprovalInBrowser', () => {
     },
   )
 
-  test('no error carries the caller secret', async () => {
+  test('no error carries the vault secret', async () => {
     const { args } = collaborators({ started: STATE_CONFLICT })
     const error: unknown = await startApprovalInBrowser({
       ...args,
       approvalRequest: STATA_REQUEST,
     }).catch((failure: unknown) => failure)
     expect(error).toBeInstanceOf(Error)
-    expect(String(error)).not.toContain(CALLER_SECRET)
+    expect(String(error)).not.toContain(VAULT_SECRET)
   })
 })
 
@@ -291,7 +299,7 @@ describe('completeApprovalInBrowser', () => {
     {
       name: 'a refused record surfaces without a retry',
       doubles: { completed: STATE_CONFLICT },
-      expectEvents: [...COMPLETE_PASS, 'release(finalized(unbound-complete))'],
+      expectEvents: [...COMPLETE_PASS],
       expectError: STATE_CONFLICT_ERROR,
     },
     {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
+import { CALLER_ADDRESS, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import { activityFixture } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
 import type { ActivityService } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service'
 import { ActivityServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-adaptor'
@@ -7,7 +8,6 @@ import { DEPOSIT_NAME } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/dep
 import { mock } from '@/lib/testing/mock'
 import { RecordingLogger } from '@/lib/testing/recording-logger'
 
-const CALLER_SECRET = 'ab'.repeat(32)
 const activity = activityFixture()
 
 function adaptorOver(service: Partial<ActivityService>, received: object[] = []) {
@@ -23,6 +23,7 @@ function adaptorOver(service: Partial<ActivityService>, received: object[] = [])
       listActivities: recording([activity]),
       ...service,
     }),
+    FIXTURE_NETWORK_ID,
     new RecordingLogger(),
   )
 }
@@ -37,32 +38,32 @@ describe('ActivityServiceAdaptor', () => {
   }> = [
     {
       name: 'getActivity hands the parsed name to the service and returns the activity',
-      call: (a) => a.getActivity(CALLER_SECRET, { name: DEPOSIT_NAME }),
+      call: (a) => a.getActivity(CALLER_ADDRESS, { name: DEPOSIT_NAME }),
       expectReceived: [{ name: DEPOSIT_NAME }],
       expectResult: { ok: true, activity },
     },
     {
       name: 'getActivity refuses a name that is not a deposit',
-      call: (a) => a.getActivity(CALLER_SECRET, { name: 'deposits/1' }),
+      call: (a) => a.getActivity(CALLER_ADDRESS, { name: 'deposits/1' }),
       expectReceived: [],
       expectResult: { ok: false },
     },
     {
       name: 'getActivity reports an activity the service has no row for',
-      call: (a) => a.getActivity(CALLER_SECRET, { name: DEPOSIT_NAME }),
+      call: (a) => a.getActivity(CALLER_ADDRESS, { name: DEPOSIT_NAME }),
       service: { getActivity: async () => undefined },
       expectReceived: [],
       expectResult: { ok: false, error: `${DEPOSIT_NAME} was not found.` },
     },
     {
       name: 'listActivities takes no arguments and returns the list',
-      call: (a) => a.listActivities(CALLER_SECRET, {}),
+      call: (a) => a.listActivities(CALLER_ADDRESS, {}),
       expectReceived: [{}],
       expectResult: { ok: true, activities: [activity] },
     },
     {
       name: 'listActivities refuses arguments that are not an object',
-      call: (a) => a.listActivities(CALLER_SECRET, 'all'),
+      call: (a) => a.listActivities(CALLER_ADDRESS, 'all'),
       expectReceived: [],
       expectResult: { ok: false },
     },

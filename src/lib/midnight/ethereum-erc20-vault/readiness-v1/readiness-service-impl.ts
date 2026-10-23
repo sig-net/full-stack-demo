@@ -49,8 +49,11 @@ export class ReadinessServiceImpl implements ReadinessService {
     this.vault = vault
   }
 
-  async getVaultReadiness(caller: Caller, _args: GetVaultReadinessArgs): Promise<VaultReadiness> {
-    const depositAccount = depositAccountOf(caller, this.signet, this.vault)
+  async getVaultReadiness(
+    _caller: Caller,
+    { userCommitment }: GetVaultReadinessArgs,
+  ): Promise<VaultReadiness> {
+    const depositAccount = depositAccountOf(userCommitment, this.signet, this.vault)
     const vaultAccount = vaultAccountOf(this.signet, this.vault)
     const [relayerDust, depositAccountEth, vaultAccountEth] = await Promise.all([
       readBalanceCheck('DUST', this.relayerWallet.unshieldedAddress(), async () => ({

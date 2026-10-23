@@ -3,6 +3,7 @@ import 'server-only'
 import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
+import type { MidnightNetworkId } from '@/lib/config/midnight-network-config'
 import { CallerOperationStateConflict } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
 import type {
   Redeem,
@@ -21,21 +22,23 @@ import {
 import type { Logger } from '@/lib/logging/logger'
 
 /**
- * Adapts the redeem service to the wire: the caller secret stands in for the caller, the
+ * Adapts the redeem service to the wire: the caller address stands in for the caller, the
  * arguments are untrusted until parsed, and every outcome the caller can act on is a result.
  * The service opens the transaction of each user action itself, after its reads.
  */
 export class RedeemServiceAdaptor {
   private readonly redeemService: RedeemService
+  private readonly networkId: MidnightNetworkId
   private readonly logger: Logger
 
-  constructor(redeemService: RedeemService, logger: Logger) {
+  constructor(redeemService: RedeemService, networkId: MidnightNetworkId, logger: Logger) {
     this.redeemService = redeemService
+    this.networkId = networkId
     this.logger = logger
   }
 
-  async prepareStartRedeem(callerSecret: string, args: unknown): Promise<RedeemStartInputsResult> {
-    const caller = resolveCaller(callerSecret)
+  async prepareStartRedeem(callerAddress: string, args: unknown): Promise<RedeemStartInputsResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'prepareStartRedeem', caller: caller.name })
     const parsed = prepareStartRedeemArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -44,8 +47,8 @@ export class RedeemServiceAdaptor {
     return { ok: true, inputs: await this.redeemService.prepareStartRedeem(caller, parsed.data) }
   }
 
-  async startRedeem(callerSecret: string, args: unknown): Promise<RedeemResult> {
-    const caller = resolveCaller(callerSecret)
+  async startRedeem(callerAddress: string, args: unknown): Promise<RedeemResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'startRedeem', caller: caller.name })
     const parsed = startRedeemArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -58,10 +61,10 @@ export class RedeemServiceAdaptor {
   }
 
   async prepareCompleteRedeem(
-    callerSecret: string,
+    callerAddress: string,
     args: unknown,
   ): Promise<RedeemCompleteInputsResult> {
-    const caller = resolveCaller(callerSecret)
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'prepareCompleteRedeem', caller: caller.name })
     const parsed = prepareCompleteRedeemArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -73,8 +76,8 @@ export class RedeemServiceAdaptor {
     }))
   }
 
-  async completeRedeem(callerSecret: string, args: unknown): Promise<RedeemResult> {
-    const caller = resolveCaller(callerSecret)
+  async completeRedeem(callerAddress: string, args: unknown): Promise<RedeemResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'completeRedeem', caller: caller.name })
     const parsed = completeRedeemArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -86,8 +89,8 @@ export class RedeemServiceAdaptor {
     }))
   }
 
-  async getRedeem(callerSecret: string, args: unknown): Promise<RedeemResult> {
-    const caller = resolveCaller(callerSecret)
+  async getRedeem(callerAddress: string, args: unknown): Promise<RedeemResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'getRedeem', caller: caller.name })
     const parsed = getRedeemArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -100,8 +103,8 @@ export class RedeemServiceAdaptor {
     return { ok: true, redeem }
   }
 
-  async listRedeems(callerSecret: string, args: unknown): Promise<RedeemListResult> {
-    const caller = resolveCaller(callerSecret)
+  async listRedeems(callerAddress: string, args: unknown): Promise<RedeemListResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'listRedeems', caller: caller.name })
     const parsed = listRedeemsArgsSchema.safeParse(args)
     if (!parsed.success) {

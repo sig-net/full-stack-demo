@@ -128,7 +128,7 @@ const cases: Case[] = [
       logger
         .midnightJsLoggerProvider()
         .info?.(
-          { seed: 'aa', secretKey: 'bb', wallet: { secret: 'cc', callerSecret: 'dd', id: 1 } },
+          { seed: 'aa', secretKey: 'bb', wallet: { secret: 'cc', vaultSecret: 'dd', id: 1 } },
           'wallet built',
         )
     },
@@ -139,7 +139,7 @@ const cases: Case[] = [
           message: 'wallet built',
           seed: '[redacted]',
           secretKey: '[redacted]',
-          wallet: { secret: '[redacted]', callerSecret: '[redacted]', id: 1 },
+          wallet: { secret: '[redacted]', vaultSecret: '[redacted]', id: 1 },
         }),
       ])
     },

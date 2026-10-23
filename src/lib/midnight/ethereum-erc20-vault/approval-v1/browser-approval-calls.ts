@@ -26,17 +26,18 @@ import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-requ
 
 /** Starts an approval from the page with the kind's start circuit, whose deployer gate refuses any other caller while the call is built. */
 export async function startApprovalInBrowser(args: StartApprovalInBrowserArgs): Promise<Approval> {
-  const { actions, builder, wallet, callerSecret, approvalRequest, onStage } = args
+  const { actions, builder, wallet, callerAddress, vaultSecret, approvalRequest, onStage } = args
   const started = await runCallerCall({
     operation: 'approval',
     wallet,
-    callerSecret,
+    callerAddress,
+    vaultSecret,
     onStage,
-    prepare: () => actions.prepareStartApproval(callerSecret, { approvalRequest }),
+    prepare: () => actions.prepareStartApproval(callerAddress, { approvalRequest }),
     circuitArgs: ({ inIndex }, caller) => ({ ...caller, inIndex, ...approvalRequest }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
     record: ({ inIndex }, finalizedTx) =>
-      actions.startApproval(callerSecret, { approvalRequest, inIndex, finalizedTx }),
+      actions.startApproval(callerAddress, { approvalRequest, inIndex, finalizedTx }),
   })
   return started.approval
 }
@@ -45,20 +46,22 @@ export async function startApprovalInBrowser(args: StartApprovalInBrowserArgs): 
 export async function completeApprovalInBrowser(
   args: CompleteApprovalInBrowserArgs,
 ): Promise<Approval> {
-  const { actions, builder, wallet, callerSecret, name, onStage } = args
+  const { actions, builder, wallet, callerAddress, vaultSecret, name, onStage } = args
   const completed = await runCallerCall({
     operation: 'approval',
     wallet,
-    callerSecret,
+    callerAddress,
+    vaultSecret,
     onStage,
-    prepare: () => actions.prepareCompleteApproval(callerSecret, { name }),
+    prepare: () => actions.prepareCompleteApproval(callerAddress, { name }),
     circuitArgs: (inputs, caller) => ({
       ...caller,
       requestId: hexToBytes(inputs.requestId),
       serializedOutput: completionOutput(inputs, 1),
     }),
     build: (circuitArgs) => builder.buildComplete(circuitArgs),
-    record: (_inputs, finalizedTx) => actions.completeApproval(callerSecret, { name, finalizedTx }),
+    record: (_inputs, finalizedTx) =>
+      actions.completeApproval(callerAddress, { name, finalizedTx }),
   })
   return completed.approval
 }
@@ -75,15 +78,15 @@ export function browserApprovalCallBuilder(
 /** The approval's server actions, as the page imports them. */
 export interface ApprovalActions {
   prepareStartApproval(
-    callerSecret: string,
+    callerAddress: string,
     args: PrepareStartApprovalArgs,
   ): Promise<ApprovalStartInputsResult>
-  startApproval(callerSecret: string, args: StartApprovalArgs): Promise<ApprovalResult>
+  startApproval(callerAddress: string, args: StartApprovalArgs): Promise<ApprovalResult>
   prepareCompleteApproval(
-    callerSecret: string,
+    callerAddress: string,
     args: PrepareCompleteApprovalArgs,
   ): Promise<ApprovalCompleteInputsResult>
-  completeApproval(callerSecret: string, args: CompleteApprovalArgs): Promise<ApprovalResult>
+  completeApproval(callerAddress: string, args: CompleteApprovalArgs): Promise<ApprovalResult>
 }
 
 export interface StartApprovalInBrowserArgs extends CallerCallArgs<ApprovalCallBuilder> {

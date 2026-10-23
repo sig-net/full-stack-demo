@@ -13,20 +13,20 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { generateCallerSecret } from '@/lib/caller/caller'
+import { generateVaultSecret } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 
-interface CallerLoginDialogProps {
+interface VaultSecretDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onLogin: (secret: string) => void
+  onSet: (secret: string) => void
 }
 
 /** Holds the secret only while the dialog is open and hands it over once on submit. */
-export function CallerLoginDialog({
+export function VaultSecretDialog({
   open,
   onOpenChange,
-  onLogin,
-}: CallerLoginDialogProps): ReactNode {
+  onSet,
+}: VaultSecretDialogProps): ReactNode {
   const id = useId()
   const [secret, setSecret] = useState('')
   const changeOpen = (value: boolean): void => {
@@ -37,10 +37,11 @@ export function CallerLoginDialog({
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Set the identity secret</DialogTitle>
+          <DialogTitle>Set the vault secret</DialogTitle>
           <DialogDescription>
-            A random 32-byte identity secret in hex identifies you to the vault. This browser keeps
-            it until you clear it, so keep a copy to return to the same identity elsewhere.
+            A random 32-byte vault secret in hex is the witness of your vault calls and picks your
+            deposit account. This browser keeps it until you clear it, so keep a copy to return to
+            the same deposit account elsewhere.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -51,10 +52,10 @@ export function CallerLoginDialog({
             const value = secret.trim()
             if (!value) return
             changeOpen(false)
-            onLogin(value)
+            onSet(value)
           }}
         >
-          <Label htmlFor={id}>Identity secret</Label>
+          <Label htmlFor={id}>Vault secret</Label>
           <Input
             id={id}
             type="password"
@@ -70,7 +71,7 @@ export function CallerLoginDialog({
             variant="ghost"
             className="self-start"
             onClick={() => {
-              setSecret(generateCallerSecret())
+              setSecret(generateVaultSecret())
             }}
           >
             Generate a new secret

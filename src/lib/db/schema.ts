@@ -135,7 +135,7 @@ export const ethereumTransactionsV1 = pgTable(
 /**
  * One row per ERC-20 vault deposit resource, keyed by its resource name. Contract integers are
  * unsigned 64 and 128 bit, beyond Postgres's signed `bigint`, so they are stored as `numeric`.
- * The deposit account index serves the caller's listing and the nonce assignment.
+ * The deposit account index serves the nonce assignment.
  */
 export const midnightEthereumErc20VaultDepositsV1 = pgTable(
   'midnight_ethereum_erc20_vault_deposits_v1',

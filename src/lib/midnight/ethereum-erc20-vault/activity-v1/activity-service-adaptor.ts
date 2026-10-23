@@ -3,6 +3,7 @@ import 'server-only'
 import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
+import type { MidnightNetworkId } from '@/lib/config/midnight-network-config'
 import type { Activity } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity'
 import {
   type ActivityService,
@@ -11,18 +12,20 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service'
 import type { Logger } from '@/lib/logging/logger'
 
-/** Adapts the activity service to the wire: the caller secret stands in for the caller, and the arguments are untrusted until parsed. */
+/** Adapts the activity service to the wire: the caller address stands in for the caller, and the arguments are untrusted until parsed. */
 export class ActivityServiceAdaptor {
   private readonly activityService: ActivityService
+  private readonly networkId: MidnightNetworkId
   private readonly logger: Logger
 
-  constructor(activityService: ActivityService, logger: Logger) {
+  constructor(activityService: ActivityService, networkId: MidnightNetworkId, logger: Logger) {
     this.activityService = activityService
+    this.networkId = networkId
     this.logger = logger
   }
 
-  async getActivity(callerSecret: string, args: unknown): Promise<ActivityResult> {
-    const caller = resolveCaller(callerSecret)
+  async getActivity(callerAddress: string, args: unknown): Promise<ActivityResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'getActivity', caller: caller.name })
     const parsed = getActivityArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -35,8 +38,8 @@ export class ActivityServiceAdaptor {
     return { ok: true, activity }
   }
 
-  async listActivities(callerSecret: string, args: unknown): Promise<ActivityListResult> {
-    const caller = resolveCaller(callerSecret)
+  async listActivities(callerAddress: string, args: unknown): Promise<ActivityListResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'listActivities', caller: caller.name })
     const parsed = listActivitiesArgsSchema.safeParse(args)
     if (!parsed.success) {

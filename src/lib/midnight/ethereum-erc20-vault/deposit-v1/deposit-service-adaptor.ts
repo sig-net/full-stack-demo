@@ -3,6 +3,7 @@ import 'server-only'
 import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
+import type { MidnightNetworkId } from '@/lib/config/midnight-network-config'
 import type {
   Deposit,
   DepositCompleteInputs,
@@ -23,24 +24,26 @@ import { DepositStateConflict } from '@/lib/midnight/ethereum-erc20-vault/deposi
 import type { Logger } from '@/lib/logging/logger'
 
 /**
- * Adapts the deposit service to the wire: the caller secret stands in for the caller, the
+ * Adapts the deposit service to the wire: the caller address stands in for the caller, the
  * arguments are untrusted until parsed, and every outcome the caller can act on is a result.
  * The service opens the transaction of each user action itself, after its chain and row reads.
  */
 export class DepositServiceAdaptor {
   private readonly depositService: DepositService
+  private readonly networkId: MidnightNetworkId
   private readonly logger: Logger
 
-  constructor(depositService: DepositService, logger: Logger) {
+  constructor(depositService: DepositService, networkId: MidnightNetworkId, logger: Logger) {
     this.depositService = depositService
+    this.networkId = networkId
     this.logger = logger
   }
 
   async prepareStartDeposit(
-    callerSecret: string,
+    callerAddress: string,
     args: unknown,
   ): Promise<DepositStartInputsResult> {
-    const caller = resolveCaller(callerSecret)
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'prepareStartDeposit', caller: caller.name })
     const parsed = prepareStartDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -49,8 +52,8 @@ export class DepositServiceAdaptor {
     return { ok: true, inputs: await this.depositService.prepareStartDeposit(caller, parsed.data) }
   }
 
-  async startDeposit(callerSecret: string, args: unknown): Promise<DepositResult> {
-    const caller = resolveCaller(callerSecret)
+  async startDeposit(callerAddress: string, args: unknown): Promise<DepositResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'startDeposit', caller: caller.name })
     const parsed = startDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -63,10 +66,10 @@ export class DepositServiceAdaptor {
   }
 
   async prepareCompleteDeposit(
-    callerSecret: string,
+    callerAddress: string,
     args: unknown,
   ): Promise<DepositCompleteInputsResult> {
-    const caller = resolveCaller(callerSecret)
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'prepareCompleteDeposit', caller: caller.name })
     const parsed = prepareCompleteDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -78,8 +81,8 @@ export class DepositServiceAdaptor {
     }))
   }
 
-  async completeDeposit(callerSecret: string, args: unknown): Promise<DepositResult> {
-    const caller = resolveCaller(callerSecret)
+  async completeDeposit(callerAddress: string, args: unknown): Promise<DepositResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'completeDeposit', caller: caller.name })
     const parsed = completeDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -91,8 +94,8 @@ export class DepositServiceAdaptor {
     }))
   }
 
-  async getDeposit(callerSecret: string, args: unknown): Promise<DepositResult> {
-    const caller = resolveCaller(callerSecret)
+  async getDeposit(callerAddress: string, args: unknown): Promise<DepositResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'getDeposit', caller: caller.name })
     const parsed = getDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -105,8 +108,8 @@ export class DepositServiceAdaptor {
     return { ok: true, deposit }
   }
 
-  async listDeposits(callerSecret: string, args: unknown): Promise<DepositListResult> {
-    const caller = resolveCaller(callerSecret)
+  async listDeposits(callerAddress: string, args: unknown): Promise<DepositListResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'listDeposits', caller: caller.name })
     const parsed = listDepositsArgsSchema.safeParse(args)
     if (!parsed.success) {

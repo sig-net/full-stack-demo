@@ -33,7 +33,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
   let backend: Backend
   let user: UserWallet
   let evm: JsonRpcProvider
-  const callerSecret = userWalletSeed()
+  const vaultSecret = userWalletSeed()
   const created: [string, string][] = []
   let coinType: string
   let deposited = false
@@ -65,7 +65,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
       const { midnight, ethereum } = backend
       const { approvalV1, depositV1 } = midnight.ethereumErc20Vault
 
-      const targets = await approvalV1.adaptor.listApprovalTargets(callerSecret, {})
+      const targets = await approvalV1.adaptor.listApprovalTargets(user.unshieldedAddress, {})
       if (!targets.ok) throw new Error(targets.error)
       const router = targets.targets.find(
         (target) => target.kind === 'router' && target.erc20Address === CIRCLE_USDC.toLowerCase(),
@@ -73,7 +73,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
       if (router === undefined) throw new Error('USDC is not an allowed token of the vault')
       if (router.allowance === 0n) {
         log('the router holds no allowance on USDC: approving first')
-        const approval = await startApprovalAsUser(backend, callerSecret, user, {
+        const approval = await startApprovalAsUser(backend, vaultSecret, user, {
           kind: 'router',
           erc20Address: CIRCLE_USDC,
         })
@@ -84,13 +84,13 @@ describe('ERC20 vault swap round trip over the local stack', () => {
             name: approval.approval.name,
             state: async () => (await approvalV1.repository.get(approval.approval.name))?.state,
             complete: () =>
-              completeApprovalAsUser(backend, callerSecret, user, approval.approval.name),
+              completeApprovalAsUser(backend, vaultSecret, user, approval.approval.name),
           },
           ROUND_TRIP_TIMEOUT_MS,
         )
       }
 
-      const deposit = await startDepositAsUser(backend, callerSecret, user, {
+      const deposit = await startDepositAsUser(backend, vaultSecret, user, {
         erc20Address: CIRCLE_USDC,
         amount: AMOUNT_IN,
       })
@@ -108,7 +108,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         {
           name: deposit.deposit.name,
           state: async () => (await depositV1.repository.get(deposit.deposit.name))?.state,
-          complete: () => completeDepositAsUser(backend, callerSecret, user, deposit.deposit.name),
+          complete: () => completeDepositAsUser(backend, vaultSecret, user, deposit.deposit.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )
@@ -131,7 +131,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         midnightEthereumErc20Vault.contractAddress,
       ).toLowerCase()
 
-      const quoted = await swapV1.adaptor.quoteSwap(callerSecret, {
+      const quoted = await swapV1.adaptor.quoteSwap(user.unshieldedAddress, {
         erc20AddressIn: CIRCLE_USDC,
         erc20AddressOut: CIRCLE_EURC,
         amountIn: AMOUNT_IN,
@@ -145,7 +145,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
       const eurcBefore = await balanceOf(evm, CIRCLE_EURC, vaultAccount)
       const coinsBefore = await user.shieldedBalance(coinType)
 
-      const swap = await startSwapAsUser(backend, callerSecret, user, {
+      const swap = await startSwapAsUser(backend, vaultSecret, user, {
         erc20AddressIn: quote.erc20AddressIn,
         erc20AddressOut: quote.erc20AddressOut,
         fee: quote.fee,
@@ -169,7 +169,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         {
           name: swap.swap.name,
           state: async () => (await swapV1.repository.get(swap.swap.name))?.state,
-          complete: () => completeSwapAsUser(backend, callerSecret, user, swap.swap.name),
+          complete: () => completeSwapAsUser(backend, vaultSecret, user, swap.swap.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )

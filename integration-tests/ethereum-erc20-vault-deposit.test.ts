@@ -32,7 +32,7 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
   let backend: Backend
   let user: UserWallet
   let evm: JsonRpcProvider
-  const callerSecret = randomBytes(32).toString('hex')
+  const vaultSecret = randomBytes(32).toString('hex')
   let caller: string | undefined
 
   beforeAll(async () => {
@@ -72,7 +72,7 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
     async () => {
       const startedAt = Date.now()
 
-      const started = await startDepositAsUser(backend, callerSecret, user, {
+      const started = await startDepositAsUser(backend, vaultSecret, user, {
         erc20Address: CIRCLE_USDC,
         amount: 1_000_000n,
       })
@@ -98,7 +98,7 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
       await waitFor(async () => (await depositState()) === 'AwaitingCompletion')
       log(`AwaitingCompletion reached ${String(Date.now() - startedAt)} ms after the start`)
 
-      const completing = await completeDepositAsUser(backend, callerSecret, user, deposit.name)
+      const completing = await completeDepositAsUser(backend, vaultSecret, user, deposit.name)
       expect(completing.ok).toBe(true)
       if (!completing.ok) return
       // A failed attempt returns the deposit to AwaitingCompletion. The deposit resolver reads the
@@ -126,7 +126,7 @@ describe('ERC20 vault deposit round trip over the local stack', () => {
           return false
         }
         retries += 1
-        const retried = await completeDepositAsUser(backend, callerSecret, user, deposit.name)
+        const retried = await completeDepositAsUser(backend, vaultSecret, user, deposit.name)
         log(
           `completeDeposit retry ${String(retries)} ${retried.ok ? 'accepted' : `refused: ${retried.error}`}`,
         )

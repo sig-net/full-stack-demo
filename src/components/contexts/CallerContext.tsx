@@ -1,146 +1,91 @@
 'use client'
 
-import { hexToBytes } from '@sig-net/midnight'
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react'
+import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from 'react'
 
 import { useConfig } from '@/components/contexts/ConfigContext'
-import { callerSecretSchema } from '@/lib/caller/caller'
-import { callerSecretStorage } from '@/lib/caller/secret-storage'
+import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
 import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
-import { getCallerName } from '@/server/actions/caller-actions'
+import {
+  userCommitmentOf,
+  vaultSecretSchema,
+} from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
+import { vaultSecretStorage } from '@/lib/midnight/ethereum-erc20-vault/vault-secret-storage'
 
 export interface CallerContextValue {
-  /** The secret every server action takes as its first argument. Null while logged out. */
-  readonly callerSecret: string | null
-  /** `callers/{caller}` once logged in. */
-  readonly callerName: string | null
-  /** The EVM account the caller's deposits are swept from, derived here from the secret and the public configuration. Null while logged out. */
+  /** The connected wallet's unshielded address, which every server action takes first. Null without a wallet. */
+  readonly callerAddress: string | null
+  /** The vault secret every caller circuit is built with, lower-case hex without `0x`. Null until set. */
+  readonly vaultSecret: string | null
+  /** The contract's commitment of the vault secret in hex, which the server derives the deposit account from. Null until the secret is set. */
+  readonly userCommitment: string | null
+  /** The EVM account the caller's deposits are swept from, derived here from the commitment and the public configuration. Null until the secret is set. */
   readonly depositAccount: string | null
-  /** True until the stored secret has been checked on first load and its login, if any, has started. */
+  /** True until the stored secret has been read on first load. */
   readonly restoring: boolean
-  readonly loggingIn: boolean
+  /** Why the last secret was refused or the stored one discarded. */
   readonly error: string | null
-  readonly login: (secret: string) => Promise<void>
-  readonly logout: () => void
+  readonly setVaultSecret: (secret: string) => void
+  readonly clearVaultSecret: () => void
 }
 
 const CallerContext = createContext<CallerContextValue | null>(null)
 
 /**
- * Holds the caller secret for the page and keeps the last one set in local storage, so a reload
- * logs the same caller in again until the secret is cleared. A login or logout advances the
- * attempt, so a superseded login's result is dropped.
+ * Names the caller after the connected wallet and holds the vault secret for the page. The
+ * secret lives in local storage until it is cleared, so a reload keeps the same vault account,
+ * and a stored value the schema rejects counts as unset until a new one replaces it. The caller
+ * is logged in exactly while a wallet is connected, since the wallet's unshielded address is
+ * the caller.
  */
 export function CallerProvider({ children }: { children: ReactNode }): ReactNode {
   const { midnightSignet, midnightEthereumErc20Vault } = useConfig()
-  const [callerSecret, setCallerSecret] = useState<string | null>(null)
-  const [callerName, setCallerName] = useState<string | null>(null)
-  const [depositAccount, setDepositAccount] = useState<string | null>(null)
-  const [loggingIn, setLoggingIn] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { wallet } = useMidnightWallet()
+  const [refusal, setRefusal] = useState<string | null>(null)
   // Undefined only while server rendering and hydrating, before the store has been read.
   const stored = useSyncExternalStore(
-    callerSecretStorage.subscribe,
-    callerSecretStorage.read,
+    vaultSecretStorage.subscribe,
+    vaultSecretStorage.read,
     () => undefined,
   )
-  const restoring =
-    stored === undefined || (stored !== null && callerName === null && !loggingIn && error === null)
-  const attempt = useRef(0)
-  const inFlight = useRef<{ secret: string; promise: Promise<void> } | null>(null)
+  const parsed =
+    stored === undefined || stored === null ? null : vaultSecretSchema.safeParse(stored)
+  const vaultSecret = parsed?.success === true ? parsed.data : null
+  const error =
+    parsed?.success === false
+      ? 'The saved vault secret is not 32 bytes in hex: set a new one.'
+      : refusal
+  const userCommitment = vaultSecret === null ? null : userCommitmentOf(vaultSecret)
+  const depositAccount =
+    userCommitment === null
+      ? null
+      : depositAccountOf(userCommitment, midnightSignet, midnightEthereumErc20Vault)
 
-  const logout = (): void => {
-    attempt.current += 1
-    inFlight.current = null
-    callerSecretStorage.clear()
-    setCallerSecret(null)
-    setCallerName(null)
-    setDepositAccount(null)
-    setLoggingIn(false)
-    setError(null)
+  const setVaultSecret = (value: string): void => {
+    const candidate = vaultSecretSchema.safeParse(value)
+    if (!candidate.success) {
+      setRefusal('The vault secret must be 32 bytes in hex.')
+      return
+    }
+    setRefusal(null)
+    vaultSecretStorage.write(candidate.data)
   }
 
-  const login = (value: string): Promise<void> => {
-    const parsed = callerSecretSchema.safeParse(value)
-    if (!parsed.success) {
-      setError('The identity secret must be 32 bytes in hex.')
-      return Promise.resolve()
-    }
-    const secret = parsed.data
-    if (inFlight.current?.secret === secret) return inFlight.current.promise
-    attempt.current += 1
-    const current = attempt.current
-    setLoggingIn(true)
-    setError(null)
-    const account = depositAccountOf(
-      { secretKey: hexToBytes(secret) },
-      midnightSignet,
-      midnightEthereumErc20Vault,
-    )
-    const promise = getCallerName(secret)
-      .then((name) => {
-        if (current !== attempt.current) return
-        callerSecretStorage.write(secret)
-        setCallerSecret(secret)
-        setCallerName(name)
-        setDepositAccount(account)
-      })
-      .catch((cause: unknown) => {
-        if (current !== attempt.current) return
-        setError(cause instanceof Error ? cause.message : 'Login failed.')
-      })
-      .finally(() => {
-        if (current !== attempt.current) return
-        inFlight.current = null
-        setLoggingIn(false)
-      })
-    inFlight.current = { secret, promise }
-    return promise
+  const clearVaultSecret = (): void => {
+    setRefusal(null)
+    vaultSecretStorage.clear()
   }
-
-  const restoreStoredSecret = useEffectEvent(() => {
-    const saved = callerSecretStorage.read()
-    if (saved === null) return
-    // The restore starts after the mount commit, so its state updates render as a new pass.
-    queueMicrotask(() => {
-      // A stored value the schema rejects can never log in, so it is discarded on load.
-      if (!callerSecretSchema.safeParse(saved).success) {
-        callerSecretStorage.clear()
-        setError('The saved identity secret was not 32 bytes in hex and has been discarded.')
-        return
-      }
-      void login(saved)
-    })
-  })
-
-  useEffect(() => {
-    restoreStoredSecret()
-    return () => {
-      attempt.current += 1
-      inFlight.current = null
-    }
-  }, [])
 
   return (
     <CallerContext.Provider
       value={{
-        callerSecret,
-        callerName,
+        callerAddress: wallet?.addresses.unshieldedAddress ?? null,
+        vaultSecret,
+        userCommitment,
         depositAccount,
-        restoring,
-        loggingIn,
+        restoring: stored === undefined,
         error,
-        login,
-        logout,
+        setVaultSecret,
+        clearVaultSecret,
       }}
     >
       {children}

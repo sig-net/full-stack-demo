@@ -3,6 +3,7 @@ import 'server-only'
 import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
+import type { MidnightNetworkId } from '@/lib/config/midnight-network-config'
 import { CallerOperationStateConflict } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation-state-controller'
 import type {
   Swap,
@@ -23,21 +24,23 @@ import {
 import type { Logger } from '@/lib/logging/logger'
 
 /**
- * Adapts the swap service to the wire: the caller secret stands in for the caller, the
+ * Adapts the swap service to the wire: the caller address stands in for the caller, the
  * arguments are untrusted until parsed, and every outcome the caller can act on is a result.
  * The service opens the transaction of each user action itself, after its row reads.
  */
 export class SwapServiceAdaptor {
   private readonly swapService: SwapService
+  private readonly networkId: MidnightNetworkId
   private readonly logger: Logger
 
-  constructor(swapService: SwapService, logger: Logger) {
+  constructor(swapService: SwapService, networkId: MidnightNetworkId, logger: Logger) {
     this.swapService = swapService
+    this.networkId = networkId
     this.logger = logger
   }
 
-  async quoteSwap(callerSecret: string, args: unknown): Promise<SwapQuoteResult> {
-    const caller = resolveCaller(callerSecret)
+  async quoteSwap(callerAddress: string, args: unknown): Promise<SwapQuoteResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'quoteSwap', caller: caller.name })
     const parsed = quoteSwapArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -50,8 +53,8 @@ export class SwapServiceAdaptor {
     return { ok: true, quote }
   }
 
-  async prepareStartSwap(callerSecret: string, args: unknown): Promise<SwapStartInputsResult> {
-    const caller = resolveCaller(callerSecret)
+  async prepareStartSwap(callerAddress: string, args: unknown): Promise<SwapStartInputsResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'prepareStartSwap', caller: caller.name })
     const parsed = prepareStartSwapArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -60,8 +63,8 @@ export class SwapServiceAdaptor {
     return { ok: true, inputs: await this.swapService.prepareStartSwap(caller, parsed.data) }
   }
 
-  async startSwap(callerSecret: string, args: unknown): Promise<SwapResult> {
-    const caller = resolveCaller(callerSecret)
+  async startSwap(callerAddress: string, args: unknown): Promise<SwapResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'startSwap', caller: caller.name })
     const parsed = startSwapArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -74,10 +77,10 @@ export class SwapServiceAdaptor {
   }
 
   async prepareCompleteSwap(
-    callerSecret: string,
+    callerAddress: string,
     args: unknown,
   ): Promise<SwapCompleteInputsResult> {
-    const caller = resolveCaller(callerSecret)
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'prepareCompleteSwap', caller: caller.name })
     const parsed = prepareCompleteSwapArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -89,8 +92,8 @@ export class SwapServiceAdaptor {
     }))
   }
 
-  async completeSwap(callerSecret: string, args: unknown): Promise<SwapResult> {
-    const caller = resolveCaller(callerSecret)
+  async completeSwap(callerAddress: string, args: unknown): Promise<SwapResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'completeSwap', caller: caller.name })
     const parsed = completeSwapArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -102,8 +105,8 @@ export class SwapServiceAdaptor {
     }))
   }
 
-  async getSwap(callerSecret: string, args: unknown): Promise<SwapResult> {
-    const caller = resolveCaller(callerSecret)
+  async getSwap(callerAddress: string, args: unknown): Promise<SwapResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'getSwap', caller: caller.name })
     const parsed = getSwapArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -116,8 +119,8 @@ export class SwapServiceAdaptor {
     return { ok: true, swap }
   }
 
-  async listSwaps(callerSecret: string, args: unknown): Promise<SwapListResult> {
-    const caller = resolveCaller(callerSecret)
+  async listSwaps(callerAddress: string, args: unknown): Promise<SwapListResult> {
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'listSwaps', caller: caller.name })
     const parsed = listSwapsArgsSchema.safeParse(args)
     if (!parsed.success) {

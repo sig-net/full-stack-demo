@@ -3,7 +3,7 @@ import { SigningKey } from 'ethers'
 import { describe, expect, test } from 'vitest'
 
 import type { Caller } from '@/lib/caller/caller'
-import { resolveCaller } from '@/lib/caller/resolve-caller'
+import { CALLER } from '@/lib/caller/caller-fixtures'
 import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
@@ -19,8 +19,9 @@ const SIGNET: MidnightSignetConfig = {
   mpcRootPublicKey: SigningKey.computePublicKey(`0x${'22'.repeat(32)}`, false),
 }
 const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(32) }
-const caller: Caller = resolveCaller('ab'.repeat(32))
-const ACCOUNT = depositAccountOf(caller, SIGNET, VAULT)
+const caller: Caller = CALLER
+const USER_COMMITMENT = 'ab'.repeat(32)
+const ACCOUNT = depositAccountOf(USER_COMMITMENT, SIGNET, VAULT)
 
 const USDC = `0x${'aa'.repeat(20)}`
 const EURC = `0x${'bb'.repeat(20)}`
@@ -79,7 +80,9 @@ describe('SupportedTokenServiceImpl', () => {
     },
   ])('listDepositAccountFunds: $name', async ({ allowed, balances, expected }) => {
     const reads: string[] = []
-    const funds = await serviceOver(allowed, balances, reads).listDepositAccountFunds(caller, {})
+    const funds = await serviceOver(allowed, balances, reads).listDepositAccountFunds(caller, {
+      userCommitment: USER_COMMITMENT,
+    })
     expect(funds).toEqual(expected)
     expect(reads).toEqual(allowed.map((address) => `${address}@${ACCOUNT}`))
   })

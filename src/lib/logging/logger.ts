@@ -40,7 +40,7 @@ export interface LogFields {
   readonly key?: string
   readonly partition?: number
   readonly offset?: bigint
-  /** The caller's derived name, `callers/{caller}`, never the caller secret. */
+  /** The caller's derived name, `callers/{caller}`. */
   readonly caller?: string
   /** The adaptor method a server action reached. */
   readonly method?: string

@@ -311,21 +311,6 @@ export async function finalizeUnboundTransaction(
   return bytesToHex(finalized.serialize())
 }
 
-/** Releases the coins a finalised transaction holds as pending, for bytes that will not be submitted. */
-export function releaseFinalizedTransaction(
-  facade: WalletFacade,
-  finalizedTx: string,
-): Promise<void> {
-  return facade.revertTransaction(
-    ledger.Transaction.deserialize<ledger.SignatureEnabled, ledger.Proof, ledger.Binding>(
-      'signature',
-      'proof',
-      'binding',
-      sigNetHexToBytes(finalizedTx),
-    ),
-  )
-}
-
 function unboundTransactionOf(unboundTx: string): UnboundTransaction {
   return ledger.Transaction.deserialize<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>(
     'signature',

@@ -23,18 +23,25 @@ import type {
   DepositStartInputsResult,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-service-adaptor'
 import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
+import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 
 /** Starts a deposit from the page, preparing and building the start call once more when the deposit account's nonce moved before the record. */
 export async function startDepositInBrowser(args: StartDepositInBrowserArgs): Promise<Deposit> {
-  const { actions, builder, wallet, callerSecret, depositRequest, onStage } = args
+  const { actions, builder, wallet, callerAddress, vaultSecret, depositRequest, onStage } = args
+  const userCommitment = userCommitmentOf(vaultSecret)
   const started = await runCallerCall(
     {
       operation: 'deposit',
       wallet,
-      callerSecret,
+      callerAddress,
+      vaultSecret,
       onStage,
       prepare: () =>
-        actions.prepareStartDeposit(callerSecret, { depositRequest, wallet: wallet.publicKeys }),
+        actions.prepareStartDeposit(callerAddress, {
+          depositRequest,
+          wallet: wallet.publicKeys,
+          userCommitment,
+        }),
       circuitArgs: (
         { inIndex, evmNonce, gasLimit, maxFeePerGas, maxPriorityFeePerGas },
         caller,
@@ -48,9 +55,10 @@ export async function startDepositInBrowser(args: StartDepositInBrowserArgs): Pr
       }),
       build: (circuitArgs) => builder.buildStart(circuitArgs),
       record: ({ inIndex, evmNonce }, finalizedTx) =>
-        actions.startDeposit(callerSecret, {
+        actions.startDeposit(callerAddress, {
           depositRequest,
           wallet: wallet.publicKeys,
+          userCommitment,
           inIndex,
           evmNonce,
           finalizedTx,
@@ -65,14 +73,15 @@ export async function startDepositInBrowser(args: StartDepositInBrowserArgs): Pr
 export async function completeDepositInBrowser(
   args: CompleteDepositInBrowserArgs,
 ): Promise<Deposit> {
-  const { actions, builder, wallet, callerSecret, name, onStage } = args
+  const { actions, builder, wallet, callerAddress, vaultSecret, name, onStage } = args
   const completed = await runCallerCall({
     operation: 'deposit',
     wallet,
-    callerSecret,
+    callerAddress,
+    vaultSecret,
     onStage,
     prepare: () =>
-      actions.prepareCompleteDeposit(callerSecret, { name, wallet: wallet.publicKeys }),
+      actions.prepareCompleteDeposit(callerAddress, { name, wallet: wallet.publicKeys }),
     circuitArgs: (inputs, caller) => ({
       ...caller,
       requestId: hexToBytes(inputs.requestId),
@@ -81,7 +90,7 @@ export async function completeDepositInBrowser(
     }),
     build: (circuitArgs) => builder.buildComplete(circuitArgs),
     record: (_inputs, finalizedTx) =>
-      actions.completeDeposit(callerSecret, { name, wallet: wallet.publicKeys, finalizedTx }),
+      actions.completeDeposit(callerAddress, { name, wallet: wallet.publicKeys, finalizedTx }),
   })
   return completed.deposit
 }
@@ -98,15 +107,15 @@ export function browserDepositCallBuilder(
 /** The deposit's server actions, as the page imports them. */
 export interface DepositActions {
   prepareStartDeposit(
-    callerSecret: string,
+    callerAddress: string,
     args: PrepareStartDepositArgs,
   ): Promise<DepositStartInputsResult>
-  startDeposit(callerSecret: string, args: StartDepositArgs): Promise<DepositResult>
+  startDeposit(callerAddress: string, args: StartDepositArgs): Promise<DepositResult>
   prepareCompleteDeposit(
-    callerSecret: string,
+    callerAddress: string,
     args: PrepareCompleteDepositArgs,
   ): Promise<DepositCompleteInputsResult>
-  completeDeposit(callerSecret: string, args: CompleteDepositArgs): Promise<DepositResult>
+  completeDeposit(callerAddress: string, args: CompleteDepositArgs): Promise<DepositResult>
 }
 
 export interface StartDepositInBrowserArgs extends CallerCallArgs<DepositCallBuilder> {

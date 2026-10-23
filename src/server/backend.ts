@@ -975,7 +975,7 @@ function createMidnightEthereumErc20Vault(
       approvalCallBuilder,
       logger,
     ),
-    activityV1: createMidnightEthereumErc20VaultActivityV1(db, logger),
+    activityV1: createMidnightEthereumErc20VaultActivityV1(db, config, logger),
     supportedTokenV1: createMidnightEthereumErc20VaultSupportedTokenV1(
       ethereum,
       config,
@@ -1012,6 +1012,7 @@ function createMidnightEthereumErc20VaultReadinessV1(
     service,
     adaptor: new ReadinessServiceAdaptor(
       service,
+      config.client.midnightNetwork.networkId,
       logger.child({ component: 'ReadinessServiceAdaptor' }),
     ),
   }
@@ -1063,6 +1064,7 @@ function createMidnightEthereumErc20VaultWithdrawV1(
     service,
     adaptor: new WithdrawServiceAdaptor(
       service,
+      config.client.midnightNetwork.networkId,
       logger.child({ component: 'WithdrawServiceAdaptor' }),
     ),
     callBuilder,
@@ -1116,7 +1118,11 @@ function createMidnightEthereumErc20VaultSupplyV1(
       logger.child({ component: 'SupplyEventConsumer' }),
     ),
     service,
-    adaptor: new SupplyServiceAdaptor(service, logger.child({ component: 'SupplyServiceAdaptor' })),
+    adaptor: new SupplyServiceAdaptor(
+      service,
+      config.client.midnightNetwork.networkId,
+      logger.child({ component: 'SupplyServiceAdaptor' }),
+    ),
     callBuilder,
   }
 }
@@ -1166,7 +1172,11 @@ function createMidnightEthereumErc20VaultRedeemV1(
       logger.child({ component: 'RedeemEventConsumer' }),
     ),
     service,
-    adaptor: new RedeemServiceAdaptor(service, logger.child({ component: 'RedeemServiceAdaptor' })),
+    adaptor: new RedeemServiceAdaptor(
+      service,
+      config.client.midnightNetwork.networkId,
+      logger.child({ component: 'RedeemServiceAdaptor' }),
+    ),
     callBuilder,
   }
 }
@@ -1217,7 +1227,11 @@ function createMidnightEthereumErc20VaultSwapV1(
       logger.child({ component: 'SwapEventConsumer' }),
     ),
     service,
-    adaptor: new SwapServiceAdaptor(service, logger.child({ component: 'SwapServiceAdaptor' })),
+    adaptor: new SwapServiceAdaptor(
+      service,
+      config.client.midnightNetwork.networkId,
+      logger.child({ component: 'SwapServiceAdaptor' }),
+    ),
     callBuilder,
   }
 }
@@ -1271,6 +1285,7 @@ function createMidnightEthereumErc20VaultApprovalV1(
     service,
     adaptor: new ApprovalServiceAdaptor(
       service,
+      config.client.midnightNetwork.networkId,
       logger.child({ component: 'ApprovalServiceAdaptor' }),
     ),
     callBuilder,
@@ -1295,6 +1310,7 @@ function createMidnightEthereumErc20VaultSupportedTokenV1(
     service,
     adaptor: new SupportedTokenServiceAdaptor(
       service,
+      config.client.midnightNetwork.networkId,
       logger.child({ component: 'SupportedTokenServiceAdaptor' }),
     ),
   }
@@ -1302,6 +1318,7 @@ function createMidnightEthereumErc20VaultSupportedTokenV1(
 
 function createMidnightEthereumErc20VaultActivityV1(
   db: DbBackend,
+  config: ServerConfig,
   logger: Logger,
 ): MidnightBackend['ethereumErc20Vault']['activityV1'] {
   const repository = new ActivityRepositorySQLImpl(db.database)
@@ -1311,6 +1328,7 @@ function createMidnightEthereumErc20VaultActivityV1(
     service,
     adaptor: new ActivityServiceAdaptor(
       service,
+      config.client.midnightNetwork.networkId,
       logger.child({ component: 'ActivityServiceAdaptor' }),
     ),
   }
@@ -1481,6 +1499,7 @@ function createMidnightEthereumErc20VaultDepositV1(
     service,
     adaptor: new DepositServiceAdaptor(
       service,
+      config.client.midnightNetwork.networkId,
       logger.child({ component: 'DepositServiceAdaptor' }),
     ),
     callBuilder,

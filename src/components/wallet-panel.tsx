@@ -126,7 +126,7 @@ function AddressRow({
 /** Fraction digits the two balances show, the rest cut. */
 const NATIVE_BALANCE_PLACES = 2
 
-/** The wallet's NIGHT and DUST, one line each, under the addresses, the NIGHT line carrying its pending amount, the faucet wand and the registration tick. */
+/** The wallet's NIGHT and DUST, one line each, under the addresses, the NIGHT line carrying the faucet wand and the registration tick. */
 function NativeBalanceRows(): ReactNode {
   const balances = useNativeBalances()
   return (
@@ -137,22 +137,11 @@ function NativeBalanceRows(): ReactNode {
           {balances.data === undefined
             ? '…'
             : formatTokenAmountTruncated(
-                balances.data.availableNight,
+                balances.data.night,
                 NIGHT_DECIMALS,
                 NATIVE_BALANCE_PLACES,
               )}
         </span>
-        {balances.data !== undefined && balances.data.pendingNight > 0n && (
-          <span className="text-muted-foreground">
-            +
-            {formatTokenAmountTruncated(
-              balances.data.pendingNight,
-              NIGHT_DECIMALS,
-              NATIVE_BALANCE_PLACES,
-            )}{' '}
-            pending
-          </span>
-        )}
         <LocalNightFaucetButton />
         <RegisterNightButton />
       </dd>

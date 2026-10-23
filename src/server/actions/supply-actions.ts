@@ -19,68 +19,68 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function getSupplyTarget(
-  callerSecret: string,
+  callerAddress: string,
   args: GetSupplyTargetArgs,
 ): Promise<SupplyTargetResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.supplyV1.adaptor.getSupplyTarget(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function prepareStartSupply(
-  callerSecret: string,
+  callerAddress: string,
   args: PrepareStartSupplyArgs,
 ): Promise<SupplyStartInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.supplyV1.adaptor.prepareStartSupply(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function startSupply(
-  callerSecret: string,
+  callerAddress: string,
   args: StartSupplyArgs,
 ): Promise<SupplyResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.supplyV1.adaptor.startSupply(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function prepareCompleteSupply(
-  callerSecret: string,
+  callerAddress: string,
   args: PrepareCompleteSupplyArgs,
 ): Promise<SupplyCompleteInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.supplyV1.adaptor.prepareCompleteSupply(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function completeSupply(
-  callerSecret: string,
+  callerAddress: string,
   args: CompleteSupplyArgs,
 ): Promise<SupplyResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.supplyV1.adaptor.completeSupply(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
-export async function getSupply(callerSecret: string, args: GetSupplyArgs): Promise<SupplyResult> {
+export async function getSupply(callerAddress: string, args: GetSupplyArgs): Promise<SupplyResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.supplyV1.adaptor.getSupply(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function listSupplies(
-  callerSecret: string,
+  callerAddress: string,
   args: ListSuppliesArgs,
 ): Promise<SupplyListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.supplyV1.adaptor.listSupplies(
-    callerSecret,
+    callerAddress,
     args,
   )
 }

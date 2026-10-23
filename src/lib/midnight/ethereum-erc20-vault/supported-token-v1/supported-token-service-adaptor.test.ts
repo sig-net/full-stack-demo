@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'vitest'
 
+import { CALLER_ADDRESS, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import type { SupportedTokenService } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service'
 import { SupportedTokenServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service-adaptor'
 import { mock } from '@/lib/testing/mock'
 import { RecordingLogger } from '@/lib/testing/recording-logger'
 
-const CALLER_SECRET = 'ab'.repeat(32)
+const USER_COMMITMENT = 'ab'.repeat(32)
 const TOKEN = {
   erc20Address: `0x${'aa'.repeat(20)}`,
   symbol: 'USDC',
@@ -23,6 +24,7 @@ function adaptorOver(callers: string[] = []): SupportedTokenServiceAdaptor {
         return Promise.resolve([FUND])
       },
     }),
+    FIXTURE_NETWORK_ID,
     new RecordingLogger(),
   )
 }
@@ -35,9 +37,13 @@ describe('SupportedTokenServiceAdaptor', () => {
     })
   })
 
-  test('listDepositAccountFunds resolves the caller from the secret and answers the funds', async () => {
+  test('listDepositAccountFunds resolves the caller from the address and answers the funds', async () => {
     const callers: string[] = []
-    await expect(adaptorOver(callers).listDepositAccountFunds(CALLER_SECRET, {})).resolves.toEqual({
+    await expect(
+      adaptorOver(callers).listDepositAccountFunds(CALLER_ADDRESS, {
+        userCommitment: USER_COMMITMENT,
+      }),
+    ).resolves.toEqual({
       ok: true,
       funds: [FUND],
     })
@@ -51,13 +57,15 @@ describe('SupportedTokenServiceAdaptor', () => {
     },
     {
       name: 'listDepositAccountFunds',
-      call: (a: SupportedTokenServiceAdaptor) => a.listDepositAccountFunds(CALLER_SECRET, 'no'),
+      call: (a: SupportedTokenServiceAdaptor) => a.listDepositAccountFunds(CALLER_ADDRESS, 'no'),
     },
   ])('$name refuses arguments that are not an object', async ({ call }) => {
     await expect(call(adaptorOver())).resolves.toMatchObject({ ok: false })
   })
 
-  test('listDepositAccountFunds refuses a malformed secret', async () => {
-    await expect(adaptorOver().listDepositAccountFunds('nope', {})).rejects.toThrow('caller secret')
+  test('listDepositAccountFunds refuses a malformed address', async () => {
+    await expect(adaptorOver().listDepositAccountFunds('nope', {})).rejects.toThrow(
+      'caller address',
+    )
   })
 })

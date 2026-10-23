@@ -8,12 +8,13 @@ import type { Backend } from '@/server/backend'
 import { testBackend } from './backend'
 import { CIRCLE_USDC } from './sepolia-tokens'
 import { buildStartCall, startDepositAsUser } from './user-deposit'
+import { userCommitmentOf } from './user-caller-call'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const DEPOSIT_REQUEST = { erc20Address: CIRCLE_USDC, amount: 1_000_000n }
 
 /**
- * A deposit started as the browser starts it, with a fresh caller secret and the user wallet: the
+ * A deposit started as the browser starts it, with a fresh vault secret and the user wallet: the
  * start call is built against the running indexer, proved through the proof server and finalised
  * with the user wallet paying its fee, and the row and its caller transaction are stored. Nothing
  * is submitted to the chain, which the end-to-end deposit test does.
@@ -21,7 +22,7 @@ const DEPOSIT_REQUEST = { erc20Address: CIRCLE_USDC, amount: 1_000_000n }
 describe('Starting a deposit over Postgres, the indexer and the proof server', () => {
   let backend: Backend
   let user: UserWallet
-  const callerSecret = randomBytes(32).toString('hex')
+  const vaultSecret = randomBytes(32).toString('hex')
   let caller: string | undefined
   let deposit: Deposit | undefined
 
@@ -50,9 +51,10 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
 
   test('prepareStartDeposit assigns a nonce of zero to a fresh caller', async () => {
     const { adaptor } = backend.midnight.ethereumErc20Vault.depositV1
-    const prepared = await adaptor.prepareStartDeposit(callerSecret, {
+    const prepared = await adaptor.prepareStartDeposit(user.unshieldedAddress, {
       depositRequest: DEPOSIT_REQUEST,
       wallet: user.publicKeys,
+      userCommitment: userCommitmentOf(vaultSecret),
     })
     expect(prepared).toMatchObject({
       ok: true,
@@ -68,7 +70,7 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
 
   test('startDeposit stores the deposit with its assigned fields and the finalised start call, with both events in the outbox', async () => {
     const { repository } = backend.midnight.ethereumErc20Vault.depositV1
-    const result = await startDepositAsUser(backend, callerSecret, user, DEPOSIT_REQUEST)
+    const result = await startDepositAsUser(backend, vaultSecret, user, DEPOSIT_REQUEST)
     expect(result.ok).toBe(true)
     if (!result.ok) return
     deposit = result.deposit
@@ -128,24 +130,21 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
     if (deposit === undefined) throw new Error('startDeposit did not run')
     const { adaptor } = backend.midnight.ethereumErc20Vault.depositV1
     const wallet = user.publicKeys
-    const prepared = await adaptor.prepareStartDeposit(callerSecret, {
+    const userCommitment = userCommitmentOf(vaultSecret)
+    const prepared = await adaptor.prepareStartDeposit(user.unshieldedAddress, {
       depositRequest: DEPOSIT_REQUEST,
       wallet,
+      userCommitment,
     })
     if (!prepared.ok) throw new Error(prepared.error)
     // The live deposit holds nonce zero, so the assignment is one.
     expect(prepared.inputs.evmNonce).toBe(1n)
     const stale = { ...prepared.inputs, evmNonce: prepared.inputs.evmNonce - 1n }
-    const { finalizedTx } = await buildStartCall(
-      backend,
-      callerSecret,
-      user,
-      DEPOSIT_REQUEST,
-      stale,
-    )
-    const refused = await adaptor.startDeposit(callerSecret, {
+    const { finalizedTx } = await buildStartCall(backend, vaultSecret, user, DEPOSIT_REQUEST, stale)
+    const refused = await adaptor.startDeposit(user.unshieldedAddress, {
       depositRequest: DEPOSIT_REQUEST,
       wallet,
+      userCommitment,
       inIndex: stale.inIndex,
       evmNonce: stale.evmNonce,
       finalizedTx,
@@ -163,16 +162,16 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
     if (deposit === undefined) throw new Error('startDeposit did not run')
     const { adaptor } = backend.midnight.ethereumErc20Vault.depositV1
     const current = await backend.midnight.ethereumErc20Vault.depositV1.repository.get(deposit.name)
-    expect(await adaptor.listDeposits(callerSecret, {})).toEqual({
+    expect(await adaptor.listDeposits(user.unshieldedAddress, {})).toEqual({
       ok: true,
       deposits: [current],
     })
-    expect(await adaptor.getDeposit(callerSecret, { name: deposit.name })).toEqual({
+    expect(await adaptor.getDeposit(user.unshieldedAddress, { name: deposit.name })).toEqual({
       ok: true,
       deposit: current,
     })
     expect(
-      await adaptor.prepareCompleteDeposit(callerSecret, {
+      await adaptor.prepareCompleteDeposit(user.unshieldedAddress, {
         name: deposit.name,
         wallet: user.publicKeys,
       }),
@@ -183,7 +182,7 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
   })
 
   test('a token the vault does not allow is refused by the circuit while the call is built', async () => {
-    const building = startDepositAsUser(backend, callerSecret, user, {
+    const building = startDepositAsUser(backend, vaultSecret, user, {
       erc20Address: `0x${'ab'.repeat(20)}`,
       amount: 1n,
     })

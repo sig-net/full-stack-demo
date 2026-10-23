@@ -17,58 +17,58 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function prepareStartRedeem(
-  callerSecret: string,
+  callerAddress: string,
   args: PrepareStartRedeemArgs,
 ): Promise<RedeemStartInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.prepareStartRedeem(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function startRedeem(
-  callerSecret: string,
+  callerAddress: string,
   args: StartRedeemArgs,
 ): Promise<RedeemResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.startRedeem(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function prepareCompleteRedeem(
-  callerSecret: string,
+  callerAddress: string,
   args: PrepareCompleteRedeemArgs,
 ): Promise<RedeemCompleteInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.prepareCompleteRedeem(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function completeRedeem(
-  callerSecret: string,
+  callerAddress: string,
   args: CompleteRedeemArgs,
 ): Promise<RedeemResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.completeRedeem(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
-export async function getRedeem(callerSecret: string, args: GetRedeemArgs): Promise<RedeemResult> {
+export async function getRedeem(callerAddress: string, args: GetRedeemArgs): Promise<RedeemResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.getRedeem(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function listRedeems(
-  callerSecret: string,
+  callerAddress: string,
   args: ListRedeemsArgs,
 ): Promise<RedeemListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.listRedeems(
-    callerSecret,
+    callerAddress,
     args,
   )
 }

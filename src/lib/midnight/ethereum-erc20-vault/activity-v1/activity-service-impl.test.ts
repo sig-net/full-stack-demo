@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import type { Caller } from '@/lib/caller/caller'
-import { resolveCaller } from '@/lib/caller/resolve-caller'
+import { CALLER, STRANGER } from '@/lib/caller/caller-fixtures'
 import type {
   Activity,
   DepositActivity,
@@ -14,8 +14,8 @@ import {
 import { ActivityServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-impl'
 import { MemoryRepository } from '@/lib/repository/repository-memory-impl'
 
-const caller: Caller = resolveCaller('ab'.repeat(32))
-const stranger: Caller = resolveCaller('cd'.repeat(32))
+const caller: Caller = CALLER
+const stranger: Caller = STRANGER
 
 const deposit = (id: string, overrides: Partial<DepositActivity> = {}): Activity =>
   activityFixture({ name: `${caller.name}/ethereum-erc20-vault-deposits/${id}`, ...overrides })

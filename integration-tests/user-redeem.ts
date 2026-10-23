@@ -17,10 +17,10 @@ import {
 } from './user-caller-call'
 import type { UserWallet } from './user-wallet'
 
-/** The start call for the server's slot and wrapper, with the caller secret as the witness, the user wallet's keys and its coin of the shares. */
+/** The start call for the server's slot and wrapper, with the vault secret as the witness, the user wallet's keys and its coin of the shares. */
 export function buildStartCall(
   backend: Backend,
-  callerSecret: string,
+  vaultSecret: string,
   user: UserWallet,
   redeemRequest: RedeemRequest,
   inputs: RedeemStartInputs,
@@ -28,7 +28,7 @@ export function buildStartCall(
   const { callBuilder } = backend.midnight.ethereumErc20Vault.redeemV1
   return finalizeAsUser(user, () =>
     callBuilder.buildStart({
-      secretKey: secretKeyOf(callerSecret),
+      secretKey: secretKeyOf(vaultSecret),
       wallet: user.publicKeys,
       inIndex: inputs.inIndex,
       stataErc20Address: inputs.stataErc20Address,
@@ -40,14 +40,14 @@ export function buildStartCall(
 /** The complete call for the attested request's inputs, under a fresh mint nonce. */
 export function buildCompleteCall(
   backend: Backend,
-  callerSecret: string,
+  vaultSecret: string,
   user: UserWallet,
   inputs: RedeemCompleteInputs,
 ): Promise<FinalizedCallerCall> {
   const { callBuilder } = backend.midnight.ethereumErc20Vault.redeemV1
   return finalizeAsUser(user, () =>
     callBuilder.buildComplete({
-      secretKey: secretKeyOf(callerSecret),
+      secretKey: secretKeyOf(vaultSecret),
       wallet: user.publicKeys,
       requestId: hexToBytes(inputs.requestId),
       serializedOutput: completionOutput(inputs, 32),
@@ -59,22 +59,22 @@ export function buildCompleteCall(
 /** `prepareStartRedeem`, the build, the finalisation and `startRedeem`, as the lend panel runs them: a refusal at either server call is the result. */
 export async function startRedeemAsUser(
   backend: Backend,
-  callerSecret: string,
+  vaultSecret: string,
   user: UserWallet,
   redeemRequest: RedeemRequest,
 ): Promise<RedeemResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.redeemV1
-  const prepared = await adaptor.prepareStartRedeem(callerSecret, { redeemRequest })
+  const prepared = await adaptor.prepareStartRedeem(user.unshieldedAddress, { redeemRequest })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildStartCall(
     backend,
-    callerSecret,
+    vaultSecret,
     user,
     redeemRequest,
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.startRedeem(callerSecret, {
+  const result = await adaptor.startRedeem(user.unshieldedAddress, {
     redeemRequest,
     inIndex: prepared.inputs.inIndex,
     finalizedTx,
@@ -88,21 +88,21 @@ export async function startRedeemAsUser(
 /** `prepareCompleteRedeem`, the build, the finalisation and `completeRedeem`, as the activity table's completion runs them. */
 export async function completeRedeemAsUser(
   backend: Backend,
-  callerSecret: string,
+  vaultSecret: string,
   user: UserWallet,
   name: string,
 ): Promise<RedeemResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.redeemV1
-  const prepared = await adaptor.prepareCompleteRedeem(callerSecret, { name })
+  const prepared = await adaptor.prepareCompleteRedeem(user.unshieldedAddress, { name })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
-    callerSecret,
+    vaultSecret,
     user,
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeRedeem(callerSecret, { name, finalizedTx })
+  const result = await adaptor.completeRedeem(user.unshieldedAddress, { name, finalizedTx })
   log(
     `complete call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, completeRedeem answered in ${String(Date.now() - calling)} ms`,
   )

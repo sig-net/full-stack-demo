@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import type { Caller } from '@/lib/caller/caller'
+import { userCommitmentSchema } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 import type {
   InitialisationCheck,
   VaultReadiness,
@@ -17,7 +18,8 @@ export interface ReadinessService {
   ): Promise<InitialisationCheck>
 }
 
-export const getVaultReadinessArgsSchema = z.object({})
+/** The commitment of the vault secret picks the deposit account whose ETH is read. */
+export const getVaultReadinessArgsSchema = z.object({ userCommitment: userCommitmentSchema })
 export type GetVaultReadinessArgs = z.infer<typeof getVaultReadinessArgsSchema>
 
 export const getVaultInitialisationArgsSchema = z.object({})

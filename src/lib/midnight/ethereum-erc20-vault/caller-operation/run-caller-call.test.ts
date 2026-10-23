@@ -10,31 +10,30 @@ import type { CallerCircuitArgs } from '@/lib/midnight/ethereum-erc20-vault/vaul
 import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
 
-const CALLER_SECRET = 'ab'.repeat(32)
+const VAULT_SECRET = 'ab'.repeat(32)
+const CALLER_ADDRESS = 'mn_addr_stagenet1caller'
 const PUBLIC_KEYS = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const REFUSED: CallRefusal = { ok: false, error: 'the slot is live', reason: 'slotConflict' }
 const ACCEPTED = { ok: true, resource: 'stored' } as const
 
 type Recorded = typeof ACCEPTED | CallRefusal
 
-/** A call whose record answers from a script, over a wallet that logs what it finalises and releases. */
+/** A call whose record answers from a script, over a wallet that logs what it finalises. */
 function callOver(answers: ReadonlyArray<Recorded | Error>) {
   const events: string[] = []
   const remaining = [...answers]
   const wallet = mock<Wallet>('Wallet', {
     publicKeys: PUBLIC_KEYS,
-    finalize: async (unboundTx) => {
+    balanceUnsealedTransaction: async (unboundTx) => {
       events.push(`finalize(${unboundTx})`)
-      return `finalized(${unboundTx})`
-    },
-    release: async (finalizedTx) => {
-      events.push(`release(${finalizedTx})`)
+      return { tx: `finalized(${unboundTx})` }
     },
   })
   const call: CallerCall<{ inIndex: bigint }, CallerCircuitArgs, Recorded> = {
     operation: 'deposit',
     wallet,
-    callerSecret: CALLER_SECRET,
+    callerAddress: CALLER_ADDRESS,
+    vaultSecret: VAULT_SECRET,
     prepare: async () => ({ ok: true, inputs: { inIndex: 42n } }),
     circuitArgs: (_inputs, caller) => caller,
     build: async () => {
@@ -52,7 +51,7 @@ function callOver(answers: ReadonlyArray<Recorded | Error>) {
   return { call, events }
 }
 
-describe('runCallerCall releases the finalised bytes the server does not record', () => {
+describe('runCallerCall finalises once per attempt and surfaces what the record answers', () => {
   const cases: ReadonlyArray<{
     name: string
     answers: ReadonlyArray<Recorded | Error>
@@ -61,41 +60,30 @@ describe('runCallerCall releases the finalised bytes the server does not record'
     expectError?: string
   }> = [
     {
-      name: 'a recorded call keeps its coins',
+      name: 'a recorded call resolves with the record',
       answers: [ACCEPTED],
       expectEvents: ['build', 'finalize(unbound)', 'record(finalized(unbound))'],
     },
     {
-      name: 'a refused record releases, then the refusal surfaces',
+      name: 'a refused record surfaces the refusal',
       answers: [REFUSED],
-      expectEvents: [
-        'build',
-        'finalize(unbound)',
-        'record(finalized(unbound))',
-        'release(finalized(unbound))',
-      ],
+      expectEvents: ['build', 'finalize(unbound)', 'record(finalized(unbound))'],
       expectError: 'the slot is live',
     },
     {
-      name: 'a record that throws releases, then the error surfaces',
+      name: 'a record that throws surfaces the error',
       answers: [new Error('network down')],
-      expectEvents: [
-        'build',
-        'finalize(unbound)',
-        'record(finalized(unbound))',
-        'release(finalized(unbound))',
-      ],
+      expectEvents: ['build', 'finalize(unbound)', 'record(finalized(unbound))'],
       expectError: 'network down',
     },
     {
-      name: 'a retried refusal releases before the second attempt finalises',
+      name: 'a retried refusal builds and finalises once more',
       answers: [REFUSED, ACCEPTED],
       options: { retryOnce: (refusal) => refusal.reason === 'slotConflict' },
       expectEvents: [
         'build',
         'finalize(unbound)',
         'record(finalized(unbound))',
-        'release(finalized(unbound))',
         'build',
         'finalize(unbound)',
         'record(finalized(unbound))',

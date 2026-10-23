@@ -11,15 +11,9 @@ import {
   finalizeUnboundTransaction,
   initialiseWalletFacade,
   SYNC_BATCH_SIZES,
-  releaseFinalizedTransaction,
   type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
-import type {
-  Wallet,
-  WalletAddressSnapshot,
-  WalletPublicKeys,
-  WalletTransactions,
-} from '@/lib/midnight/wallet/wallet'
+import type { Wallet, WalletAddresses, WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 import {
   type WalletSyncProgress,
   walletSyncProgress,
@@ -32,20 +26,15 @@ type StateSubscription = ReturnType<ReturnType<WalletFacade['state']>['subscribe
 const DISCONNECTED = 'Wallet disconnected.'
 const SYNCHRONISING = 'Wallet is still synchronising.'
 
-/** Owns seed-derived keys, synchronisation and DUST registration for one disposable wallet session. */
+/**
+ * Owns seed-derived keys, synchronisation and DUST registration for one disposable wallet
+ * session. Registration and the unregistered NIGHT read are the seed wallet's own, outside
+ * `Wallet`, since the DApp connector serves neither and a browser wallet registers NIGHT in its
+ * own interface.
+ */
 export class SeedWallet implements Wallet {
   readonly kind = 'seed'
   readonly name = 'Seed wallet'
-  readonly iconUrl = undefined
-  get id(): string {
-    return this.shieldedAddress
-  }
-  get accountDetail(): string {
-    return this.shieldedAddress
-  }
-  get transactions(): WalletTransactions {
-    return this
-  }
   private facade?: WalletFacade
   private provider?: SeedWalletProvider
   private latestState?: State
@@ -55,13 +44,11 @@ export class SeedWallet implements Wallet {
   private stopping?: Promise<void>
   private stopped = false
   private cancel?: () => void
-  private shielded = ''
-  private unshielded = ''
-  private dust = ''
+  private walletAddresses?: WalletAddresses
   private keys?: AccountKeys
   /** The registration in flight, so a second click joins it. */
   private registration?: Promise<bigint>
-  readonly configuration: MidnightNetworkConfig
+  private readonly configuration: MidnightNetworkConfig
   /** Cleared after derivation or disconnect. */
   private seed: string
 
@@ -86,7 +73,7 @@ export class SeedWallet implements Wallet {
    */
   initialise(
     onProgress: (progress: WalletSyncProgress) => void = () => undefined,
-    onAddresses: (snapshot: WalletAddressSnapshot) => void = () => undefined,
+    onAddresses: (addresses: WalletAddresses) => void = () => undefined,
   ): Promise<void> {
     if (this.stopped) return Promise.reject(new Error(DISCONNECTED))
     if (this.initialising) return this.initialising
@@ -106,28 +93,23 @@ export class SeedWallet implements Wallet {
 
   private async start(
     onProgress: (progress: WalletSyncProgress) => void,
-    onAddresses: (snapshot: WalletAddressSnapshot) => void,
+    onAddresses: (addresses: WalletAddresses) => void,
   ): Promise<void> {
     try {
       setNetworkId(this.configuration.networkId)
       const keys = deriveAccountKeys(this.seed, this.configuration.networkId)
       this.keys = keys
-      this.shielded = shieldedAddressOf(keys.shieldedSecretKeys, this.configuration.networkId)
-      this.unshielded = keys.unshieldedKeystore.getBech32Address().toString()
-      this.dust = MidnightBech32m.encode(
-        this.configuration.networkId,
-        new DustAddress(keys.dustSecretKey.publicKey),
-      ).toString()
+      this.walletAddresses = Object.freeze({
+        shieldedAddress: shieldedAddressOf(keys.shieldedSecretKeys, this.configuration.networkId),
+        unshieldedAddress: keys.unshieldedKeystore.getBech32Address().toString(),
+        dustAddress: MidnightBech32m.encode(
+          this.configuration.networkId,
+          new DustAddress(keys.dustSecretKey.publicKey),
+        ).toString(),
+      })
       this.seed = ''
       this.assertActive()
-      onAddresses(
-        Object.freeze({
-          networkId: this.configuration.networkId,
-          shieldedAddress: this.shielded,
-          unshieldedAddress: this.unshielded,
-          dustAddress: this.dust,
-        }),
-      )
+      onAddresses(this.walletAddresses)
       const facade = await initialiseWalletFacade(
         keys,
         this.configuration,
@@ -172,9 +154,7 @@ export class SeedWallet implements Wallet {
     this.provider = undefined
     this.latestState = undefined
     this.keys = undefined
-    this.shielded = ''
-    this.unshielded = ''
-    this.dust = ''
+    this.walletAddresses = undefined
     if (!this.facade) return Promise.resolve()
     this.stopping ??= this.facade.stop()
     return this.stopping
@@ -189,9 +169,7 @@ export class SeedWallet implements Wallet {
     this.provider = undefined
     this.latestState = undefined
     this.keys = undefined
-    this.shielded = ''
-    this.unshielded = ''
-    this.dust = ''
+    this.walletAddresses = undefined
     // A start already in flight can open connections after stop, so teardown awaits it.
     return (this.work ?? Promise.resolve()).catch(() => undefined).then(() => this.stopFacade())
   }
@@ -202,34 +180,16 @@ export class SeedWallet implements Wallet {
     return this.provider
   }
 
-  get shieldedAddress(): string {
-    this.assertActive()
-    return this.shielded
-  }
-  getCoinPublicKey: WalletTransactions['getCoinPublicKey'] = () =>
-    this.requireProvider().getCoinPublicKey()
-  getEncryptionPublicKey: WalletTransactions['getEncryptionPublicKey'] = () =>
-    this.requireProvider().getEncryptionPublicKey()
-  balanceTx: WalletTransactions['balanceTx'] = (tx, ttl) =>
-    this.requireProvider().balanceTx(tx, ttl)
-  submitTx: WalletTransactions['submitTx'] = (tx) => this.requireProvider().submitTx(tx)
-
   private state(): State {
     this.assertActive()
     if (!this.latestState) throw new Error(SYNCHRONISING)
     return this.latestState
   }
 
-  get unshieldedAddress(): string {
+  get addresses(): WalletAddresses {
     this.assertActive()
-    if (!this.unshielded) throw new Error(SYNCHRONISING)
-    return this.unshielded
-  }
-
-  get dustAddress(): string {
-    this.assertActive()
-    if (!this.dust) throw new Error(SYNCHRONISING)
-    return this.dust
+    if (!this.walletAddresses) throw new Error(SYNCHRONISING)
+    return this.walletAddresses
   }
 
   get publicKeys(): WalletPublicKeys {
@@ -241,12 +201,15 @@ export class SeedWallet implements Wallet {
     }
   }
 
-  finalize(unboundTx: string): Promise<string> {
-    return finalizeUnboundTransaction(this.requireProvider(), unboundTx)
-  }
-
-  release(finalizedTx: string): Promise<void> {
-    return releaseFinalizedTransaction(this.requireKeys().facade, finalizedTx)
+  /** The seed wallet pays the fee of every transaction it balances, so `payFees: false` is refused. */
+  async balanceUnsealedTransaction(
+    tx: string,
+    options?: { payFees?: boolean },
+  ): Promise<{ tx: string }> {
+    if (options?.payFees === false) {
+      throw new Error('The seed wallet pays the fee of every transaction it balances.')
+    }
+    return { tx: await finalizeUnboundTransaction(this.requireProvider(), tx) }
   }
 
   private requireKeys(): { facade: WalletFacade; keys: AccountKeys } {
@@ -256,12 +219,13 @@ export class SeedWallet implements Wallet {
     return { facade, keys }
   }
 
-  get unshieldedPublicKey(): ReturnType<AccountKeys['unshieldedKeystore']['getPublicKey']> {
-    this.assertActive()
-    if (!this.keys) throw new Error(SYNCHRONISING)
-    return this.keys.unshieldedKeystore.getPublicKey()
-  }
-
+  /**
+   * Registers every NIGHT coin the wallet holds unregistered for DUST generation and resolves
+   * with the NIGHT registered in STAR once the wallet's own state holds the registered coins:
+   * zero when every coin already was.
+   *
+   * @throws {Error} If registration or session ownership fails.
+   */
   registerNightForDust(): Promise<bigint> {
     this.assertActive()
     this.registration ??= this.register().finally(() => {
@@ -280,17 +244,17 @@ export class SeedWallet implements Wallet {
       state.shielded.capabilities.coinsAndBalances.getTotalBalances(state.shielded.state),
     )
   }
-  getAvailableUnshieldedBalances(): Promise<Record<string, bigint>> {
+  getUnshieldedBalances(): Promise<Record<string, bigint>> {
     return this.readState((state) => state.unshielded.balances)
   }
-  getPendingUnshieldedBalances(): Promise<Record<string, bigint>> {
-    return this.readState((state) =>
-      state.unshielded.capabilities.coinsAndBalances.getPendingBalances(state.unshielded.state),
-    )
+  /** The cap is what every DUST coin the wallet holds can grow to, in SPECK. */
+  getDustBalance(): Promise<{ cap: bigint; balance: bigint }> {
+    return this.readState((state) => ({
+      cap: state.dust.totalCoins.reduce((sum, coin) => sum + coin.maxCap, 0n),
+      balance: state.dust.balance(new Date()),
+    }))
   }
-  getDustBalance(): Promise<bigint> {
-    return this.readState((state) => state.dust.balance(new Date()))
-  }
+  /** Available NIGHT not registered for DUST generation, in STAR. */
   getUnregisteredNightBalance(): Promise<bigint> {
     return this.readState((state) =>
       state.unshielded.availableCoins.reduce(

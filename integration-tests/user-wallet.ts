@@ -132,6 +132,11 @@ export function userWalletPublicKeys(seedHex: string): WalletPublicKeys {
   return { coinPublicKey: keys.coinPublicKey, encryptionPublicKey: keys.encryptionPublicKey }
 }
 
+/** The unshielded address of the seed's account zero, known without a start, which names the caller. */
+export function userWalletUnshieldedAddress(seedHex: string, networkId: MidnightNetworkId): string {
+  return deriveKeys(seedHex, networkId).unshieldedKeystore.getBech32Address().toString()
+}
+
 /** `MIDNIGHT_USER_SEED` from `.env.local`, the harness-funded user wallet of the stack. */
 export function userWalletSeed(): string {
   const seed = process.env.MIDNIGHT_USER_SEED

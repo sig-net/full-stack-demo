@@ -24,7 +24,7 @@ interface BalancesSectionProps {
 
 export function BalancesSection({ onSwap }: BalancesSectionProps): ReactNode {
   const connection = useMidnightWallet()
-  const { callerSecret, depositAccount } = useCaller()
+  const { vaultSecret, depositAccount } = useCaller()
   const registry = useTokenInfoRegistry()
   const [depositOpen, setDepositOpen] = useState(false)
   const [sendTokenType, setSendTokenType] = useState<string | null>(null)
@@ -32,7 +32,7 @@ export function BalancesSection({ onSwap }: BalancesSectionProps): ReactNode {
   const status = walletConnectionStatus(connection)
   const missing = missingDepositPrerequisites({
     walletConnected: wallet !== null,
-    identitySecretSet: callerSecret !== null,
+    vaultSecretSet: vaultSecret !== null,
   })
   const depositButton = (
     <Button
@@ -112,7 +112,7 @@ export function BalancesSection({ onSwap }: BalancesSectionProps): ReactNode {
         <ul className="grid grid-cols-1 md:gap-y-4.5 @min-[862px]:grid-cols-2 @min-[862px]:gap-x-10.5">
           {balances.data.map((balance) => {
             const info = registry.get({ ledger: 'shielded', tokenType: balance.tokenType })
-            // Only a token the vault admits is swapped or sent, and a send also needs the identity secret.
+            // Only a token the vault admits is swapped or sent, and a send also needs the vault secret.
             const supported = info !== undefined && info.supported ? info : null
             return (
               <li key={`${balance.networkName}:${balance.tokenType}`}>
@@ -126,7 +126,7 @@ export function BalancesSection({ onSwap }: BalancesSectionProps): ReactNode {
                         }
                   }
                   onSend={
-                    supported === null || callerSecret === null
+                    supported === null || vaultSecret === null
                       ? undefined
                       : () => {
                           setSendTokenType(balance.tokenType)
@@ -165,5 +165,5 @@ function DepositPrerequisitesMessage({ missing }: { missing: DepositPrerequisite
 const DEPOSIT_PREREQUISITE_ITEMS: Record<DepositPrerequisite, { Icon: LucideIcon; label: string }> =
   {
     wallet: { Icon: Wallet, label: 'connect wallet' },
-    identitySecret: { Icon: EyeOff, label: 'set identity secret' },
+    vaultSecret: { Icon: EyeOff, label: 'set vault secret' },
   }

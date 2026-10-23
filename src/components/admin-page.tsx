@@ -9,17 +9,17 @@ import { LocalEthereumFaucetPanel } from '@/components/local-ethereum-faucet-pan
 
 /**
  * The vault's administration: the deployer's approvals of the vault's spenders. Everything
- * waits behind the identity secret, and the contract itself refuses any identity but the
- * deployer's, so the page needs no gate of its own.
+ * waits behind a connected wallet and the vault secret, and the contract itself refuses any
+ * secret but the deployer's, so the page needs no gate of its own.
  */
 export function AdminPage(): ReactNode {
-  const { callerSecret } = useCaller()
-  if (callerSecret === null) {
+  const { callerAddress, vaultSecret } = useCaller()
+  if (callerAddress === null || vaultSecret === null) {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-2 px-5 py-20 text-center">
         <h1 className="text-xl font-semibold">Admin</h1>
         <p role="status" className="text-muted-foreground">
-          Set the identity secret to access admin functionality.
+          Connect a Midnight wallet and set the vault secret to access admin functionality.
         </p>
       </main>
     )
@@ -29,7 +29,7 @@ export function AdminPage(): ReactNode {
       <div className="flex flex-col gap-2">
         <h1 className="text-xl font-semibold">Admin</h1>
         <p className="text-muted-foreground">
-          The vault's approvals run under its deployer's identity only: any other identity is
+          The vault's approvals run under its deployer's vault secret only: any other secret is
           refused when the call is built.
         </p>
       </div>

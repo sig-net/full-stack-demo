@@ -17,60 +17,60 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function prepareStartWithdraw(
-  callerSecret: string,
+  callerAddress: string,
   args: PrepareStartWithdrawArgs,
 ): Promise<WithdrawStartInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.prepareStartWithdraw(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function startWithdraw(
-  callerSecret: string,
+  callerAddress: string,
   args: StartWithdrawArgs,
 ): Promise<WithdrawResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.startWithdraw(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function prepareCompleteWithdraw(
-  callerSecret: string,
+  callerAddress: string,
   args: PrepareCompleteWithdrawArgs,
 ): Promise<WithdrawCompleteInputsResult> {
   return (
     await getBackend()
-  ).midnight.ethereumErc20Vault.withdrawV1.adaptor.prepareCompleteWithdraw(callerSecret, args)
+  ).midnight.ethereumErc20Vault.withdrawV1.adaptor.prepareCompleteWithdraw(callerAddress, args)
 }
 
 export async function completeWithdraw(
-  callerSecret: string,
+  callerAddress: string,
   args: CompleteWithdrawArgs,
 ): Promise<WithdrawResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.completeWithdraw(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function getWithdraw(
-  callerSecret: string,
+  callerAddress: string,
   args: GetWithdrawArgs,
 ): Promise<WithdrawResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.getWithdraw(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function listWithdraws(
-  callerSecret: string,
+  callerAddress: string,
   args: ListWithdrawsArgs,
 ): Promise<WithdrawListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.listWithdraws(
-    callerSecret,
+    callerAddress,
     args,
   )
 }

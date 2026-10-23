@@ -11,20 +11,20 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function getVaultReadiness(
-  callerSecret: string,
+  callerAddress: string,
   args: GetVaultReadinessArgs,
 ): Promise<VaultReadinessResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.readinessV1.adaptor.getVaultReadiness(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function getVaultInitialisation(
-  callerSecret: string,
+  callerAddress: string,
   args: GetVaultInitialisationArgs,
 ): Promise<VaultInitialisationResult> {
   return (
     await getBackend()
-  ).midnight.ethereumErc20Vault.readinessV1.adaptor.getVaultInitialisation(callerSecret, args)
+  ).midnight.ethereumErc20Vault.readinessV1.adaptor.getVaultInitialisation(callerAddress, args)
 }

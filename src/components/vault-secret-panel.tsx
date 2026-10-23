@@ -2,41 +2,43 @@
 
 import { useState, type ReactNode } from 'react'
 
-import { CallerLoginDialog } from '@/components/caller-login-dialog'
 import { useCaller } from '@/components/contexts/CallerContext'
 import { CopyButton } from '@/components/copy-button'
 import { EthereumAccountLink } from '@/components/ethereum-account-link'
 import { Button } from '@/components/ui/button'
+import { VaultSecretDialog } from '@/components/vault-secret-dialog'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
 
-/** The identity secret's state: the caller it names and a copy of the secret once set, otherwise the way in. */
-export function CallerPanel(): ReactNode {
-  const { callerSecret, callerName, depositAccount, restoring, loggingIn, error, login, logout } =
-    useCaller()
+/** The vault secret's state: its commitment and deposit account with a copy of the secret once set, otherwise the way in. */
+export function VaultSecretPanel(): ReactNode {
+  const {
+    vaultSecret,
+    userCommitment,
+    depositAccount,
+    restoring,
+    error,
+    setVaultSecret,
+    clearVaultSecret,
+  } = useCaller()
   const [open, setOpen] = useState(false)
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-sm font-medium">Identity secret</p>
-      {callerSecret === null || callerName === null || depositAccount === null ? (
+      <p className="text-sm font-medium">Vault secret</p>
+      {vaultSecret === null || userCommitment === null || depositAccount === null ? (
         <>
           <p className="text-sm text-muted-foreground">
-            {restoring ? 'Checking for a saved secret…' : loggingIn ? 'Setting…' : 'Not set.'}
+            {restoring ? 'Checking for a saved secret…' : 'Not set.'}
           </p>
-          <Button
-            type="button"
-            size="sm"
-            disabled={restoring || loggingIn}
-            onClick={() => setOpen(true)}
-          >
+          <Button type="button" size="sm" disabled={restoring} onClick={() => setOpen(true)}>
             Set secret
           </Button>
         </>
       ) : (
         <>
           <span className="flex items-center gap-1">
-            <CopyButton label="identity secret" value={callerSecret} />
-            <span className="font-mono text-sm" title={callerName}>
-              {abbreviateHex(callerName.slice(callerName.indexOf('/') + 1))}
+            <CopyButton label="vault secret" value={vaultSecret} />
+            <span className="font-mono text-sm" title={userCommitment}>
+              {abbreviateHex(userCommitment)}
             </span>
           </span>
           <div className="flex flex-col gap-0.5">
@@ -49,7 +51,7 @@ export function CallerPanel(): ReactNode {
               </span>
             </span>
           </div>
-          <Button type="button" size="sm" variant="secondary" onClick={logout}>
+          <Button type="button" size="sm" variant="secondary" onClick={clearVaultSecret}>
             Clear secret
           </Button>
         </>
@@ -59,13 +61,7 @@ export function CallerPanel(): ReactNode {
           {error}
         </p>
       )}
-      <CallerLoginDialog
-        open={open}
-        onOpenChange={setOpen}
-        onLogin={(secret) => {
-          void login(secret)
-        }}
-      />
+      <VaultSecretDialog open={open} onOpenChange={setOpen} onSet={setVaultSecret} />
     </div>
   )
 }

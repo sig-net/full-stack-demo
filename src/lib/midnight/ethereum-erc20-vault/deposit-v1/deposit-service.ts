@@ -8,6 +8,7 @@ import {
   depositRequestSchema,
   type DepositStartInputs,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit'
+import { userCommitmentSchema } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 import { hexBytesSchema, uint64Schema } from '@/lib/value-schemas'
 
 /**
@@ -63,9 +64,11 @@ const walletPublicKeysSchema = z.object({
   encryptionPublicKey: walletKeySchema,
 })
 
+/** The commitment of the vault secret the call is built with picks the deposit account the sweep is signed from. */
 export const prepareStartDepositArgsSchema = z.object({
   depositRequest: depositRequestSchema,
   wallet: walletPublicKeysSchema,
+  userCommitment: userCommitmentSchema,
 })
 export type PrepareStartDepositArgs = z.infer<typeof prepareStartDepositArgsSchema>
 

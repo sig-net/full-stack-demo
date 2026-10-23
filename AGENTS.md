@@ -438,3 +438,29 @@ Keep setup instructions and application reference material in README.md and docs
   come from the per-package files `docs/diagram-library/<package path>/diagram-library.drawio`,
   which `yarn diagram-library` generates and renders from the code and
   `yarn diagram-library:check` gates, so they are never edited by hand.
+
+## NEVER BREAK: `Wallet` is a subset of the DApp connector API.
+
+- The application waits for the browser wallet extensions to support the chain version it runs
+  on and moves to them the moment they do. The `Wallet` interface
+  (`src/lib/midnight/wallet/wallet.ts`) is therefore a subset of `WalletConnectedAPI` in
+  `@midnight-ntwrk/dapp-connector-api` and NOTHING more: a member an extension cannot serve
+  through the connector would be lost in the move, and the seed wallet's reach into the wallet
+  SDK is never a reason to add one.
+- A method on `Wallet` is a method of `WalletConnectedAPI`, declared in `WalletConnectorMethods`
+  with the connector's signature: the same name, the same arguments, the same return shape, hex
+  strings where the connector has hex strings. Never a renamed, narrowed or widened twin.
+- A field on `Wallet` is a value one connector method answers, read once at connection
+  (`addresses`, `publicKeys`), and is listed in `wallet.test.ts` under `PageOwnedMember` with
+  the connector read it comes from. `disconnect()` is the page's own teardown and the one
+  member with no connector read.
+- `wallet.test.ts` fails `yarn typecheck` on any other member and on any drift from the
+  connector's signatures. Never weaken it: adding a connector method means declaring it in
+  `WalletConnectorMethods` and adding its name to the pinned set there, and a member that cannot
+  be named with a connector source does not belong on `Wallet`.
+- What the connector cannot serve lives on `SeedWallet` alone (`registerNightForDust()`,
+  `getUnregisteredNightBalance()`), reached by narrowing with `isSeedWallet()` from a control
+  that renders for the seed wallet only, never as an optional member of `Wallet`. Nothing
+  releases finalised bytes, reads pending balances, or reaches the midnight-js provider slots
+  from the page: those are impossible through the connector, and `RelayerWallet` is the
+  backend's port, not a model for `Wallet`.

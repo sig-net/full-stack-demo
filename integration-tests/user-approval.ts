@@ -17,10 +17,10 @@ import {
 } from './user-caller-call'
 import type { UserWallet } from './user-wallet'
 
-/** The kind's start call for the server's slot, with the caller secret as the witness and the user wallet's keys. */
+/** The kind's start call for the server's slot, with the vault secret as the witness and the user wallet's keys. */
 export function buildStartCall(
   backend: Backend,
-  callerSecret: string,
+  vaultSecret: string,
   user: UserWallet,
   approvalRequest: ApprovalRequest,
   inputs: ApprovalStartInputs,
@@ -28,7 +28,7 @@ export function buildStartCall(
   const { callBuilder } = backend.midnight.ethereumErc20Vault.approvalV1
   return finalizeAsUser(user, () =>
     callBuilder.buildStart({
-      secretKey: secretKeyOf(callerSecret),
+      secretKey: secretKeyOf(vaultSecret),
       wallet: user.publicKeys,
       inIndex: inputs.inIndex,
       ...approvalRequest,
@@ -39,14 +39,14 @@ export function buildStartCall(
 /** The complete call for the attested request's inputs, which takes no nonce. */
 export function buildCompleteCall(
   backend: Backend,
-  callerSecret: string,
+  vaultSecret: string,
   user: UserWallet,
   inputs: ApprovalCompleteInputs,
 ): Promise<FinalizedCallerCall> {
   const { callBuilder } = backend.midnight.ethereumErc20Vault.approvalV1
   return finalizeAsUser(user, () =>
     callBuilder.buildComplete({
-      secretKey: secretKeyOf(callerSecret),
+      secretKey: secretKeyOf(vaultSecret),
       wallet: user.publicKeys,
       requestId: hexToBytes(inputs.requestId),
       serializedOutput: completionOutput(inputs, 1),
@@ -57,22 +57,22 @@ export function buildCompleteCall(
 /** `prepareStartApproval`, the build, the finalisation and `startApproval`, as the admin page's spender list runs them: a refusal at either server call is the result. */
 export async function startApprovalAsUser(
   backend: Backend,
-  callerSecret: string,
+  vaultSecret: string,
   user: UserWallet,
   approvalRequest: ApprovalRequest,
 ): Promise<ApprovalResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.approvalV1
-  const prepared = await adaptor.prepareStartApproval(callerSecret, { approvalRequest })
+  const prepared = await adaptor.prepareStartApproval(user.unshieldedAddress, { approvalRequest })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildStartCall(
     backend,
-    callerSecret,
+    vaultSecret,
     user,
     approvalRequest,
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.startApproval(callerSecret, {
+  const result = await adaptor.startApproval(user.unshieldedAddress, {
     approvalRequest,
     inIndex: prepared.inputs.inIndex,
     finalizedTx,
@@ -86,21 +86,21 @@ export async function startApprovalAsUser(
 /** `prepareCompleteApproval`, the build, the finalisation and `completeApproval`, as the activity table's completion runs them. */
 export async function completeApprovalAsUser(
   backend: Backend,
-  callerSecret: string,
+  vaultSecret: string,
   user: UserWallet,
   name: string,
 ): Promise<ApprovalResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.approvalV1
-  const prepared = await adaptor.prepareCompleteApproval(callerSecret, { name })
+  const prepared = await adaptor.prepareCompleteApproval(user.unshieldedAddress, { name })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
-    callerSecret,
+    vaultSecret,
     user,
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeApproval(callerSecret, { name, finalizedTx })
+  const result = await adaptor.completeApproval(user.unshieldedAddress, { name, finalizedTx })
   log(
     `complete call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, completeApproval answered in ${String(Date.now() - calling)} ms`,
   )

@@ -26,17 +26,18 @@ import type {
 
 /** Starts a withdrawal from the page, the wallet's own coin of the sent token funding the start call. */
 export async function startWithdrawInBrowser(args: StartWithdrawInBrowserArgs): Promise<Withdraw> {
-  const { actions, builder, wallet, callerSecret, withdrawRequest, onStage } = args
+  const { actions, builder, wallet, callerAddress, vaultSecret, withdrawRequest, onStage } = args
   const started = await runCallerCall({
     operation: 'send',
     wallet,
-    callerSecret,
+    callerAddress,
+    vaultSecret,
     onStage,
-    prepare: () => actions.prepareStartWithdraw(callerSecret, { withdrawRequest }),
+    prepare: () => actions.prepareStartWithdraw(callerAddress, { withdrawRequest }),
     circuitArgs: ({ inIndex }, caller) => ({ ...caller, inIndex, ...withdrawRequest }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
     record: ({ inIndex }, finalizedTx) =>
-      actions.startWithdraw(callerSecret, { withdrawRequest, inIndex, finalizedTx }),
+      actions.startWithdraw(callerAddress, { withdrawRequest, inIndex, finalizedTx }),
   })
   return started.withdraw
 }
@@ -45,13 +46,14 @@ export async function startWithdrawInBrowser(args: StartWithdrawInBrowserArgs): 
 export async function completeWithdrawInBrowser(
   args: CompleteWithdrawInBrowserArgs,
 ): Promise<Withdraw> {
-  const { actions, builder, wallet, callerSecret, name, onStage } = args
+  const { actions, builder, wallet, callerAddress, vaultSecret, name, onStage } = args
   const completed = await runCallerCall({
     operation: 'send',
     wallet,
-    callerSecret,
+    callerAddress,
+    vaultSecret,
     onStage,
-    prepare: () => actions.prepareCompleteWithdraw(callerSecret, { name }),
+    prepare: () => actions.prepareCompleteWithdraw(callerAddress, { name }),
     circuitArgs: (inputs, caller) => ({
       ...caller,
       requestId: hexToBytes(inputs.requestId),
@@ -59,7 +61,8 @@ export async function completeWithdrawInBrowser(
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
     }),
     build: (circuitArgs) => builder.buildComplete(circuitArgs),
-    record: (_inputs, finalizedTx) => actions.completeWithdraw(callerSecret, { name, finalizedTx }),
+    record: (_inputs, finalizedTx) =>
+      actions.completeWithdraw(callerAddress, { name, finalizedTx }),
   })
   return completed.withdraw
 }
@@ -76,15 +79,15 @@ export function browserWithdrawCallBuilder(
 /** The withdraw's server actions, as the page imports them. */
 export interface WithdrawActions {
   prepareStartWithdraw(
-    callerSecret: string,
+    callerAddress: string,
     args: PrepareStartWithdrawArgs,
   ): Promise<WithdrawStartInputsResult>
-  startWithdraw(callerSecret: string, args: StartWithdrawArgs): Promise<WithdrawResult>
+  startWithdraw(callerAddress: string, args: StartWithdrawArgs): Promise<WithdrawResult>
   prepareCompleteWithdraw(
-    callerSecret: string,
+    callerAddress: string,
     args: PrepareCompleteWithdrawArgs,
   ): Promise<WithdrawCompleteInputsResult>
-  completeWithdraw(callerSecret: string, args: CompleteWithdrawArgs): Promise<WithdrawResult>
+  completeWithdraw(callerAddress: string, args: CompleteWithdrawArgs): Promise<WithdrawResult>
 }
 
 export interface StartWithdrawInBrowserArgs extends CallerCallArgs<WithdrawCallBuilder> {

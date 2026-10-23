@@ -30,7 +30,7 @@ export function LocalNightFaucetButton(): ReactNode {
   const funding = useMutation({
     mutationFn: async () => {
       if (wallet === null) throw new Error('No Midnight wallet is connected.')
-      const result = await fundNight({ unshieldedAddress: wallet.unshieldedAddress })
+      const result = await fundNight({ unshieldedAddress: wallet.addresses.unshieldedAddress })
       if (!result.ok) throw new Error(result.error)
       return result.funding
     },

@@ -43,7 +43,7 @@ const TARGET_REFETCH_INTERVAL_MS = 30_000
  * records it for the backend to submit.
  */
 export function LendPanel(): ReactNode {
-  const { callerSecret, callerName } = useCaller()
+  const { callerAddress, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -57,12 +57,12 @@ export function LendPanel(): ReactNode {
   const [redeemStage, setRedeemStage] = useState<CallerCallStage | null>(null)
 
   const target = useQuery({
-    queryKey: ['supply-target', callerName],
+    queryKey: ['supply-target', callerAddress],
     queryFn:
-      callerSecret === null || checks.vaultInitialised.status !== 'ok'
+      callerAddress === null || checks.vaultInitialised.status !== 'ok'
         ? skipToken
         : async () => {
-            const result = await getSupplyTarget(callerSecret, {})
+            const result = await getSupplyTarget(callerAddress, {})
             if (!result.ok) throw new Error(result.error)
             return result.target
           },
@@ -86,8 +86,10 @@ export function LendPanel(): ReactNode {
 
   const supplying = useMutation({
     mutationFn: async () => {
-      if (callerSecret === null) throw new Error('The identity secret is not set.')
-      if (wallet === null) throw new Error('No Midnight wallet is connected.')
+      if (callerAddress === null || wallet === null) {
+        throw new Error('No Midnight wallet is connected.')
+      }
+      if (vaultSecret === null) throw new Error('The vault secret is not set.')
       if (supplyAmount.value === null) throw new Error('No amount to supply.')
       // Loaded on first use, so a visitor who never supplies never downloads the call builder and the contract.
       const calls =
@@ -96,7 +98,8 @@ export function LendPanel(): ReactNode {
         actions: { prepareStartSupply, startSupply },
         builder: calls.browserSupplyCallBuilder(config, window.location.origin),
         wallet,
-        callerSecret,
+        callerAddress,
+        vaultSecret,
         supplyRequest: { amount: supplyAmount.value },
         onStage: setSupplyStage,
       })
@@ -117,8 +120,10 @@ export function LendPanel(): ReactNode {
   })
   const redeeming = useMutation({
     mutationFn: async () => {
-      if (callerSecret === null) throw new Error('The identity secret is not set.')
-      if (wallet === null) throw new Error('No Midnight wallet is connected.')
+      if (callerAddress === null || wallet === null) {
+        throw new Error('No Midnight wallet is connected.')
+      }
+      if (vaultSecret === null) throw new Error('The vault secret is not set.')
       if (redeemAmount.value === null) throw new Error('No shares to redeem.')
       // Loaded on first use, so a visitor who never redeems never downloads the call builder and the contract.
       const calls =
@@ -127,7 +132,8 @@ export function LendPanel(): ReactNode {
         actions: { prepareStartRedeem, startRedeem },
         builder: calls.browserRedeemCallBuilder(config, window.location.origin),
         wallet,
-        callerSecret,
+        callerAddress,
+        vaultSecret,
         redeemRequest: { shares: redeemAmount.value },
         onStage: setRedeemStage,
       })
@@ -148,10 +154,10 @@ export function LendPanel(): ReactNode {
   })
 
   const pairBlocker =
-    callerSecret === null
-      ? 'Set the identity secret first.'
-      : wallet === null
-        ? 'Connect a Midnight wallet first.'
+    wallet === null
+      ? 'Connect a Midnight wallet first.'
+      : vaultSecret === null
+        ? 'Set the vault secret first.'
         : checks.vaultInitialised.status === 'uninitialised'
           ? 'The vault is not initialised: its deployer has not pinned a lending pair yet.'
           : checks.vaultInitialised.status === 'unavailable'

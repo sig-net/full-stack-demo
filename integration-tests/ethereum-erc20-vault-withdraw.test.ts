@@ -37,7 +37,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
   let backend: Backend
   let user: UserWallet
   let evm: JsonRpcProvider
-  const callerSecret = userWalletSeed()
+  const vaultSecret = userWalletSeed()
   const created: [string, string][] = []
   let deposit: Deposit | undefined
   let coinType: string
@@ -67,7 +67,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
     'a deposit gives the caller the vault coin it will send',
     async () => {
       const { depositV1 } = backend.midnight.ethereumErc20Vault
-      const started = await startDepositAsUser(backend, callerSecret, user, {
+      const started = await startDepositAsUser(backend, vaultSecret, user, {
         erc20Address: CIRCLE_USDC,
         amount: AMOUNT,
       })
@@ -87,7 +87,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
         {
           name,
           state: async () => (await depositV1.repository.get(name))?.state,
-          complete: () => completeDepositAsUser(backend, callerSecret, user, name),
+          complete: () => completeDepositAsUser(backend, vaultSecret, user, name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )
@@ -113,7 +113,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
       const coinsBefore = await user.shieldedBalance(coinType)
 
       log(`sending ${AMOUNT.toString()} USDC base units to ${destination}`)
-      const started = await startWithdrawAsUser(backend, callerSecret, user, {
+      const started = await startWithdrawAsUser(backend, vaultSecret, user, {
         erc20Address: CIRCLE_USDC,
         amount: AMOUNT,
         destEvmAddress: destination,
@@ -141,7 +141,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
         {
           name: withdraw.name,
           state: async () => (await withdrawV1.repository.get(withdraw.name))?.state,
-          complete: () => completeWithdrawAsUser(backend, callerSecret, user, withdraw.name),
+          complete: () => completeWithdrawAsUser(backend, vaultSecret, user, withdraw.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )

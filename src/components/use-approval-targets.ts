@@ -13,17 +13,17 @@ export const APPROVAL_TARGETS_QUERY_KEY = 'approval-targets'
 /** The chain's allowance moves only when an approval lands, so the list follows at the sweep's pace. */
 const TARGETS_REFETCH_INTERVAL_MS = 15_000
 
-/** Every spender the vault may grant, with the allowance the vault account holds for it now, read for the identity secret's caller once the vault is initialised. */
+/** Every spender the vault may grant, with the allowance the vault account holds for it now, read for the connected wallet's caller once the vault is initialised. */
 export function useApprovalTargets(): UseQueryResult<ApprovalTarget[]> {
-  const { callerSecret, callerName } = useCaller()
+  const { callerAddress } = useCaller()
   const { checks } = useVaultReadiness()
   return useQuery({
-    queryKey: [APPROVAL_TARGETS_QUERY_KEY, callerName],
+    queryKey: [APPROVAL_TARGETS_QUERY_KEY, callerAddress],
     queryFn:
-      callerSecret === null || checks.vaultInitialised.status !== 'ok'
+      callerAddress === null || checks.vaultInitialised.status !== 'ok'
         ? skipToken
         : async () => {
-            const result = await listApprovalTargets(callerSecret, {})
+            const result = await listApprovalTargets(callerAddress, {})
             if (!result.ok) throw new Error(result.error)
             return result.targets
           },

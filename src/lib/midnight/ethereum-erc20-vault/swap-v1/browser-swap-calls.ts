@@ -23,30 +23,32 @@ import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-requ
 
 /** Starts a swap from the page, the wallet's own coin of the sold token funding the start call. */
 export async function startSwapInBrowser(args: StartSwapInBrowserArgs): Promise<Swap> {
-  const { actions, builder, wallet, callerSecret, swapRequest, onStage } = args
+  const { actions, builder, wallet, callerAddress, vaultSecret, swapRequest, onStage } = args
   const started = await runCallerCall({
     operation: 'swap',
     wallet,
-    callerSecret,
+    callerAddress,
+    vaultSecret,
     onStage,
-    prepare: () => actions.prepareStartSwap(callerSecret, { swapRequest }),
+    prepare: () => actions.prepareStartSwap(callerAddress, { swapRequest }),
     circuitArgs: ({ inIndex }, caller) => ({ ...caller, inIndex, ...swapRequest }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
     record: ({ inIndex }, finalizedTx) =>
-      actions.startSwap(callerSecret, { swapRequest, inIndex, finalizedTx }),
+      actions.startSwap(callerAddress, { swapRequest, inIndex, finalizedTx }),
   })
   return started.swap
 }
 
 /** Completes an attested swap from the page, under a fresh mint nonce and a fresh change nonce. */
 export async function completeSwapInBrowser(args: CompleteSwapInBrowserArgs): Promise<Swap> {
-  const { actions, builder, wallet, callerSecret, name, onStage } = args
+  const { actions, builder, wallet, callerAddress, vaultSecret, name, onStage } = args
   const completed = await runCallerCall({
     operation: 'swap',
     wallet,
-    callerSecret,
+    callerAddress,
+    vaultSecret,
     onStage,
-    prepare: () => actions.prepareCompleteSwap(callerSecret, { name }),
+    prepare: () => actions.prepareCompleteSwap(callerAddress, { name }),
     circuitArgs: (inputs, caller) => ({
       ...caller,
       requestId: hexToBytes(inputs.requestId),
@@ -55,7 +57,7 @@ export async function completeSwapInBrowser(args: CompleteSwapInBrowserArgs): Pr
       changeNonce: crypto.getRandomValues(new Uint8Array(32)),
     }),
     build: (circuitArgs) => builder.buildComplete(circuitArgs),
-    record: (_inputs, finalizedTx) => actions.completeSwap(callerSecret, { name, finalizedTx }),
+    record: (_inputs, finalizedTx) => actions.completeSwap(callerAddress, { name, finalizedTx }),
   })
   return completed.swap
 }
@@ -68,13 +70,16 @@ export function browserSwapCallBuilder(config: ClientConfig, origin: string): Sw
 
 /** The swap's server actions, as the page imports them. */
 export interface SwapActions {
-  prepareStartSwap(callerSecret: string, args: PrepareStartSwapArgs): Promise<SwapStartInputsResult>
-  startSwap(callerSecret: string, args: StartSwapArgs): Promise<SwapResult>
+  prepareStartSwap(
+    callerAddress: string,
+    args: PrepareStartSwapArgs,
+  ): Promise<SwapStartInputsResult>
+  startSwap(callerAddress: string, args: StartSwapArgs): Promise<SwapResult>
   prepareCompleteSwap(
-    callerSecret: string,
+    callerAddress: string,
     args: PrepareCompleteSwapArgs,
   ): Promise<SwapCompleteInputsResult>
-  completeSwap(callerSecret: string, args: CompleteSwapArgs): Promise<SwapResult>
+  completeSwap(callerAddress: string, args: CompleteSwapArgs): Promise<SwapResult>
 }
 
 export interface StartSwapInBrowserArgs extends CallerCallArgs<SwapCallBuilder> {

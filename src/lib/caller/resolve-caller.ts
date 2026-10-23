@@ -1,27 +1,29 @@
 import 'server-only'
 
-import { createHash } from 'node:crypto'
+import { MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk-address-format'
 
-import { type Caller, callerName, callerSecretSchema } from '@/lib/caller/caller'
+import { type Caller, callerName } from '@/lib/caller/caller'
+import type { MidnightNetworkId } from '@/lib/config/midnight-network-config'
+import { unshieldedAddressSchema } from '@/lib/value-schemas'
 
 /**
- * Validates the caller secret a server action received and derives the caller name from it.
+ * Validates the unshielded address a server action received, on the application's network, and
+ * names the caller after the user address it encodes.
  *
- * @throws {Error} When the secret is not 32 bytes in hex.
+ * @throws {Error} When the value is not an unshielded address of `networkId`.
  */
-export function resolveCaller(callerSecret: unknown): Caller {
-  const parsed = callerSecretSchema.safeParse(callerSecret)
+export function resolveCaller(callerAddress: unknown, networkId: MidnightNetworkId): Caller {
+  const parsed = unshieldedAddressSchema.safeParse(callerAddress)
   if (!parsed.success) {
-    throw new Error('The caller secret must be 32 bytes in hex.')
+    throw new Error('The caller address must be an unshielded Midnight address.')
   }
-  const secretKey = Uint8Array.from(Buffer.from(parsed.data, 'hex'))
-  return { secretKey, name: callerName(callerIdOf(secretKey)) }
-}
-
-/** Changing this tag renames every caller, and with it every stored resource name. */
-const CALLER_ID_DOMAIN_TAG = 'full-stack-demo:caller:'
-
-/** SHA-256 of the domain tag and the secret, in hex. */
-export function callerIdOf(secretKey: Uint8Array): string {
-  return createHash('sha256').update(CALLER_ID_DOMAIN_TAG).update(secretKey).digest('hex')
+  let decoded: UnshieldedAddress
+  try {
+    decoded = MidnightBech32m.parse(parsed.data).decode(UnshieldedAddress, networkId)
+  } catch (error: unknown) {
+    throw new Error(`The caller address must be an unshielded address of ${networkId}.`, {
+      cause: error,
+    })
+  }
+  return { unshieldedAddress: parsed.data, name: callerName(decoded.hexString) }
 }

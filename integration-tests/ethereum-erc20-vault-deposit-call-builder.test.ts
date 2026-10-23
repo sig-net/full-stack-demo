@@ -17,7 +17,7 @@ import { userWalletPublicKeys, userWalletSeed } from './user-wallet'
 
 /**
  * The deposit call builder, as the browser drives it, over the backend's own providers: a
- * start call built against the running indexer with a fresh caller secret and the user wallet's
+ * start call built against the running indexer with a fresh vault secret and the user wallet's
  * keys, proven through the proof server, comes back as unbound bytes. Nothing is submitted and
  * no row is written, so there is nothing to delete and the ledger sees nothing.
  */

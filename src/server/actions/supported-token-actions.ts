@@ -19,10 +19,13 @@ export async function listSupportedTokens(
 }
 
 export async function listDepositAccountFunds(
-  callerSecret: string,
+  callerAddress: string,
   args: ListDepositAccountFundsArgs,
 ): Promise<DepositAccountFundListResult> {
   return (
     await getBackend()
-  ).midnight.ethereumErc20Vault.supportedTokenV1.adaptor.listDepositAccountFunds(callerSecret, args)
+  ).midnight.ethereumErc20Vault.supportedTokenV1.adaptor.listDepositAccountFunds(
+    callerAddress,
+    args,
+  )
 }

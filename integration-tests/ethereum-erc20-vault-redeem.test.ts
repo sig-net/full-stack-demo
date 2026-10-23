@@ -37,7 +37,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
   let user: UserWallet
   let evm: JsonRpcProvider
   let vaultAccount: string
-  const callerSecret = userWalletSeed()
+  const vaultSecret = userWalletSeed()
   const created: [string, string][] = []
   let pair: Pick<Redeem, 'underlyingErc20Address' | 'stataErc20Address'> | undefined
   let shares: bigint | undefined
@@ -68,13 +68,13 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
     async () => {
       const { approvalV1, depositV1, supplyV1 } = backend.midnight.ethereumErc20Vault
 
-      const targeted = await supplyV1.adaptor.getSupplyTarget(callerSecret, {})
+      const targeted = await supplyV1.adaptor.getSupplyTarget(user.unshieldedAddress, {})
       if (!targeted.ok) throw new Error(targeted.error)
       const { underlyingErc20Address, stataErc20Address } = targeted.target
       await ensureAaveReserveAcceptsDeposits(evm, stataErc20Address)
       if (targeted.target.allowance === 0n) {
         log('the wrapper holds no allowance on the underlying: approving first')
-        const approval = await startApprovalAsUser(backend, callerSecret, user, { kind: 'stata' })
+        const approval = await startApprovalAsUser(backend, vaultSecret, user, { kind: 'stata' })
         if (!approval.ok) throw new Error(approval.error)
         created.push(['midnight_ethereum_erc20_vault_approvals_v1', approval.approval.name])
         await driveOperation(
@@ -82,13 +82,13 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
             name: approval.approval.name,
             state: async () => (await approvalV1.repository.get(approval.approval.name))?.state,
             complete: () =>
-              completeApprovalAsUser(backend, callerSecret, user, approval.approval.name),
+              completeApprovalAsUser(backend, vaultSecret, user, approval.approval.name),
           },
           ROUND_TRIP_TIMEOUT_MS,
         )
       }
 
-      const deposit = await startDepositAsUser(backend, callerSecret, user, {
+      const deposit = await startDepositAsUser(backend, vaultSecret, user, {
         erc20Address: underlyingErc20Address,
         amount: AMOUNT,
       })
@@ -106,21 +106,21 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
         {
           name: deposit.deposit.name,
           state: async () => (await depositV1.repository.get(deposit.deposit.name))?.state,
-          complete: () => completeDepositAsUser(backend, callerSecret, user, deposit.deposit.name),
+          complete: () => completeDepositAsUser(backend, vaultSecret, user, deposit.deposit.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )
       expect((await depositV1.repository.get(deposit.deposit.name))?.outcome).toBe('minted')
 
       const sharesBeforeSupply = await balanceOf(evm, stataErc20Address, vaultAccount)
-      const supply = await startSupplyAsUser(backend, callerSecret, user, { amount: AMOUNT })
+      const supply = await startSupplyAsUser(backend, vaultSecret, user, { amount: AMOUNT })
       if (!supply.ok) throw new Error(supply.error)
       created.push(['midnight_ethereum_erc20_vault_supplies_v1', supply.supply.name])
       await driveOperation(
         {
           name: supply.supply.name,
           state: async () => (await supplyV1.repository.get(supply.supply.name))?.state,
-          complete: () => completeSupplyAsUser(backend, callerSecret, user, supply.supply.name),
+          complete: () => completeSupplyAsUser(backend, vaultSecret, user, supply.supply.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )
@@ -149,7 +149,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
       const sharesBefore = await balanceOf(evm, stataErc20Address, vaultAccount)
       const coinsBefore = await user.shieldedBalance(coinType)
       log(`redeeming ${shares.toString()} shares of ${stataErc20Address} for the underlying`)
-      const redeem = await startRedeemAsUser(backend, callerSecret, user, { shares })
+      const redeem = await startRedeemAsUser(backend, vaultSecret, user, { shares })
       if (!redeem.ok) throw new Error(redeem.error)
       created.push(['midnight_ethereum_erc20_vault_redeems_v1', redeem.redeem.name])
       expect(redeem.redeem).toMatchObject({
@@ -172,7 +172,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
         {
           name: redeem.redeem.name,
           state: async () => (await redeemV1.repository.get(redeem.redeem.name))?.state,
-          complete: () => completeRedeemAsUser(backend, callerSecret, user, redeem.redeem.name),
+          complete: () => completeRedeemAsUser(backend, vaultSecret, user, redeem.redeem.name),
         },
         ROUND_TRIP_TIMEOUT_MS,
       )

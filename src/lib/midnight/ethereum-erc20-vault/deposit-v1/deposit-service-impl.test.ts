@@ -1,10 +1,9 @@
-import { bytesToHex, deriveEvmAddress } from '@sig-net/midnight'
-import { pureCircuits } from '@sig-net/midnight-examples-erc20-vault-contract'
+import { deriveEvmAddress } from '@sig-net/midnight'
 import { type Provider, SigningKey } from 'ethers'
 import { describe, expect, test } from 'vitest'
 
 import type { Caller } from '@/lib/caller/caller'
-import { resolveCaller } from '@/lib/caller/resolve-caller'
+import { CALLER, STRANGER } from '@/lib/caller/caller-fixtures'
 import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
 import { MIDNIGHT_NETWORK_DEFAULTS } from '@/lib/config/midnight-network-config'
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
@@ -34,6 +33,7 @@ import {
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
 import { MemoryRepository } from '@/lib/repository/repository-memory-impl'
+import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 import { mock } from '@/lib/testing/mock'
 import { UINT64_MAX, UUID } from '@/lib/value-schemas'
 
@@ -44,13 +44,15 @@ const SIGNET: MidnightSignetConfig = {
 }
 const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(32) }
 
-const caller: Caller = resolveCaller('ab'.repeat(32))
-const stranger: Caller = resolveCaller('cd'.repeat(32))
+const caller: Caller = CALLER
+const stranger: Caller = STRANGER
+const VAULT_SECRET = 'ab'.repeat(32)
+const USER_COMMITMENT = userCommitmentOf(VAULT_SECRET)
 /** The account the MPC signs the caller's sweeps from, as the service must derive it. */
 const CALLER_ACCOUNT = deriveEvmAddress(
   SIGNET.mpcRootPublicKey,
   VAULT.contractAddress,
-  bytesToHex(pureCircuits.userCommitment(caller.secretKey)),
+  USER_COMMITMENT,
 ).toLowerCase()
 const OTHER_ACCOUNT = `0x${'99'.repeat(20)}`
 const WALLET: WalletPublicKeys = {
@@ -196,6 +198,7 @@ describe('DepositServiceImpl.prepareStartDeposit', () => {
       const inputs = await service.prepareStartDeposit(caller, {
         depositRequest: DEPOSIT_REQUEST,
         wallet: WALLET,
+        userCommitment: USER_COMMITMENT,
       })
       expect(inputs).toEqual({ inIndex: inputs.inIndex, evmNonce: expectNonce, ...GAS })
       expect(inputs.inIndex).toBeGreaterThanOrEqual(0n)
@@ -207,7 +210,11 @@ describe('DepositServiceImpl.prepareStartDeposit', () => {
   test('each call draws a fresh input index', async () => {
     const { service, ready } = serviceOver({})
     await ready
-    const args = { depositRequest: DEPOSIT_REQUEST, wallet: WALLET }
+    const args = {
+      depositRequest: DEPOSIT_REQUEST,
+      wallet: WALLET,
+      userCommitment: USER_COMMITMENT,
+    }
     const first = await service.prepareStartDeposit(caller, args)
     const second = await service.prepareStartDeposit(caller, args)
     expect(first.inIndex).not.toBe(second.inIndex)
@@ -223,6 +230,7 @@ describe('DepositServiceImpl.startDeposit', () => {
       const deposit = await service.startDeposit(caller, {
         depositRequest: DEPOSIT_REQUEST,
         wallet: WALLET,
+        userCommitment: USER_COMMITMENT,
         inIndex: 42n,
         evmNonce: expectNonce,
         finalizedTx: FINALIZED_TX,
@@ -290,6 +298,7 @@ describe('DepositServiceImpl.startDeposit', () => {
       const starting = service.startDeposit(caller, {
         depositRequest: DEPOSIT_REQUEST,
         wallet: WALLET,
+        userCommitment: USER_COMMITMENT,
         inIndex: 42n,
         evmNonce,
         finalizedTx: FINALIZED_TX,

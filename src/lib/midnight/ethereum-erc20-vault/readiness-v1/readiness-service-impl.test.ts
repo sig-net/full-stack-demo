@@ -2,7 +2,7 @@ import { SigningKey } from 'ethers'
 import { describe, expect, test } from 'vitest'
 
 import type { Caller } from '@/lib/caller/caller'
-import { resolveCaller } from '@/lib/caller/resolve-caller'
+import { CALLER } from '@/lib/caller/caller-fixtures'
 import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { EthereumAccountReader } from '@/lib/ethereum/account-reader'
@@ -27,8 +27,9 @@ const SIGNET: MidnightSignetConfig = {
   mpcRootPublicKey: SigningKey.computePublicKey(`0x${'22'.repeat(32)}`, false),
 }
 const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(32) }
-const caller: Caller = resolveCaller('ab'.repeat(32))
-const DEPOSIT_ACCOUNT = depositAccountOf(caller, SIGNET, VAULT)
+const caller: Caller = CALLER
+const USER_COMMITMENT = 'ab'.repeat(32)
+const DEPOSIT_ACCOUNT = depositAccountOf(USER_COMMITMENT, SIGNET, VAULT)
 const VAULT_ACCOUNT = vaultAccountOf(SIGNET, VAULT)
 const RELAYER_ADDRESS = 'mn_addr_undeployed1relayer'
 
@@ -224,7 +225,9 @@ describe('ReadinessServiceImpl.getVaultReadiness', () => {
       },
     ],
   )('$name', async ({ doubles, expected }) => {
-    await expect(serviceOver(doubles).getVaultReadiness(caller, {})).resolves.toEqual(expected)
+    await expect(
+      serviceOver(doubles).getVaultReadiness(caller, { userCommitment: USER_COMMITMENT }),
+    ).resolves.toEqual(expected)
   })
 })
 

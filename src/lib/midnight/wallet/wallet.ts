@@ -1,108 +1,57 @@
-import type { MidnightProvider, WalletProvider } from '@midnight-ntwrk/midnight-js/types'
-import type { SignatureVerifyingKey } from '@midnightntwrk/ledger-v9'
+import type { WalletConnectedAPI } from '@midnight-ntwrk/dapp-connector-api'
 
-import type { MidnightNetworkConfig, MidnightNetworkId } from '@/lib/config/midnight-network-config'
+/**
+ * A connected Midnight wallet as the page uses it: a subset of what a browser wallet extension
+ * serves through the DApp connector API (`WalletConnectedAPI` in
+ * `@midnight-ntwrk/dapp-connector-api`). Each method is one of that type's, declared with its
+ * signature unchanged, each field is read from one of its methods once at connection, and
+ * `disconnect` drops only what the page holds. `wallet.test.ts` fails the type check on any
+ * member outside that set and on any drift from the connector's signatures, since the
+ * application moves to the extensions the moment they support its chain version and a member
+ * they cannot serve would block the move.
+ */
+export interface Wallet extends WalletMetadata, WalletConnectorMethods {
+  /** Read at connection from `getShieldedAddresses`, `getUnshieldedAddress` and `getDustAddress`. */
+  readonly addresses: WalletAddresses
+  /** The coin and encryption public keys of `getShieldedAddresses`, decoded from Bech32m to hex. */
+  readonly publicKeys: WalletPublicKeys
+  /** Drops the page's own references, since the extension owns the connection itself. */
+  disconnect(): Promise<void>
+}
+
+/**
+ * The connector methods the page calls, declared as the connector declares them:
+ * `wallet.test.ts` holds this interface equal to `Pick<WalletConnectedAPI, WalletConnectorMethod>`.
+ */
+export interface WalletConnectorMethods {
+  getShieldedBalances(): Promise<Record<string, bigint>>
+  getUnshieldedBalances(): Promise<Record<string, bigint>>
+  getDustBalance(): Promise<{ cap: bigint; balance: bigint }>
+  balanceUnsealedTransaction(tx: string, options?: { payFees?: boolean }): Promise<{ tx: string }>
+}
+
+export type WalletConnectorMethod = keyof WalletConnectorMethods
+
+/** Display identity of a connected wallet: its kind, and the name the connector's `InitialAPI` carries. */
+export interface WalletMetadata {
+  readonly kind: WalletKind
+  readonly name: string
+}
 
 /** The wallet implementations the application can connect. */
 export const WALLET_KINDS = ['seed'] as const
 
 export type WalletKind = (typeof WALLET_KINDS)[number]
 
-/** Display identity of a connected wallet, without its signing credentials. */
-export interface WalletMetadata {
-  readonly kind: WalletKind
-  readonly name: string
-  readonly iconUrl?: string
-  readonly id: string
-  readonly accountDetail: string
-}
+/** The wallet's addresses in Bech32m, as the connector's three address reads answer them. */
+export type WalletAddresses = Readonly<
+  Pick<Awaited<ReturnType<WalletConnectedAPI['getShieldedAddresses']>>, 'shieldedAddress'> &
+    Awaited<ReturnType<WalletConnectedAPI['getUnshieldedAddress']>> &
+    Awaited<ReturnType<WalletConnectedAPI['getDustAddress']>>
+>
 
-/** SDK signing and submission capabilities supplied by a connected wallet. */
-export type WalletTransactions = MidnightProvider & WalletProvider
-
-/** The public keys of the wallet that balances a call and receives anything it mints. */
+/** The public keys of the wallet that balances a call and receives anything it mints, in hex. */
 export interface WalletPublicKeys {
   readonly coinPublicKey: string
   readonly encryptionPublicKey: string
-}
-
-/** Public derivation results only. Availability does not establish wallet or balance readiness. */
-export interface WalletAddressSnapshot {
-  readonly networkId: MidnightNetworkId
-  readonly shieldedAddress?: string
-  readonly unshieldedAddress?: string
-  readonly dustAddress?: string
-  readonly dustUnavailable?: string
-}
-
-/** Session-bound wallet reads with explicit optional transaction, funding and recovery capabilities. */
-export interface Wallet extends WalletMetadata {
-  readonly transactions?: WalletTransactions
-  readonly transactionUnavailable?: string
-  /** The keys a call is built for, known once the wallet has derived them. */
-  readonly publicKeys: WalletPublicKeys
-  /**
-   * Balances the wallet's own coins and DUST fee into the unbound bytes of a proven call, signs
-   * and finalises it, resolving with the finalised bytes in hex that the node receives.
-   */
-  finalize(unboundTx: string): Promise<string>
-  /**
-   * Releases the coins the finalised bytes hold as pending: a finalised transaction that is not
-   * submitted holds its coins until released, so a call the server refused is released before
-   * the wallet finalises the next one.
-   */
-  release(finalizedTx: string): Promise<void>
-  readonly registrationUnavailable?: string
-  readonly recoveryUnavailable?: string
-  readonly reportedProofServerUrl?: string
-  readonly configuration?: MidnightNetworkConfig
-  readonly shieldedAddress: string
-  readonly unshieldedAddress: string
-  readonly dustAddress?: string
-  readonly unshieldedPublicKey?: SignatureVerifyingKey
-  /**
-   * Reads NIGHT that the connected wallet has not registered for DUST generation.
-   *
-   * @returns Available unregistered NIGHT in ledger units when the wallet can observe it.
-   */
-  getUnregisteredNightBalance?(): Promise<bigint>
-  /**
-   * Registers every NIGHT coin the wallet holds unregistered for DUST generation and resolves
-   * with the NIGHT registered in STAR once the wallet's own state holds the registered coins:
-   * zero when every coin already was.
-   *
-   * @throws {Error} If registration or session ownership fails.
-   */
-  registerNightForDust?(): Promise<bigint>
-  /**
-   * Reads shielded token balances for the active session.
-   *
-   * @returns Token-type balances in base units.
-   */
-  getShieldedBalances(): Promise<Record<string, bigint>>
-  /**
-   * Reads the unshielded token balances the active session can spend.
-   *
-   * @returns Token-type balances in base units.
-   */
-  getAvailableUnshieldedBalances(): Promise<Record<string, bigint>>
-  /**
-   * Reads the unshielded token balances held by coins an in-flight transaction spends, until the
-   * wallet synchronises its outcome.
-   *
-   * @returns Token-type balances in base units.
-   */
-  getPendingUnshieldedBalances(): Promise<Record<string, bigint>>
-  /**
-   * Reads spendable DUST for the active session.
-   *
-   * @returns The current fee balance in ledger units.
-   */
-  getDustBalance(): Promise<bigint>
-  /**
-   * Releases app-owned signing references and adapter resources.
-   *
-   * @returns Completion after owned transport teardown.
-   */
-  disconnect(): Promise<void>
 }

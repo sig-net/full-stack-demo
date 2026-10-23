@@ -75,10 +75,10 @@ export class DepositServiceImpl implements DepositService {
   }
 
   async prepareStartDeposit(
-    caller: Caller,
-    _args: PrepareStartDepositArgs,
+    _caller: Caller,
+    { userCommitment }: PrepareStartDepositArgs,
   ): Promise<DepositStartInputs> {
-    const depositAccount = depositAccountOf(caller, this.signet, this.vault)
+    const depositAccount = depositAccountOf(userCommitment, this.signet, this.vault)
     return {
       inIndex: newInputIndex(),
       evmNonce: await this.nextEvmNonce(depositAccount),
@@ -89,9 +89,9 @@ export class DepositServiceImpl implements DepositService {
   /** The nonce is read from the chain before the transaction opens, so two starts of one caller racing past the check commit the same nonce. */
   async startDeposit(
     caller: Caller,
-    { depositRequest, wallet, inIndex, evmNonce, finalizedTx }: StartDepositArgs,
+    { depositRequest, wallet, userCommitment, inIndex, evmNonce, finalizedTx }: StartDepositArgs,
   ): Promise<Deposit> {
-    const depositAccount = depositAccountOf(caller, this.signet, this.vault)
+    const depositAccount = depositAccountOf(userCommitment, this.signet, this.vault)
     if (evmNonce !== (await this.nextEvmNonce(depositAccount))) {
       throw new DepositNonceConflict(depositAccount)
     }
@@ -135,16 +135,10 @@ export class DepositServiceImpl implements DepositService {
     return this.depositRepository.get(args.name)
   }
 
-  /** Every deposit of a caller shares the deposit account, which stands in for the caller in the search. */
+  /** Every deposit of a caller is named under the caller, which stands in for it in the search. */
   async listDeposits(caller: Caller, _args: ListDepositsArgs): Promise<Deposit[]> {
     return this.depositRepository.search({
-      criteria: [
-        {
-          type: 'exact-text',
-          field: 'depositAccount',
-          text: depositAccountOf(caller, this.signet, this.vault),
-        },
-      ],
+      criteria: [{ type: 'prefix-text', field: 'name', prefix: `${caller.name}/` }],
       order: { field: 'createTime', direction: 'desc' },
     })
   }

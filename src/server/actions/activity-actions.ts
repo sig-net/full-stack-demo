@@ -11,21 +11,21 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function getActivity(
-  callerSecret: string,
+  callerAddress: string,
   args: GetActivityArgs,
 ): Promise<ActivityResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.activityV1.adaptor.getActivity(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function listActivities(
-  callerSecret: string,
+  callerAddress: string,
   args: ListActivitiesArgs,
 ): Promise<ActivityListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.activityV1.adaptor.listActivities(
-    callerSecret,
+    callerAddress,
     args,
   )
 }

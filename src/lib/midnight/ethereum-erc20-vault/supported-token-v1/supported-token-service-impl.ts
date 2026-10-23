@@ -45,10 +45,10 @@ export class SupportedTokenServiceImpl implements SupportedTokenService {
   }
 
   async listDepositAccountFunds(
-    caller: Caller,
-    _args: ListDepositAccountFundsArgs,
+    _caller: Caller,
+    { userCommitment }: ListDepositAccountFundsArgs,
   ): Promise<DepositAccountFund[]> {
-    const account = depositAccountOf(caller, this.signet, this.vault)
+    const account = depositAccountOf(userCommitment, this.signet, this.vault)
     const addresses = await this.allowedAddresses()
     const balances = await Promise.all(
       addresses.map(async (erc20Address) => ({

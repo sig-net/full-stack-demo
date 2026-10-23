@@ -15,12 +15,12 @@ import {
 
 import { useConfig } from '@/components/contexts/ConfigContext'
 import { seedStorage } from '@/lib/midnight/wallet/seed-storage'
-import type { Wallet, WalletAddressSnapshot } from '@/lib/midnight/wallet/wallet'
+import type { Wallet, WalletAddresses } from '@/lib/midnight/wallet/wallet'
 import type { WalletSyncProgress } from '@/lib/midnight/wallet/wallet-sync-progress'
 
 export interface MidnightWalletContextValue {
   readonly wallet: Wallet | null
-  readonly addresses: WalletAddressSnapshot | null
+  readonly addresses: WalletAddresses | null
   readonly connecting: boolean
   /** True until the stored seed has been checked on first load, and no connection may start before. */
   readonly restoring: boolean
@@ -49,7 +49,7 @@ const SEED_PATTERN = /^(?:[0-9a-f]{2}){16,64}$/
 export function MidnightWalletProvider({ children }: { children: ReactNode }): ReactNode {
   const { midnightNetwork } = useConfig()
   const [wallet, setWallet] = useState<Wallet | null>(null)
-  const [addresses, setAddresses] = useState<WalletAddressSnapshot | null>(null)
+  const [addresses, setAddresses] = useState<WalletAddresses | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [syncProgress, setSyncProgress] = useState<WalletSyncProgress | null>(null)
   const [error, setError] = useState<string | null>(null)

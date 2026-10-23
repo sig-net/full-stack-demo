@@ -2,7 +2,7 @@ import { SigningKey } from 'ethers'
 import { describe, expect, test } from 'vitest'
 
 import type { Caller } from '@/lib/caller/caller'
-import { resolveCaller } from '@/lib/caller/resolve-caller'
+import { CALLER, STRANGER } from '@/lib/caller/caller-fixtures'
 import type { MidnightEthereumErc20VaultConfig } from '@/lib/config/midnight-ethereum-erc20-vault-config'
 import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import type { UnitOfWork } from '@/lib/db/unit-of-work'
@@ -37,8 +37,8 @@ const SIGNET: MidnightSignetConfig = {
 }
 const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(32) }
 
-const caller: Caller = resolveCaller('ab'.repeat(32))
-const stranger: Caller = resolveCaller('cd'.repeat(32))
+const caller: Caller = CALLER
+const stranger: Caller = STRANGER
 const REQUEST = { erc20Address: ERC20_ADDRESS, amount: 1_000_000n, destEvmAddress: DESTINATION }
 const FINALIZED_TX = 'f1a1'
 

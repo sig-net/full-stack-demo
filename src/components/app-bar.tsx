@@ -2,11 +2,11 @@ import type { ReactNode } from 'react'
 
 import { BrandEmblem } from '@/components/brand-emblem'
 import { BrandLogo } from '@/components/brand-logo'
-import { CallerPopover } from '@/components/caller-popover'
 import { GitHubCorner } from '@/components/github-corner'
 import { MobileMenu } from '@/components/mobile-menu'
 import { SettingsPopover } from '@/components/settings-popover'
 import { TotalBalance } from '@/components/total-balance'
+import { VaultSecretPopover } from '@/components/vault-secret-popover'
 import { WalletPopover } from '@/components/wallet-popover'
 
 export function AppBar(): ReactNode {
@@ -26,7 +26,7 @@ export function AppBar(): ReactNode {
         <SettingsPopover />
       </div>
       <div className="hidden items-center gap-3.75 px-3.75 md:flex">
-        <CallerPopover />
+        <VaultSecretPopover />
         <WalletPopover />
       </div>
       <div className="flex items-center px-5 md:hidden">

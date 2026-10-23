@@ -29,21 +29,22 @@ const VaultReadinessContext = createContext<VaultReadinessContextValue | null>(n
 
 /**
  * Owns the readiness reads: the caller's DUST from the connected wallet, which only the browser
- * can read, and the backend's checks for the identity secret's caller. Each read runs once its
+ * can read, and the backend's checks for the connected wallet's caller and the vault secret's
+ * deposit account. Each read runs once its
  * input exists and again only on `recheck`, since every read costs a chain or wallet round trip.
  */
 export function VaultReadinessProvider({ children }: { children: ReactNode }): ReactNode {
   const { midnightNetwork } = useConfig()
   const { wallet, addresses, generation } = useMidnightWallet()
-  const { callerSecret, callerName } = useCaller()
+  const { callerAddress, userCommitment } = useCaller()
   const dustAccount = addresses?.unshieldedAddress
   const initialisation = useQuery({
-    queryKey: ['vault-initialisation', midnightNetwork.networkId, callerName],
+    queryKey: ['vault-initialisation', midnightNetwork.networkId, callerAddress],
     queryFn:
-      callerSecret === null
+      callerAddress === null
         ? skipToken
         : async () => {
-            const result = await getVaultInitialisation(callerSecret, {})
+            const result = await getVaultInitialisation(callerAddress, {})
             if (!result.ok) throw new Error(result.error)
             return result.initialisation
           },
@@ -59,7 +60,7 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
         ? skipToken
         : () =>
             readBalanceCheck('DUST', dustAccount, async () => ({
-              available: await wallet.getDustBalance(),
+              available: (await wallet.getDustBalance()).balance,
               required: CALLER_DUST_MINIMUM,
             })),
     staleTime: Infinity,
@@ -68,12 +69,12 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
     retry: false,
   })
   const backend = useQuery({
-    queryKey: ['vault-readiness', midnightNetwork.networkId, callerName],
+    queryKey: ['vault-readiness', midnightNetwork.networkId, callerAddress, userCommitment],
     queryFn:
-      callerSecret === null
+      callerAddress === null || userCommitment === null
         ? skipToken
         : async () => {
-            const result = await getVaultReadiness(callerSecret, {})
+            const result = await getVaultReadiness(callerAddress, { userCommitment })
             if (!result.ok) throw new Error(result.error)
             return result.readiness
           },
@@ -83,17 +84,19 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
     retry: false,
   })
   const backendReason =
-    callerSecret === null
-      ? 'No identity secret is set.'
-      : backend.status === 'error'
-        ? backend.error.message
-        : NOT_CHECKED
+    callerAddress === null
+      ? 'No Midnight wallet is connected.'
+      : userCommitment === null
+        ? 'No vault secret is set.'
+        : backend.status === 'error'
+          ? backend.error.message
+          : NOT_CHECKED
   const checks: ReadinessChecks = {
     vaultInitialised: initialisation.data ?? {
       status: 'unavailable',
       reason:
-        callerSecret === null
-          ? 'No identity secret is set.'
+        callerAddress === null
+          ? 'No Midnight wallet is connected.'
           : initialisation.status === 'error'
             ? initialisation.error.message
             : NOT_CHECKED,
@@ -116,8 +119,8 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
   const recheck = async (): Promise<void> => {
     await Promise.all([
       wallet === null || dustAccount === undefined ? undefined : callerDust.refetch(),
-      callerSecret === null ? undefined : backend.refetch(),
-      callerSecret === null ? undefined : initialisation.refetch(),
+      callerAddress === null || userCommitment === null ? undefined : backend.refetch(),
+      callerAddress === null ? undefined : initialisation.refetch(),
     ])
   }
   return (

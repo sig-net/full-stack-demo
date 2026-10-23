@@ -8,13 +8,13 @@ import type { Wallet } from '@/lib/midnight/wallet/wallet'
 
 /**
  * Runs one caller circuit call as the page runs every one of them: the server assigns the
- * call's inputs, the page builds and proves the call with the caller secret as its witness, the
+ * call's inputs, the page builds and proves the call with the vault secret as its witness, the
  * wallet balances it with its own coins and DUST fee, signs and finalises it, and the server
  * records the finalised bytes. Every stage is reported as it begins, a refusal at either server
  * call is thrown with the server's message, a contract assert while building is thrown as the
  * vault refusing the operation, and a refusal `retryOnce` matches is prepared and built once more.
- * Finalised bytes the server does not record are released, so the wallet's coins never stay
- * pending for a call that was refused.
+ * The wallet keeps the coins of finalised bytes the server refuses pending until it frees them
+ * by its own rules, as a browser wallet would.
  */
 export async function runCallerCall<
   Inputs,
@@ -51,8 +51,10 @@ export interface CallerCall<
 /** What every call from the page carries beside its operation's own parts. */
 export interface CallerCallContext {
   readonly wallet: Wallet
-  /** The stored identity secret, lower-case hex without `0x`, which is the call's witness. */
-  readonly callerSecret: string
+  /** The connected wallet's unshielded address, which every server action takes first. */
+  readonly callerAddress: string
+  /** The stored vault secret, lower-case hex without `0x`, which is the call's witness. */
+  readonly vaultSecret: string
   readonly onStage?: (stage: CallerCallStage) => void
 }
 
@@ -86,7 +88,7 @@ export interface CallerCallArgs<Builder> extends CallerCallContext {
 async function attempt<Inputs, CircuitArgs extends CallerCircuitArgs, Recorded extends CallOutcome>(
   call: CallerCall<Inputs, CircuitArgs, Recorded>,
 ): Promise<Accepted<Recorded>> {
-  const { wallet, callerSecret, onStage } = call
+  const { wallet, vaultSecret, onStage } = call
   onStage?.('preparing')
   const prepared = await call.prepare()
   assertAccepted(prepared)
@@ -94,37 +96,17 @@ async function attempt<Inputs, CircuitArgs extends CallerCircuitArgs, Recorded e
   const unboundTx = await vaultRefusalOf(
     call.build(
       call.circuitArgs(prepared.inputs, {
-        secretKey: hexToBytes(callerSecret),
+        secretKey: hexToBytes(vaultSecret),
         wallet: wallet.publicKeys,
       }),
     ),
     call.operation,
   )
   onStage?.('signing')
-  const finalizedTx = await wallet.finalize(unboundTx)
+  const { tx: finalizedTx } = await wallet.balanceUnsealedTransaction(unboundTx)
   onStage?.('recording')
-  const recorded = await releasedUnlessRecorded(wallet, finalizedTx, () =>
-    call.record(prepared.inputs, finalizedTx),
-  )
+  const recorded = await call.record(prepared.inputs, finalizedTx)
   assertAccepted(recorded)
-  return recorded
-}
-
-/** Runs the record and releases the finalised bytes when it refuses or throws, so a refused call holds no coins. */
-async function releasedUnlessRecorded<Recorded extends CallOutcome>(
-  wallet: Wallet,
-  finalizedTx: string,
-  record: () => Promise<Recorded>,
-): Promise<Recorded> {
-  let recorded: Recorded
-  try {
-    recorded = await record()
-  } catch (error: unknown) {
-    await wallet.release(finalizedTx)
-    throw error
-  }
-  const outcome: CallOutcome = recorded
-  if (!outcome.ok) await wallet.release(finalizedTx)
   return recorded
 }
 

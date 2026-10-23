@@ -2,20 +2,26 @@ import { z } from 'zod'
 
 import { HEX_32_BYTES } from '@/lib/value-schemas'
 
-/** The authenticated caller of a service method, resolved on the server from the caller secret. */
+/**
+ * The caller of a service method, resolved on the server from the unshielded Midnight address
+ * the browser sends as every action's first argument. The address is the wallet's, so a wallet
+ * challenge can later prove the caller holds its key and the caller's resources stay named as
+ * they are.
+ */
 export interface Caller {
-  /** The 32-byte vault identity secret, the value of the `callerSecretKey` witness. Never logged. */
-  readonly secretKey: Uint8Array
+  /** The caller's unshielded address in Bech32m, as the wallet reports it. */
+  readonly unshieldedAddress: string
   /**
-   * `callers/{caller}`, the parent of every resource the caller owns. The caller id is SHA-256 of
-   * the secret under the application's domain tag, in hex, so it depends only on the application.
+   * `callers/{caller}`, the parent of every resource the caller owns. The caller id is the
+   * 32-byte user address the unshielded address encodes, in hex, so it names the wallet's
+   * unshielded key on every network.
    */
   readonly name: string
 }
 
 export const CALLER_COLLECTION = 'callers'
 
-/** `callers/{caller}`, where the caller is the application's caller id in hex. */
+/** `callers/{caller}`, where the caller is the 32-byte user address of the caller's unshielded key in hex. */
 export const callerNameSchema = z
   .string()
   .regex(
@@ -35,19 +41,4 @@ export function resourceOwnedByCaller(resourceName: string, caller: Caller): boo
 /** `callers/{caller}`, the first two segments of any resource name under a caller. */
 export function callerOf(resourceName: string): string {
   return resourceName.split('/').slice(0, 2).join('/')
-}
-
-/**
- * The caller's 32-byte vault identity secret in hex, the value of the contract's
- * `callerSecretKey` witness. Stored without the `0x` prefix in lower case.
- */
-export const callerSecretSchema = z
-  .string()
-  .regex(/^(?:0x)?[0-9a-fA-F]{64}$/, 'expected 32 bytes in hex')
-  .transform((value) => value.replace(/^0x/i, '').toLowerCase())
-
-/** A fresh random caller secret in hex. */
-export function generateCallerSecret(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32))
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }

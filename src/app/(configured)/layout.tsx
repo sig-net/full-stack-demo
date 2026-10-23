@@ -22,8 +22,8 @@ export default async function ConfiguredLayout({ children }: LayoutProps<'/'>): 
       <ReactQueryProvider>
         <ConfigProvider config={config}>
           <TokenInfoRegistryProvider>
-            <CallerProvider>
-              <MidnightWalletProvider>
+            <MidnightWalletProvider>
+              <CallerProvider>
                 <VaultReadinessProvider>
                   {/* Below md the app bar stays at the top while the page scrolls under it. */}
                   <div className="sticky top-0 z-10 md:static">
@@ -31,8 +31,8 @@ export default async function ConfiguredLayout({ children }: LayoutProps<'/'>): 
                   </div>
                   {children}
                 </VaultReadinessProvider>
-              </MidnightWalletProvider>
-            </CallerProvider>
+              </CallerProvider>
+            </MidnightWalletProvider>
           </TokenInfoRegistryProvider>
         </ConfigProvider>
       </ReactQueryProvider>

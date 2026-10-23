@@ -50,7 +50,7 @@ const KIND_LABELS: Record<ApprovalKind, string> = {
  * paying its fee, and the server records it for the backend to submit.
  */
 export function ApprovalTargets(): ReactNode {
-  const { callerSecret } = useCaller()
+  const { callerAddress, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -60,8 +60,10 @@ export function ApprovalTargets(): ReactNode {
   const [stage, setStage] = useState<CallerCallStage | null>(null)
   const approving = useMutation({
     mutationFn: async (target: ApprovalTarget) => {
-      if (callerSecret === null) throw new Error('The identity secret is not set.')
-      if (wallet === null) throw new Error('No Midnight wallet is connected.')
+      if (callerAddress === null || wallet === null) {
+        throw new Error('No Midnight wallet is connected.')
+      }
+      if (vaultSecret === null) throw new Error('The vault secret is not set.')
       // Loaded on first use, so a visitor who never approves never downloads the call builder and the contract.
       const calls =
         await import('@/lib/midnight/ethereum-erc20-vault/approval-v1/browser-approval-calls')
@@ -69,7 +71,8 @@ export function ApprovalTargets(): ReactNode {
         actions: { prepareStartApproval, startApproval },
         builder: calls.browserApprovalCallBuilder(config, window.location.origin),
         wallet,
-        callerSecret,
+        callerAddress,
+        vaultSecret,
         approvalRequest:
           target.kind === 'router'
             ? { kind: 'router', erc20Address: target.erc20Address }

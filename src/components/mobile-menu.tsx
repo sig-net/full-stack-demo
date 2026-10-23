@@ -1,11 +1,11 @@
 import { EyeOff, Menu, Settings, Wallet } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { CallerPanel } from '@/components/caller-panel'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { VaultSecretPanel } from '@/components/vault-secret-panel'
 import { WalletPanel } from '@/components/wallet-panel'
 
 export function MobileMenu(): ReactNode {
@@ -24,11 +24,11 @@ export function MobileMenu(): ReactNode {
               render={<Button variant="ghost" size="lg" className="w-full justify-start" />}
             >
               <EyeOff />
-              Identity secret
+              Vault secret
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="px-4 pt-2 pb-3">
-                <CallerPanel />
+                <VaultSecretPanel />
               </div>
               <Separator />
             </CollapsibleContent>

@@ -3,6 +3,7 @@ import 'server-only'
 import { z } from 'zod'
 
 import { resolveCaller } from '@/lib/caller/resolve-caller'
+import type { MidnightNetworkId } from '@/lib/config/midnight-network-config'
 import type { DepositAccountFund } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/deposit-account-fund'
 import type { SupportedToken } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token'
 import {
@@ -12,13 +13,19 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service'
 import type { Logger } from '@/lib/logging/logger'
 
-/** Adapts the supported token service to the wire: untrusted arguments are parsed, and the funds read takes the caller secret. */
+/** Adapts the supported token service to the wire: untrusted arguments are parsed, and the funds read takes the caller address. */
 export class SupportedTokenServiceAdaptor {
   private readonly supportedTokenService: SupportedTokenService
+  private readonly networkId: MidnightNetworkId
   private readonly logger: Logger
 
-  constructor(supportedTokenService: SupportedTokenService, logger: Logger) {
+  constructor(
+    supportedTokenService: SupportedTokenService,
+    networkId: MidnightNetworkId,
+    logger: Logger,
+  ) {
     this.supportedTokenService = supportedTokenService
+    this.networkId = networkId
     this.logger = logger
   }
 
@@ -32,10 +39,10 @@ export class SupportedTokenServiceAdaptor {
   }
 
   async listDepositAccountFunds(
-    callerSecret: string,
+    callerAddress: string,
     args: unknown,
   ): Promise<DepositAccountFundListResult> {
-    const caller = resolveCaller(callerSecret)
+    const caller = resolveCaller(callerAddress, this.networkId)
     this.logger.debug('method called', { method: 'listDepositAccountFunds', caller: caller.name })
     const parsed = listDepositAccountFundsArgsSchema.safeParse(args)
     if (!parsed.success) {

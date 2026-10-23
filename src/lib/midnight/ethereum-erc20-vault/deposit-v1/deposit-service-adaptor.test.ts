@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { resolveCaller } from '@/lib/caller/resolve-caller'
+import { CALLER_ADDRESS, CALLER_NAME, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import type {
   DepositCompleteInputs,
   DepositStartInputs,
@@ -29,9 +29,10 @@ import { mock } from '@/lib/testing/mock'
 import { RecordingLogger } from '@/lib/testing/recording-logger'
 import { UINT64_MAX } from '@/lib/value-schemas'
 
-const CALLER_SECRET = 'ab'.repeat(32)
 const WALLET = { coinPublicKey: `0x${'AA'.repeat(32)}`, encryptionPublicKey: 'bb'.repeat(32) }
 const PARSED_WALLET = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
+const USER_COMMITMENT = `0x${'AB'.repeat(32)}`
+const PARSED_USER_COMMITMENT = 'ab'.repeat(32)
 const deposit = depositFixture()
 type Refusal = Extract<DepositResult, { ok: false }>
 const START_INPUTS: DepositStartInputs = {
@@ -64,6 +65,7 @@ function adaptorOver(service: Partial<DepositService>, received: object[] = []) 
       listDeposits: recording([deposit]),
       ...service,
     }),
+    FIXTURE_NETWORK_ID,
     new RecordingLogger(),
   )
 }
@@ -78,23 +80,26 @@ describe('DepositServiceAdaptor parsing', () => {
     {
       name: 'prepareStartDeposit normalises the wallet keys and carries the amount as a bigint',
       call: (a) =>
-        a.prepareStartDeposit(CALLER_SECRET, {
+        a.prepareStartDeposit(CALLER_ADDRESS, {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: '1000000' },
           wallet: WALLET,
+          userCommitment: USER_COMMITMENT,
         }),
       expectReceived: [
         {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: 1_000_000n },
           wallet: PARSED_WALLET,
+          userCommitment: PARSED_USER_COMMITMENT,
         },
       ],
     },
     {
       name: 'prepareStartDeposit refuses a zero amount',
       call: (a) =>
-        a.prepareStartDeposit(CALLER_SECRET, {
+        a.prepareStartDeposit(CALLER_ADDRESS, {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: 0n },
           wallet: WALLET,
+          userCommitment: USER_COMMITMENT,
         }),
       expectReceived: [],
       expectError: 'depositRequest.amount',
@@ -102,9 +107,10 @@ describe('DepositServiceAdaptor parsing', () => {
     {
       name: 'startDeposit carries the inputs as bigints and the finalised bytes without the 0x prefix',
       call: (a) =>
-        a.startDeposit(CALLER_SECRET, {
+        a.startDeposit(CALLER_ADDRESS, {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: '1000000' },
           wallet: WALLET,
+          userCommitment: USER_COMMITMENT,
           inIndex: '42',
           evmNonce: 7n,
           finalizedTx: '0xF1A1',
@@ -113,6 +119,7 @@ describe('DepositServiceAdaptor parsing', () => {
         {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: 1_000_000n },
           wallet: PARSED_WALLET,
+          userCommitment: PARSED_USER_COMMITMENT,
           inIndex: 42n,
           evmNonce: 7n,
           finalizedTx: 'f1a1',
@@ -122,9 +129,10 @@ describe('DepositServiceAdaptor parsing', () => {
     {
       name: 'startDeposit refuses a wallet key that is not 32 bytes',
       call: (a) =>
-        a.startDeposit(CALLER_SECRET, {
+        a.startDeposit(CALLER_ADDRESS, {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: 1n },
           wallet: { ...WALLET, coinPublicKey: 'aa' },
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           evmNonce: 7n,
           finalizedTx: 'f1a1',
@@ -135,9 +143,10 @@ describe('DepositServiceAdaptor parsing', () => {
     {
       name: 'startDeposit refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startDeposit(CALLER_SECRET, {
+        a.startDeposit(CALLER_ADDRESS, {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: 1n },
           wallet: WALLET,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           evmNonce: 7n,
           finalizedTx: 'not hex',
@@ -148,9 +157,10 @@ describe('DepositServiceAdaptor parsing', () => {
     {
       name: 'startDeposit refuses a nonce above the 64-bit range',
       call: (a) =>
-        a.startDeposit(CALLER_SECRET, {
+        a.startDeposit(CALLER_ADDRESS, {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: 1n },
           wallet: WALLET,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           evmNonce: UINT64_MAX + 1n,
           finalizedTx: 'f1a1',
@@ -161,9 +171,10 @@ describe('DepositServiceAdaptor parsing', () => {
     {
       name: 'startDeposit refuses a missing input index',
       call: (a) =>
-        a.startDeposit(CALLER_SECRET, {
+        a.startDeposit(CALLER_ADDRESS, {
           depositRequest: { erc20Address: ERC20_ADDRESS, amount: 1n },
           wallet: WALLET,
+          userCommitment: USER_COMMITMENT,
           evmNonce: 7n,
           finalizedTx: 'f1a1',
         }),
@@ -172,19 +183,19 @@ describe('DepositServiceAdaptor parsing', () => {
     },
     {
       name: 'prepareCompleteDeposit passes the name and the wallet',
-      call: (a) => a.prepareCompleteDeposit(CALLER_SECRET, { name: DEPOSIT_NAME, wallet: WALLET }),
+      call: (a) => a.prepareCompleteDeposit(CALLER_ADDRESS, { name: DEPOSIT_NAME, wallet: WALLET }),
       expectReceived: [{ name: DEPOSIT_NAME, wallet: PARSED_WALLET }],
     },
     {
       name: 'prepareCompleteDeposit refuses a name that is not a deposit',
-      call: (a) => a.prepareCompleteDeposit(CALLER_SECRET, { name: 'deposits/1', wallet: WALLET }),
+      call: (a) => a.prepareCompleteDeposit(CALLER_ADDRESS, { name: 'deposits/1', wallet: WALLET }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-deposits/{uuid}',
     },
     {
       name: 'completeDeposit passes the name, the wallet and the finalised bytes',
       call: (a) =>
-        a.completeDeposit(CALLER_SECRET, {
+        a.completeDeposit(CALLER_ADDRESS, {
           name: DEPOSIT_NAME,
           wallet: WALLET,
           finalizedTx: 'F1A1',
@@ -193,23 +204,23 @@ describe('DepositServiceAdaptor parsing', () => {
     },
     {
       name: 'completeDeposit refuses a missing finalised call',
-      call: (a) => a.completeDeposit(CALLER_SECRET, { name: DEPOSIT_NAME, wallet: WALLET }),
+      call: (a) => a.completeDeposit(CALLER_ADDRESS, { name: DEPOSIT_NAME, wallet: WALLET }),
       expectReceived: [],
       expectError: 'finalizedTx',
     },
     {
       name: 'getDeposit passes the name',
-      call: (a) => a.getDeposit(CALLER_SECRET, { name: DEPOSIT_NAME }),
+      call: (a) => a.getDeposit(CALLER_ADDRESS, { name: DEPOSIT_NAME }),
       expectReceived: [{ name: DEPOSIT_NAME }],
     },
     {
       name: 'listDeposits takes no arguments',
-      call: (a) => a.listDeposits(CALLER_SECRET, {}),
+      call: (a) => a.listDeposits(CALLER_ADDRESS, {}),
       expectReceived: [{}],
     },
     {
       name: 'listDeposits refuses a non-object',
-      call: (a) => a.listDeposits(CALLER_SECRET, 'all'),
+      call: (a) => a.listDeposits(CALLER_ADDRESS, 'all'),
       expectReceived: [],
       expectError: 'expected object',
     },
@@ -223,9 +234,9 @@ describe('DepositServiceAdaptor parsing', () => {
     else expect(result).toMatchObject({ ok: false, error: expect.stringContaining(expectError) })
   })
 
-  test('an invalid caller secret throws before anything is parsed', async () => {
+  test('an invalid caller address throws before anything is parsed', async () => {
     await expect(adaptorOver({}).getDeposit('nope', { name: DEPOSIT_NAME })).rejects.toThrow(
-      'caller secret',
+      'caller address',
     )
   })
 })
@@ -233,7 +244,7 @@ describe('DepositServiceAdaptor parsing', () => {
 describe('DepositServiceAdaptor outcomes', () => {
   test('a missing deposit is a not-found result', async () => {
     const adaptor = adaptorOver({ getDeposit: async () => undefined })
-    expect(await adaptor.getDeposit(CALLER_SECRET, { name: DEPOSIT_NAME })).toEqual({
+    expect(await adaptor.getDeposit(CALLER_ADDRESS, { name: DEPOSIT_NAME })).toEqual({
       ok: false,
       error: `${DEPOSIT_NAME} was not found.`,
     })
@@ -242,13 +253,14 @@ describe('DepositServiceAdaptor outcomes', () => {
   test('the prepare methods answer with the inputs the service assigned or read', async () => {
     const adaptor = adaptorOver({})
     expect(
-      await adaptor.prepareStartDeposit(CALLER_SECRET, {
+      await adaptor.prepareStartDeposit(CALLER_ADDRESS, {
         depositRequest: { erc20Address: ERC20_ADDRESS, amount: 1n },
         wallet: WALLET,
+        userCommitment: USER_COMMITMENT,
       }),
     ).toEqual({ ok: true, inputs: START_INPUTS })
     expect(
-      await adaptor.prepareCompleteDeposit(CALLER_SECRET, { name: DEPOSIT_NAME, wallet: WALLET }),
+      await adaptor.prepareCompleteDeposit(CALLER_ADDRESS, { name: DEPOSIT_NAME, wallet: WALLET }),
     ).toEqual({ ok: true, inputs: COMPLETE_INPUTS })
   })
 
@@ -290,18 +302,19 @@ describe('DepositServiceAdaptor outcomes', () => {
       prepareCompleteDeposit: refusing,
       completeDeposit: refusing,
     })
-    const starting = adaptor.startDeposit(CALLER_SECRET, {
+    const starting = adaptor.startDeposit(CALLER_ADDRESS, {
       depositRequest: { erc20Address: ERC20_ADDRESS, amount: 1n },
       wallet: WALLET,
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       evmNonce: 7n,
       finalizedTx: 'f1a1',
     })
-    const preparing = adaptor.prepareCompleteDeposit(CALLER_SECRET, {
+    const preparing = adaptor.prepareCompleteDeposit(CALLER_ADDRESS, {
       name: DEPOSIT_NAME,
       wallet: WALLET,
     })
-    const completing = adaptor.completeDeposit(CALLER_SECRET, {
+    const completing = adaptor.completeDeposit(CALLER_ADDRESS, {
       name: DEPOSIT_NAME,
       wallet: WALLET,
       finalizedTx: 'f1a1',
@@ -318,16 +331,16 @@ describe('DepositServiceAdaptor logging', () => {
     method: string
     call: (adaptor: DepositServiceAdaptor) => Promise<unknown>
   }> = [
-    { method: 'prepareStartDeposit', call: (a) => a.prepareStartDeposit(CALLER_SECRET, {}) },
-    { method: 'startDeposit', call: (a) => a.startDeposit(CALLER_SECRET, {}) },
-    { method: 'prepareCompleteDeposit', call: (a) => a.prepareCompleteDeposit(CALLER_SECRET, {}) },
-    { method: 'completeDeposit', call: (a) => a.completeDeposit(CALLER_SECRET, {}) },
-    { method: 'getDeposit', call: (a) => a.getDeposit(CALLER_SECRET, { name: DEPOSIT_NAME }) },
-    { method: 'listDeposits', call: (a) => a.listDeposits(CALLER_SECRET, {}) },
+    { method: 'prepareStartDeposit', call: (a) => a.prepareStartDeposit(CALLER_ADDRESS, {}) },
+    { method: 'startDeposit', call: (a) => a.startDeposit(CALLER_ADDRESS, {}) },
+    { method: 'prepareCompleteDeposit', call: (a) => a.prepareCompleteDeposit(CALLER_ADDRESS, {}) },
+    { method: 'completeDeposit', call: (a) => a.completeDeposit(CALLER_ADDRESS, {}) },
+    { method: 'getDeposit', call: (a) => a.getDeposit(CALLER_ADDRESS, { name: DEPOSIT_NAME }) },
+    { method: 'listDeposits', call: (a) => a.listDeposits(CALLER_ADDRESS, {}) },
   ]
 
   test.each(cases)(
-    '$method logs one line naming the method and the derived caller, never the secret',
+    '$method logs one line naming the method and the derived caller',
     async ({ method, call }) => {
       const logger = new RecordingLogger()
       await call(
@@ -336,6 +349,7 @@ describe('DepositServiceAdaptor logging', () => {
             getDeposit: async () => deposit,
             listDeposits: async () => [deposit],
           }),
+          FIXTURE_NETWORK_ID,
           logger,
         ),
       )
@@ -343,10 +357,10 @@ describe('DepositServiceAdaptor logging', () => {
         {
           level: 'debug',
           message: 'method called',
-          fields: { method, caller: resolveCaller(CALLER_SECRET).name },
+          fields: { method, caller: CALLER_NAME },
         },
       ])
-      expect(JSON.stringify(logger.lines)).not.toContain(CALLER_SECRET)
+      expect(JSON.stringify(logger.lines)).not.toContain(CALLER_ADDRESS)
     },
   )
 })

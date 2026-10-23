@@ -17,61 +17,61 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function prepareStartDeposit(
-  callerSecret: string,
+  callerAddress: string,
   args: PrepareStartDepositArgs,
 ): Promise<DepositStartInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.prepareStartDeposit(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function startDeposit(
-  callerSecret: string,
+  callerAddress: string,
   args: StartDepositArgs,
 ): Promise<DepositResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.startDeposit(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function prepareCompleteDeposit(
-  callerSecret: string,
+  callerAddress: string,
   args: PrepareCompleteDepositArgs,
 ): Promise<DepositCompleteInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.prepareCompleteDeposit(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function completeDeposit(
-  callerSecret: string,
+  callerAddress: string,
   args: CompleteDepositArgs,
 ): Promise<DepositResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.completeDeposit(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function getDeposit(
-  callerSecret: string,
+  callerAddress: string,
   args: GetDepositArgs,
 ): Promise<DepositResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.getDeposit(
-    callerSecret,
+    callerAddress,
     args,
   )
 }
 
 export async function listDeposits(
-  callerSecret: string,
+  callerAddress: string,
   args: ListDepositsArgs,
 ): Promise<DepositListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.listDeposits(
-    callerSecret,
+    callerAddress,
     args,
   )
 }

@@ -63,7 +63,7 @@ interface SwapPanelProps {
  * its fee, and the server records it for the backend to submit.
  */
 export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
-  const { callerSecret, callerName } = useCaller()
+  const { callerAddress, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -109,21 +109,21 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   const quote = useQuery({
     queryKey: [
       'swap-quote',
-      callerName,
+      callerAddress,
       fromToken?.origin.erc20Address,
       toToken?.origin.erc20Address,
       restingAmount,
       slippageBps?.toString(),
     ],
     queryFn:
-      callerSecret === null ||
+      callerAddress === null ||
       fromToken === null ||
       toToken === null ||
       restingAmount === null ||
       slippageBps === null
         ? skipToken
         : async () => {
-            const result = await quoteSwap(callerSecret, {
+            const result = await quoteSwap(callerAddress, {
               erc20AddressIn: fromToken.origin.erc20Address,
               erc20AddressOut: toToken.origin.erc20Address,
               amountIn: BigInt(restingAmount),
@@ -136,8 +136,10 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   })
   const swapping = useMutation({
     mutationFn: async () => {
-      if (callerSecret === null) throw new Error('The identity secret is not set.')
-      if (wallet === null) throw new Error('No Midnight wallet is connected.')
+      if (callerAddress === null || wallet === null) {
+        throw new Error('No Midnight wallet is connected.')
+      }
+      if (vaultSecret === null) throw new Error('The vault secret is not set.')
       if (quote.data === undefined || toToken === null) throw new Error('No quote yet.')
       // Loaded on first use, so a visitor who never swaps never downloads the call builder and the contract.
       const calls = await import('@/lib/midnight/ethereum-erc20-vault/swap-v1/browser-swap-calls')
@@ -145,7 +147,8 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
         actions: { prepareStartSwap, startSwap },
         builder: calls.browserSwapCallBuilder(config, window.location.origin),
         wallet,
-        callerSecret,
+        callerAddress,
+        vaultSecret,
         swapRequest: {
           erc20AddressIn: quote.data.erc20AddressIn,
           erc20AddressOut: quote.data.erc20AddressOut,
@@ -185,10 +188,10 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
       ? formatTokenAmount(quote.data.amountOutMinimum, toToken.decimals)
       : ''
   const blocker =
-    callerSecret === null
-      ? 'Set the identity secret to swap.'
-      : wallet === null
-        ? 'Connect a Midnight wallet to swap.'
+    wallet === null
+      ? 'Connect a Midnight wallet to swap.'
+      : vaultSecret === null
+        ? 'Set the vault secret to swap.'
         : sources.length === 0 && balances.isSuccess
           ? 'Deposit a token first: the wallet holds nothing the vault admits.'
           : fromToken !== null && targets.isError

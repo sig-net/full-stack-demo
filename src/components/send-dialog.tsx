@@ -55,7 +55,7 @@ interface SendDialogProps {
  * and no other control answers.
  */
 export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): ReactNode {
-  const { callerSecret } = useCaller()
+  const { callerAddress, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -84,8 +84,10 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
 
   const sending = useMutation({
     mutationFn: async () => {
-      if (callerSecret === null) throw new Error('The identity secret is not set.')
-      if (wallet === null) throw new Error('No Midnight wallet is connected.')
+      if (callerAddress === null || wallet === null) {
+        throw new Error('No Midnight wallet is connected.')
+      }
+      if (vaultSecret === null) throw new Error('The vault secret is not set.')
       if (source === null || amount.value === null) throw new Error('No amount to send.')
       // Loaded on first use, so a visitor who never sends never downloads the call builder and the contract.
       const calls =
@@ -94,7 +96,8 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
         actions: { prepareStartWithdraw, startWithdraw },
         builder: calls.browserWithdrawCallBuilder(config, window.location.origin),
         wallet,
-        callerSecret,
+        callerAddress,
+        vaultSecret,
         withdrawRequest: {
           erc20Address: source.token.origin.erc20Address,
           amount: amount.value,
@@ -120,10 +123,10 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
   })
   const busy = sending.isPending
   const blocker =
-    callerSecret === null
-      ? 'Set the identity secret to send.'
-      : wallet === null
-        ? 'Connect a Midnight wallet to send.'
+    wallet === null
+      ? 'Connect a Midnight wallet to send.'
+      : vaultSecret === null
+        ? 'Set the vault secret to send.'
         : sources.length === 0 && balances.isSuccess
           ? 'Deposit a token first: the wallet holds nothing the vault admits.'
           : amount.error
