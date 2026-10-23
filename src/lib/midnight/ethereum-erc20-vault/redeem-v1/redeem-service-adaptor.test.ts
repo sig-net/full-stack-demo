@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { CALLER_ADDRESS, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
+import { CALLER_CREDENTIAL, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import type {
   RedeemCompleteInputs,
   RedeemStartInputs,
@@ -65,19 +65,19 @@ describe('RedeemServiceAdaptor parsing', () => {
   }> = [
     {
       name: 'prepareStartRedeem carries the shares as a bigint',
-      call: (a) => a.prepareStartRedeem(CALLER_ADDRESS, { redeemRequest: { shares: '300000' } }),
+      call: (a) => a.prepareStartRedeem(CALLER_CREDENTIAL, { redeemRequest: { shares: '300000' } }),
       expectReceived: [{ redeemRequest: REQUEST }],
     },
     {
       name: 'prepareStartRedeem refuses zero shares',
-      call: (a) => a.prepareStartRedeem(CALLER_ADDRESS, { redeemRequest: { shares: 0n } }),
+      call: (a) => a.prepareStartRedeem(CALLER_CREDENTIAL, { redeemRequest: { shares: 0n } }),
       expectReceived: [],
       expectError: 'redeemRequest.shares',
     },
     {
       name: 'startRedeem carries the shares, the slot and the finalised bytes normalised',
       call: (a) =>
-        a.startRedeem(CALLER_ADDRESS, {
+        a.startRedeem(CALLER_CREDENTIAL, {
           redeemRequest: { shares: '300000' },
           inIndex: '42',
           finalizedTx: FINALIZED_TX,
@@ -87,7 +87,7 @@ describe('RedeemServiceAdaptor parsing', () => {
     {
       name: 'startRedeem refuses zero shares',
       call: (a) =>
-        a.startRedeem(CALLER_ADDRESS, {
+        a.startRedeem(CALLER_CREDENTIAL, {
           redeemRequest: { shares: 0n },
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
@@ -98,49 +98,53 @@ describe('RedeemServiceAdaptor parsing', () => {
     {
       name: 'startRedeem refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startRedeem(CALLER_ADDRESS, { redeemRequest: REQUEST, inIndex: 42n, finalizedTx: 'zz' }),
+        a.startRedeem(CALLER_CREDENTIAL, {
+          redeemRequest: REQUEST,
+          inIndex: 42n,
+          finalizedTx: 'zz',
+        }),
       expectReceived: [],
       expectError: 'finalizedTx',
     },
     {
       name: 'startRedeem refuses a missing slot',
       call: (a) =>
-        a.startRedeem(CALLER_ADDRESS, { redeemRequest: REQUEST, finalizedTx: FINALIZED_TX }),
+        a.startRedeem(CALLER_CREDENTIAL, { redeemRequest: REQUEST, finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'inIndex',
     },
     {
       name: 'prepareCompleteRedeem passes the name',
-      call: (a) => a.prepareCompleteRedeem(CALLER_ADDRESS, { name: REDEEM_NAME }),
+      call: (a) => a.prepareCompleteRedeem(CALLER_CREDENTIAL, { name: REDEEM_NAME }),
       expectReceived: [{ name: REDEEM_NAME }],
     },
     {
       name: 'completeRedeem passes the name and the finalised bytes',
       call: (a) =>
-        a.completeRedeem(CALLER_ADDRESS, { name: REDEEM_NAME, finalizedTx: FINALIZED_TX }),
+        a.completeRedeem(CALLER_CREDENTIAL, { name: REDEEM_NAME, finalizedTx: FINALIZED_TX }),
       expectReceived: [{ name: REDEEM_NAME, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'completeRedeem refuses a name that is not a redeem',
       call: (a) =>
-        a.completeRedeem(CALLER_ADDRESS, { name: 'redeems/1', finalizedTx: FINALIZED_TX }),
+        a.completeRedeem(CALLER_CREDENTIAL, { name: 'redeems/1', finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-redeems/{uuid}',
     },
     {
       name: 'completeRedeem refuses missing finalised bytes',
-      call: (a) => a.completeRedeem(CALLER_ADDRESS, { name: REDEEM_NAME }),
+      call: (a) => a.completeRedeem(CALLER_CREDENTIAL, { name: REDEEM_NAME }),
       expectReceived: [],
       expectError: 'finalizedTx',
     },
     {
       name: 'getRedeem passes the name',
-      call: (a) => a.getRedeem(CALLER_ADDRESS, { name: REDEEM_NAME }),
+      call: (a) => a.getRedeem(CALLER_CREDENTIAL, { name: REDEEM_NAME }),
       expectReceived: [{ name: REDEEM_NAME }],
     },
     {
       name: 'listRedeems takes no arguments',
-      call: (a) => a.listRedeems(CALLER_ADDRESS, {}),
+      call: (a) => a.listRedeems(CALLER_CREDENTIAL, {}),
       expectReceived: [{}],
     },
   ]
@@ -157,7 +161,7 @@ describe('RedeemServiceAdaptor parsing', () => {
 describe('RedeemServiceAdaptor outcomes', () => {
   test('a missing redeem is a not-found result', async () => {
     const adaptor = adaptorOver({ getRedeem: async () => undefined })
-    expect(await adaptor.getRedeem(CALLER_ADDRESS, { name: REDEEM_NAME })).toEqual({
+    expect(await adaptor.getRedeem(CALLER_CREDENTIAL, { name: REDEEM_NAME })).toEqual({
       ok: false,
       error: `${REDEEM_NAME} was not found.`,
     })
@@ -165,11 +169,13 @@ describe('RedeemServiceAdaptor outcomes', () => {
 
   test('the prepare methods answer with the inputs the service assigned or read', async () => {
     const adaptor = adaptorOver({})
-    expect(await adaptor.prepareStartRedeem(CALLER_ADDRESS, { redeemRequest: REQUEST })).toEqual({
-      ok: true,
-      inputs: START_INPUTS,
-    })
-    expect(await adaptor.prepareCompleteRedeem(CALLER_ADDRESS, { name: REDEEM_NAME })).toEqual({
+    expect(await adaptor.prepareStartRedeem(CALLER_CREDENTIAL, { redeemRequest: REQUEST })).toEqual(
+      {
+        ok: true,
+        inputs: START_INPUTS,
+      },
+    )
+    expect(await adaptor.prepareCompleteRedeem(CALLER_CREDENTIAL, { name: REDEEM_NAME })).toEqual({
       ok: true,
       inputs: COMPLETE_INPUTS,
     })
@@ -196,13 +202,13 @@ describe('RedeemServiceAdaptor outcomes', () => {
       prepareCompleteRedeem: refusing,
       completeRedeem: refusing,
     })
-    const starting = adaptor.startRedeem(CALLER_ADDRESS, {
+    const starting = adaptor.startRedeem(CALLER_CREDENTIAL, {
       redeemRequest: REQUEST,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })
-    const preparing = adaptor.prepareCompleteRedeem(CALLER_ADDRESS, { name: REDEEM_NAME })
-    const completing = adaptor.completeRedeem(CALLER_ADDRESS, {
+    const preparing = adaptor.prepareCompleteRedeem(CALLER_CREDENTIAL, { name: REDEEM_NAME })
+    const completing = adaptor.completeRedeem(CALLER_CREDENTIAL, {
       name: REDEEM_NAME,
       finalizedTx: FINALIZED_TX,
     })

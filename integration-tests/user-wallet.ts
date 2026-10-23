@@ -25,6 +25,7 @@ import {
   UnshieldedWallet,
 } from '@midnightntwrk/wallet-sdk-unshielded-wallet'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type { MidnightNetworkConfig, MidnightNetworkId } from '@/lib/config/midnight-network-config'
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
 
@@ -33,6 +34,8 @@ export interface UserWallet {
   readonly publicKeys: WalletPublicKeys
   /** The bech32m address NIGHT is sent to. */
   readonly unshieldedAddress: string
+  /** The login credential every adaptor call takes first, signed now with the unshielded key. */
+  login(): Promise<LoginCredential>
   /** Unshielded NIGHT in STAR, from the synced state. */
   nightBalance(): Promise<bigint>
   /** The shielded coins of `tokenType` the wallet may spend, in the token's base units, from the synced state. */
@@ -104,6 +107,7 @@ export async function startUserWallet(
       encryptionPublicKey: keys.shieldedSecretKeys.encryptionPublicKey,
     },
     unshieldedAddress: keys.unshieldedKeystore.getBech32Address().toString(),
+    login: () => Promise.resolve(userLogin(keys.unshieldedKeystore, config.networkId)),
     async nightBalance(): Promise<bigint> {
       const state = await facade.waitForSyncedState()
       return state.unshielded.balances[nativeToken().raw] ?? 0n
@@ -132,9 +136,31 @@ export function userWalletPublicKeys(seedHex: string): WalletPublicKeys {
   return { coinPublicKey: keys.coinPublicKey, encryptionPublicKey: keys.encryptionPublicKey }
 }
 
-/** The unshielded address of the seed's account zero, known without a start, which names the caller. */
-export function userWalletUnshieldedAddress(seedHex: string, networkId: MidnightNetworkId): string {
-  return deriveKeys(seedHex, networkId).unshieldedKeystore.getBech32Address().toString()
+/** A login of the seed's account zero, signed now without a start, which names the caller. */
+export function userWalletLogin(seedHex: string, networkId: MidnightNetworkId): LoginCredential {
+  return userLogin(deriveKeys(seedHex, networkId).unshieldedKeystore, networkId)
+}
+
+/**
+ * Mirrors `loginMessageOf` in `src/lib/caller/login-credential.ts` and `signedMessageOf` in
+ * `src/lib/midnight/signed-message.ts`: the login the browser asks the wallet to sign, signed
+ * here with the keystore as the seed wallet signs it.
+ */
+function userLogin(keystore: UnshieldedKeystore, networkId: MidnightNetworkId): LoginCredential {
+  const issuedAt = new Date().toISOString()
+  const payload = Buffer.from(`full-stack-demo:login:${networkId}:${issuedAt}`, 'utf8')
+  const message = Buffer.concat([
+    Buffer.from(`midnight_signed_message:${payload.length}:`, 'utf8'),
+    payload,
+  ])
+  return {
+    issuedAt,
+    signature: {
+      scheme: 'schnorr_bip340',
+      verifyingKey: keystore.getPublicKey().value,
+      signature: keystore.signData(Uint8Array.from(message)).value,
+    },
+  }
 }
 
 /** `MIDNIGHT_USER_SEED` from `.env.local`, the harness-funded user wallet of the stack. */

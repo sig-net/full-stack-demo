@@ -62,7 +62,7 @@ export async function startApprovalAsUser(
   approvalRequest: ApprovalRequest,
 ): Promise<ApprovalResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.approvalV1
-  const prepared = await adaptor.prepareStartApproval(user.unshieldedAddress, { approvalRequest })
+  const prepared = await adaptor.prepareStartApproval(await user.login(), { approvalRequest })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildStartCall(
     backend,
@@ -72,7 +72,7 @@ export async function startApprovalAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.startApproval(user.unshieldedAddress, {
+  const result = await adaptor.startApproval(await user.login(), {
     approvalRequest,
     inIndex: prepared.inputs.inIndex,
     finalizedTx,
@@ -91,7 +91,7 @@ export async function completeApprovalAsUser(
   name: string,
 ): Promise<ApprovalResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.approvalV1
-  const prepared = await adaptor.prepareCompleteApproval(user.unshieldedAddress, { name })
+  const prepared = await adaptor.prepareCompleteApproval(await user.login(), { name })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
@@ -100,7 +100,7 @@ export async function completeApprovalAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeApproval(user.unshieldedAddress, { name, finalizedTx })
+  const result = await adaptor.completeApproval(await user.login(), { name, finalizedTx })
   log(
     `complete call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, completeApproval answered in ${String(Date.now() - calling)} ms`,
   )

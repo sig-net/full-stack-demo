@@ -15,15 +15,15 @@ const TARGETS_REFETCH_INTERVAL_MS = 15_000
 
 /** Every spender the vault may grant, with the allowance the vault account holds for it now, read for the connected wallet's caller once the vault is initialised. */
 export function useApprovalTargets(): UseQueryResult<ApprovalTarget[]> {
-  const { callerAddress } = useCaller()
+  const { login } = useCaller()
   const { checks } = useVaultReadiness()
   return useQuery({
-    queryKey: [APPROVAL_TARGETS_QUERY_KEY, callerAddress],
+    queryKey: [APPROVAL_TARGETS_QUERY_KEY, login?.verifyingKey ?? null],
     queryFn:
-      callerAddress === null || checks.vaultInitialised.status !== 'ok'
+      login === null || checks.vaultInitialised.status !== 'ok'
         ? skipToken
         : async () => {
-            const result = await listApprovalTargets(callerAddress, {})
+            const result = await listApprovalTargets(await login.credential(), {})
             if (!result.ok) throw new Error(result.error)
             return result.targets
           },

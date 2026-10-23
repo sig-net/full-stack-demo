@@ -444,9 +444,9 @@ circuit)` over the non-terminal states allows one live attempt per deposit step,
 resolvers racing to retry cannot both create one.
 
 `{caller}` is the application's caller id for the depositor: the 32-byte user address of the
-depositor's wallet's unshielded key in hex, which the unshielded address every server action
-takes as its first argument encodes (see Caller authentication in the README), so a caller can
-only name their own caller as a parent. The vault secret and its `userCommitment` pick the
+depositor's wallet's unshielded key in hex, derived from the key that signed the login credential
+every server action takes as its first argument (see Caller authentication in the README), so a
+caller can only name their own caller as a parent. The vault secret and its `userCommitment` pick the
 deposit account under that caller and do not take part in the name. Listing a user's deposits is
 a list under it.
 

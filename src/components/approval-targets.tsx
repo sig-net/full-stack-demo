@@ -50,7 +50,7 @@ const KIND_LABELS: Record<ApprovalKind, string> = {
  * paying its fee, and the server records it for the backend to submit.
  */
 export function ApprovalTargets(): ReactNode {
-  const { callerAddress, vaultSecret } = useCaller()
+  const { login, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -60,7 +60,7 @@ export function ApprovalTargets(): ReactNode {
   const [stage, setStage] = useState<CallerCallStage | null>(null)
   const approving = useMutation({
     mutationFn: async (target: ApprovalTarget) => {
-      if (callerAddress === null || wallet === null) {
+      if (login === null || wallet === null) {
         throw new Error('No Midnight wallet is connected.')
       }
       if (vaultSecret === null) throw new Error('The vault secret is not set.')
@@ -71,7 +71,7 @@ export function ApprovalTargets(): ReactNode {
         actions: { prepareStartApproval, startApproval },
         builder: calls.browserApprovalCallBuilder(config, window.location.origin),
         wallet,
-        callerAddress,
+        login,
         vaultSecret,
         approvalRequest:
           target.kind === 'router'

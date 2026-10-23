@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
+import { CALLER_CREDENTIAL, CALLER_LOGIN } from '@/lib/caller/caller-fixtures'
 import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import type {
   CompleteWithdrawCircuitArgs,
@@ -40,7 +41,6 @@ import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
 
 const VAULT_SECRET = 'ab'.repeat(32)
-const CALLER_ADDRESS = 'mn_addr_stagenet1caller'
 const SECRET_KEY = new Uint8Array(32).fill(0xab)
 const PUBLIC_KEYS = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const WITHDRAW_REQUEST = {
@@ -95,26 +95,26 @@ interface Doubles {
 function collaborators(doubles: Doubles) {
   const trail: Trail = { events: [], received: structuredClone(NOTHING_RECEIVED) }
   const actions = mock<WithdrawActions>('WithdrawActions', {
-    prepareStartWithdraw: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    prepareStartWithdraw: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('prepareStartWithdraw')
       trail.received.prepareStartWithdraw.push(args)
       return doubles.prepareStartRefusal ?? { ok: true, inputs: START_INPUTS }
     },
-    startWithdraw: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    startWithdraw: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('startWithdraw')
       trail.received.startWithdraw.push(args)
       return doubles.started ?? { ok: true, withdraw }
     },
-    prepareCompleteWithdraw: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    prepareCompleteWithdraw: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('prepareCompleteWithdraw')
       trail.received.prepareCompleteWithdraw.push(args)
       return { ok: true, inputs: COMPLETE_INPUTS }
     },
-    completeWithdraw: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    completeWithdraw: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('completeWithdraw')
       trail.received.completeWithdraw.push(args)
       return doubles.completed ?? { ok: true, withdraw }
@@ -151,7 +151,7 @@ function collaborators(doubles: Doubles) {
       actions,
       builder,
       wallet,
-      callerAddress: CALLER_ADDRESS,
+      login: CALLER_LOGIN,
       vaultSecret: VAULT_SECRET,
       onStage,
     },

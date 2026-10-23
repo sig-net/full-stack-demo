@@ -1,5 +1,6 @@
 'use server'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type {
   CompleteWithdrawArgs,
   GetWithdrawArgs,
@@ -17,60 +18,60 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function prepareStartWithdraw(
-  callerAddress: string,
+  credential: LoginCredential,
   args: PrepareStartWithdrawArgs,
 ): Promise<WithdrawStartInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.prepareStartWithdraw(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function startWithdraw(
-  callerAddress: string,
+  credential: LoginCredential,
   args: StartWithdrawArgs,
 ): Promise<WithdrawResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.startWithdraw(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function prepareCompleteWithdraw(
-  callerAddress: string,
+  credential: LoginCredential,
   args: PrepareCompleteWithdrawArgs,
 ): Promise<WithdrawCompleteInputsResult> {
   return (
     await getBackend()
-  ).midnight.ethereumErc20Vault.withdrawV1.adaptor.prepareCompleteWithdraw(callerAddress, args)
+  ).midnight.ethereumErc20Vault.withdrawV1.adaptor.prepareCompleteWithdraw(credential, args)
 }
 
 export async function completeWithdraw(
-  callerAddress: string,
+  credential: LoginCredential,
   args: CompleteWithdrawArgs,
 ): Promise<WithdrawResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.completeWithdraw(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function getWithdraw(
-  callerAddress: string,
+  credential: LoginCredential,
   args: GetWithdrawArgs,
 ): Promise<WithdrawResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.getWithdraw(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function listWithdraws(
-  callerAddress: string,
+  credential: LoginCredential,
   args: ListWithdrawsArgs,
 ): Promise<WithdrawListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.withdrawV1.adaptor.listWithdraws(
-    callerAddress,
+    credential,
     args,
   )
 }

@@ -150,7 +150,7 @@ function DepositAccountFunds({
   onBusyChange: (busy: boolean) => void
   onDeposited: () => void
 }): ReactNode {
-  const { callerAddress, vaultSecret, userCommitment } = useCaller()
+  const { login, vaultSecret, userCommitment } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -160,7 +160,7 @@ function DepositAccountFunds({
   const [stage, setStage] = useState<CallerCallStage | null>(null)
   const depositing = useMutation({
     mutationFn: async (fund: DepositAccountFund) => {
-      if (callerAddress === null || wallet === null) {
+      if (login === null || wallet === null) {
         throw new Error('No Midnight wallet is connected.')
       }
       if (vaultSecret === null) throw new Error('The vault secret is not set.')
@@ -171,7 +171,7 @@ function DepositAccountFunds({
         actions: { prepareStartDeposit, startDeposit },
         builder: calls.browserDepositCallBuilder(config, window.location.origin),
         wallet,
-        callerAddress,
+        login,
         vaultSecret,
         depositRequest: { erc20Address: fund.erc20Address, amount: fund.amount },
         onStage: setStage,
@@ -201,12 +201,14 @@ function DepositAccountFunds({
     },
   })
   const funds = useQuery({
-    queryKey: ['deposit-account-funds', callerAddress, userCommitment, address],
+    queryKey: ['deposit-account-funds', login?.verifyingKey ?? null, userCommitment, address],
     queryFn:
-      callerAddress === null || userCommitment === null
+      login === null || userCommitment === null
         ? skipToken
         : async () => {
-            const result = await listDepositAccountFunds(callerAddress, { userCommitment })
+            const result = await listDepositAccountFunds(await login.credential(), {
+              userCommitment,
+            })
             if (!result.ok) throw new Error(result.error)
             return result.funds
           },

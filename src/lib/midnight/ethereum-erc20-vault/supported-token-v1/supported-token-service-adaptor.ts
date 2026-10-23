@@ -13,7 +13,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service'
 import type { Logger } from '@/lib/logging/logger'
 
-/** Adapts the supported token service to the wire: untrusted arguments are parsed, and the funds read takes the caller address. */
+/** Adapts the supported token service to the wire: untrusted arguments are parsed, and the funds read takes the login credential. */
 export class SupportedTokenServiceAdaptor {
   private readonly supportedTokenService: SupportedTokenService
   private readonly networkId: MidnightNetworkId
@@ -39,10 +39,10 @@ export class SupportedTokenServiceAdaptor {
   }
 
   async listDepositAccountFunds(
-    callerAddress: string,
+    credential: unknown,
     args: unknown,
   ): Promise<DepositAccountFundListResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'listDepositAccountFunds', caller: caller.name })
     const parsed = listDepositAccountFundsArgsSchema.safeParse(args)
     if (!parsed.success) {

@@ -1,6 +1,7 @@
 import { hexToBytes } from '@sig-net/midnight'
 import { describe, expect, test } from 'vitest'
 
+import { CALLER_CREDENTIAL, CALLER_LOGIN } from '@/lib/caller/caller-fixtures'
 import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import {
   completeSupplyInBrowser,
@@ -40,7 +41,6 @@ import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
 
 const VAULT_SECRET = 'ab'.repeat(32)
-const CALLER_ADDRESS = 'mn_addr_stagenet1caller'
 const SECRET_KEY = new Uint8Array(32).fill(0xab)
 const PUBLIC_KEYS = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const SUPPLY_REQUEST = { amount: 1_000_000n }
@@ -96,26 +96,26 @@ interface Doubles {
 function collaborators(doubles: Doubles) {
   const trail: Trail = { events: [], received: structuredClone(NOTHING_RECEIVED) }
   const actions = mock<SupplyActions>('SupplyActions', {
-    prepareStartSupply: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    prepareStartSupply: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('prepareStartSupply')
       trail.received.prepareStartSupply.push(args)
       return doubles.prepareStartRefusal ?? { ok: true, inputs: START_INPUTS }
     },
-    startSupply: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    startSupply: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('startSupply')
       trail.received.startSupply.push(args)
       return doubles.started ?? { ok: true, supply }
     },
-    prepareCompleteSupply: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    prepareCompleteSupply: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('prepareCompleteSupply')
       trail.received.prepareCompleteSupply.push(args)
       return doubles.prepareComplete ?? { ok: true, inputs: EXECUTED_INPUTS }
     },
-    completeSupply: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    completeSupply: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('completeSupply')
       trail.received.completeSupply.push(args)
       return doubles.completed ?? { ok: true, supply }
@@ -152,7 +152,7 @@ function collaborators(doubles: Doubles) {
       actions,
       builder,
       wallet,
-      callerAddress: CALLER_ADDRESS,
+      login: CALLER_LOGIN,
       vaultSecret: VAULT_SECRET,
       onStage,
     },

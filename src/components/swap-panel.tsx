@@ -63,7 +63,7 @@ interface SwapPanelProps {
  * its fee, and the server records it for the backend to submit.
  */
 export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
-  const { callerAddress, vaultSecret } = useCaller()
+  const { login, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -109,21 +109,21 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   const quote = useQuery({
     queryKey: [
       'swap-quote',
-      callerAddress,
+      login?.verifyingKey ?? null,
       fromToken?.origin.erc20Address,
       toToken?.origin.erc20Address,
       restingAmount,
       slippageBps?.toString(),
     ],
     queryFn:
-      callerAddress === null ||
+      login === null ||
       fromToken === null ||
       toToken === null ||
       restingAmount === null ||
       slippageBps === null
         ? skipToken
         : async () => {
-            const result = await quoteSwap(callerAddress, {
+            const result = await quoteSwap(await login.credential(), {
               erc20AddressIn: fromToken.origin.erc20Address,
               erc20AddressOut: toToken.origin.erc20Address,
               amountIn: BigInt(restingAmount),
@@ -136,7 +136,7 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
   })
   const swapping = useMutation({
     mutationFn: async () => {
-      if (callerAddress === null || wallet === null) {
+      if (login === null || wallet === null) {
         throw new Error('No Midnight wallet is connected.')
       }
       if (vaultSecret === null) throw new Error('The vault secret is not set.')
@@ -147,7 +147,7 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
         actions: { prepareStartSwap, startSwap },
         builder: calls.browserSwapCallBuilder(config, window.location.origin),
         wallet,
-        callerAddress,
+        login,
         vaultSecret,
         swapRequest: {
           erc20AddressIn: quote.data.erc20AddressIn,

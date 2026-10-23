@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
+import { CALLER_LOGIN } from '@/lib/caller/caller-fixtures'
 import {
   type CallerCall,
   type CallRefusal,
@@ -11,7 +12,6 @@ import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
 
 const VAULT_SECRET = 'ab'.repeat(32)
-const CALLER_ADDRESS = 'mn_addr_stagenet1caller'
 const PUBLIC_KEYS = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const REFUSED: CallRefusal = { ok: false, error: 'the slot is live', reason: 'slotConflict' }
 const ACCEPTED = { ok: true, resource: 'stored' } as const
@@ -32,7 +32,7 @@ function callOver(answers: ReadonlyArray<Recorded | Error>) {
   const call: CallerCall<{ inIndex: bigint }, CallerCircuitArgs, Recorded> = {
     operation: 'deposit',
     wallet,
-    callerAddress: CALLER_ADDRESS,
+    login: CALLER_LOGIN,
     vaultSecret: VAULT_SECRET,
     prepare: async () => ({ ok: true, inputs: { inIndex: 42n } }),
     circuitArgs: (_inputs, caller) => caller,

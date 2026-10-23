@@ -68,7 +68,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
     async () => {
       const { approvalV1, depositV1, supplyV1 } = backend.midnight.ethereumErc20Vault
 
-      const targeted = await supplyV1.adaptor.getSupplyTarget(user.unshieldedAddress, {})
+      const targeted = await supplyV1.adaptor.getSupplyTarget(await user.login(), {})
       if (!targeted.ok) throw new Error(targeted.error)
       const { underlyingErc20Address, stataErc20Address } = targeted.target
       await ensureAaveReserveAcceptsDeposits(evm, stataErc20Address)

@@ -1,5 +1,6 @@
 import { hexToBytes } from '@sig-net/midnight'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type { ClientConfig } from '@/lib/config/client-config'
 import { browserVaultCallProviders } from '@/lib/midnight/ethereum-erc20-vault/browser-vault-call-providers'
 import {
@@ -23,14 +24,14 @@ import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-requ
 
 /** Starts a supply from the page, the wallet's own coin of the pinned underlying funding the start call. */
 export async function startSupplyInBrowser(args: StartSupplyInBrowserArgs): Promise<Supply> {
-  const { actions, builder, wallet, callerAddress, vaultSecret, supplyRequest, onStage } = args
+  const { actions, builder, wallet, login, vaultSecret, supplyRequest, onStage } = args
   const started = await runCallerCall({
     operation: 'supply',
     wallet,
-    callerAddress,
+    login,
     vaultSecret,
     onStage,
-    prepare: () => actions.prepareStartSupply(callerAddress, { supplyRequest }),
+    prepare: async () => actions.prepareStartSupply(await login.credential(), { supplyRequest }),
     circuitArgs: ({ inIndex, underlyingErc20Address }, caller) => ({
       ...caller,
       inIndex,
@@ -38,22 +39,22 @@ export async function startSupplyInBrowser(args: StartSupplyInBrowserArgs): Prom
       ...supplyRequest,
     }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
-    record: ({ inIndex }, finalizedTx) =>
-      actions.startSupply(callerAddress, { supplyRequest, inIndex, finalizedTx }),
+    record: async ({ inIndex }, finalizedTx) =>
+      actions.startSupply(await login.credential(), { supplyRequest, inIndex, finalizedTx }),
   })
   return started.supply
 }
 
 /** Completes an attested supply from the page, under a fresh mint nonce. */
 export async function completeSupplyInBrowser(args: CompleteSupplyInBrowserArgs): Promise<Supply> {
-  const { actions, builder, wallet, callerAddress, vaultSecret, name, onStage } = args
+  const { actions, builder, wallet, login, vaultSecret, name, onStage } = args
   const completed = await runCallerCall({
     operation: 'supply',
     wallet,
-    callerAddress,
+    login,
     vaultSecret,
     onStage,
-    prepare: () => actions.prepareCompleteSupply(callerAddress, { name }),
+    prepare: async () => actions.prepareCompleteSupply(await login.credential(), { name }),
     circuitArgs: (inputs, caller) => ({
       ...caller,
       requestId: hexToBytes(inputs.requestId),
@@ -61,7 +62,8 @@ export async function completeSupplyInBrowser(args: CompleteSupplyInBrowserArgs)
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
     }),
     build: (circuitArgs) => builder.buildComplete(circuitArgs),
-    record: (_inputs, finalizedTx) => actions.completeSupply(callerAddress, { name, finalizedTx }),
+    record: async (_inputs, finalizedTx) =>
+      actions.completeSupply(await login.credential(), { name, finalizedTx }),
   })
   return completed.supply
 }
@@ -75,15 +77,15 @@ export function browserSupplyCallBuilder(config: ClientConfig, origin: string): 
 /** The supply's server actions, as the page imports them. */
 export interface SupplyActions {
   prepareStartSupply(
-    callerAddress: string,
+    credential: LoginCredential,
     args: PrepareStartSupplyArgs,
   ): Promise<SupplyStartInputsResult>
-  startSupply(callerAddress: string, args: StartSupplyArgs): Promise<SupplyResult>
+  startSupply(credential: LoginCredential, args: StartSupplyArgs): Promise<SupplyResult>
   prepareCompleteSupply(
-    callerAddress: string,
+    credential: LoginCredential,
     args: PrepareCompleteSupplyArgs,
   ): Promise<SupplyCompleteInputsResult>
-  completeSupply(callerAddress: string, args: CompleteSupplyArgs): Promise<SupplyResult>
+  completeSupply(credential: LoginCredential, args: CompleteSupplyArgs): Promise<SupplyResult>
 }
 
 export interface StartSupplyInBrowserArgs extends CallerCallArgs<SupplyCallBuilder> {

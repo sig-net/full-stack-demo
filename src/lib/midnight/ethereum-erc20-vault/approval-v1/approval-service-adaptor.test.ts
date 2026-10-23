@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { CALLER_ADDRESS, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
+import { CALLER_CREDENTIAL, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import type {
   ApprovalCompleteInputs,
   ApprovalStartInputs,
@@ -67,29 +67,30 @@ describe('ApprovalServiceAdaptor parsing', () => {
   }> = [
     {
       name: 'listApprovalTargets takes no arguments',
-      call: (a) => a.listApprovalTargets(CALLER_ADDRESS, {}),
+      call: (a) => a.listApprovalTargets(CALLER_CREDENTIAL, {}),
       expectReceived: [{}],
     },
     {
       name: 'prepareStartApproval of the router carries the token',
-      call: (a) => a.prepareStartApproval(CALLER_ADDRESS, { approvalRequest: ROUTER_REQUEST }),
+      call: (a) => a.prepareStartApproval(CALLER_CREDENTIAL, { approvalRequest: ROUTER_REQUEST }),
       expectReceived: [{ approvalRequest: ROUTER_REQUEST }],
     },
     {
       name: 'prepareStartApproval of the wrapper takes no token',
-      call: (a) => a.prepareStartApproval(CALLER_ADDRESS, { approvalRequest: STATA_REQUEST }),
+      call: (a) => a.prepareStartApproval(CALLER_CREDENTIAL, { approvalRequest: STATA_REQUEST }),
       expectReceived: [{ approvalRequest: STATA_REQUEST }],
     },
     {
       name: 'prepareStartApproval refuses a router approval without a token',
-      call: (a) => a.prepareStartApproval(CALLER_ADDRESS, { approvalRequest: { kind: 'router' } }),
+      call: (a) =>
+        a.prepareStartApproval(CALLER_CREDENTIAL, { approvalRequest: { kind: 'router' } }),
       expectReceived: [],
       expectError: 'erc20Address',
     },
     {
       name: 'startApproval of the router carries the request, the slot and the finalised bytes normalised',
       call: (a) =>
-        a.startApproval(CALLER_ADDRESS, {
+        a.startApproval(CALLER_CREDENTIAL, {
           approvalRequest: ROUTER_REQUEST,
           inIndex: '42',
           finalizedTx: FINALIZED_TX,
@@ -101,7 +102,7 @@ describe('ApprovalServiceAdaptor parsing', () => {
     {
       name: 'startApproval of the wrapper carries the request, the slot and the finalised bytes',
       call: (a) =>
-        a.startApproval(CALLER_ADDRESS, {
+        a.startApproval(CALLER_CREDENTIAL, {
           approvalRequest: STATA_REQUEST,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
@@ -113,7 +114,7 @@ describe('ApprovalServiceAdaptor parsing', () => {
     {
       name: 'startApproval refuses a router approval without a token',
       call: (a) =>
-        a.startApproval(CALLER_ADDRESS, {
+        a.startApproval(CALLER_CREDENTIAL, {
           approvalRequest: { kind: 'router' },
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
@@ -124,7 +125,7 @@ describe('ApprovalServiceAdaptor parsing', () => {
     {
       name: 'startApproval refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startApproval(CALLER_ADDRESS, {
+        a.startApproval(CALLER_CREDENTIAL, {
           approvalRequest: STATA_REQUEST,
           inIndex: 42n,
           finalizedTx: 'zz',
@@ -135,7 +136,7 @@ describe('ApprovalServiceAdaptor parsing', () => {
     {
       name: 'startApproval refuses a missing slot',
       call: (a) =>
-        a.startApproval(CALLER_ADDRESS, {
+        a.startApproval(CALLER_CREDENTIAL, {
           approvalRequest: STATA_REQUEST,
           finalizedTx: FINALIZED_TX,
         }),
@@ -144,30 +145,30 @@ describe('ApprovalServiceAdaptor parsing', () => {
     },
     {
       name: 'prepareCompleteApproval passes the name',
-      call: (a) => a.prepareCompleteApproval(CALLER_ADDRESS, { name: APPROVAL_NAME }),
+      call: (a) => a.prepareCompleteApproval(CALLER_CREDENTIAL, { name: APPROVAL_NAME }),
       expectReceived: [{ name: APPROVAL_NAME }],
     },
     {
       name: 'completeApproval passes the name and the finalised bytes',
       call: (a) =>
-        a.completeApproval(CALLER_ADDRESS, { name: APPROVAL_NAME, finalizedTx: FINALIZED_TX }),
+        a.completeApproval(CALLER_CREDENTIAL, { name: APPROVAL_NAME, finalizedTx: FINALIZED_TX }),
       expectReceived: [{ name: APPROVAL_NAME, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'completeApproval refuses a name that is not an approval',
       call: (a) =>
-        a.completeApproval(CALLER_ADDRESS, { name: 'approvals/1', finalizedTx: FINALIZED_TX }),
+        a.completeApproval(CALLER_CREDENTIAL, { name: 'approvals/1', finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-approvals/{uuid}',
     },
     {
       name: 'getApproval passes the name',
-      call: (a) => a.getApproval(CALLER_ADDRESS, { name: APPROVAL_NAME }),
+      call: (a) => a.getApproval(CALLER_CREDENTIAL, { name: APPROVAL_NAME }),
       expectReceived: [{ name: APPROVAL_NAME }],
     },
     {
       name: 'listApprovals takes no arguments',
-      call: (a) => a.listApprovals(CALLER_ADDRESS, {}),
+      call: (a) => a.listApprovals(CALLER_CREDENTIAL, {}),
       expectReceived: [{}],
     },
   ]
@@ -184,7 +185,7 @@ describe('ApprovalServiceAdaptor parsing', () => {
 describe('ApprovalServiceAdaptor outcomes', () => {
   test('a missing approval is a not-found result', async () => {
     const adaptor = adaptorOver({ getApproval: async () => undefined })
-    expect(await adaptor.getApproval(CALLER_ADDRESS, { name: APPROVAL_NAME })).toEqual({
+    expect(await adaptor.getApproval(CALLER_CREDENTIAL, { name: APPROVAL_NAME })).toEqual({
       ok: false,
       error: `${APPROVAL_NAME} was not found.`,
     })
@@ -193,9 +194,11 @@ describe('ApprovalServiceAdaptor outcomes', () => {
   test('the prepare methods answer with the inputs the service assigned or read', async () => {
     const adaptor = adaptorOver({})
     expect(
-      await adaptor.prepareStartApproval(CALLER_ADDRESS, { approvalRequest: STATA_REQUEST }),
+      await adaptor.prepareStartApproval(CALLER_CREDENTIAL, { approvalRequest: STATA_REQUEST }),
     ).toEqual({ ok: true, inputs: START_INPUTS })
-    expect(await adaptor.prepareCompleteApproval(CALLER_ADDRESS, { name: APPROVAL_NAME })).toEqual({
+    expect(
+      await adaptor.prepareCompleteApproval(CALLER_CREDENTIAL, { name: APPROVAL_NAME }),
+    ).toEqual({
       ok: true,
       inputs: COMPLETE_INPUTS,
     })
@@ -222,13 +225,13 @@ describe('ApprovalServiceAdaptor outcomes', () => {
       prepareCompleteApproval: refusing,
       completeApproval: refusing,
     })
-    const starting = adaptor.startApproval(CALLER_ADDRESS, {
+    const starting = adaptor.startApproval(CALLER_CREDENTIAL, {
       approvalRequest: STATA_REQUEST,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })
-    const preparing = adaptor.prepareCompleteApproval(CALLER_ADDRESS, { name: APPROVAL_NAME })
-    const completing = adaptor.completeApproval(CALLER_ADDRESS, {
+    const preparing = adaptor.prepareCompleteApproval(CALLER_CREDENTIAL, { name: APPROVAL_NAME })
+    const completing = adaptor.completeApproval(CALLER_CREDENTIAL, {
       name: APPROVAL_NAME,
       finalizedTx: FINALIZED_TX,
     })

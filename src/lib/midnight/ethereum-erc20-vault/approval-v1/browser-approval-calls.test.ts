@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
+import { CALLER_CREDENTIAL, CALLER_LOGIN } from '@/lib/caller/caller-fixtures'
 import type {
   ApprovalCompleteInputs,
   ApprovalRequest,
@@ -40,7 +41,6 @@ import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
 
 const VAULT_SECRET = 'ab'.repeat(32)
-const CALLER_ADDRESS = 'mn_addr_stagenet1caller'
 const SECRET_KEY = new Uint8Array(32).fill(0xab)
 const PUBLIC_KEYS = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const ROUTER_REQUEST: ApprovalRequest = { kind: 'router', erc20Address: ERC20_ADDRESS }
@@ -93,26 +93,26 @@ interface Doubles {
 function collaborators(doubles: Doubles) {
   const trail: Trail = { events: [], received: structuredClone(NOTHING_RECEIVED) }
   const actions = mock<ApprovalActions>('ApprovalActions', {
-    prepareStartApproval: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    prepareStartApproval: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('prepareStartApproval')
       trail.received.prepareStartApproval.push(args)
       return doubles.prepareStartRefusal ?? { ok: true, inputs: START_INPUTS }
     },
-    startApproval: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    startApproval: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('startApproval')
       trail.received.startApproval.push(args)
       return doubles.started ?? { ok: true, approval }
     },
-    prepareCompleteApproval: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    prepareCompleteApproval: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('prepareCompleteApproval')
       trail.received.prepareCompleteApproval.push(args)
       return doubles.prepareComplete ?? { ok: true, inputs: EXECUTED_INPUTS }
     },
-    completeApproval: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    completeApproval: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('completeApproval')
       trail.received.completeApproval.push(args)
       return doubles.completed ?? { ok: true, approval }
@@ -149,7 +149,7 @@ function collaborators(doubles: Doubles) {
       actions,
       builder,
       wallet,
-      callerAddress: CALLER_ADDRESS,
+      login: CALLER_LOGIN,
       vaultSecret: VAULT_SECRET,
       onStage,
     },

@@ -6,7 +6,7 @@ import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
 import { userCommitmentOf } from './user-caller-call'
-import { userWalletUnshieldedAddress } from './user-wallet'
+import { userWalletLogin } from './user-wallet'
 import { CIRCLE_USDC } from './sepolia-tokens'
 
 /** The vault's allowlist read from the indexer and each token's metadata read from the fork. */
@@ -35,7 +35,7 @@ describe('The vault allowlist over the local stack', () => {
   test('a fresh vault secret holds no funds at its deposit account', async () => {
     const result =
       await backend.midnight.ethereumErc20Vault.supportedTokenV1.adaptor.listDepositAccountFunds(
-        userWalletUnshieldedAddress(
+        userWalletLogin(
           randomBytes(32).toString('hex'),
           backend.config.client.midnightNetwork.networkId,
         ),

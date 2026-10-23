@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { CALLER_ADDRESS, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
+import { CALLER_CREDENTIAL, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import { activityFixture } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-fixtures'
 import type { ActivityService } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service'
 import { ActivityServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service-adaptor'
@@ -38,32 +38,32 @@ describe('ActivityServiceAdaptor', () => {
   }> = [
     {
       name: 'getActivity hands the parsed name to the service and returns the activity',
-      call: (a) => a.getActivity(CALLER_ADDRESS, { name: DEPOSIT_NAME }),
+      call: (a) => a.getActivity(CALLER_CREDENTIAL, { name: DEPOSIT_NAME }),
       expectReceived: [{ name: DEPOSIT_NAME }],
       expectResult: { ok: true, activity },
     },
     {
       name: 'getActivity refuses a name that is not a deposit',
-      call: (a) => a.getActivity(CALLER_ADDRESS, { name: 'deposits/1' }),
+      call: (a) => a.getActivity(CALLER_CREDENTIAL, { name: 'deposits/1' }),
       expectReceived: [],
       expectResult: { ok: false },
     },
     {
       name: 'getActivity reports an activity the service has no row for',
-      call: (a) => a.getActivity(CALLER_ADDRESS, { name: DEPOSIT_NAME }),
+      call: (a) => a.getActivity(CALLER_CREDENTIAL, { name: DEPOSIT_NAME }),
       service: { getActivity: async () => undefined },
       expectReceived: [],
       expectResult: { ok: false, error: `${DEPOSIT_NAME} was not found.` },
     },
     {
       name: 'listActivities takes no arguments and returns the list',
-      call: (a) => a.listActivities(CALLER_ADDRESS, {}),
+      call: (a) => a.listActivities(CALLER_CREDENTIAL, {}),
       expectReceived: [{}],
       expectResult: { ok: true, activities: [activity] },
     },
     {
       name: 'listActivities refuses arguments that are not an object',
-      call: (a) => a.listActivities(CALLER_ADDRESS, 'all'),
+      call: (a) => a.listActivities(CALLER_CREDENTIAL, 'all'),
       expectReceived: [],
       expectResult: { ok: false },
     },

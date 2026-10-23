@@ -24,7 +24,7 @@ import {
 import type { Logger } from '@/lib/logging/logger'
 
 /**
- * Adapts the supply service to the wire: the caller address stands in for the caller, the
+ * Adapts the supply service to the wire: the login credential stands in for the caller, the
  * arguments are untrusted until parsed, and every outcome the caller can act on is a result.
  * The service opens the transaction of each user action itself, after its row reads.
  */
@@ -39,8 +39,8 @@ export class SupplyServiceAdaptor {
     this.logger = logger
   }
 
-  async getSupplyTarget(callerAddress: string, args: unknown): Promise<SupplyTargetResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async getSupplyTarget(credential: unknown, args: unknown): Promise<SupplyTargetResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'getSupplyTarget', caller: caller.name })
     const parsed = getSupplyTargetArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -49,8 +49,8 @@ export class SupplyServiceAdaptor {
     return { ok: true, target: await this.supplyService.getSupplyTarget(caller, parsed.data) }
   }
 
-  async prepareStartSupply(callerAddress: string, args: unknown): Promise<SupplyStartInputsResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async prepareStartSupply(credential: unknown, args: unknown): Promise<SupplyStartInputsResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'prepareStartSupply', caller: caller.name })
     const parsed = prepareStartSupplyArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -59,8 +59,8 @@ export class SupplyServiceAdaptor {
     return { ok: true, inputs: await this.supplyService.prepareStartSupply(caller, parsed.data) }
   }
 
-  async startSupply(callerAddress: string, args: unknown): Promise<SupplyResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async startSupply(credential: unknown, args: unknown): Promise<SupplyResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'startSupply', caller: caller.name })
     const parsed = startSupplyArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -73,10 +73,10 @@ export class SupplyServiceAdaptor {
   }
 
   async prepareCompleteSupply(
-    callerAddress: string,
+    credential: unknown,
     args: unknown,
   ): Promise<SupplyCompleteInputsResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'prepareCompleteSupply', caller: caller.name })
     const parsed = prepareCompleteSupplyArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -88,8 +88,8 @@ export class SupplyServiceAdaptor {
     }))
   }
 
-  async completeSupply(callerAddress: string, args: unknown): Promise<SupplyResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async completeSupply(credential: unknown, args: unknown): Promise<SupplyResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'completeSupply', caller: caller.name })
     const parsed = completeSupplyArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -101,8 +101,8 @@ export class SupplyServiceAdaptor {
     }))
   }
 
-  async getSupply(callerAddress: string, args: unknown): Promise<SupplyResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async getSupply(credential: unknown, args: unknown): Promise<SupplyResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'getSupply', caller: caller.name })
     const parsed = getSupplyArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -115,8 +115,8 @@ export class SupplyServiceAdaptor {
     return { ok: true, supply }
   }
 
-  async listSupplies(callerAddress: string, args: unknown): Promise<SupplyListResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async listSupplies(credential: unknown, args: unknown): Promise<SupplyListResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'listSupplies', caller: caller.name })
     const parsed = listSuppliesArgsSchema.safeParse(args)
     if (!parsed.success) {

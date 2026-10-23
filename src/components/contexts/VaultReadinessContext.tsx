@@ -36,15 +36,15 @@ const VaultReadinessContext = createContext<VaultReadinessContextValue | null>(n
 export function VaultReadinessProvider({ children }: { children: ReactNode }): ReactNode {
   const { midnightNetwork } = useConfig()
   const { wallet, addresses, generation } = useMidnightWallet()
-  const { callerAddress, userCommitment } = useCaller()
+  const { login, userCommitment } = useCaller()
   const dustAccount = addresses?.unshieldedAddress
   const initialisation = useQuery({
-    queryKey: ['vault-initialisation', midnightNetwork.networkId, callerAddress],
+    queryKey: ['vault-initialisation', midnightNetwork.networkId, login?.verifyingKey ?? null],
     queryFn:
-      callerAddress === null
+      login === null
         ? skipToken
         : async () => {
-            const result = await getVaultInitialisation(callerAddress, {})
+            const result = await getVaultInitialisation(await login.credential(), {})
             if (!result.ok) throw new Error(result.error)
             return result.initialisation
           },
@@ -69,12 +69,17 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
     retry: false,
   })
   const backend = useQuery({
-    queryKey: ['vault-readiness', midnightNetwork.networkId, callerAddress, userCommitment],
+    queryKey: [
+      'vault-readiness',
+      midnightNetwork.networkId,
+      login?.verifyingKey ?? null,
+      userCommitment,
+    ],
     queryFn:
-      callerAddress === null || userCommitment === null
+      login === null || userCommitment === null
         ? skipToken
         : async () => {
-            const result = await getVaultReadiness(callerAddress, { userCommitment })
+            const result = await getVaultReadiness(await login.credential(), { userCommitment })
             if (!result.ok) throw new Error(result.error)
             return result.readiness
           },
@@ -84,7 +89,7 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
     retry: false,
   })
   const backendReason =
-    callerAddress === null
+    login === null
       ? 'No Midnight wallet is connected.'
       : userCommitment === null
         ? 'No vault secret is set.'
@@ -95,7 +100,7 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
     vaultInitialised: initialisation.data ?? {
       status: 'unavailable',
       reason:
-        callerAddress === null
+        login === null
           ? 'No Midnight wallet is connected.'
           : initialisation.status === 'error'
             ? initialisation.error.message
@@ -119,8 +124,8 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
   const recheck = async (): Promise<void> => {
     await Promise.all([
       wallet === null || dustAccount === undefined ? undefined : callerDust.refetch(),
-      callerAddress === null || userCommitment === null ? undefined : backend.refetch(),
-      callerAddress === null ? undefined : initialisation.refetch(),
+      login === null || userCommitment === null ? undefined : backend.refetch(),
+      login === null ? undefined : initialisation.refetch(),
     ])
   }
   return (

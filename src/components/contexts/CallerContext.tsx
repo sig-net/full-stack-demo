@@ -1,9 +1,11 @@
 'use client'
 
+import { skipToken, useQuery } from '@tanstack/react-query'
 import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from 'react'
 
 import { useConfig } from '@/components/contexts/ConfigContext'
 import { useMidnightWallet } from '@/components/contexts/MidnightWalletContext'
+import { type CallerLogin, loginWithWallet } from '@/lib/caller/wallet-login'
 import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
 import {
   userCommitmentOf,
@@ -12,8 +14,10 @@ import {
 import { vaultSecretStorage } from '@/lib/midnight/ethereum-erc20-vault/vault-secret-storage'
 
 export interface CallerContextValue {
-  /** The connected wallet's unshielded address, which every server action takes first. Null without a wallet. */
-  readonly callerAddress: string | null
+  /** The connected wallet's login, whose credential every server action takes first. Null without a wallet, until the wallet has signed, and when it refused. */
+  readonly login: CallerLogin | null
+  /** Why the connected wallet's login signature was refused, or null. */
+  readonly loginError: string | null
   /** The vault secret every caller circuit is built with, lower-case hex without `0x`. Null until set. */
   readonly vaultSecret: string | null
   /** The contract's commitment of the vault secret in hex, which the server derives the deposit account from. Null until the secret is set. */
@@ -31,16 +35,25 @@ export interface CallerContextValue {
 const CallerContext = createContext<CallerContextValue | null>(null)
 
 /**
- * Names the caller after the connected wallet and holds the vault secret for the page. The
- * secret lives in local storage until it is cleared, so a reload keeps the same vault account,
- * and a stored value the schema rejects counts as unset until a new one replaces it. The caller
- * is logged in exactly while a wallet is connected, since the wallet's unshielded address is
- * the caller.
+ * Logs the caller in with the connected wallet and holds the vault secret for the page. The
+ * login is signed once per wallet generation and kept in page memory only, so a disconnect or
+ * a reload asks the wallet again. The secret lives in local storage until it is cleared, so a
+ * reload keeps the same vault account, and a stored value the schema rejects counts as unset
+ * until a new one replaces it.
  */
 export function CallerProvider({ children }: { children: ReactNode }): ReactNode {
-  const { midnightSignet, midnightEthereumErc20Vault } = useConfig()
-  const { wallet } = useMidnightWallet()
+  const { midnightNetwork, midnightSignet, midnightEthereumErc20Vault } = useConfig()
+  const { wallet, generation } = useMidnightWallet()
   const [refusal, setRefusal] = useState<string | null>(null)
+  const login = useQuery({
+    queryKey: ['wallet-login', midnightNetwork.networkId, generation],
+    queryFn: wallet === null ? skipToken : () => loginWithWallet(wallet, midnightNetwork.networkId),
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  })
   // Undefined only while server rendering and hydrating, before the store has been read.
   const stored = useSyncExternalStore(
     vaultSecretStorage.subscribe,
@@ -78,7 +91,8 @@ export function CallerProvider({ children }: { children: ReactNode }): ReactNode
   return (
     <CallerContext.Provider
       value={{
-        callerAddress: wallet?.addresses.unshieldedAddress ?? null,
+        login: wallet === null ? null : (login.data ?? null),
+        loginError: login.status === 'error' ? login.error.message : null,
         vaultSecret,
         userCommitment,
         depositAccount,

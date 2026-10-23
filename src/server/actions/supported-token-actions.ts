@@ -1,5 +1,6 @@
 'use server'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type {
   DepositAccountFundListResult,
   SupportedTokenListResult,
@@ -19,13 +20,10 @@ export async function listSupportedTokens(
 }
 
 export async function listDepositAccountFunds(
-  callerAddress: string,
+  credential: LoginCredential,
   args: ListDepositAccountFundsArgs,
 ): Promise<DepositAccountFundListResult> {
   return (
     await getBackend()
-  ).midnight.ethereumErc20Vault.supportedTokenV1.adaptor.listDepositAccountFunds(
-    callerAddress,
-    args,
-  )
+  ).midnight.ethereumErc20Vault.supportedTokenV1.adaptor.listDepositAccountFunds(credential, args)
 }

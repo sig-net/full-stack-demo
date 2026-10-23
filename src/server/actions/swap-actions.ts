@@ -1,5 +1,6 @@
 'use server'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type {
   CompleteSwapArgs,
   GetSwapArgs,
@@ -19,65 +20,56 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function quoteSwap(
-  callerAddress: string,
+  credential: LoginCredential,
   args: QuoteSwapArgs,
 ): Promise<SwapQuoteResult> {
-  return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.quoteSwap(
-    callerAddress,
-    args,
-  )
+  return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.quoteSwap(credential, args)
 }
 
 export async function prepareStartSwap(
-  callerAddress: string,
+  credential: LoginCredential,
   args: PrepareStartSwapArgs,
 ): Promise<SwapStartInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.prepareStartSwap(
-    callerAddress,
+    credential,
     args,
   )
 }
 
-export async function startSwap(callerAddress: string, args: StartSwapArgs): Promise<SwapResult> {
-  return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.startSwap(
-    callerAddress,
-    args,
-  )
+export async function startSwap(
+  credential: LoginCredential,
+  args: StartSwapArgs,
+): Promise<SwapResult> {
+  return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.startSwap(credential, args)
 }
 
 export async function prepareCompleteSwap(
-  callerAddress: string,
+  credential: LoginCredential,
   args: PrepareCompleteSwapArgs,
 ): Promise<SwapCompleteInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.prepareCompleteSwap(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function completeSwap(
-  callerAddress: string,
+  credential: LoginCredential,
   args: CompleteSwapArgs,
 ): Promise<SwapResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.completeSwap(
-    callerAddress,
+    credential,
     args,
   )
 }
 
-export async function getSwap(callerAddress: string, args: GetSwapArgs): Promise<SwapResult> {
-  return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.getSwap(
-    callerAddress,
-    args,
-  )
+export async function getSwap(credential: LoginCredential, args: GetSwapArgs): Promise<SwapResult> {
+  return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.getSwap(credential, args)
 }
 
 export async function listSwaps(
-  callerAddress: string,
+  credential: LoginCredential,
   args: ListSwapsArgs,
 ): Promise<SwapListResult> {
-  return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.listSwaps(
-    callerAddress,
-    args,
-  )
+  return (await getBackend()).midnight.ethereumErc20Vault.swapV1.adaptor.listSwaps(credential, args)
 }

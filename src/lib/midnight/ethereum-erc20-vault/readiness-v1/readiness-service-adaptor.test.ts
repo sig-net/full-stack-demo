@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { CALLER_ADDRESS, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
+import { CALLER_CREDENTIAL, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import type { ReadinessService } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/readiness-service'
 import {
   ReadinessServiceAdaptor,
@@ -41,10 +41,12 @@ function adaptorOver(callers: string[] = []): ReadinessServiceAdaptor {
 }
 
 describe('ReadinessServiceAdaptor.getVaultReadiness', () => {
-  test('resolves the caller from the address and answers the readiness', async () => {
+  test('resolves the caller from the credential and answers the readiness', async () => {
     const callers: string[] = []
     await expect(
-      adaptorOver(callers).getVaultReadiness(CALLER_ADDRESS, { userCommitment: USER_COMMITMENT }),
+      adaptorOver(callers).getVaultReadiness(CALLER_CREDENTIAL, {
+        userCommitment: USER_COMMITMENT,
+      }),
     ).resolves.toEqual({
       ok: true,
       readiness: READINESS,
@@ -53,45 +55,51 @@ describe('ReadinessServiceAdaptor.getVaultReadiness', () => {
   })
 
   test('refuses arguments that are not an object', async () => {
-    await expect(adaptorOver().getVaultReadiness(CALLER_ADDRESS, 'no')).resolves.toMatchObject({
+    await expect(adaptorOver().getVaultReadiness(CALLER_CREDENTIAL, 'no')).resolves.toMatchObject({
       ok: false,
     })
   })
 
-  test('refuses a malformed address', async () => {
-    await expect(adaptorOver().getVaultReadiness('nope', {})).rejects.toThrow('caller address')
+  test('refuses a malformed credential', async () => {
+    await expect(adaptorOver().getVaultReadiness('nope', {})).rejects.toThrow(
+      'wallet login signature',
+    )
   })
 })
 
 describe('ReadinessServiceAdaptor.getVaultInitialisation', () => {
   test.each<{
     name: string
-    address: string
+    credential: unknown
     args: unknown
     expected: VaultInitialisationResult
     callers: number
   }>([
     {
-      name: 'resolves the caller from the address and answers the initialisation',
-      address: CALLER_ADDRESS,
+      name: 'resolves the caller from the credential and answers the initialisation',
+      credential: CALLER_CREDENTIAL,
       args: {},
       expected: { ok: true, initialisation: { status: 'uninitialised' } },
       callers: 1,
     },
     {
       name: 'refuses arguments that are not an object',
-      address: CALLER_ADDRESS,
+      credential: CALLER_CREDENTIAL,
       args: 'no',
       expected: { ok: false, error: expect.any(String) },
       callers: 0,
     },
-  ])('$name', async ({ address, args, expected, callers }) => {
+  ])('$name', async ({ credential, args, expected, callers }) => {
     const seen: string[] = []
-    await expect(adaptorOver(seen).getVaultInitialisation(address, args)).resolves.toEqual(expected)
+    await expect(adaptorOver(seen).getVaultInitialisation(credential, args)).resolves.toEqual(
+      expected,
+    )
     expect(seen).toHaveLength(callers)
   })
 
-  test('refuses a malformed address', async () => {
-    await expect(adaptorOver().getVaultInitialisation('nope', {})).rejects.toThrow('caller address')
+  test('refuses a malformed credential', async () => {
+    await expect(adaptorOver().getVaultInitialisation('nope', {})).rejects.toThrow(
+      'wallet login signature',
+    )
   })
 })

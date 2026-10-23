@@ -24,7 +24,7 @@ import { CallerOperationStateConflict } from '@/lib/midnight/ethereum-erc20-vaul
 import type { Logger } from '@/lib/logging/logger'
 
 /**
- * Adapts the approval service to the wire: the caller address stands in for the caller, the
+ * Adapts the approval service to the wire: the login credential stands in for the caller, the
  * arguments are untrusted until parsed, and every outcome the caller can act on is a result.
  * The service opens the transaction of each deployer action itself, after its ledger and row reads.
  */
@@ -39,11 +39,8 @@ export class ApprovalServiceAdaptor {
     this.logger = logger
   }
 
-  async listApprovalTargets(
-    callerAddress: string,
-    args: unknown,
-  ): Promise<ApprovalTargetListResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async listApprovalTargets(credential: unknown, args: unknown): Promise<ApprovalTargetListResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'listApprovalTargets', caller: caller.name })
     const parsed = listApprovalTargetsArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -56,10 +53,10 @@ export class ApprovalServiceAdaptor {
   }
 
   async prepareStartApproval(
-    callerAddress: string,
+    credential: unknown,
     args: unknown,
   ): Promise<ApprovalStartInputsResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'prepareStartApproval', caller: caller.name })
     const parsed = prepareStartApprovalArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -71,8 +68,8 @@ export class ApprovalServiceAdaptor {
     }
   }
 
-  async startApproval(callerAddress: string, args: unknown): Promise<ApprovalResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async startApproval(credential: unknown, args: unknown): Promise<ApprovalResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'startApproval', caller: caller.name })
     const parsed = startApprovalArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -85,10 +82,10 @@ export class ApprovalServiceAdaptor {
   }
 
   async prepareCompleteApproval(
-    callerAddress: string,
+    credential: unknown,
     args: unknown,
   ): Promise<ApprovalCompleteInputsResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'prepareCompleteApproval', caller: caller.name })
     const parsed = prepareCompleteApprovalArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -100,8 +97,8 @@ export class ApprovalServiceAdaptor {
     }))
   }
 
-  async completeApproval(callerAddress: string, args: unknown): Promise<ApprovalResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async completeApproval(credential: unknown, args: unknown): Promise<ApprovalResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'completeApproval', caller: caller.name })
     const parsed = completeApprovalArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -113,8 +110,8 @@ export class ApprovalServiceAdaptor {
     }))
   }
 
-  async getApproval(callerAddress: string, args: unknown): Promise<ApprovalResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async getApproval(credential: unknown, args: unknown): Promise<ApprovalResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'getApproval', caller: caller.name })
     const parsed = getApprovalArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -127,8 +124,8 @@ export class ApprovalServiceAdaptor {
     return { ok: true, approval }
   }
 
-  async listApprovals(callerAddress: string, args: unknown): Promise<ApprovalListResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async listApprovals(credential: unknown, args: unknown): Promise<ApprovalListResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'listApprovals', caller: caller.name })
     const parsed = listApprovalsArgsSchema.safeParse(args)
     if (!parsed.success) {

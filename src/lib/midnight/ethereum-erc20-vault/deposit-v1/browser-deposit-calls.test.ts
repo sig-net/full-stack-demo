@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
+import { CALLER_CREDENTIAL, CALLER_LOGIN } from '@/lib/caller/caller-fixtures'
 import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import {
   completeDepositInBrowser,
@@ -40,7 +41,6 @@ import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secr
 import { mock } from '@/lib/testing/mock'
 
 const VAULT_SECRET = 'ab'.repeat(32)
-const CALLER_ADDRESS = 'mn_addr_stagenet1caller'
 const USER_COMMITMENT = userCommitmentOf(VAULT_SECRET)
 const SECRET_KEY = new Uint8Array(32).fill(0xab)
 const PUBLIC_KEYS = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
@@ -108,14 +108,14 @@ function collaborators(doubles: Doubles) {
   const trail: Trail = { events: [], received: structuredClone(NOTHING_RECEIVED) }
   let starts = 0
   const actions = mock<DepositActions>('DepositActions', {
-    prepareStartDeposit: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    prepareStartDeposit: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('prepareStartDeposit')
       trail.received.prepareStartDeposit.push(args)
       return doubles.prepareStartRefusal ?? { ok: true, inputs: START_INPUTS }
     },
-    startDeposit: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    startDeposit: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('startDeposit')
       trail.received.startDeposit.push(args)
       const answers = doubles.started ?? [{ ok: true, deposit }]
@@ -124,14 +124,14 @@ function collaborators(doubles: Doubles) {
       if (answer === undefined) throw new Error('the case scripts no startDeposit answer')
       return answer
     },
-    prepareCompleteDeposit: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    prepareCompleteDeposit: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('prepareCompleteDeposit')
       trail.received.prepareCompleteDeposit.push(args)
       return { ok: true, inputs: COMPLETE_INPUTS }
     },
-    completeDeposit: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    completeDeposit: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('completeDeposit')
       trail.received.completeDeposit.push(args)
       return doubles.completed ?? { ok: true, deposit }
@@ -168,7 +168,7 @@ function collaborators(doubles: Doubles) {
       actions,
       builder,
       wallet,
-      callerAddress: CALLER_ADDRESS,
+      login: CALLER_LOGIN,
       vaultSecret: VAULT_SECRET,
       onStage,
     },

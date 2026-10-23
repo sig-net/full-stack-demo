@@ -1,5 +1,6 @@
 'use server'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type {
   GetVaultInitialisationArgs,
   GetVaultReadinessArgs,
@@ -11,20 +12,20 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function getVaultReadiness(
-  callerAddress: string,
+  credential: LoginCredential,
   args: GetVaultReadinessArgs,
 ): Promise<VaultReadinessResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.readinessV1.adaptor.getVaultReadiness(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function getVaultInitialisation(
-  callerAddress: string,
+  credential: LoginCredential,
   args: GetVaultInitialisationArgs,
 ): Promise<VaultInitialisationResult> {
   return (
     await getBackend()
-  ).midnight.ethereumErc20Vault.readinessV1.adaptor.getVaultInitialisation(callerAddress, args)
+  ).midnight.ethereumErc20Vault.readinessV1.adaptor.getVaultInitialisation(credential, args)
 }

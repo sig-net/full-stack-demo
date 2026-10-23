@@ -1,5 +1,6 @@
 'use server'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type {
   DepositCompleteInputsResult,
   DepositListResult,
@@ -17,61 +18,61 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function prepareStartDeposit(
-  callerAddress: string,
+  credential: LoginCredential,
   args: PrepareStartDepositArgs,
 ): Promise<DepositStartInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.prepareStartDeposit(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function startDeposit(
-  callerAddress: string,
+  credential: LoginCredential,
   args: StartDepositArgs,
 ): Promise<DepositResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.startDeposit(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function prepareCompleteDeposit(
-  callerAddress: string,
+  credential: LoginCredential,
   args: PrepareCompleteDepositArgs,
 ): Promise<DepositCompleteInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.prepareCompleteDeposit(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function completeDeposit(
-  callerAddress: string,
+  credential: LoginCredential,
   args: CompleteDepositArgs,
 ): Promise<DepositResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.completeDeposit(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function getDeposit(
-  callerAddress: string,
+  credential: LoginCredential,
   args: GetDepositArgs,
 ): Promise<DepositResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.getDeposit(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function listDeposits(
-  callerAddress: string,
+  credential: LoginCredential,
   args: ListDepositsArgs,
 ): Promise<DepositListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.depositV1.adaptor.listDeposits(
-    callerAddress,
+    credential,
     args,
   )
 }

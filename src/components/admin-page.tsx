@@ -13,8 +13,8 @@ import { LocalEthereumFaucetPanel } from '@/components/local-ethereum-faucet-pan
  * secret but the deployer's, so the page needs no gate of its own.
  */
 export function AdminPage(): ReactNode {
-  const { callerAddress, vaultSecret } = useCaller()
-  if (callerAddress === null || vaultSecret === null) {
+  const { login, vaultSecret } = useCaller()
+  if (login === null || vaultSecret === null) {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-2 px-5 py-20 text-center">
         <h1 className="text-xl font-semibold">Admin</h1>

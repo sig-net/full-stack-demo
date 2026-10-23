@@ -22,7 +22,7 @@ import {
 import type { Logger } from '@/lib/logging/logger'
 
 /**
- * Adapts the withdraw service to the wire: the caller address stands in for the caller, the
+ * Adapts the withdraw service to the wire: the login credential stands in for the caller, the
  * arguments are untrusted until parsed, and every outcome the caller can act on is a result.
  * The service opens the transaction of each user action itself, after its row reads.
  */
@@ -38,10 +38,10 @@ export class WithdrawServiceAdaptor {
   }
 
   async prepareStartWithdraw(
-    callerAddress: string,
+    credential: unknown,
     args: unknown,
   ): Promise<WithdrawStartInputsResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'prepareStartWithdraw', caller: caller.name })
     const parsed = prepareStartWithdrawArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -53,8 +53,8 @@ export class WithdrawServiceAdaptor {
     }
   }
 
-  async startWithdraw(callerAddress: string, args: unknown): Promise<WithdrawResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async startWithdraw(credential: unknown, args: unknown): Promise<WithdrawResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'startWithdraw', caller: caller.name })
     const parsed = startWithdrawArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -67,10 +67,10 @@ export class WithdrawServiceAdaptor {
   }
 
   async prepareCompleteWithdraw(
-    callerAddress: string,
+    credential: unknown,
     args: unknown,
   ): Promise<WithdrawCompleteInputsResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'prepareCompleteWithdraw', caller: caller.name })
     const parsed = prepareCompleteWithdrawArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -82,8 +82,8 @@ export class WithdrawServiceAdaptor {
     }))
   }
 
-  async completeWithdraw(callerAddress: string, args: unknown): Promise<WithdrawResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async completeWithdraw(credential: unknown, args: unknown): Promise<WithdrawResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'completeWithdraw', caller: caller.name })
     const parsed = completeWithdrawArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -95,8 +95,8 @@ export class WithdrawServiceAdaptor {
     }))
   }
 
-  async getWithdraw(callerAddress: string, args: unknown): Promise<WithdrawResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async getWithdraw(credential: unknown, args: unknown): Promise<WithdrawResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'getWithdraw', caller: caller.name })
     const parsed = getWithdrawArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -109,8 +109,8 @@ export class WithdrawServiceAdaptor {
     return { ok: true, withdraw }
   }
 
-  async listWithdraws(callerAddress: string, args: unknown): Promise<WithdrawListResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async listWithdraws(credential: unknown, args: unknown): Promise<WithdrawListResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'listWithdraws', caller: caller.name })
     const parsed = listWithdrawsArgsSchema.safeParse(args)
     if (!parsed.success) {

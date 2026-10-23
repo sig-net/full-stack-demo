@@ -50,7 +50,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
     })
     user = await startUserWallet(userWalletSeed(), backend.config.client.midnightNetwork)
     const targeted = await backend.midnight.ethereumErc20Vault.supplyV1.adaptor.getSupplyTarget(
-      user.unshieldedAddress,
+      await user.login(),
       {},
     )
     if (!targeted.ok) throw new Error(targeted.error)

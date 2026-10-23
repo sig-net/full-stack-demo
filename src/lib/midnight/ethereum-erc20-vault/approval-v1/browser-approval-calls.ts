@@ -1,5 +1,6 @@
 import { hexToBytes } from '@sig-net/midnight'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type { ClientConfig } from '@/lib/config/client-config'
 import type {
   Approval,
@@ -26,18 +27,19 @@ import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-requ
 
 /** Starts an approval from the page with the kind's start circuit, whose deployer gate refuses any other caller while the call is built. */
 export async function startApprovalInBrowser(args: StartApprovalInBrowserArgs): Promise<Approval> {
-  const { actions, builder, wallet, callerAddress, vaultSecret, approvalRequest, onStage } = args
+  const { actions, builder, wallet, login, vaultSecret, approvalRequest, onStage } = args
   const started = await runCallerCall({
     operation: 'approval',
     wallet,
-    callerAddress,
+    login,
     vaultSecret,
     onStage,
-    prepare: () => actions.prepareStartApproval(callerAddress, { approvalRequest }),
+    prepare: async () =>
+      actions.prepareStartApproval(await login.credential(), { approvalRequest }),
     circuitArgs: ({ inIndex }, caller) => ({ ...caller, inIndex, ...approvalRequest }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
-    record: ({ inIndex }, finalizedTx) =>
-      actions.startApproval(callerAddress, { approvalRequest, inIndex, finalizedTx }),
+    record: async ({ inIndex }, finalizedTx) =>
+      actions.startApproval(await login.credential(), { approvalRequest, inIndex, finalizedTx }),
   })
   return started.approval
 }
@@ -46,22 +48,22 @@ export async function startApprovalInBrowser(args: StartApprovalInBrowserArgs): 
 export async function completeApprovalInBrowser(
   args: CompleteApprovalInBrowserArgs,
 ): Promise<Approval> {
-  const { actions, builder, wallet, callerAddress, vaultSecret, name, onStage } = args
+  const { actions, builder, wallet, login, vaultSecret, name, onStage } = args
   const completed = await runCallerCall({
     operation: 'approval',
     wallet,
-    callerAddress,
+    login,
     vaultSecret,
     onStage,
-    prepare: () => actions.prepareCompleteApproval(callerAddress, { name }),
+    prepare: async () => actions.prepareCompleteApproval(await login.credential(), { name }),
     circuitArgs: (inputs, caller) => ({
       ...caller,
       requestId: hexToBytes(inputs.requestId),
       serializedOutput: completionOutput(inputs, 1),
     }),
     build: (circuitArgs) => builder.buildComplete(circuitArgs),
-    record: (_inputs, finalizedTx) =>
-      actions.completeApproval(callerAddress, { name, finalizedTx }),
+    record: async (_inputs, finalizedTx) =>
+      actions.completeApproval(await login.credential(), { name, finalizedTx }),
   })
   return completed.approval
 }
@@ -78,15 +80,15 @@ export function browserApprovalCallBuilder(
 /** The approval's server actions, as the page imports them. */
 export interface ApprovalActions {
   prepareStartApproval(
-    callerAddress: string,
+    credential: LoginCredential,
     args: PrepareStartApprovalArgs,
   ): Promise<ApprovalStartInputsResult>
-  startApproval(callerAddress: string, args: StartApprovalArgs): Promise<ApprovalResult>
+  startApproval(credential: LoginCredential, args: StartApprovalArgs): Promise<ApprovalResult>
   prepareCompleteApproval(
-    callerAddress: string,
+    credential: LoginCredential,
     args: PrepareCompleteApprovalArgs,
   ): Promise<ApprovalCompleteInputsResult>
-  completeApproval(callerAddress: string, args: CompleteApprovalArgs): Promise<ApprovalResult>
+  completeApproval(credential: LoginCredential, args: CompleteApprovalArgs): Promise<ApprovalResult>
 }
 
 export interface StartApprovalInBrowserArgs extends CallerCallArgs<ApprovalCallBuilder> {

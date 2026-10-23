@@ -3,13 +3,12 @@ import { z } from 'zod'
 import { HEX_32_BYTES } from '@/lib/value-schemas'
 
 /**
- * The caller of a service method, resolved on the server from the unshielded Midnight address
- * the browser sends as every action's first argument. The address is the wallet's, so a wallet
- * challenge can later prove the caller holds its key and the caller's resources stay named as
- * they are.
+ * The caller of a service method, resolved on the server from the login credential the browser
+ * sends as every action's first argument: the connected wallet's signature over the login
+ * message, which proves the caller holds the unshielded key its resources are named after.
  */
 export interface Caller {
-  /** The caller's unshielded address in Bech32m, as the wallet reports it. */
+  /** The caller's unshielded address in Bech32m on the application's network, encoded from the key that signed. */
   readonly unshieldedAddress: string
   /**
    * `callers/{caller}`, the parent of every resource the caller owns. The caller id is the

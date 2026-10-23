@@ -1,6 +1,7 @@
 import { hexToBytes } from '@sig-net/midnight'
 import { describe, expect, test } from 'vitest'
 
+import { CALLER_CREDENTIAL, CALLER_LOGIN } from '@/lib/caller/caller-fixtures'
 import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import {
   completeRedeemInBrowser,
@@ -40,7 +41,6 @@ import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
 
 const VAULT_SECRET = 'ab'.repeat(32)
-const CALLER_ADDRESS = 'mn_addr_stagenet1caller'
 const SECRET_KEY = new Uint8Array(32).fill(0xab)
 const PUBLIC_KEYS = { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) }
 const REDEEM_REQUEST = { shares: 300_000n }
@@ -94,26 +94,26 @@ interface Doubles {
 function collaborators(doubles: Doubles) {
   const trail: Trail = { events: [], received: structuredClone(NOTHING_RECEIVED) }
   const actions = mock<RedeemActions>('RedeemActions', {
-    prepareStartRedeem: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    prepareStartRedeem: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('prepareStartRedeem')
       trail.received.prepareStartRedeem.push(args)
       return doubles.prepareStartRefusal ?? { ok: true, inputs: START_INPUTS }
     },
-    startRedeem: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    startRedeem: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('startRedeem')
       trail.received.startRedeem.push(args)
       return doubles.started ?? { ok: true, redeem }
     },
-    prepareCompleteRedeem: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    prepareCompleteRedeem: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('prepareCompleteRedeem')
       trail.received.prepareCompleteRedeem.push(args)
       return doubles.prepareComplete ?? { ok: true, inputs: EXECUTED_INPUTS }
     },
-    completeRedeem: async (callerAddress, args) => {
-      expect(callerAddress).toBe(CALLER_ADDRESS)
+    completeRedeem: async (credential, args) => {
+      expect(credential).toBe(CALLER_CREDENTIAL)
       trail.events.push('completeRedeem')
       trail.received.completeRedeem.push(args)
       return doubles.completed ?? { ok: true, redeem }
@@ -150,7 +150,7 @@ function collaborators(doubles: Doubles) {
       actions,
       builder,
       wallet,
-      callerAddress: CALLER_ADDRESS,
+      login: CALLER_LOGIN,
       vaultSecret: VAULT_SECRET,
       onStage,
     },

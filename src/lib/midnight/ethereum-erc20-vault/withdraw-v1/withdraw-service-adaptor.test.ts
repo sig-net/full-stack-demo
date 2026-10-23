@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { CALLER_ADDRESS, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
+import { CALLER_CREDENTIAL, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import {
   ATTESTATION_FIELDS,
   REQUEST_ID_HEX,
@@ -67,7 +67,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
     {
       name: 'prepareStartWithdraw carries the request with the amount as a bigint',
       call: (a) =>
-        a.prepareStartWithdraw(CALLER_ADDRESS, {
+        a.prepareStartWithdraw(CALLER_CREDENTIAL, {
           withdrawRequest: { ...REQUEST, amount: '1000000' },
         }),
       expectReceived: [{ withdrawRequest: REQUEST }],
@@ -75,7 +75,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
     {
       name: 'startWithdraw carries the request, the slot and the finalised bytes normalised',
       call: (a) =>
-        a.startWithdraw(CALLER_ADDRESS, {
+        a.startWithdraw(CALLER_CREDENTIAL, {
           withdrawRequest: { ...REQUEST, amount: '1000000' },
           inIndex: '42',
           finalizedTx: FINALIZED_TX,
@@ -87,7 +87,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
     {
       name: 'startWithdraw lower-cases a checksummed destination',
       call: (a) =>
-        a.startWithdraw(CALLER_ADDRESS, {
+        a.startWithdraw(CALLER_CREDENTIAL, {
           withdrawRequest: {
             ...REQUEST,
             destEvmAddress: DESTINATION.toUpperCase().replace('0X', '0x'),
@@ -102,7 +102,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
     {
       name: 'startWithdraw refuses a zero amount',
       call: (a) =>
-        a.startWithdraw(CALLER_ADDRESS, {
+        a.startWithdraw(CALLER_CREDENTIAL, {
           withdrawRequest: { ...REQUEST, amount: 0n },
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
@@ -113,7 +113,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
     {
       name: 'startWithdraw refuses a destination that is not an address',
       call: (a) =>
-        a.startWithdraw(CALLER_ADDRESS, {
+        a.startWithdraw(CALLER_CREDENTIAL, {
           withdrawRequest: { ...REQUEST, destEvmAddress: '0x1234' },
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
@@ -124,7 +124,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
     {
       name: 'startWithdraw refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startWithdraw(CALLER_ADDRESS, {
+        a.startWithdraw(CALLER_CREDENTIAL, {
           withdrawRequest: REQUEST,
           inIndex: 42n,
           finalizedTx: 'zz',
@@ -135,36 +135,36 @@ describe('WithdrawServiceAdaptor parsing', () => {
     {
       name: 'startWithdraw refuses a missing slot',
       call: (a) =>
-        a.startWithdraw(CALLER_ADDRESS, { withdrawRequest: REQUEST, finalizedTx: FINALIZED_TX }),
+        a.startWithdraw(CALLER_CREDENTIAL, { withdrawRequest: REQUEST, finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'inIndex',
     },
     {
       name: 'prepareCompleteWithdraw passes the name',
-      call: (a) => a.prepareCompleteWithdraw(CALLER_ADDRESS, { name: WITHDRAW_NAME }),
+      call: (a) => a.prepareCompleteWithdraw(CALLER_CREDENTIAL, { name: WITHDRAW_NAME }),
       expectReceived: [{ name: WITHDRAW_NAME }],
     },
     {
       name: 'completeWithdraw passes the name and the finalised bytes',
       call: (a) =>
-        a.completeWithdraw(CALLER_ADDRESS, { name: WITHDRAW_NAME, finalizedTx: FINALIZED_TX }),
+        a.completeWithdraw(CALLER_CREDENTIAL, { name: WITHDRAW_NAME, finalizedTx: FINALIZED_TX }),
       expectReceived: [{ name: WITHDRAW_NAME, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'completeWithdraw refuses a name that is not a withdrawal',
       call: (a) =>
-        a.completeWithdraw(CALLER_ADDRESS, { name: 'withdraws/1', finalizedTx: FINALIZED_TX }),
+        a.completeWithdraw(CALLER_CREDENTIAL, { name: 'withdraws/1', finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-withdraws/{uuid}',
     },
     {
       name: 'getWithdraw passes the name',
-      call: (a) => a.getWithdraw(CALLER_ADDRESS, { name: WITHDRAW_NAME }),
+      call: (a) => a.getWithdraw(CALLER_CREDENTIAL, { name: WITHDRAW_NAME }),
       expectReceived: [{ name: WITHDRAW_NAME }],
     },
     {
       name: 'listWithdraws takes no arguments',
-      call: (a) => a.listWithdraws(CALLER_ADDRESS, {}),
+      call: (a) => a.listWithdraws(CALLER_CREDENTIAL, {}),
       expectReceived: [{}],
     },
   ]
@@ -181,7 +181,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
 describe('WithdrawServiceAdaptor outcomes', () => {
   test('a missing withdrawal is a not-found result', async () => {
     const adaptor = adaptorOver({ getWithdraw: async () => undefined })
-    expect(await adaptor.getWithdraw(CALLER_ADDRESS, { name: WITHDRAW_NAME })).toEqual({
+    expect(await adaptor.getWithdraw(CALLER_CREDENTIAL, { name: WITHDRAW_NAME })).toEqual({
       ok: false,
       error: `${WITHDRAW_NAME} was not found.`,
     })
@@ -190,9 +190,11 @@ describe('WithdrawServiceAdaptor outcomes', () => {
   test('the prepare methods answer with the inputs the service assigned or read', async () => {
     const adaptor = adaptorOver({})
     expect(
-      await adaptor.prepareStartWithdraw(CALLER_ADDRESS, { withdrawRequest: REQUEST }),
+      await adaptor.prepareStartWithdraw(CALLER_CREDENTIAL, { withdrawRequest: REQUEST }),
     ).toEqual({ ok: true, inputs: START_INPUTS })
-    expect(await adaptor.prepareCompleteWithdraw(CALLER_ADDRESS, { name: WITHDRAW_NAME })).toEqual({
+    expect(
+      await adaptor.prepareCompleteWithdraw(CALLER_CREDENTIAL, { name: WITHDRAW_NAME }),
+    ).toEqual({
       ok: true,
       inputs: COMPLETE_INPUTS,
     })
@@ -219,13 +221,13 @@ describe('WithdrawServiceAdaptor outcomes', () => {
       prepareCompleteWithdraw: refusing,
       completeWithdraw: refusing,
     })
-    const starting = adaptor.startWithdraw(CALLER_ADDRESS, {
+    const starting = adaptor.startWithdraw(CALLER_CREDENTIAL, {
       withdrawRequest: REQUEST,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })
-    const preparing = adaptor.prepareCompleteWithdraw(CALLER_ADDRESS, { name: WITHDRAW_NAME })
-    const completing = adaptor.completeWithdraw(CALLER_ADDRESS, {
+    const preparing = adaptor.prepareCompleteWithdraw(CALLER_CREDENTIAL, { name: WITHDRAW_NAME })
+    const completing = adaptor.completeWithdraw(CALLER_CREDENTIAL, {
       name: WITHDRAW_NAME,
       finalizedTx: FINALIZED_TX,
     })

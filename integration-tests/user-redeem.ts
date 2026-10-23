@@ -64,7 +64,7 @@ export async function startRedeemAsUser(
   redeemRequest: RedeemRequest,
 ): Promise<RedeemResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.redeemV1
-  const prepared = await adaptor.prepareStartRedeem(user.unshieldedAddress, { redeemRequest })
+  const prepared = await adaptor.prepareStartRedeem(await user.login(), { redeemRequest })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildStartCall(
     backend,
@@ -74,7 +74,7 @@ export async function startRedeemAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.startRedeem(user.unshieldedAddress, {
+  const result = await adaptor.startRedeem(await user.login(), {
     redeemRequest,
     inIndex: prepared.inputs.inIndex,
     finalizedTx,
@@ -93,7 +93,7 @@ export async function completeRedeemAsUser(
   name: string,
 ): Promise<RedeemResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.redeemV1
-  const prepared = await adaptor.prepareCompleteRedeem(user.unshieldedAddress, { name })
+  const prepared = await adaptor.prepareCompleteRedeem(await user.login(), { name })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
@@ -102,7 +102,7 @@ export async function completeRedeemAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeRedeem(user.unshieldedAddress, { name, finalizedTx })
+  const result = await adaptor.completeRedeem(await user.login(), { name, finalizedTx })
   log(
     `complete call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, completeRedeem answered in ${String(Date.now() - calling)} ms`,
   )

@@ -1,4 +1,8 @@
-import type { WalletConnectedAPI } from '@midnight-ntwrk/dapp-connector-api'
+import type {
+  Signature,
+  SignDataOptions,
+  WalletConnectedAPI,
+} from '@midnight-ntwrk/dapp-connector-api'
 
 /**
  * A connected Midnight wallet as the page uses it: a subset of what a browser wallet extension
@@ -28,6 +32,7 @@ export interface WalletConnectorMethods {
   getUnshieldedBalances(): Promise<Record<string, bigint>>
   getDustBalance(): Promise<{ cap: bigint; balance: bigint }>
   balanceUnsealedTransaction(tx: string, options?: { payFees?: boolean }): Promise<{ tx: string }>
+  signData(data: string, options: SignDataOptions): Promise<Signature>
 }
 
 export type WalletConnectorMethod = keyof WalletConnectorMethods

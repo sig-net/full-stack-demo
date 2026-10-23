@@ -1,5 +1,6 @@
 'use server'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type {
   GetActivityArgs,
   ListActivitiesArgs,
@@ -11,21 +12,21 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function getActivity(
-  callerAddress: string,
+  credential: LoginCredential,
   args: GetActivityArgs,
 ): Promise<ActivityResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.activityV1.adaptor.getActivity(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function listActivities(
-  callerAddress: string,
+  credential: LoginCredential,
   args: ListActivitiesArgs,
 ): Promise<ActivityListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.activityV1.adaptor.listActivities(
-    callerAddress,
+    credential,
     args,
   )
 }

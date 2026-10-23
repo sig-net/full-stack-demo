@@ -55,7 +55,7 @@ interface SendDialogProps {
  * and no other control answers.
  */
 export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): ReactNode {
-  const { callerAddress, vaultSecret } = useCaller()
+  const { login, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -84,7 +84,7 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
 
   const sending = useMutation({
     mutationFn: async () => {
-      if (callerAddress === null || wallet === null) {
+      if (login === null || wallet === null) {
         throw new Error('No Midnight wallet is connected.')
       }
       if (vaultSecret === null) throw new Error('The vault secret is not set.')
@@ -96,7 +96,7 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
         actions: { prepareStartWithdraw, startWithdraw },
         builder: calls.browserWithdrawCallBuilder(config, window.location.origin),
         wallet,
-        callerAddress,
+        login,
         vaultSecret,
         withdrawRequest: {
           erc20Address: source.token.origin.erc20Address,

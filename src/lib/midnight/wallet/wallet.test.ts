@@ -26,6 +26,7 @@ describe('Wallet is a subset of the DApp connector API', () => {
       | 'getUnshieldedBalances'
       | 'getDustBalance'
       | 'balanceUnsealedTransaction'
+      | 'signData'
     >()
   })
 

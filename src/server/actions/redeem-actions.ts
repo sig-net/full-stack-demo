@@ -1,5 +1,6 @@
 'use server'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type {
   CompleteRedeemArgs,
   GetRedeemArgs,
@@ -17,58 +18,61 @@ import type {
 import { getBackend } from '@/server/backend'
 
 export async function prepareStartRedeem(
-  callerAddress: string,
+  credential: LoginCredential,
   args: PrepareStartRedeemArgs,
 ): Promise<RedeemStartInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.prepareStartRedeem(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function startRedeem(
-  callerAddress: string,
+  credential: LoginCredential,
   args: StartRedeemArgs,
 ): Promise<RedeemResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.startRedeem(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function prepareCompleteRedeem(
-  callerAddress: string,
+  credential: LoginCredential,
   args: PrepareCompleteRedeemArgs,
 ): Promise<RedeemCompleteInputsResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.prepareCompleteRedeem(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function completeRedeem(
-  callerAddress: string,
+  credential: LoginCredential,
   args: CompleteRedeemArgs,
 ): Promise<RedeemResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.completeRedeem(
-    callerAddress,
+    credential,
     args,
   )
 }
 
-export async function getRedeem(callerAddress: string, args: GetRedeemArgs): Promise<RedeemResult> {
+export async function getRedeem(
+  credential: LoginCredential,
+  args: GetRedeemArgs,
+): Promise<RedeemResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.getRedeem(
-    callerAddress,
+    credential,
     args,
   )
 }
 
 export async function listRedeems(
-  callerAddress: string,
+  credential: LoginCredential,
   args: ListRedeemsArgs,
 ): Promise<RedeemListResult> {
   return (await getBackend()).midnight.ethereumErc20Vault.redeemV1.adaptor.listRedeems(
-    callerAddress,
+    credential,
     args,
   )
 }

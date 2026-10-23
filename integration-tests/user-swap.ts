@@ -64,7 +64,7 @@ export async function startSwapAsUser(
   swapRequest: SwapRequest,
 ): Promise<SwapResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.swapV1
-  const prepared = await adaptor.prepareStartSwap(user.unshieldedAddress, { swapRequest })
+  const prepared = await adaptor.prepareStartSwap(await user.login(), { swapRequest })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildStartCall(
     backend,
@@ -74,7 +74,7 @@ export async function startSwapAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.startSwap(user.unshieldedAddress, {
+  const result = await adaptor.startSwap(await user.login(), {
     swapRequest,
     inIndex: prepared.inputs.inIndex,
     finalizedTx,
@@ -93,7 +93,7 @@ export async function completeSwapAsUser(
   name: string,
 ): Promise<SwapResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.swapV1
-  const prepared = await adaptor.prepareCompleteSwap(user.unshieldedAddress, { name })
+  const prepared = await adaptor.prepareCompleteSwap(await user.login(), { name })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
@@ -102,7 +102,7 @@ export async function completeSwapAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeSwap(user.unshieldedAddress, { name, finalizedTx })
+  const result = await adaptor.completeSwap(await user.login(), { name, finalizedTx })
   log(
     `complete call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, completeSwap answered in ${String(Date.now() - calling)} ms`,
   )

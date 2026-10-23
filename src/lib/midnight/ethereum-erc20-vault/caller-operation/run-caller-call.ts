@@ -1,5 +1,6 @@
 import { hexToBytes } from '@sig-net/midnight'
 
+import type { CallerLogin } from '@/lib/caller/wallet-login'
 import {
   type CallerCircuitArgs,
   circuitAssertMessage,
@@ -51,8 +52,8 @@ export interface CallerCall<
 /** What every call from the page carries beside its operation's own parts. */
 export interface CallerCallContext {
   readonly wallet: Wallet
-  /** The connected wallet's unshielded address, which every server action takes first. */
-  readonly callerAddress: string
+  /** The connected wallet's login, whose credential every server action takes first. */
+  readonly login: CallerLogin
   /** The stored vault secret, lower-case hex without `0x`, which is the call's witness. */
   readonly vaultSecret: string
   readonly onStage?: (stage: CallerCallStage) => void

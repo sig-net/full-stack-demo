@@ -1,8 +1,11 @@
+import type { Signature, SignDataOptions } from '@midnight-ntwrk/dapp-connector-api'
 import { setNetworkId } from '@midnight-ntwrk/midnight-js/network-id'
 import { DustAddress, MidnightBech32m } from '@midnightntwrk/wallet-sdk-address-format'
+import { bytesToHex } from '@sig-net/midnight'
 
 import type { MidnightNetworkConfig } from '@/lib/config/midnight-network-config'
 import { registerNightForDust } from '@/lib/midnight/wallet/register-night-for-dust'
+import { signDataPayloadOf, signedMessageOf } from '@/lib/midnight/signed-message'
 import { shieldedAddressOf } from '@/lib/midnight/wallet/shielded-address'
 import {
   type AccountKeys,
@@ -210,6 +213,22 @@ export class SeedWallet implements Wallet {
       throw new Error('The seed wallet pays the fee of every transaction it balances.')
     }
     return { tx: await finalizeUnboundTransaction(this.requireProvider(), tx) }
+  }
+
+  /**
+   * Signs the MIP-0031 message of the payload with the unshielded key, the key `addresses`
+   * reports, and answers the whole signed message in hex as `data`.
+   *
+   * @throws {SignDataInvalidRequest} When the data is not what the declared encoding accepts.
+   */
+  async signData(data: string, options: SignDataOptions): Promise<Signature> {
+    const { keys } = this.requireKeys()
+    const message = signedMessageOf(signDataPayloadOf(data, options))
+    return {
+      data: bytesToHex(message),
+      signature: keys.unshieldedKeystore.signData(message).value,
+      verifyingKey: keys.unshieldedKeystore.getPublicKey().value,
+    }
   }
 
   private requireKeys(): { facade: WalletFacade; keys: AccountKeys } {

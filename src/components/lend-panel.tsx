@@ -43,7 +43,7 @@ const TARGET_REFETCH_INTERVAL_MS = 30_000
  * records it for the backend to submit.
  */
 export function LendPanel(): ReactNode {
-  const { callerAddress, vaultSecret } = useCaller()
+  const { login, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -57,12 +57,12 @@ export function LendPanel(): ReactNode {
   const [redeemStage, setRedeemStage] = useState<CallerCallStage | null>(null)
 
   const target = useQuery({
-    queryKey: ['supply-target', callerAddress],
+    queryKey: ['supply-target', login?.verifyingKey ?? null],
     queryFn:
-      callerAddress === null || checks.vaultInitialised.status !== 'ok'
+      login === null || checks.vaultInitialised.status !== 'ok'
         ? skipToken
         : async () => {
-            const result = await getSupplyTarget(callerAddress, {})
+            const result = await getSupplyTarget(await login.credential(), {})
             if (!result.ok) throw new Error(result.error)
             return result.target
           },
@@ -86,7 +86,7 @@ export function LendPanel(): ReactNode {
 
   const supplying = useMutation({
     mutationFn: async () => {
-      if (callerAddress === null || wallet === null) {
+      if (login === null || wallet === null) {
         throw new Error('No Midnight wallet is connected.')
       }
       if (vaultSecret === null) throw new Error('The vault secret is not set.')
@@ -98,7 +98,7 @@ export function LendPanel(): ReactNode {
         actions: { prepareStartSupply, startSupply },
         builder: calls.browserSupplyCallBuilder(config, window.location.origin),
         wallet,
-        callerAddress,
+        login,
         vaultSecret,
         supplyRequest: { amount: supplyAmount.value },
         onStage: setSupplyStage,
@@ -120,7 +120,7 @@ export function LendPanel(): ReactNode {
   })
   const redeeming = useMutation({
     mutationFn: async () => {
-      if (callerAddress === null || wallet === null) {
+      if (login === null || wallet === null) {
         throw new Error('No Midnight wallet is connected.')
       }
       if (vaultSecret === null) throw new Error('The vault secret is not set.')
@@ -132,7 +132,7 @@ export function LendPanel(): ReactNode {
         actions: { prepareStartRedeem, startRedeem },
         builder: calls.browserRedeemCallBuilder(config, window.location.origin),
         wallet,
-        callerAddress,
+        login,
         vaultSecret,
         redeemRequest: { shares: redeemAmount.value },
         onStage: setRedeemStage,

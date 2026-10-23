@@ -1,5 +1,6 @@
 import { hexToBytes } from '@sig-net/midnight'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type { ClientConfig } from '@/lib/config/client-config'
 import { browserVaultCallProviders } from '@/lib/midnight/ethereum-erc20-vault/browser-vault-call-providers'
 import {
@@ -23,14 +24,14 @@ import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-requ
 
 /** Starts a redeem from the page, the wallet's own coin of the pinned wrapper's shares funding the start call. */
 export async function startRedeemInBrowser(args: StartRedeemInBrowserArgs): Promise<Redeem> {
-  const { actions, builder, wallet, callerAddress, vaultSecret, redeemRequest, onStage } = args
+  const { actions, builder, wallet, login, vaultSecret, redeemRequest, onStage } = args
   const started = await runCallerCall({
     operation: 'redeem',
     wallet,
-    callerAddress,
+    login,
     vaultSecret,
     onStage,
-    prepare: () => actions.prepareStartRedeem(callerAddress, { redeemRequest }),
+    prepare: async () => actions.prepareStartRedeem(await login.credential(), { redeemRequest }),
     circuitArgs: ({ inIndex, stataErc20Address }, caller) => ({
       ...caller,
       inIndex,
@@ -38,22 +39,22 @@ export async function startRedeemInBrowser(args: StartRedeemInBrowserArgs): Prom
       shares: redeemRequest.shares,
     }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
-    record: ({ inIndex }, finalizedTx) =>
-      actions.startRedeem(callerAddress, { redeemRequest, inIndex, finalizedTx }),
+    record: async ({ inIndex }, finalizedTx) =>
+      actions.startRedeem(await login.credential(), { redeemRequest, inIndex, finalizedTx }),
   })
   return started.redeem
 }
 
 /** Completes an attested redeem from the page, under a fresh mint nonce. */
 export async function completeRedeemInBrowser(args: CompleteRedeemInBrowserArgs): Promise<Redeem> {
-  const { actions, builder, wallet, callerAddress, vaultSecret, name, onStage } = args
+  const { actions, builder, wallet, login, vaultSecret, name, onStage } = args
   const completed = await runCallerCall({
     operation: 'redeem',
     wallet,
-    callerAddress,
+    login,
     vaultSecret,
     onStage,
-    prepare: () => actions.prepareCompleteRedeem(callerAddress, { name }),
+    prepare: async () => actions.prepareCompleteRedeem(await login.credential(), { name }),
     circuitArgs: (inputs, caller) => ({
       ...caller,
       requestId: hexToBytes(inputs.requestId),
@@ -61,7 +62,8 @@ export async function completeRedeemInBrowser(args: CompleteRedeemInBrowserArgs)
       mintNonce: crypto.getRandomValues(new Uint8Array(32)),
     }),
     build: (circuitArgs) => builder.buildComplete(circuitArgs),
-    record: (_inputs, finalizedTx) => actions.completeRedeem(callerAddress, { name, finalizedTx }),
+    record: async (_inputs, finalizedTx) =>
+      actions.completeRedeem(await login.credential(), { name, finalizedTx }),
   })
   return completed.redeem
 }
@@ -75,15 +77,15 @@ export function browserRedeemCallBuilder(config: ClientConfig, origin: string): 
 /** The redeem's server actions, as the page imports them. */
 export interface RedeemActions {
   prepareStartRedeem(
-    callerAddress: string,
+    credential: LoginCredential,
     args: PrepareStartRedeemArgs,
   ): Promise<RedeemStartInputsResult>
-  startRedeem(callerAddress: string, args: StartRedeemArgs): Promise<RedeemResult>
+  startRedeem(credential: LoginCredential, args: StartRedeemArgs): Promise<RedeemResult>
   prepareCompleteRedeem(
-    callerAddress: string,
+    credential: LoginCredential,
     args: PrepareCompleteRedeemArgs,
   ): Promise<RedeemCompleteInputsResult>
-  completeRedeem(callerAddress: string, args: CompleteRedeemArgs): Promise<RedeemResult>
+  completeRedeem(credential: LoginCredential, args: CompleteRedeemArgs): Promise<RedeemResult>
 }
 
 export interface StartRedeemInBrowserArgs extends CallerCallArgs<RedeemCallBuilder> {

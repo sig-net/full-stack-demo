@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { CALLER_ADDRESS, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
+import { CALLER_CREDENTIAL, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import type {
   SwapCompleteInputs,
   SwapStartInputs,
@@ -85,7 +85,7 @@ describe('SwapServiceAdaptor parsing', () => {
     {
       name: 'quoteSwap carries the amount as a bigint and takes the default slippage',
       call: (a) =>
-        a.quoteSwap(CALLER_ADDRESS, {
+        a.quoteSwap(CALLER_CREDENTIAL, {
           erc20AddressIn: ERC20_ADDRESS_IN,
           erc20AddressOut: ERC20_ADDRESS_OUT,
           amountIn: '1000000',
@@ -102,7 +102,7 @@ describe('SwapServiceAdaptor parsing', () => {
     {
       name: 'quoteSwap refuses a slippage past half the output',
       call: (a) =>
-        a.quoteSwap(CALLER_ADDRESS, {
+        a.quoteSwap(CALLER_CREDENTIAL, {
           erc20AddressIn: ERC20_ADDRESS_IN,
           erc20AddressOut: ERC20_ADDRESS_OUT,
           amountIn: '1000000',
@@ -114,7 +114,7 @@ describe('SwapServiceAdaptor parsing', () => {
     {
       name: 'quoteSwap refuses a zero amount',
       call: (a) =>
-        a.quoteSwap(CALLER_ADDRESS, {
+        a.quoteSwap(CALLER_CREDENTIAL, {
           erc20AddressIn: ERC20_ADDRESS_IN,
           erc20AddressOut: ERC20_ADDRESS_OUT,
           amountIn: 0n,
@@ -124,20 +124,20 @@ describe('SwapServiceAdaptor parsing', () => {
     },
     {
       name: 'prepareStartSwap carries the request with its amounts as bigints',
-      call: (a) => a.prepareStartSwap(CALLER_ADDRESS, { swapRequest: WIRE_REQUEST }),
+      call: (a) => a.prepareStartSwap(CALLER_CREDENTIAL, { swapRequest: WIRE_REQUEST }),
       expectReceived: [{ swapRequest: REQUEST }],
     },
     {
       name: 'prepareStartSwap refuses a request without a fee tier',
       call: (a) =>
-        a.prepareStartSwap(CALLER_ADDRESS, { swapRequest: { ...REQUEST, fee: undefined } }),
+        a.prepareStartSwap(CALLER_CREDENTIAL, { swapRequest: { ...REQUEST, fee: undefined } }),
       expectReceived: [],
       expectError: 'swapRequest.fee',
     },
     {
       name: 'startSwap carries the request, the slot and the finalised bytes normalised',
       call: (a) =>
-        a.startSwap(CALLER_ADDRESS, {
+        a.startSwap(CALLER_CREDENTIAL, {
           swapRequest: WIRE_REQUEST,
           inIndex: '42',
           finalizedTx: FINALIZED_TX,
@@ -147,7 +147,7 @@ describe('SwapServiceAdaptor parsing', () => {
     {
       name: 'startSwap refuses a request without a fee tier',
       call: (a) =>
-        a.startSwap(CALLER_ADDRESS, {
+        a.startSwap(CALLER_CREDENTIAL, {
           swapRequest: { ...REQUEST, fee: undefined },
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
@@ -158,40 +158,43 @@ describe('SwapServiceAdaptor parsing', () => {
     {
       name: 'startSwap refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startSwap(CALLER_ADDRESS, { swapRequest: REQUEST, inIndex: 42n, finalizedTx: 'zz' }),
+        a.startSwap(CALLER_CREDENTIAL, { swapRequest: REQUEST, inIndex: 42n, finalizedTx: 'zz' }),
       expectReceived: [],
       expectError: 'finalizedTx',
     },
     {
       name: 'startSwap refuses a missing slot',
-      call: (a) => a.startSwap(CALLER_ADDRESS, { swapRequest: REQUEST, finalizedTx: FINALIZED_TX }),
+      call: (a) =>
+        a.startSwap(CALLER_CREDENTIAL, { swapRequest: REQUEST, finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'inIndex',
     },
     {
       name: 'prepareCompleteSwap passes the name',
-      call: (a) => a.prepareCompleteSwap(CALLER_ADDRESS, { name: SWAP_NAME }),
+      call: (a) => a.prepareCompleteSwap(CALLER_CREDENTIAL, { name: SWAP_NAME }),
       expectReceived: [{ name: SWAP_NAME }],
     },
     {
       name: 'completeSwap passes the name and the finalised bytes',
-      call: (a) => a.completeSwap(CALLER_ADDRESS, { name: SWAP_NAME, finalizedTx: FINALIZED_TX }),
+      call: (a) =>
+        a.completeSwap(CALLER_CREDENTIAL, { name: SWAP_NAME, finalizedTx: FINALIZED_TX }),
       expectReceived: [{ name: SWAP_NAME, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'completeSwap refuses a name that is not a swap',
-      call: (a) => a.completeSwap(CALLER_ADDRESS, { name: 'swaps/1', finalizedTx: FINALIZED_TX }),
+      call: (a) =>
+        a.completeSwap(CALLER_CREDENTIAL, { name: 'swaps/1', finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-swaps/{uuid}',
     },
     {
       name: 'getSwap passes the name',
-      call: (a) => a.getSwap(CALLER_ADDRESS, { name: SWAP_NAME }),
+      call: (a) => a.getSwap(CALLER_CREDENTIAL, { name: SWAP_NAME }),
       expectReceived: [{ name: SWAP_NAME }],
     },
     {
       name: 'listSwaps takes no arguments',
-      call: (a) => a.listSwaps(CALLER_ADDRESS, {}),
+      call: (a) => a.listSwaps(CALLER_CREDENTIAL, {}),
       expectReceived: [{}],
     },
   ]
@@ -209,7 +212,7 @@ describe('SwapServiceAdaptor outcomes', () => {
   test('a pair no pool prices is a result, not a failure', async () => {
     const adaptor = adaptorOver({ quoteSwap: async () => undefined })
     expect(
-      await adaptor.quoteSwap(CALLER_ADDRESS, {
+      await adaptor.quoteSwap(CALLER_CREDENTIAL, {
         erc20AddressIn: ERC20_ADDRESS_IN,
         erc20AddressOut: ERC20_ADDRESS_OUT,
         amountIn: 1n,
@@ -219,7 +222,7 @@ describe('SwapServiceAdaptor outcomes', () => {
 
   test('a missing swap is a not-found result', async () => {
     const adaptor = adaptorOver({ getSwap: async () => undefined })
-    expect(await adaptor.getSwap(CALLER_ADDRESS, { name: SWAP_NAME })).toEqual({
+    expect(await adaptor.getSwap(CALLER_CREDENTIAL, { name: SWAP_NAME })).toEqual({
       ok: false,
       error: `${SWAP_NAME} was not found.`,
     })
@@ -227,11 +230,11 @@ describe('SwapServiceAdaptor outcomes', () => {
 
   test('the prepare methods answer with the inputs the service assigned or read', async () => {
     const adaptor = adaptorOver({})
-    expect(await adaptor.prepareStartSwap(CALLER_ADDRESS, { swapRequest: REQUEST })).toEqual({
+    expect(await adaptor.prepareStartSwap(CALLER_CREDENTIAL, { swapRequest: REQUEST })).toEqual({
       ok: true,
       inputs: START_INPUTS,
     })
-    expect(await adaptor.prepareCompleteSwap(CALLER_ADDRESS, { name: SWAP_NAME })).toEqual({
+    expect(await adaptor.prepareCompleteSwap(CALLER_CREDENTIAL, { name: SWAP_NAME })).toEqual({
       ok: true,
       inputs: COMPLETE_INPUTS,
     })
@@ -258,13 +261,13 @@ describe('SwapServiceAdaptor outcomes', () => {
       prepareCompleteSwap: refusing,
       completeSwap: refusing,
     })
-    const starting = adaptor.startSwap(CALLER_ADDRESS, {
+    const starting = adaptor.startSwap(CALLER_CREDENTIAL, {
       swapRequest: REQUEST,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })
-    const preparing = adaptor.prepareCompleteSwap(CALLER_ADDRESS, { name: SWAP_NAME })
-    const completing = adaptor.completeSwap(CALLER_ADDRESS, {
+    const preparing = adaptor.prepareCompleteSwap(CALLER_CREDENTIAL, { name: SWAP_NAME })
+    const completing = adaptor.completeSwap(CALLER_CREDENTIAL, {
       name: SWAP_NAME,
       finalizedTx: FINALIZED_TX,
     })

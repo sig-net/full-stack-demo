@@ -71,7 +71,7 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/components/ui`                                        | Components written by the shadcn CLI.                                                                                                                                                                                                                                                     |
 | `src/components/contexts`                                  | React contexts: each file holds a context, its provider and its `use<Name>` hook.                                                                                                                                                                                                         |
 | `src/lib`                                                  | Non-React modules. The files at its root serve every domain: `value-schemas.ts`, `lazy-singleton.ts`, `sweep.ts`, `run-until-aborted.ts`, `coalescing-runner.ts`, `delay-unless-aborted.ts`, `message-of.ts`.                                                                             |
-| `src/lib/caller`                                           | The `Caller` type and caller name schema (`caller.ts`, shared with the browser), the server's `resolveCaller()` over the wallet's unshielded address, and the caller fixtures.                                                                                                            |
+| `src/lib/caller`                                           | The `Caller` type and caller name schema (`caller.ts`), the login credential and its message (`login-credential.ts`), the page's login over the wallet (`wallet-login.ts`), the server's `resolveCaller()` over the credential, and the caller fixtures.                                  |
 | `src/lib/config`                                           | Server configuration loading and the client configuration type.                                                                                                                                                                                                                           |
 | `src/lib/db`                                               | The Drizzle schema and the Postgres connection pool.                                                                                                                                                                                                                                      |
 | `src/lib/kafka`                                            | The Kafka producer and consumer factories and the connection options.                                                                                                                                                                                                                     |
@@ -95,7 +95,7 @@ described under [Configuration](#configuration), and Postgres and Kafka under
 | `src/lib/midnight/transaction-v1`                          | The Midnight transaction resource, its repository, state machine, state controller, ledger, resolver and event consumer.                                                                                                                                                                  |
 | `src/lib/midnight/wallet`                                  | The wallet layer: the `Wallet` interface, the seed wallet and its facade, the stored seed, and the backend's relayer wallet.                                                                                                                                                              |
 | `src/lib/pricing`                                          | Spot prices for display: the price request and price resources, the market source port with its CoinGecko implementation, the cached service and its adaptor.                                                                                                                             |
-| `src/lib/midnight`                                         | The Midnight modules every domain shares: the address abbreviation, the browser `Buffer` shim and the in-memory private state provider.                                                                                                                                                   |
+| `src/lib/midnight`                                         | The Midnight modules every domain shares: the address abbreviation, the browser `Buffer` shim, the in-memory private state provider and the MIP-0031 signed message (`signed-message.ts`) the wallet signs and the server verifies.                                                       |
 | `src/server`                                               | The code that runs: the composition root, the server action files, the start-up and the console bridge.                                                                                                                                                                                   |
 | `src/instrumentation.ts`                                   | Runs once when the server process starts and calls the start-up in `src/server/start.ts`.                                                                                                                                                                                                 |
 | `integration-tests`                                        | The integration tests and their helpers, run with `yarn test:integration` (see [Testing](#testing)).                                                                                                                                                                                      |
@@ -432,18 +432,58 @@ request, so runs repeat without cleaning the chain.
 
 ## Caller authentication
 
-The caller of every server action is the connected Midnight wallet, named by its unshielded
-address. The browser passes that address, in Bech32m as the wallet reports it, as the first
-argument of every action, and `resolveCaller()` (`src/lib/caller/resolve-caller.ts`) validates
-it as an unshielded address of the configured network and names the caller `callers/{caller}`,
-where the caller id is the 32-byte user address the address encodes, in hex. That id names the
-wallet's unshielded key on every network, so the names a caller owns survive a change of network,
-and a wallet challenge can later prove the caller holds the key: the address is the credential
-now, and a signature over a server challenge, carried in a header, will be the proof. The action
-compares every resource name it receives against the caller's name, so a caller only ever
-creates or reads under their own caller. The `Caller` type and the name helpers live in
-`src/lib/caller/caller.ts`, and `src/lib/caller/caller-fixtures.ts` holds the addresses the unit
-tests resolve.
+The caller of every server action is the connected Midnight wallet, and the wallet proves it
+holds the key by signing a login. The browser passes a login credential as the first argument
+of every action, and `resolveCaller()` (`src/lib/caller/resolve-caller.ts`) verifies it and
+names the caller `callers/{caller}`, where the caller id is the 32-byte user address of the key
+that signed, in hex (the ledger's `addressFromKey()`). That id names the wallet's unshielded key
+on every network, so the names a caller owns survive a change of network. The action compares
+every resource name it receives against the caller's name, so a caller only ever creates or
+reads under their own caller. The `Caller` type and the name helpers live in
+`src/lib/caller/caller.ts`, and `src/lib/caller/caller-fixtures.ts` holds the keys and
+credentials the unit tests resolve: MIP-0031's published test keys, which must never hold funds.
+
+The credential (`loginCredentialSchema` in `src/lib/caller/login-credential.ts`) is
+`{ issuedAt, signature }`. `issuedAt` is the moment of signing in ISO 8601 UTC, and `signature`
+is the wallet's answer to the DApp connector's `signData` without its `data` field:
+`{ scheme, verifyingKey, signature }` in bare lower-case hex, the scheme spelled as the connector
+spells it (`schnorr_bip340` or `ecdsa_secp256k1_sha256`). The text the wallet signs is
+`full-stack-demo:login:{networkId}:{issuedAt}`, so a signature is bound to this application, one
+network and one moment. The server never reads the message from the credential: it rebuilds it
+from its own network and the credential's `issuedAt`, refuses a credential older than five
+minutes (`LOGIN_WINDOW_MS`) or dated in the future, verifies the signature with the ledger's
+`verifySignature()`, and only then derives the caller. A captured credential therefore replays
+for at most five minutes, and only at this application on this network.
+
+What the wallet signs is not that text itself. A Midnight wallet prefixes the data a DApp hands
+to `signData`, so a signed message can never be a well-formed transaction, and the exact bytes
+are specified by MIP-0031, Midnight Message Signing
+(`mips/mip-0031-message-signing/mip-0031-message-signing.md` in
+`midnightntwrk/midnight-improvement-proposals`, merged on 16 October 2026): the signed message
+is `midnight_signed_message:` followed by the payload's byte length in decimal, a colon and the
+payload, and the signature binds its SHA-256 digest under BIP-340 Schnorr or ECDSA over
+secp256k1. The DApp connector specification's Signing section states the same prefix in one
+sentence, and the installed connector package (4.0.1) says only that the data is prepended with
+the right prefix. `src/lib/midnight/signed-message.ts` holds that construction
+(`signedMessageOf()`), the connector's payload decoding (`signDataPayloadOf()`, which refuses
+what the declared encoding does not accept with the connector's `InvalidRequest`), the wire form
+of a signature (`messageSignatureSchema`) and the verification (`verifyMessageSignature()`, over
+the ledger's `verifySignature()`, which hashes the message itself and refuses an ECDSA signature
+with a high `s`). `src/lib/midnight/signed-message.test.ts` runs the MIP's own test vectors
+(`mip-0031-vectors.json`, verbatim from the proposal) against all of them, so the seed wallet
+signs exactly the bytes a browser wallet extension signs, and the server accepts exactly what
+the MIP's verifier accepts.
+
+In the browser, `CallerProvider` (`src/components/contexts/CallerContext.tsx`) logs the caller
+in once per wallet generation through `loginWithWallet()` (`src/lib/caller/wallet-login.ts`),
+which asks the wallet to sign the login text (`encoding: 'text'`, `keyType: 'unshielded'`) and
+holds the credential in page memory only: a reload or a disconnect asks the wallet again, and
+nothing of it reaches local storage. `useCaller().login` is the `CallerLogin`: its
+`verifyingKey` is the caller's identity, which the page keys its queries on, never a credential,
+and `credential()` answers the current credential, or one signed afresh once less than a minute
+of the window remains, so a call in flight never carries one that expires on arrival. The seed
+wallet signs silently; a browser wallet extension will prompt, at most once per window and never
+while the page is idle. `useCaller().loginError` carries the wallet's refusal.
 
 The vault still needs a 32-byte secret, the value of the contract's `callerSecretKey` witness,
 which the application calls the vault secret
@@ -460,14 +500,14 @@ the server derives the account with `depositAccountOf()`
   the app bar, dotted green once set) or the Vault secret item of the mobile menu, by pasting a
   secret or generating a fresh one, and the panel (`src/components/vault-secret-panel.tsx`) then
   shows the commitment with a copy button for the secret, the deposit account and a Clear secret
-  button. `CallerProvider` (`src/components/contexts/CallerContext.tsx`) names the caller after
+  button. `CallerProvider` (`src/components/contexts/CallerContext.tsx`) logs the caller in with
   the connected wallet and keeps the secret in local storage
   (`src/lib/midnight/ethereum-erc20-vault/vault-secret-storage.ts`), so a reload keeps the same
   vault account until Clear secret removes it, and a stored value that is not 32 bytes in hex
-  counts as unset until a new one replaces it. `useCaller()` exposes the caller address, the
-  secret, its commitment and the deposit account.
-- An action that builds a call needs both: the address to name the caller and the secret as the
-  witness. A read such as the activity list needs the address alone.
+  counts as unset until a new one replaces it. `useCaller()` exposes the login, the secret, its
+  commitment and the deposit account.
+- An action that builds a call needs both: the login to name the caller and the secret as the
+  witness. A read such as the activity list needs the login alone.
 
 ## Events
 
@@ -539,8 +579,8 @@ The story below is the order one deposit visits them, with the actor of each ste
 in the table hold the definitions.
 
 1. **Start (the user).** The browser holds the vault secret, the 32-byte witness of the vault's
-   two user circuits, and a connected Midnight wallet, whose unshielded address names the caller.
-   It calls `prepareStartDeposit(callerAddress, { depositRequest, wallet, userCommitment })`,
+   two user circuits, and a connected Midnight wallet, whose login names the caller.
+   It calls `prepareStartDeposit(credential, { depositRequest, wallet, userCommitment })`,
    where `wallet` is the wallet's coin and encryption public keys and `userCommitment` the
    contract's commitment of the vault secret, which picks the deposit account, and the server
    answers with the inputs it decides
@@ -586,7 +626,7 @@ in the table hold the definitions.
    failed start or complete.
 6. **Complete (the user).** The request's `attested` event nudges the deposit to
    `AwaitingCompletion`, the one state after the start that waits for the user. The browser calls
-   `prepareCompleteDeposit(callerAddress, { name, wallet })`, which answers with the attested
+   `prepareCompleteDeposit(credential, { name, wallet })`, which answers with the attested
    request's id, output kind and output, builds the `completeDeposit` call from them under a
    fresh random mint nonce, proves and finalises it as in step 1, and calls `completeDeposit`
    with the name, the wallet keys and the finalised bytes. The server stores
@@ -1193,13 +1233,13 @@ import {
 
 const wallet = { coinPublicKey, encryptionPublicKey }
 const depositRequest = { erc20Address, amount: 1000000n }
-const prepared = await prepareStartDeposit(callerAddress, {
+const prepared = await prepareStartDeposit(credential, {
   depositRequest,
   wallet,
   userCommitment,
 })
 // ... build and prove the startDeposit call from prepared.inputs, finalise it with the wallet
-const started = await startDeposit(callerAddress, {
+const started = await startDeposit(credential, {
   depositRequest,
   wallet,
   userCommitment,
@@ -1208,9 +1248,9 @@ const started = await startDeposit(callerAddress, {
   finalizedTx,
 })
 // ... fund started.deposit.depositAccount, wait for AwaitingCompletion
-const inputs = await prepareCompleteDeposit(callerAddress, { name: started.deposit.name, wallet })
+const inputs = await prepareCompleteDeposit(credential, { name: started.deposit.name, wallet })
 // ... build, prove and finalise the completeDeposit call from inputs.inputs
-const completed = await completeDeposit(callerAddress, {
+const completed = await completeDeposit(credential, {
   name: started.deposit.name,
   wallet,
   finalizedTx: completeFinalizedTx,
@@ -1235,20 +1275,20 @@ A withdrawal holds the caller's request (`erc20Address`, `amount`, `destEvmAddre
 `inIndex` the server assigns when the start is prepared, and `vaultAccount`, which the server
 derives when the start is committed. The caller's two calls take the same path as the deposit's
 (see [ERC-20 vault deposit API](#erc-20-vault-deposit-api)): the browser calls
-`prepareStartWithdraw(callerAddress, { withdrawRequest })`, which answers with `{ inIndex }`
+`prepareStartWithdraw(credential, { withdrawRequest })`, which answers with `{ inIndex }`
 (`WithdrawStartInputs` in `withdraw.ts`) and writes nothing, builds the `startWithdraw` call
 with the vault secret as the witness and the connected wallet's keys (`WithdrawCallBuilder`),
 proves it, and has the wallet balance it with its own coins and DUST fee, sign and finalise it.
 The circuit surrenders a fresh coin of the token worth exactly `amount`, so this balancing spends
 the wallet's own coins of that vault token and leaves the change. The browser then calls
-`startWithdraw(callerAddress, { withdrawRequest, inIndex, finalizedTx })`. The server derives the
+`startWithdraw(credential, { withdrawRequest, inIndex, finalizedTx })`. The server derives the
 vault account, and in one database transaction stores the withdrawal in
 `AwaitingStartTransaction` and commits the call as a Midnight transaction in
-`AwaitingSubmission`. Completion is `prepareCompleteWithdraw(callerAddress, { name })`, which
+`AwaitingSubmission`. Completion is `prepareCompleteWithdraw(credential, { name })`, which
 checks the state and answers with the attested request's `requestId`, `attestationOutputKind`
 and `attestationOutput` (`WithdrawCompleteInputs`), the `completeWithdraw` call built from them
 under a fresh mint nonce with a one-byte completion output, finalised by the wallet, and
-`completeWithdraw(callerAddress, { name, finalizedTx })`, which checks the state again and
+`completeWithdraw(credential, { name, finalizedTx })`, which checks the state again and
 commits the call in `AwaitingSubmission`. No withdraw method takes the wallet's keys: they go
 into the calls the page builds and nowhere else. A state conflict is an `{ ok: false }` result
 of `WithdrawServiceAdaptor`, and the six server actions in
@@ -1273,7 +1313,7 @@ A supply holds the caller's request (`amount`), the pinned pair (`underlyingErc2
 `stataErc20Address`), the slot `inIndex` the server assigns when the start is prepared, and
 `vaultAccount`, which the server derives when the start is committed. The caller's two calls take
 the same path as the withdrawal's (see [ERC-20 vault withdraw API](#erc-20-vault-withdraw-api)):
-the browser calls `prepareStartSupply(callerAddress, { supplyRequest })`, which reads the pair
+the browser calls `prepareStartSupply(credential, { supplyRequest })`, which reads the pair
 from the vault ledger and answers with `{ inIndex, underlyingErc20Address }`
 (`SupplyStartInputs` in `supply.ts`) and writes nothing, builds the `startSupply` call with the
 vault secret as the witness and the connected wallet's keys (`SupplyCallBuilder`), proves it,
@@ -1281,14 +1321,14 @@ and has the wallet balance it with its own coins and DUST fee, sign and finalise
 circuit surrenders a fresh coin of the underlying's vault token worth exactly `amount`, whose
 coin type the option builder derives from the underlying and the vault address, so this
 balancing spends the wallet's own coins of that vault token and leaves the change. The browser
-then calls `startSupply(callerAddress, { supplyRequest, inIndex, finalizedTx })`. The server
+then calls `startSupply(credential, { supplyRequest, inIndex, finalizedTx })`. The server
 reads the pair from the ledger again and derives the vault account, and in one database
 transaction stores the supply in `AwaitingStartTransaction` and commits the call as a Midnight
-transaction in `AwaitingSubmission`. Completion is `prepareCompleteSupply(callerAddress, { name
+transaction in `AwaitingSubmission`. Completion is `prepareCompleteSupply(credential, { name
 })`, which checks the state and answers with the attested request's `requestId`,
 `attestationOutputKind` and `attestationOutput` (`SupplyCompleteInputs`), the `completeSupply`
 call built from them under a fresh mint nonce with a 32-byte completion output (the attested
-shares, or zeros the circuit ignores), finalised by the wallet, and `completeSupply(callerAddress,
+shares, or zeros the circuit ignores), finalised by the wallet, and `completeSupply(credential,
 { name, finalizedTx })`, which checks the state again and commits the call in
 `AwaitingSubmission`. No supply method takes the wallet's keys: they go into the calls the page
 builds and nowhere else. A state conflict is an `{ ok: false }` result of `SupplyServiceAdaptor`,
@@ -1312,20 +1352,20 @@ page-built `completeRedeem` call is paid for and included, then `Completed` with
 
 A redeem holds the caller's `shares`, the pinned pair (`stataErc20Address` and
 `underlyingErc20Address`), the slot `inIndex` the server assigns when the start is prepared, and
-`vaultAccount`. The browser calls `prepareStartRedeem(callerAddress, { redeemRequest })`, which
+`vaultAccount`. The browser calls `prepareStartRedeem(credential, { redeemRequest })`, which
 reads the pair from the vault ledger and answers with `{ inIndex, stataErc20Address }`
 (`RedeemStartInputs` in `redeem.ts`) and writes nothing, builds the `startRedeem` call with the
 vault secret as the witness and the connected wallet's keys (`RedeemCallBuilder`, which derives
 the surrendered coin's type from the wrapper and the vault address), proves it, and has the wallet balance it with its own coins and DUST fee, sign and finalise it,
 spending the wallet's own coins of the wrapper's vault token and leaving the change. The browser
-then calls `startRedeem(callerAddress, { redeemRequest, inIndex, finalizedTx })`. The server
+then calls `startRedeem(credential, { redeemRequest, inIndex, finalizedTx })`. The server
 reads the pair from the ledger again, derives the vault account, and in one database transaction
 stores the redeem in `AwaitingStartTransaction` and commits the call as a Midnight transaction
-in `AwaitingSubmission`. Completion is `prepareCompleteRedeem(callerAddress, { name })`, which
+in `AwaitingSubmission`. Completion is `prepareCompleteRedeem(credential, { name })`, which
 checks the state and answers with the attested request's `requestId`, `attestationOutputKind`
 and `attestationOutput` (`RedeemCompleteInputs`), the `completeRedeem` call built from them
 under a fresh mint nonce with a 32-byte completion output (the attested assets, or zeros the
-circuit ignores), finalised by the wallet, and `completeRedeem(callerAddress, { name, finalizedTx
+circuit ignores), finalised by the wallet, and `completeRedeem(credential, { name, finalizedTx
 })`, which checks the state again and commits the call in `AwaitingSubmission`. No redeem method
 takes the wallet's keys. A state conflict is an `{ ok: false }` result of `RedeemServiceAdaptor`, and the six
 server actions in `src/server/actions/redeem-actions.ts` forward to it.
@@ -1351,21 +1391,21 @@ page-built `completeSwap` call is paid for and included, then `Completed` with `
 A swap holds the caller's request (`erc20AddressIn`, `erc20AddressOut`, `fee`, `amountOut`,
 `amountInMaximum`), the slot `inIndex` the server assigns when the start is prepared, and
 `vaultAccount`, which the server derives when the start is committed. The browser calls
-`prepareStartSwap(callerAddress, { swapRequest })`, which answers with `{ inIndex }`
+`prepareStartSwap(credential, { swapRequest })`, which answers with `{ inIndex }`
 (`SwapStartInputs` in `swap.ts`) and writes nothing, builds the `startSwap` call with the caller
 secret as the witness and the connected wallet's keys (`SwapCallBuilder`, which derives the
 surrendered coin's type from `erc20AddressIn` and the vault address), proves it, and has the
 wallet balance it with its own coins and DUST fee, sign and finalise it, spending the wallet's
 own coins of the sold token's vault token worth `amountInMaximum` and leaving the change. The
-browser then calls `startSwap(callerAddress, { swapRequest, inIndex, finalizedTx })`. The server
+browser then calls `startSwap(credential, { swapRequest, inIndex, finalizedTx })`. The server
 derives the vault account, and in one database transaction stores the swap in
 `AwaitingStartTransaction` and commits the call as a Midnight transaction in
-`AwaitingSubmission`. Completion is `prepareCompleteSwap(callerAddress, { name })`, which checks
+`AwaitingSubmission`. Completion is `prepareCompleteSwap(credential, { name })`, which checks
 the state and answers with the attested request's `requestId`, `attestationOutputKind` and
 `attestationOutput` (`SwapCompleteInputs`), the `completeSwap` call built from them under a
 fresh mint nonce and a fresh change nonce with a 32-byte completion output (the attested
 `amountIn`, or zeros the circuit ignores), finalised by the wallet, and
-`completeSwap(callerAddress, { name, finalizedTx })`, which checks the state again and commits
+`completeSwap(credential, { name, finalizedTx })`, which checks the state again and commits
 the call in `AwaitingSubmission`. No swap method takes the wallet's keys. A state conflict is an
 `{ ok: false }` result of `SwapServiceAdaptor`, and the seven server actions in `src/server/actions/swap-actions.ts` (the
 four above, `quoteSwap`, `getSwap` and `listSwaps`) forward to it.
@@ -1392,7 +1432,7 @@ An approval holds its `kind` (`router` or `stata`), the ERC20 the allowance is g
 the `spender`, the slot `inIndex` the server assigns when the start is prepared, and
 `vaultAccount`. The deployer's two calls take the same path as the withdrawal's (see
 [ERC-20 vault withdraw API](#erc-20-vault-withdraw-api)): the browser calls
-`prepareStartApproval(callerAddress, { approvalRequest })`, which answers with `{ inIndex }`
+`prepareStartApproval(credential, { approvalRequest })`, which answers with `{ inIndex }`
 (`ApprovalStartInputs` in `approval.ts`) and writes nothing, builds the kind's start call with
 the vault secret as the witness and the connected wallet's keys (`ApprovalCallBuilder`), proves
 it, and has the wallet balance it with its own DUST fee, sign and finalise it.
@@ -1400,17 +1440,17 @@ it, and has the wallet balance it with its own DUST fee, sign and finalise it.
 takes the slot alone, since the contract reads the wrapper and its underlying from its own
 ledger. Neither start takes a coin, so the balancing adds the fee alone. The contract refuses any
 identity but the deployer's while the call is built, which the page reports as the vault
-refusing the approval. The browser then calls `startApproval(callerAddress, { approvalRequest,
+refusing the approval. The browser then calls `startApproval(credential, { approvalRequest,
 inIndex, finalizedTx })`. The server reads the spender (and for a stata approval the
 underlying) from the vault ledger, derives the vault account, and in one database transaction
 stores the approval in `AwaitingStartTransaction` and commits the call as a Midnight transaction
 in `AwaitingSubmission` under the kind's start circuit (`APPROVAL_START_CIRCUIT_BY_KIND`).
-Completion is `prepareCompleteApproval(callerAddress, { name })`, which checks the state and
+Completion is `prepareCompleteApproval(credential, { name })`, which checks the state and
 answers with the attested request's `requestId`, `attestationOutputKind` and
 `attestationOutput` (`ApprovalCompleteInputs`), the `completeApprove` call built from them with
 a one-byte completion output (the attested approve result, or a zero byte the circuit ignores)
 and no nonce, since the circuit mints nothing, finalised by the wallet, and
-`completeApproval(callerAddress, { name, finalizedTx })`, which checks the state again and
+`completeApproval(credential, { name, finalizedTx })`, which checks the state again and
 commits the call in `AwaitingSubmission`. No approval method takes the wallet's keys. A state
 conflict is an `{ ok: false }` result of `ApprovalServiceAdaptor`, and
 the seven server actions in `src/server/actions/approval-actions.ts` (the four above,
@@ -1585,7 +1625,7 @@ another tab got there first
 and is left to the next window. Success and failure surface
 as toasts from the shadcn `sonner` toaster mounted in the root layout, and the Next dev
 server's server function invocation log is switched off in `next.config.ts`, since every action
-carries the caller address as its first argument.
+carries the login credential as its first argument.
 
 The same Ethereum explorer opens an account's page from an `EthereumAccountLink`
 (`src/components/ethereum-account-link.tsx`) wherever the UI names one: the deposit account in
@@ -1617,7 +1657,8 @@ wallet components read its types and the connection status label.
   serves, and nothing more (see [The wallet interface](#the-wallet-interface)). A wallet signs
   a caller's call with `balanceUnsealedTransaction`, which balances it with the wallet's own
   coins and DUST fee, signs and finalises it for the backend to submit. The page finalises every
-  operation's two caller calls this way (see [Midnight transactions](#midnight-transactions)).
+  operation's two caller calls this way (see [Midnight transactions](#midnight-transactions)),
+  and logs the caller in with `signData` (see [Caller authentication](#caller-authentication)).
 - `connection-status.ts` defines `WalletConnectionStatus`, the status label the wallet components
   show, and derives it from the provider's state.
 - `seed-wallet.ts` is the seed implementation: it derives account-zero keys from a hex seed,
@@ -1678,6 +1719,7 @@ fails on any other member and on any drift from the connector's signatures.
 | `getUnshieldedBalances()`      | The same method.                                                                                    |
 | `getDustBalance()`             | The same method: `{ cap, balance }` in SPECK.                                                       |
 | `balanceUnsealedTransaction()` | The same method: the unbound bytes of a proven call in hex in, the finalised bytes in hex out.      |
+| `signData()`                   | The same method: the MIP-0031 signed message of the payload, signed with the unshielded key.        |
 | `addresses`                    | `getShieldedAddresses()`, `getUnshieldedAddress()` and `getDustAddress()`, read once at connection. |
 | `publicKeys`                   | The coin and encryption public keys of `getShieldedAddresses()`, decoded from Bech32m to hex.       |
 | `kind`, `name`                 | The application's own wallet kind, and `InitialAPI.name`.                                           |
@@ -1844,7 +1886,7 @@ reads that set from the indexer and each token's `symbol()`, `name()` and `decim
 token contract through the `Erc20Reader` port (`erc20-reader.ts`, implemented over ethers in
 `erc20-reader-ethers-impl.ts`), and the `listSupportedTokens` action in
 `src/server/actions/supported-token-actions.ts` hands the list to the browser; the allowlist is
-public vault state, so that one action takes no caller address. The same service's
+public vault state, so that one action takes no credential. The same service's
 `listDepositAccountFunds` reads what the caller's deposit account holds of those tokens.
 
 `vaultTokenInfos()` (`src/lib/midnight/ethereum-erc20-vault/vault-token-infos.ts`) turns the

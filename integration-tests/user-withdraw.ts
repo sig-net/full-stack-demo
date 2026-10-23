@@ -63,7 +63,7 @@ export async function startWithdrawAsUser(
   withdrawRequest: WithdrawRequest,
 ): Promise<WithdrawResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.withdrawV1
-  const prepared = await adaptor.prepareStartWithdraw(user.unshieldedAddress, { withdrawRequest })
+  const prepared = await adaptor.prepareStartWithdraw(await user.login(), { withdrawRequest })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildStartCall(
     backend,
@@ -73,7 +73,7 @@ export async function startWithdrawAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.startWithdraw(user.unshieldedAddress, {
+  const result = await adaptor.startWithdraw(await user.login(), {
     withdrawRequest,
     inIndex: prepared.inputs.inIndex,
     finalizedTx,
@@ -92,7 +92,7 @@ export async function completeWithdrawAsUser(
   name: string,
 ): Promise<WithdrawResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.withdrawV1
-  const prepared = await adaptor.prepareCompleteWithdraw(user.unshieldedAddress, { name })
+  const prepared = await adaptor.prepareCompleteWithdraw(await user.login(), { name })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
@@ -101,7 +101,7 @@ export async function completeWithdrawAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeWithdraw(user.unshieldedAddress, { name, finalizedTx })
+  const result = await adaptor.completeWithdraw(await user.login(), { name, finalizedTx })
   log(
     `complete call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, completeWithdraw answered in ${String(Date.now() - calling)} ms`,
   )

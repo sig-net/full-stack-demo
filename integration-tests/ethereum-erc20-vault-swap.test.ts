@@ -65,7 +65,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
       const { midnight, ethereum } = backend
       const { approvalV1, depositV1 } = midnight.ethereumErc20Vault
 
-      const targets = await approvalV1.adaptor.listApprovalTargets(user.unshieldedAddress, {})
+      const targets = await approvalV1.adaptor.listApprovalTargets(await user.login(), {})
       if (!targets.ok) throw new Error(targets.error)
       const router = targets.targets.find(
         (target) => target.kind === 'router' && target.erc20Address === CIRCLE_USDC.toLowerCase(),
@@ -131,7 +131,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         midnightEthereumErc20Vault.contractAddress,
       ).toLowerCase()
 
-      const quoted = await swapV1.adaptor.quoteSwap(user.unshieldedAddress, {
+      const quoted = await swapV1.adaptor.quoteSwap(await user.login(), {
         erc20AddressIn: CIRCLE_USDC,
         erc20AddressOut: CIRCLE_EURC,
         amountIn: AMOUNT_IN,

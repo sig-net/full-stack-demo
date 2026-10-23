@@ -12,6 +12,7 @@ import { useTokenInfoRegistry } from '@/components/contexts/TokenInfoRegistryCon
 import { useSpotPrices } from '@/components/use-spot-prices'
 import { activityEntryOf } from '@/lib/activity/activity-entries'
 import { activitiesDueForCompletion } from '@/lib/activity/completions-due'
+import type { CallerLogin } from '@/lib/caller/wallet-login'
 import type { ClientConfig } from '@/lib/config/client-config'
 import type {
   Activity,
@@ -49,16 +50,16 @@ interface ActivitySectionProps {
  * built with.
  */
 export function ActivitySection({ types, title = 'Activity' }: ActivitySectionProps): ReactNode {
-  const { callerAddress } = useCaller()
+  const { login } = useCaller()
   const registry = useTokenInfoRegistry()
   const prices = useSpotPrices()
   const activities = useQuery({
-    queryKey: [ACTIVITIES_QUERY_KEY, callerAddress, ...types],
+    queryKey: [ACTIVITIES_QUERY_KEY, login?.verifyingKey ?? null, ...types],
     queryFn:
-      callerAddress === null
+      login === null
         ? skipToken
         : async () => {
-            const result = await listActivities(callerAddress, { types: [...types] })
+            const result = await listActivities(await login.credential(), { types: [...types] })
             if (!result.ok) throw new Error(result.error)
             return result.activities
           },
@@ -76,7 +77,7 @@ export function ActivitySection({ types, title = 'Activity' }: ActivitySectionPr
       >
         {title}
       </h2>
-      {callerAddress === null ? (
+      {login === null ? (
         <p role="status" className="text-muted-foreground">
           Connect a Midnight wallet to see your activity.
         </p>
@@ -107,7 +108,7 @@ export function ActivitySection({ types, title = 'Activity' }: ActivitySectionPr
 interface PageCompletionArgs {
   readonly config: ClientConfig
   readonly wallet: Wallet
-  readonly callerAddress: string
+  readonly login: CallerLogin
   readonly vaultSecret: string
   readonly name: string
 }
@@ -117,71 +118,71 @@ interface PageCompletionArgs {
  * never completes one downloads neither the call builder nor the contract.
  */
 const PAGE_COMPLETE_BY_TYPE: Record<ActivityType, (args: PageCompletionArgs) => Promise<void>> = {
-  Deposit: async ({ config, wallet, callerAddress, vaultSecret, name }) => {
+  Deposit: async ({ config, wallet, login, vaultSecret, name }) => {
     const calls =
       await import('@/lib/midnight/ethereum-erc20-vault/deposit-v1/browser-deposit-calls')
     await calls.completeDepositInBrowser({
       actions: { prepareCompleteDeposit, completeDeposit },
       builder: calls.browserDepositCallBuilder(config, window.location.origin),
       wallet,
-      callerAddress,
+      login,
       vaultSecret,
       name,
     })
   },
-  Withdraw: async ({ config, wallet, callerAddress, vaultSecret, name }) => {
+  Withdraw: async ({ config, wallet, login, vaultSecret, name }) => {
     const calls =
       await import('@/lib/midnight/ethereum-erc20-vault/withdraw-v1/browser-withdraw-calls')
     await calls.completeWithdrawInBrowser({
       actions: { prepareCompleteWithdraw, completeWithdraw },
       builder: calls.browserWithdrawCallBuilder(config, window.location.origin),
       wallet,
-      callerAddress,
+      login,
       vaultSecret,
       name,
     })
   },
-  Supply: async ({ config, wallet, callerAddress, vaultSecret, name }) => {
+  Supply: async ({ config, wallet, login, vaultSecret, name }) => {
     const calls = await import('@/lib/midnight/ethereum-erc20-vault/supply-v1/browser-supply-calls')
     await calls.completeSupplyInBrowser({
       actions: { prepareCompleteSupply, completeSupply },
       builder: calls.browserSupplyCallBuilder(config, window.location.origin),
       wallet,
-      callerAddress,
+      login,
       vaultSecret,
       name,
     })
   },
-  Redeem: async ({ config, wallet, callerAddress, vaultSecret, name }) => {
+  Redeem: async ({ config, wallet, login, vaultSecret, name }) => {
     const calls = await import('@/lib/midnight/ethereum-erc20-vault/redeem-v1/browser-redeem-calls')
     await calls.completeRedeemInBrowser({
       actions: { prepareCompleteRedeem, completeRedeem },
       builder: calls.browserRedeemCallBuilder(config, window.location.origin),
       wallet,
-      callerAddress,
+      login,
       vaultSecret,
       name,
     })
   },
-  Swap: async ({ config, wallet, callerAddress, vaultSecret, name }) => {
+  Swap: async ({ config, wallet, login, vaultSecret, name }) => {
     const calls = await import('@/lib/midnight/ethereum-erc20-vault/swap-v1/browser-swap-calls')
     await calls.completeSwapInBrowser({
       actions: { prepareCompleteSwap, completeSwap },
       builder: calls.browserSwapCallBuilder(config, window.location.origin),
       wallet,
-      callerAddress,
+      login,
       vaultSecret,
       name,
     })
   },
-  Approval: async ({ config, wallet, callerAddress, vaultSecret, name }) => {
+  Approval: async ({ config, wallet, login, vaultSecret, name }) => {
     const calls =
       await import('@/lib/midnight/ethereum-erc20-vault/approval-v1/browser-approval-calls')
     await calls.completeApprovalInBrowser({
       actions: { prepareCompleteApproval, completeApproval },
       builder: calls.browserApprovalCallBuilder(config, window.location.origin),
       wallet,
-      callerAddress,
+      login,
       vaultSecret,
       name,
     })
@@ -195,21 +196,21 @@ const PAGE_COMPLETE_BY_TYPE: Record<ActivityType, (args: PageCompletionArgs) => 
  * next window.
  */
 function useAutoCompletion(activities: readonly Activity[] | undefined): void {
-  const { callerAddress, vaultSecret } = useCaller()
+  const { login, vaultSecret } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
   const queryClient = useQueryClient()
   const attemptedAt = useRef(new Map<string, number>())
   const complete = useEffectEvent(async (activity: Activity) => {
-    if (callerAddress === null || vaultSecret === null || wallet === null) return
+    if (login === null || vaultSecret === null || wallet === null) return
     attemptedAt.current.set(activity.name, Date.now())
     const { description } = activityEntryOf(activity, registry, NO_PRICES)
     try {
       await PAGE_COMPLETE_BY_TYPE[activity.type]({
         config,
         wallet,
-        callerAddress,
+        login,
         vaultSecret,
         name: activity.name,
       })

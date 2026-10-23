@@ -51,7 +51,7 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
 
   test('prepareStartDeposit assigns a nonce of zero to a fresh caller', async () => {
     const { adaptor } = backend.midnight.ethereumErc20Vault.depositV1
-    const prepared = await adaptor.prepareStartDeposit(user.unshieldedAddress, {
+    const prepared = await adaptor.prepareStartDeposit(await user.login(), {
       depositRequest: DEPOSIT_REQUEST,
       wallet: user.publicKeys,
       userCommitment: userCommitmentOf(vaultSecret),
@@ -131,7 +131,7 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
     const { adaptor } = backend.midnight.ethereumErc20Vault.depositV1
     const wallet = user.publicKeys
     const userCommitment = userCommitmentOf(vaultSecret)
-    const prepared = await adaptor.prepareStartDeposit(user.unshieldedAddress, {
+    const prepared = await adaptor.prepareStartDeposit(await user.login(), {
       depositRequest: DEPOSIT_REQUEST,
       wallet,
       userCommitment,
@@ -141,7 +141,7 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
     expect(prepared.inputs.evmNonce).toBe(1n)
     const stale = { ...prepared.inputs, evmNonce: prepared.inputs.evmNonce - 1n }
     const { finalizedTx } = await buildStartCall(backend, vaultSecret, user, DEPOSIT_REQUEST, stale)
-    const refused = await adaptor.startDeposit(user.unshieldedAddress, {
+    const refused = await adaptor.startDeposit(await user.login(), {
       depositRequest: DEPOSIT_REQUEST,
       wallet,
       userCommitment,
@@ -162,16 +162,16 @@ describe('Starting a deposit over Postgres, the indexer and the proof server', (
     if (deposit === undefined) throw new Error('startDeposit did not run')
     const { adaptor } = backend.midnight.ethereumErc20Vault.depositV1
     const current = await backend.midnight.ethereumErc20Vault.depositV1.repository.get(deposit.name)
-    expect(await adaptor.listDeposits(user.unshieldedAddress, {})).toEqual({
+    expect(await adaptor.listDeposits(await user.login(), {})).toEqual({
       ok: true,
       deposits: [current],
     })
-    expect(await adaptor.getDeposit(user.unshieldedAddress, { name: deposit.name })).toEqual({
+    expect(await adaptor.getDeposit(await user.login(), { name: deposit.name })).toEqual({
       ok: true,
       deposit: current,
     })
     expect(
-      await adaptor.prepareCompleteDeposit(user.unshieldedAddress, {
+      await adaptor.prepareCompleteDeposit(await user.login(), {
         name: deposit.name,
         wallet: user.publicKeys,
       }),

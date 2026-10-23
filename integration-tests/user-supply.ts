@@ -64,7 +64,7 @@ export async function startSupplyAsUser(
   supplyRequest: SupplyRequest,
 ): Promise<SupplyResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.supplyV1
-  const prepared = await adaptor.prepareStartSupply(user.unshieldedAddress, { supplyRequest })
+  const prepared = await adaptor.prepareStartSupply(await user.login(), { supplyRequest })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildStartCall(
     backend,
@@ -74,7 +74,7 @@ export async function startSupplyAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.startSupply(user.unshieldedAddress, {
+  const result = await adaptor.startSupply(await user.login(), {
     supplyRequest,
     inIndex: prepared.inputs.inIndex,
     finalizedTx,
@@ -93,7 +93,7 @@ export async function completeSupplyAsUser(
   name: string,
 ): Promise<SupplyResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.supplyV1
-  const prepared = await adaptor.prepareCompleteSupply(user.unshieldedAddress, { name })
+  const prepared = await adaptor.prepareCompleteSupply(await user.login(), { name })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
@@ -102,7 +102,7 @@ export async function completeSupplyAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeSupply(user.unshieldedAddress, { name, finalizedTx })
+  const result = await adaptor.completeSupply(await user.login(), { name, finalizedTx })
   log(
     `complete call built in ${String(buildMs)} ms, finalised in ${String(finalizeMs)} ms, completeSupply answered in ${String(Date.now() - calling)} ms`,
   )

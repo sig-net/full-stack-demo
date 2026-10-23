@@ -1,5 +1,6 @@
 import { hexToBytes } from '@sig-net/midnight'
 
+import type { LoginCredential } from '@/lib/caller/login-credential'
 import type { ClientConfig } from '@/lib/config/client-config'
 import { browserVaultCallProviders } from '@/lib/midnight/ethereum-erc20-vault/browser-vault-call-providers'
 import {
@@ -23,32 +24,32 @@ import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-requ
 
 /** Starts a swap from the page, the wallet's own coin of the sold token funding the start call. */
 export async function startSwapInBrowser(args: StartSwapInBrowserArgs): Promise<Swap> {
-  const { actions, builder, wallet, callerAddress, vaultSecret, swapRequest, onStage } = args
+  const { actions, builder, wallet, login, vaultSecret, swapRequest, onStage } = args
   const started = await runCallerCall({
     operation: 'swap',
     wallet,
-    callerAddress,
+    login,
     vaultSecret,
     onStage,
-    prepare: () => actions.prepareStartSwap(callerAddress, { swapRequest }),
+    prepare: async () => actions.prepareStartSwap(await login.credential(), { swapRequest }),
     circuitArgs: ({ inIndex }, caller) => ({ ...caller, inIndex, ...swapRequest }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
-    record: ({ inIndex }, finalizedTx) =>
-      actions.startSwap(callerAddress, { swapRequest, inIndex, finalizedTx }),
+    record: async ({ inIndex }, finalizedTx) =>
+      actions.startSwap(await login.credential(), { swapRequest, inIndex, finalizedTx }),
   })
   return started.swap
 }
 
 /** Completes an attested swap from the page, under a fresh mint nonce and a fresh change nonce. */
 export async function completeSwapInBrowser(args: CompleteSwapInBrowserArgs): Promise<Swap> {
-  const { actions, builder, wallet, callerAddress, vaultSecret, name, onStage } = args
+  const { actions, builder, wallet, login, vaultSecret, name, onStage } = args
   const completed = await runCallerCall({
     operation: 'swap',
     wallet,
-    callerAddress,
+    login,
     vaultSecret,
     onStage,
-    prepare: () => actions.prepareCompleteSwap(callerAddress, { name }),
+    prepare: async () => actions.prepareCompleteSwap(await login.credential(), { name }),
     circuitArgs: (inputs, caller) => ({
       ...caller,
       requestId: hexToBytes(inputs.requestId),
@@ -57,7 +58,8 @@ export async function completeSwapInBrowser(args: CompleteSwapInBrowserArgs): Pr
       changeNonce: crypto.getRandomValues(new Uint8Array(32)),
     }),
     build: (circuitArgs) => builder.buildComplete(circuitArgs),
-    record: (_inputs, finalizedTx) => actions.completeSwap(callerAddress, { name, finalizedTx }),
+    record: async (_inputs, finalizedTx) =>
+      actions.completeSwap(await login.credential(), { name, finalizedTx }),
   })
   return completed.swap
 }
@@ -71,15 +73,15 @@ export function browserSwapCallBuilder(config: ClientConfig, origin: string): Sw
 /** The swap's server actions, as the page imports them. */
 export interface SwapActions {
   prepareStartSwap(
-    callerAddress: string,
+    credential: LoginCredential,
     args: PrepareStartSwapArgs,
   ): Promise<SwapStartInputsResult>
-  startSwap(callerAddress: string, args: StartSwapArgs): Promise<SwapResult>
+  startSwap(credential: LoginCredential, args: StartSwapArgs): Promise<SwapResult>
   prepareCompleteSwap(
-    callerAddress: string,
+    credential: LoginCredential,
     args: PrepareCompleteSwapArgs,
   ): Promise<SwapCompleteInputsResult>
-  completeSwap(callerAddress: string, args: CompleteSwapArgs): Promise<SwapResult>
+  completeSwap(credential: LoginCredential, args: CompleteSwapArgs): Promise<SwapResult>
 }
 
 export interface StartSwapInBrowserArgs extends CallerCallArgs<SwapCallBuilder> {

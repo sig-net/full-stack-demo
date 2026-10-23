@@ -73,7 +73,7 @@ export async function startDepositAsUser(
   const { adaptor } = backend.midnight.ethereumErc20Vault.depositV1
   const wallet = user.publicKeys
   const userCommitment = userCommitmentOf(vaultSecret)
-  const prepared = await adaptor.prepareStartDeposit(user.unshieldedAddress, {
+  const prepared = await adaptor.prepareStartDeposit(await user.login(), {
     depositRequest,
     wallet,
     userCommitment,
@@ -87,7 +87,7 @@ export async function startDepositAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.startDeposit(user.unshieldedAddress, {
+  const result = await adaptor.startDeposit(await user.login(), {
     depositRequest,
     wallet,
     userCommitment,
@@ -110,7 +110,7 @@ export async function completeDepositAsUser(
 ): Promise<DepositResult> {
   const { adaptor } = backend.midnight.ethereumErc20Vault.depositV1
   const wallet = user.publicKeys
-  const prepared = await adaptor.prepareCompleteDeposit(user.unshieldedAddress, { name, wallet })
+  const prepared = await adaptor.prepareCompleteDeposit(await user.login(), { name, wallet })
   if (!prepared.ok) return prepared
   const { finalizedTx, buildMs, finalizeMs } = await buildCompleteCall(
     backend,
@@ -119,7 +119,7 @@ export async function completeDepositAsUser(
     prepared.inputs,
   )
   const calling = Date.now()
-  const result = await adaptor.completeDeposit(user.unshieldedAddress, {
+  const result = await adaptor.completeDeposit(await user.login(), {
     name,
     wallet,
     finalizedTx,

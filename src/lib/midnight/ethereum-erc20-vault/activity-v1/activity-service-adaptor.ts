@@ -12,7 +12,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/activity-v1/activity-service'
 import type { Logger } from '@/lib/logging/logger'
 
-/** Adapts the activity service to the wire: the caller address stands in for the caller, and the arguments are untrusted until parsed. */
+/** Adapts the activity service to the wire: the login credential stands in for the caller, and the arguments are untrusted until parsed. */
 export class ActivityServiceAdaptor {
   private readonly activityService: ActivityService
   private readonly networkId: MidnightNetworkId
@@ -24,8 +24,8 @@ export class ActivityServiceAdaptor {
     this.logger = logger
   }
 
-  async getActivity(callerAddress: string, args: unknown): Promise<ActivityResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async getActivity(credential: unknown, args: unknown): Promise<ActivityResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'getActivity', caller: caller.name })
     const parsed = getActivityArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -38,8 +38,8 @@ export class ActivityServiceAdaptor {
     return { ok: true, activity }
   }
 
-  async listActivities(callerAddress: string, args: unknown): Promise<ActivityListResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async listActivities(credential: unknown, args: unknown): Promise<ActivityListResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'listActivities', caller: caller.name })
     const parsed = listActivitiesArgsSchema.safeParse(args)
     if (!parsed.success) {

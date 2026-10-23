@@ -24,7 +24,7 @@ import { DepositStateConflict } from '@/lib/midnight/ethereum-erc20-vault/deposi
 import type { Logger } from '@/lib/logging/logger'
 
 /**
- * Adapts the deposit service to the wire: the caller address stands in for the caller, the
+ * Adapts the deposit service to the wire: the login credential stands in for the caller, the
  * arguments are untrusted until parsed, and every outcome the caller can act on is a result.
  * The service opens the transaction of each user action itself, after its chain and row reads.
  */
@@ -39,11 +39,8 @@ export class DepositServiceAdaptor {
     this.logger = logger
   }
 
-  async prepareStartDeposit(
-    callerAddress: string,
-    args: unknown,
-  ): Promise<DepositStartInputsResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async prepareStartDeposit(credential: unknown, args: unknown): Promise<DepositStartInputsResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'prepareStartDeposit', caller: caller.name })
     const parsed = prepareStartDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -52,8 +49,8 @@ export class DepositServiceAdaptor {
     return { ok: true, inputs: await this.depositService.prepareStartDeposit(caller, parsed.data) }
   }
 
-  async startDeposit(callerAddress: string, args: unknown): Promise<DepositResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async startDeposit(credential: unknown, args: unknown): Promise<DepositResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'startDeposit', caller: caller.name })
     const parsed = startDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -66,10 +63,10 @@ export class DepositServiceAdaptor {
   }
 
   async prepareCompleteDeposit(
-    callerAddress: string,
+    credential: unknown,
     args: unknown,
   ): Promise<DepositCompleteInputsResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'prepareCompleteDeposit', caller: caller.name })
     const parsed = prepareCompleteDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -81,8 +78,8 @@ export class DepositServiceAdaptor {
     }))
   }
 
-  async completeDeposit(callerAddress: string, args: unknown): Promise<DepositResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async completeDeposit(credential: unknown, args: unknown): Promise<DepositResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'completeDeposit', caller: caller.name })
     const parsed = completeDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -94,8 +91,8 @@ export class DepositServiceAdaptor {
     }))
   }
 
-  async getDeposit(callerAddress: string, args: unknown): Promise<DepositResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async getDeposit(credential: unknown, args: unknown): Promise<DepositResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'getDeposit', caller: caller.name })
     const parsed = getDepositArgsSchema.safeParse(args)
     if (!parsed.success) {
@@ -108,8 +105,8 @@ export class DepositServiceAdaptor {
     return { ok: true, deposit }
   }
 
-  async listDeposits(callerAddress: string, args: unknown): Promise<DepositListResult> {
-    const caller = resolveCaller(callerAddress, this.networkId)
+  async listDeposits(credential: unknown, args: unknown): Promise<DepositListResult> {
+    const caller = resolveCaller(credential, this.networkId)
     this.logger.debug('method called', { method: 'listDeposits', caller: caller.name })
     const parsed = listDepositsArgsSchema.safeParse(args)
     if (!parsed.success) {

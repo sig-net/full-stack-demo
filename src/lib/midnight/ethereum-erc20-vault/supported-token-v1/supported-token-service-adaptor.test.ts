@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { CALLER_ADDRESS, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
+import { CALLER_CREDENTIAL, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import type { SupportedTokenService } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service'
 import { SupportedTokenServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service-adaptor'
 import { mock } from '@/lib/testing/mock'
@@ -37,10 +37,10 @@ describe('SupportedTokenServiceAdaptor', () => {
     })
   })
 
-  test('listDepositAccountFunds resolves the caller from the address and answers the funds', async () => {
+  test('listDepositAccountFunds resolves the caller from the credential and answers the funds', async () => {
     const callers: string[] = []
     await expect(
-      adaptorOver(callers).listDepositAccountFunds(CALLER_ADDRESS, {
+      adaptorOver(callers).listDepositAccountFunds(CALLER_CREDENTIAL, {
         userCommitment: USER_COMMITMENT,
       }),
     ).resolves.toEqual({
@@ -57,15 +57,15 @@ describe('SupportedTokenServiceAdaptor', () => {
     },
     {
       name: 'listDepositAccountFunds',
-      call: (a: SupportedTokenServiceAdaptor) => a.listDepositAccountFunds(CALLER_ADDRESS, 'no'),
+      call: (a: SupportedTokenServiceAdaptor) => a.listDepositAccountFunds(CALLER_CREDENTIAL, 'no'),
     },
   ])('$name refuses arguments that are not an object', async ({ call }) => {
     await expect(call(adaptorOver())).resolves.toMatchObject({ ok: false })
   })
 
-  test('listDepositAccountFunds refuses a malformed address', async () => {
+  test('listDepositAccountFunds refuses a malformed credential', async () => {
     await expect(adaptorOver().listDepositAccountFunds('nope', {})).rejects.toThrow(
-      'caller address',
+      'wallet login signature',
     )
   })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { CALLER_ADDRESS, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
+import { CALLER_CREDENTIAL, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
 import type {
   SupplyCompleteInputs,
   SupplyStartInputs,
@@ -76,24 +76,25 @@ describe('SupplyServiceAdaptor parsing', () => {
   }> = [
     {
       name: 'getSupplyTarget takes no arguments',
-      call: (a) => a.getSupplyTarget(CALLER_ADDRESS, {}),
+      call: (a) => a.getSupplyTarget(CALLER_CREDENTIAL, {}),
       expectReceived: [{}],
     },
     {
       name: 'prepareStartSupply carries the amount as a bigint',
-      call: (a) => a.prepareStartSupply(CALLER_ADDRESS, { supplyRequest: { amount: '1000000' } }),
+      call: (a) =>
+        a.prepareStartSupply(CALLER_CREDENTIAL, { supplyRequest: { amount: '1000000' } }),
       expectReceived: [{ supplyRequest: REQUEST }],
     },
     {
       name: 'prepareStartSupply refuses a zero amount',
-      call: (a) => a.prepareStartSupply(CALLER_ADDRESS, { supplyRequest: { amount: 0n } }),
+      call: (a) => a.prepareStartSupply(CALLER_CREDENTIAL, { supplyRequest: { amount: 0n } }),
       expectReceived: [],
       expectError: 'supplyRequest.amount',
     },
     {
       name: 'startSupply carries the request, the slot and the finalised bytes normalised',
       call: (a) =>
-        a.startSupply(CALLER_ADDRESS, {
+        a.startSupply(CALLER_CREDENTIAL, {
           supplyRequest: { amount: '1000000' },
           inIndex: '42',
           finalizedTx: FINALIZED_TX,
@@ -103,7 +104,7 @@ describe('SupplyServiceAdaptor parsing', () => {
     {
       name: 'startSupply refuses a zero amount',
       call: (a) =>
-        a.startSupply(CALLER_ADDRESS, {
+        a.startSupply(CALLER_CREDENTIAL, {
           supplyRequest: { amount: 0n },
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
@@ -114,43 +115,47 @@ describe('SupplyServiceAdaptor parsing', () => {
     {
       name: 'startSupply refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startSupply(CALLER_ADDRESS, { supplyRequest: REQUEST, inIndex: 42n, finalizedTx: 'zz' }),
+        a.startSupply(CALLER_CREDENTIAL, {
+          supplyRequest: REQUEST,
+          inIndex: 42n,
+          finalizedTx: 'zz',
+        }),
       expectReceived: [],
       expectError: 'finalizedTx',
     },
     {
       name: 'startSupply refuses a missing slot',
       call: (a) =>
-        a.startSupply(CALLER_ADDRESS, { supplyRequest: REQUEST, finalizedTx: FINALIZED_TX }),
+        a.startSupply(CALLER_CREDENTIAL, { supplyRequest: REQUEST, finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'inIndex',
     },
     {
       name: 'prepareCompleteSupply passes the name',
-      call: (a) => a.prepareCompleteSupply(CALLER_ADDRESS, { name: SUPPLY_NAME }),
+      call: (a) => a.prepareCompleteSupply(CALLER_CREDENTIAL, { name: SUPPLY_NAME }),
       expectReceived: [{ name: SUPPLY_NAME }],
     },
     {
       name: 'completeSupply passes the name and the finalised bytes',
       call: (a) =>
-        a.completeSupply(CALLER_ADDRESS, { name: SUPPLY_NAME, finalizedTx: FINALIZED_TX }),
+        a.completeSupply(CALLER_CREDENTIAL, { name: SUPPLY_NAME, finalizedTx: FINALIZED_TX }),
       expectReceived: [{ name: SUPPLY_NAME, finalizedTx: PARSED_FINALIZED_TX }],
     },
     {
       name: 'completeSupply refuses a name that is not a supply',
       call: (a) =>
-        a.completeSupply(CALLER_ADDRESS, { name: 'supplies/1', finalizedTx: FINALIZED_TX }),
+        a.completeSupply(CALLER_CREDENTIAL, { name: 'supplies/1', finalizedTx: FINALIZED_TX }),
       expectReceived: [],
       expectError: 'expected callers/{caller}/ethereum-erc20-vault-supplies/{uuid}',
     },
     {
       name: 'getSupply passes the name',
-      call: (a) => a.getSupply(CALLER_ADDRESS, { name: SUPPLY_NAME }),
+      call: (a) => a.getSupply(CALLER_CREDENTIAL, { name: SUPPLY_NAME }),
       expectReceived: [{ name: SUPPLY_NAME }],
     },
     {
       name: 'listSupplies takes no arguments',
-      call: (a) => a.listSupplies(CALLER_ADDRESS, {}),
+      call: (a) => a.listSupplies(CALLER_CREDENTIAL, {}),
       expectReceived: [{}],
     },
   ]
@@ -167,7 +172,7 @@ describe('SupplyServiceAdaptor parsing', () => {
 describe('SupplyServiceAdaptor outcomes', () => {
   test('a missing supply is a not-found result', async () => {
     const adaptor = adaptorOver({ getSupply: async () => undefined })
-    expect(await adaptor.getSupply(CALLER_ADDRESS, { name: SUPPLY_NAME })).toEqual({
+    expect(await adaptor.getSupply(CALLER_CREDENTIAL, { name: SUPPLY_NAME })).toEqual({
       ok: false,
       error: `${SUPPLY_NAME} was not found.`,
     })
@@ -175,11 +180,13 @@ describe('SupplyServiceAdaptor outcomes', () => {
 
   test('the prepare methods answer with the inputs the service assigned or read', async () => {
     const adaptor = adaptorOver({})
-    expect(await adaptor.prepareStartSupply(CALLER_ADDRESS, { supplyRequest: REQUEST })).toEqual({
-      ok: true,
-      inputs: START_INPUTS,
-    })
-    expect(await adaptor.prepareCompleteSupply(CALLER_ADDRESS, { name: SUPPLY_NAME })).toEqual({
+    expect(await adaptor.prepareStartSupply(CALLER_CREDENTIAL, { supplyRequest: REQUEST })).toEqual(
+      {
+        ok: true,
+        inputs: START_INPUTS,
+      },
+    )
+    expect(await adaptor.prepareCompleteSupply(CALLER_CREDENTIAL, { name: SUPPLY_NAME })).toEqual({
       ok: true,
       inputs: COMPLETE_INPUTS,
     })
@@ -206,13 +213,13 @@ describe('SupplyServiceAdaptor outcomes', () => {
       prepareCompleteSupply: refusing,
       completeSupply: refusing,
     })
-    const starting = adaptor.startSupply(CALLER_ADDRESS, {
+    const starting = adaptor.startSupply(CALLER_CREDENTIAL, {
       supplyRequest: REQUEST,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })
-    const preparing = adaptor.prepareCompleteSupply(CALLER_ADDRESS, { name: SUPPLY_NAME })
-    const completing = adaptor.completeSupply(CALLER_ADDRESS, {
+    const preparing = adaptor.prepareCompleteSupply(CALLER_CREDENTIAL, { name: SUPPLY_NAME })
+    const completing = adaptor.completeSupply(CALLER_CREDENTIAL, {
       name: SUPPLY_NAME,
       finalizedTx: FINALIZED_TX,
     })
