@@ -1,8 +1,17 @@
 name: full-stack-demo
 
+# Every service keeps at most three 100 MB log files, since Docker's json-file driver is otherwise
+# unbounded and the Docker VM's disk is shared with the Midnight stack.
+x-logging: &bounded-logs
+  driver: 'json-file'
+  options:
+    max-size: '100m'
+    max-file: '3'
+
 services:
   postgres:
     image: postgres:18
+    logging: *bounded-logs
     environment:
       POSTGRES_USER: demo
       POSTGRES_PASSWORD: demo
@@ -21,6 +30,7 @@ services:
   # A single node in KRaft mode, acting as both broker and controller.
   kafka:
     image: apache/kafka:4.2.2
+    logging: *bounded-logs
     # Setting any KAFKA_ variable makes the image build its whole configuration from them.
     environment:
       KAFKA_NODE_ID: 1
@@ -53,6 +63,7 @@ services:
   # the browser reaches it, and anvil answers its ots_ calls with open CORS.
   otterscan:
     image: otterscan/otterscan:v2.11.0
+    logging: *bounded-logs
     environment:
       ERIGON_URL: http://127.0.0.1:8545
     ports:
@@ -63,6 +74,7 @@ services:
   # reaches it. The image publishes only its latest tag and only for amd64.
   polkadot-js-apps:
     image: jacogr/polkadot-js-apps:latest
+    logging: *bounded-logs
     platform: linux/amd64
     environment:
       WS_URL: ws://127.0.0.1:9944
@@ -75,6 +87,7 @@ services:
   # why the services start with `docker compose --env-file .env.local up -d --wait`.
   signet-explorer:
     image: ghcr.io/sig-net/explorer:latest
+    logging: *bounded-logs
     environment:
       VITE_MIDNIGHT_DEFAULT_NETWORK: undeployed
       VITE_MIDNIGHT_UNDEPLOYED_SIGNET_CONTRACT_ADDRESS: ${MIDNIGHT_SIGNET_CONTRACT_ADDRESS:-}
