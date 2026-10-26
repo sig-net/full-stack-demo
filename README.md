@@ -837,7 +837,8 @@ read from that log.
 
 The browser fetches the vault's bundle from the page's own origin under
 `/zk-assets/ethereum-erc20-vault/`, where `yarn zk-assets:public` copies it after `yarn zk-assets`
-(into `public/zk-assets/`, gitignored). The fetch provider verifies each artefact against the
+(into `public/zk-assets/`, gitignored). The production image builds the bundle itself and ships
+it in both places. The fetch provider verifies each artefact against the
 bundle's manifest before it is sent to the proof server.
 
 ## Ethereum transactions
