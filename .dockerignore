@@ -20,7 +20,7 @@ next-env.d.ts
 # Environment files carry the deployment's configuration and server credentials, which the image
 # takes from its runtime environment.
 .env*
-!.env.example
+!.env.*.example
 
 # The zk-assets stage regenerates the prover keys inside the image, the browser's copy included.
 zk-assets

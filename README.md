@@ -3,38 +3,153 @@
 A sig.network demonstration application, built with Next.js (App Router), React, Tailwind CSS
 and shadcn/ui components on Base UI.
 
-## Requirements
-
-- Node.js 22.22 or newer.
-- Yarn 4, supplied by Corepack from the `packageManager` field in `package.json`. Run
-  `corepack enable` once if `yarn --version` does not report 4.x inside this folder.
-- Docker with the Compose plugin, for the local Postgres database and Kafka broker.
-
 ## Getting started
 
+Every command below runs from a clean machine to a working application against the local stack,
+and the [Stagenet](#stagenet) variant at the end swaps the local chain for stagenet. The local
+stack is two halves: the Midnight chain, the Sepolia fork and the Sig Network MPC responder come
+from the [midnight-examples](https://github.com/sig-net/midnight-examples) repository, and this
+repository adds Postgres, Kafka and the explorers.
+
+### 1. Install the tools
+
+| Tool                               | Check with                          | Where to get it                                                                                                                                                                                              |
+| ---------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Node.js 22.22 or newer             | `node --version`                    | [nodejs.org](https://nodejs.org) or a version manager                                                                                                                                                        |
+| Yarn 4 through Corepack            | `corepack enable && yarn --version` | Ships with Node. Both repositories pin their Yarn in `packageManager`.                                                                                                                                       |
+| Compact compiler 0.33.0-rc.2       | `compact compile --version`         | Install the `compact` launcher per [Midnight's docs](https://docs.midnight.network/), then `compact update 0.33.0-rc.2`. `yarn zk-assets` below runs that exact compiler and fails when it is not installed. |
+| Docker with the Compose plugin     | `docker compose version`            | [Docker Desktop](https://www.docker.com/products/docker-desktop/) or a distribution engine, with at least 16 GB of RAM allocated: the proof server hangs under less.                                         |
+| An archive-capable Sepolia RPC URL |                                     | `https://sepolia.gateway.tenderly.co` works. The local EVM node forks Sepolia from it, and the MPC responder reads state at old blocks, which a pruned RPC refuses.                                          |
+
+### 2. Bring up the Midnight stack and deploy the vault
+
 ```bash
+git clone https://github.com/sig-net/midnight-examples.git
+cd midnight-examples
+corepack enable
 yarn install
+cp .env.example .env
 ```
 
-```bash
-cp .env.example .env.local
-```
+Open `.env` and set `SEPOLIA_FORK_RPC_URL` to the archive RPC. Compose reads it when the stack
+starts, and without it anvil starts as a bare chain with no USDC and no Uniswap. Then compile the
+vault contract and start the node, the indexer, the proof server and the Sepolia fork:
 
 ```bash
-docker compose --env-file .env.local up -d --wait
+yarn compile:erc20-vault
+docker compose up -d
 ```
 
+Generate the vault's proving keys, deploy the signet singleton and the vault, start the fakenet
+MPC responder, initialise the vault, allow its tokens (USDC, EURC, WETH, LINK, Aave USDC and
+stataUSDC) and grant the Uniswap router and the stataUSDC wrapper their allowances, seven MPC
+round trips:
+
 ```bash
+yarn setup-local:erc20-vault
+```
+
+The whole pipeline takes 35 to 40 minutes (37.5 measured on a clean run), most of it the seven
+approvals. It appends every value it generated to `.env`. Five of them come across to this
+repository in the next step. A rerun reuses the deployed contracts and skips what is done, and
+`docker compose down` followed by `docker compose up -d` discards the chain, after which the
+setup deploys again and the five values change.
+
+### 3. Configure this repository
+
+```bash
+cd <this repository>
+yarn install
+cp .env.local.example .env.local
+```
+
+Open `.env.local` and copy the five values from the midnight-examples `.env`. The names differ:
+
+| midnight-examples `.env`           | `.env.local` here                                | What it is                                               |
+| ---------------------------------- | ------------------------------------------------ | -------------------------------------------------------- |
+| `MIDNIGHT_SIGNET_CONTRACT_ADDRESS` | `MIDNIGHT_SIGNET_CONTRACT_ADDRESS`               | The signet singleton the local stack deployed            |
+| `MPC_SECP256K1_PUBKEY`             | `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY`            | The fakenet MPC's root public key                        |
+| `MIDNIGHT_VAULT_CONTRACT_ADDRESS`  | `MIDNIGHT_ETHEREUM_ERC20_VAULT_CONTRACT_ADDRESS` | The vault the local stack deployed                       |
+| `BEARER_SEED`                      | `MIDNIGHT_RELAYER_SEED`                          | A funded wallet the backend pays relayer fees with       |
+| `USER_SEED`                        | `MIDNIGHT_USER_SEED`                             | A funded wallet the integration tests play the user with |
+
+Everything else in `.env.local.example` already points at the local stack:
+`MIDNIGHT_NETWORK_ID=undeployed` selects the local node, indexer, proof server and MPC output
+cache, `EVM_RPC_URL` is the fork, and `DB_CONNECTION_STRING` and `KAFKA_BROKERS` match the
+services the next step starts. [Configuration](#configuration) describes every variable.
+
+### 4. Build the proving keys
+
+The contract packages ship verifier keys only. Build the prover keys and ZKIR of the vault and
+the signet contract under `zk-assets/` (under a minute), then copy the vault's bundle under
+`public/` for the browser:
+
+```bash
+yarn zk-assets
+yarn zk-assets:public
+```
+
+Both are idempotent: a rerun over a bundle that verifies finishes in seconds (see
+[Proving keys](#proving-keys)).
+
+### 5. Start the services and the application
+
+Start Postgres, Kafka and the explorers, wait until they are healthy, apply the schema and start
+the development server:
+
+```bash
+yarn stack:up
 yarn db:migrate
-```
-
-```bash
 yarn dev
 ```
 
-The development server listens on http://localhost:3000. The variables in `.env.local` are
-described under [Configuration](#configuration), and Postgres and Kafka under
-[Local services](#local-services).
+The application listens on http://localhost:3000. The log shows `relayer wallet synced` within a
+few seconds of the first request, after which the backend is ready.
+
+### 6. Try it
+
+Connect a wallet from the app bar's Midnight wallet control, as a seed wallet. On the local
+stack the genesis wallet's seed,
+`0000000000000000000000000000000000000000000000000000000000000001`, holds NIGHT registered for
+DUST generation, which pays the fees of every operation (the wallet panel shows a Register
+button while some NIGHT is not). Set a vault secret from the app bar's Vault secret control
+(Generate a new secret, then Set secret), then open Deposit above the balances. The dialog
+shows the deposit account, and on the local stack two faucet controls: Fund the deposit account
+from the local faucet sends it USDC, and Fund with 1 ETH from the local faucet gives it the gas
+the sweep needs. Once the dialog reports Ready to deposit, Deposit USDC starts the deposit: the Activity table
+shows it Complete after about four minutes, the balances gain 100 USDC, and its links open in
+the local explorers:
+
+| Explorer                 | URL                   | Opens                             |
+| ------------------------ | --------------------- | --------------------------------- |
+| Otterscan                | http://127.0.0.1:5100 | Ethereum transactions on the fork |
+| Polkadot.js Apps         | http://127.0.0.1:5300 | Midnight blocks                   |
+| The sig.network explorer | http://127.0.0.1:5400 | Sig Network requests              |
+
+[Local services](#local-services) describes the three and the commands that stop, reset and
+restart the services.
+
+### Stagenet
+
+Stagenet publishes the signet singleton, the MPC root key and the vault through the SDK packages,
+so no midnight-examples setup is needed. The proof server still runs locally, since it sees
+private witness data, and the midnight-examples compose file provides one:
+
+```bash
+cd midnight-examples
+docker compose up -d proof-server
+```
+
+Then, in this repository, start from the stagenet template instead of the local one and set
+`MIDNIGHT_RELAYER_SEED` to a wallet holding NIGHT registered for DUST on stagenet, funded through
+the stagenet faucet:
+
+```bash
+cp .env.stagenet.example .env.local
+```
+
+Steps 4 and 5 are the same. Step 6 connects a wallet funded through the faucet, and the
+Activity table's links open on the public explorers.
 
 ## Scripts
 
@@ -112,7 +227,8 @@ only when it needs state, effects or browser APIs, as `src/components/mode-toggl
 ## Configuration
 
 Configuration is read from environment variables on the server at request time. Nothing is baked
-in at build time, so one build serves every environment. `.env.example` lists the variables:
+in at build time, so one build serves every environment. `.env.local.example` (the local stack) and
+`.env.stagenet.example` (stagenet) list the variables:
 
 | Variable                                         | Secret | Purpose                                                                                                                                                                     |
 | ------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -127,7 +243,7 @@ in at build time, so one build serves every environment. `.env.example` lists th
 | `EVM_CHAIN_ID`                                   | No     | Ethereum chain ID. `1`, `11155111` and `31337` have a default RPC.                                                                                                          |
 | `EVM_RPC_URL`                                    | No     | Optional override of the RPC endpoint, required for other chains.                                                                                                           |
 | `EVM_UNISWAP_QUOTER_ADDRESS`                     | No     | Uniswap's QuoterV2, the price source of a swap quote. Sepolia and the local fork have a default, other chains require it.                                                   |
-| `DB_CONNECTION_STRING`                           | Yes    | Postgres connection string. The value in `.env.example` points at the [local database](#local-services).                                                                    |
+| `DB_CONNECTION_STRING`                           | Yes    | Postgres connection string. The value in both `.env.*.example` files points at the [local database](#local-services).                                                       |
 | `KAFKA_BROKERS`                                  | No     | Kafka bootstrap brokers as comma-separated `host:port`. Server-only: it is not part of the client configuration.                                                            |
 | `MIDNIGHT_ZK_ASSETS_ROOT`                        | No     | The root the backend's proof provider searches for every contract's prover keys and ZKIR, `zk-assets/` by default (see [Proving keys](#proving-keys)). Server-only.         |
 | `MIDNIGHT_RELAYER_SEED`                          | Yes    | 32-byte hex seed of the backend's own Midnight wallet, which finalises and pays for relayer transactions (see [The relayer wallet](#the-relayer-wallet)). Server-only.      |
@@ -225,7 +341,7 @@ application uses, and the block explorer of the local EVM node:
   `MIDNIGHT_SIGNET_CONTRACT_ADDRESS` and `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY` from `.env.local`,
   which is why the services start with `--env-file .env.local`.
 
-`DB_CONNECTION_STRING` and `KAFKA_BROKERS` in `.env.example` point at the first two. Their data
+`DB_CONNECTION_STRING` and `KAFKA_BROKERS` in both `.env.*.example` files point at the first two. Their data
 lives in the `full-stack-demo_postgres-data` and `full-stack-demo_kafka-data` Docker volumes and
 survives a restart of the containers.
 

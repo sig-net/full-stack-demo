@@ -5,7 +5,7 @@
 # Every instruction stays within what the legacy builder supports (architecture comes from uname),
 # so the image builds with and without BuildKit.
 # All configuration, public and server-only alike, is read from the runtime environment
-# (.env.example lists it), so the image is the same for every deployment.
+# (the .env.*.example files list it), so the image is the same for every deployment.
 
 ARG NODE_IMAGE=node:24.18.0-bookworm-slim
 
