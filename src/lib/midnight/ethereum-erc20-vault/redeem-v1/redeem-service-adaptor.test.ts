@@ -9,6 +9,7 @@ import {
   REDEEM_NAME,
   redeemFixture,
   STATA_ERC20_ADDRESS,
+  USER_COMMITMENT,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-fixtures'
 import type { RedeemService } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service'
 import {
@@ -79,16 +80,25 @@ describe('RedeemServiceAdaptor parsing', () => {
       call: (a) =>
         a.startRedeem(CALLER_CREDENTIAL, {
           redeemRequest: { shares: '300000' },
+          userCommitment: USER_COMMITMENT,
           inIndex: '42',
           finalizedTx: FINALIZED_TX,
         }),
-      expectReceived: [{ redeemRequest: REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX }],
+      expectReceived: [
+        {
+          redeemRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
+          inIndex: 42n,
+          finalizedTx: PARSED_FINALIZED_TX,
+        },
+      ],
     },
     {
       name: 'startRedeem refuses zero shares',
       call: (a) =>
         a.startRedeem(CALLER_CREDENTIAL, {
           redeemRequest: { shares: 0n },
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
@@ -100,6 +110,7 @@ describe('RedeemServiceAdaptor parsing', () => {
       call: (a) =>
         a.startRedeem(CALLER_CREDENTIAL, {
           redeemRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: 'zz',
         }),
@@ -109,7 +120,11 @@ describe('RedeemServiceAdaptor parsing', () => {
     {
       name: 'startRedeem refuses a missing slot',
       call: (a) =>
-        a.startRedeem(CALLER_CREDENTIAL, { redeemRequest: REQUEST, finalizedTx: FINALIZED_TX }),
+        a.startRedeem(CALLER_CREDENTIAL, {
+          redeemRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
+          finalizedTx: FINALIZED_TX,
+        }),
       expectReceived: [],
       expectError: 'inIndex',
     },
@@ -204,6 +219,7 @@ describe('RedeemServiceAdaptor outcomes', () => {
     })
     const starting = adaptor.startRedeem(CALLER_CREDENTIAL, {
       redeemRequest: REQUEST,
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })

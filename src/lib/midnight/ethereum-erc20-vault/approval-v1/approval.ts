@@ -13,7 +13,13 @@ import {
   isTerminalCallerOperationState,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
 import type { CompletionInputs } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
-import { evmAddressSchema, HEX_32_BYTES, uint64Schema, UUID } from '@/lib/value-schemas'
+import {
+  evmAddressSchema,
+  HEX_32_BYTES,
+  hex32BytesSchema,
+  uint64Schema,
+  UUID,
+} from '@/lib/value-schemas'
 
 /** The collection segment of an approval's resource name. */
 export const APPROVAL_COLLECTION = 'ethereum-erc20-vault-approvals'
@@ -75,6 +81,8 @@ export const approvalSchema = z.object({
   state: approvalStateSchema,
   /** The circuit's `inIndex`: the request's slot in the vault's buffers, chosen at random. */
   inIndex: uint64Schema,
+  /** The commitment of the vault secret the start call was built with, the one secret the contract lets complete the request. */
+  userCommitment: hex32BytesSchema,
   /** The EVM account the MPC signs the approve call from: the vault's own. */
   vaultAccount: evmAddressSchema,
   /** Set with `Completed`. */

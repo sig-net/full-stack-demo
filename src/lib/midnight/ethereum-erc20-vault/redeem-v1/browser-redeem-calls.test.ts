@@ -37,6 +37,7 @@ import {
   REQUEST_ID,
   REQUEST_ID_HEX,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-fixtures'
+import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
 
@@ -233,6 +234,7 @@ describe('startRedeemInBrowser', () => {
       startRedeem: [
         {
           redeemRequest: REDEEM_REQUEST,
+          userCommitment: userCommitmentOf(VAULT_SECRET),
           inIndex: START_INPUTS.inIndex,
           finalizedTx: 'finalized(unbound-start)',
         },

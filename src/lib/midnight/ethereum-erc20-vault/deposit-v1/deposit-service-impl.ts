@@ -101,6 +101,7 @@ export class DepositServiceImpl implements DepositService {
         erc20Address: depositRequest.erc20Address,
         amount: depositRequest.amount,
         inIndex,
+        userCommitment,
         evmNonce,
         recipient: shieldedAddressOf(wallet, this.midnightNetwork.networkId),
         ...SWEEP_GAS,

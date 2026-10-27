@@ -17,6 +17,7 @@ import type { Withdraw } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/w
 import {
   DESTINATION,
   ERC20_ADDRESS,
+  USER_COMMITMENT,
   withdrawFixture,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-fixtures'
 import { WithdrawServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-service-impl'
@@ -117,6 +118,7 @@ describe('WithdrawServiceImpl.startWithdraw', () => {
     const { service, recorded } = serviceOver({})
     const withdraw = await service.startWithdraw(caller, {
       withdrawRequest: REQUEST,
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })
@@ -126,6 +128,7 @@ describe('WithdrawServiceImpl.startWithdraw', () => {
     expect(withdraw).toMatchObject({
       ...REQUEST,
       state: 'AwaitingStartTransaction',
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       vaultAccount: vaultAccountOf(SIGNET, VAULT),
       outcome: null,
@@ -138,6 +141,7 @@ describe('WithdrawServiceImpl.startWithdraw', () => {
         {
           name: withdraw.name,
           ...REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           vaultAccount: vaultAccountOf(SIGNET, VAULT),
           call: { finalizedTx: FINALIZED_TX },

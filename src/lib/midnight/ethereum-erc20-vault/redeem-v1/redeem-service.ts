@@ -8,6 +8,7 @@ import {
   redeemRequestSchema,
   type RedeemStartInputs,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem'
+import { userCommitmentSchema } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 import { hexBytesSchema, uint64Schema } from '@/lib/value-schemas'
 
 /**
@@ -40,8 +41,9 @@ export const prepareStartRedeemArgsSchema = z.object({
 })
 export type PrepareStartRedeemArgs = z.infer<typeof prepareStartRedeemArgsSchema>
 
-/** The slot the browser baked into the call travels with it, and the finalised bytes are hex in the ledger's serialisation. */
+/** The slot the browser baked into the call and the commitment of the secret it built it with travel with it, and the finalised bytes are hex in the ledger's serialisation. */
 export const startRedeemArgsSchema = prepareStartRedeemArgsSchema.extend({
+  userCommitment: userCommitmentSchema,
   inIndex: uint64Schema,
   finalizedTx: hexBytesSchema,
 })

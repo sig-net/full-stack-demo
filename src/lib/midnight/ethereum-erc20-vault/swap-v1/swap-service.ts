@@ -13,6 +13,7 @@ import {
   type SwapQuote,
   swapSlippageBpsSchema,
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-quote'
+import { userCommitmentSchema } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 import { amountSchema, evmAddressSchema, hexBytesSchema, uint64Schema } from '@/lib/value-schemas'
 
 /**
@@ -52,8 +53,9 @@ export const prepareStartSwapArgsSchema = z.object({
 })
 export type PrepareStartSwapArgs = z.infer<typeof prepareStartSwapArgsSchema>
 
-/** The slot the browser baked into the call travels with it, and the finalised bytes are hex in the ledger's serialisation. */
+/** The slot the browser baked into the call and the commitment of the secret it built it with travel with it, and the finalised bytes are hex in the ledger's serialisation. */
 export const startSwapArgsSchema = prepareStartSwapArgsSchema.extend({
+  userCommitment: userCommitmentSchema,
   inIndex: uint64Schema,
   finalizedTx: hexBytesSchema,
 })

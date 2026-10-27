@@ -6,6 +6,7 @@ import type {
   CompleteWithdrawCircuitArgs,
   StartWithdrawCircuitArgs,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
+import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 import {
   ATTESTATION_FIELDS,
   REQUEST_ID,
@@ -233,6 +234,7 @@ describe('startWithdrawInBrowser', () => {
       startWithdraw: [
         {
           withdrawRequest: WITHDRAW_REQUEST,
+          userCommitment: userCommitmentOf(VAULT_SECRET),
           inIndex: START_INPUTS.inIndex,
           finalizedTx: 'finalized(unbound-start)',
         },

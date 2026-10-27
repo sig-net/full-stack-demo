@@ -9,6 +9,7 @@ export function supplyFixture(overrides: Partial<Supply> = {}): Supply {
     amount: 1_000_000n,
     state: 'AwaitingStartTransaction',
     inIndex: IN_INDEX,
+    userCommitment: USER_COMMITMENT,
     vaultAccount: VAULT_ACCOUNT,
     outcome: null,
     failure: null,
@@ -25,6 +26,7 @@ export const SUPPLY_NAME = `${CALLER_NAME}/ethereum-erc20-vault-supplies/5d6e7f8
 export const UNDERLYING_ERC20_ADDRESS = `0x${'ea'.repeat(20)}`
 export const STATA_ERC20_ADDRESS = `0x${'5a'.repeat(20)}`
 export const VAULT_ACCOUNT = `0x${'cc'.repeat(20)}`
+export const USER_COMMITMENT = '1c'.repeat(32)
 export const IN_INDEX = 43n
 
 /** The row each state leaves behind, consistent with the state machine's field table. */

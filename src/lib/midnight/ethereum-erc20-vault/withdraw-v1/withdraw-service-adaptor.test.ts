@@ -12,6 +12,7 @@ import type {
 import {
   DESTINATION,
   ERC20_ADDRESS,
+  USER_COMMITMENT,
   WITHDRAW_NAME,
   withdrawFixture,
 } from '@/lib/midnight/ethereum-erc20-vault/withdraw-v1/withdraw-fixtures'
@@ -77,11 +78,17 @@ describe('WithdrawServiceAdaptor parsing', () => {
       call: (a) =>
         a.startWithdraw(CALLER_CREDENTIAL, {
           withdrawRequest: { ...REQUEST, amount: '1000000' },
+          userCommitment: USER_COMMITMENT,
           inIndex: '42',
           finalizedTx: FINALIZED_TX,
         }),
       expectReceived: [
-        { withdrawRequest: REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX },
+        {
+          withdrawRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
+          inIndex: 42n,
+          finalizedTx: PARSED_FINALIZED_TX,
+        },
       ],
     },
     {
@@ -92,11 +99,17 @@ describe('WithdrawServiceAdaptor parsing', () => {
             ...REQUEST,
             destEvmAddress: DESTINATION.toUpperCase().replace('0X', '0x'),
           },
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
       expectReceived: [
-        { withdrawRequest: REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX },
+        {
+          withdrawRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
+          inIndex: 42n,
+          finalizedTx: PARSED_FINALIZED_TX,
+        },
       ],
     },
     {
@@ -104,6 +117,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
       call: (a) =>
         a.startWithdraw(CALLER_CREDENTIAL, {
           withdrawRequest: { ...REQUEST, amount: 0n },
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
@@ -115,6 +129,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
       call: (a) =>
         a.startWithdraw(CALLER_CREDENTIAL, {
           withdrawRequest: { ...REQUEST, destEvmAddress: '0x1234' },
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
@@ -126,6 +141,7 @@ describe('WithdrawServiceAdaptor parsing', () => {
       call: (a) =>
         a.startWithdraw(CALLER_CREDENTIAL, {
           withdrawRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: 'zz',
         }),
@@ -135,7 +151,11 @@ describe('WithdrawServiceAdaptor parsing', () => {
     {
       name: 'startWithdraw refuses a missing slot',
       call: (a) =>
-        a.startWithdraw(CALLER_CREDENTIAL, { withdrawRequest: REQUEST, finalizedTx: FINALIZED_TX }),
+        a.startWithdraw(CALLER_CREDENTIAL, {
+          withdrawRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
+          finalizedTx: FINALIZED_TX,
+        }),
       expectReceived: [],
       expectError: 'inIndex',
     },
@@ -223,6 +243,7 @@ describe('WithdrawServiceAdaptor outcomes', () => {
     })
     const starting = adaptor.startWithdraw(CALLER_CREDENTIAL, {
       withdrawRequest: REQUEST,
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })

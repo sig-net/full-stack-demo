@@ -11,6 +11,7 @@ export function depositFixture(overrides: Partial<Deposit> = {}): Deposit {
     amount: 1_000_000n,
     state: 'AwaitingStartTransaction',
     inIndex: IN_INDEX,
+    userCommitment: USER_COMMITMENT,
     evmNonce: 7n,
     gasLimit: 100_000n,
     maxFeePerGas: 30_000_000_000n,
@@ -36,6 +37,7 @@ export const RECIPIENT = shieldedAddressOf(
   { coinPublicKey: 'aa'.repeat(32), encryptionPublicKey: 'bb'.repeat(32) },
   MidnightNetwork.Undeployed,
 )
+export const USER_COMMITMENT = '1c'.repeat(32)
 export const IN_INDEX = 42n
 
 /** The row each state leaves behind, consistent with the state machine's field table. */

@@ -12,6 +12,7 @@ import {
   redeemFixture,
   STATA_ERC20_ADDRESS,
   UNDERLYING_ERC20_ADDRESS,
+  USER_COMMITMENT,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-fixtures'
 import { RedeemServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service-impl'
 import {
@@ -144,6 +145,7 @@ describe('RedeemServiceImpl on an uninitialised vault', () => {
       call: (service) =>
         service.startRedeem(caller, {
           redeemRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
@@ -162,6 +164,7 @@ describe('RedeemServiceImpl.startRedeem', () => {
     const { service, recorded } = serviceOver({})
     const redeem = await service.startRedeem(caller, {
       redeemRequest: REQUEST,
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })
@@ -171,6 +174,7 @@ describe('RedeemServiceImpl.startRedeem', () => {
       underlyingErc20Address: UNDERLYING_ERC20_ADDRESS,
       shares: REQUEST.shares,
       state: 'AwaitingStartTransaction',
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       vaultAccount: vaultAccountOf(SIGNET, VAULT),
       outcome: null,
@@ -185,6 +189,7 @@ describe('RedeemServiceImpl.startRedeem', () => {
           stataErc20Address: STATA_ERC20_ADDRESS,
           underlyingErc20Address: UNDERLYING_ERC20_ADDRESS,
           shares: REQUEST.shares,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           vaultAccount: vaultAccountOf(SIGNET, VAULT),
           call: { finalizedTx: FINALIZED_TX },

@@ -10,6 +10,7 @@ import {
   ERC20_ADDRESS_OUT,
   SWAP_NAME,
   swapFixture,
+  USER_COMMITMENT,
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-fixtures'
 import type { SwapQuote } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-quote'
 import type { SwapService } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service'
@@ -139,16 +140,25 @@ describe('SwapServiceAdaptor parsing', () => {
       call: (a) =>
         a.startSwap(CALLER_CREDENTIAL, {
           swapRequest: WIRE_REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: '42',
           finalizedTx: FINALIZED_TX,
         }),
-      expectReceived: [{ swapRequest: REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX }],
+      expectReceived: [
+        {
+          swapRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
+          inIndex: 42n,
+          finalizedTx: PARSED_FINALIZED_TX,
+        },
+      ],
     },
     {
       name: 'startSwap refuses a request without a fee tier',
       call: (a) =>
         a.startSwap(CALLER_CREDENTIAL, {
           swapRequest: { ...REQUEST, fee: undefined },
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
@@ -158,14 +168,23 @@ describe('SwapServiceAdaptor parsing', () => {
     {
       name: 'startSwap refuses finalised bytes that are not hex',
       call: (a) =>
-        a.startSwap(CALLER_CREDENTIAL, { swapRequest: REQUEST, inIndex: 42n, finalizedTx: 'zz' }),
+        a.startSwap(CALLER_CREDENTIAL, {
+          swapRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
+          inIndex: 42n,
+          finalizedTx: 'zz',
+        }),
       expectReceived: [],
       expectError: 'finalizedTx',
     },
     {
       name: 'startSwap refuses a missing slot',
       call: (a) =>
-        a.startSwap(CALLER_CREDENTIAL, { swapRequest: REQUEST, finalizedTx: FINALIZED_TX }),
+        a.startSwap(CALLER_CREDENTIAL, {
+          swapRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
+          finalizedTx: FINALIZED_TX,
+        }),
       expectReceived: [],
       expectError: 'inIndex',
     },
@@ -263,6 +282,7 @@ describe('SwapServiceAdaptor outcomes', () => {
     })
     const starting = adaptor.startSwap(CALLER_CREDENTIAL, {
       swapRequest: REQUEST,
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })

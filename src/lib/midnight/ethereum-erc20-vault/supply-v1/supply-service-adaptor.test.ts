@@ -11,6 +11,7 @@ import {
   SUPPLY_NAME,
   supplyFixture,
   UNDERLYING_ERC20_ADDRESS,
+  USER_COMMITMENT,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-fixtures'
 import type { SupplyService } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service'
 import {
@@ -96,16 +97,25 @@ describe('SupplyServiceAdaptor parsing', () => {
       call: (a) =>
         a.startSupply(CALLER_CREDENTIAL, {
           supplyRequest: { amount: '1000000' },
+          userCommitment: USER_COMMITMENT,
           inIndex: '42',
           finalizedTx: FINALIZED_TX,
         }),
-      expectReceived: [{ supplyRequest: REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX }],
+      expectReceived: [
+        {
+          supplyRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
+          inIndex: 42n,
+          finalizedTx: PARSED_FINALIZED_TX,
+        },
+      ],
     },
     {
       name: 'startSupply refuses a zero amount',
       call: (a) =>
         a.startSupply(CALLER_CREDENTIAL, {
           supplyRequest: { amount: 0n },
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
@@ -117,6 +127,7 @@ describe('SupplyServiceAdaptor parsing', () => {
       call: (a) =>
         a.startSupply(CALLER_CREDENTIAL, {
           supplyRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: 'zz',
         }),
@@ -126,7 +137,11 @@ describe('SupplyServiceAdaptor parsing', () => {
     {
       name: 'startSupply refuses a missing slot',
       call: (a) =>
-        a.startSupply(CALLER_CREDENTIAL, { supplyRequest: REQUEST, finalizedTx: FINALIZED_TX }),
+        a.startSupply(CALLER_CREDENTIAL, {
+          supplyRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
+          finalizedTx: FINALIZED_TX,
+        }),
       expectReceived: [],
       expectError: 'inIndex',
     },
@@ -215,6 +230,7 @@ describe('SupplyServiceAdaptor outcomes', () => {
     })
     const starting = adaptor.startSupply(CALLER_CREDENTIAL, {
       supplyRequest: REQUEST,
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })

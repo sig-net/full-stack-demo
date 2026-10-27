@@ -78,7 +78,7 @@ export class RedeemServiceImpl implements RedeemService {
 
   async startRedeem(
     caller: Caller,
-    { redeemRequest, inIndex, finalizedTx }: StartRedeemArgs,
+    { redeemRequest, userCommitment, inIndex, finalizedTx }: StartRedeemArgs,
   ): Promise<Redeem> {
     const pair = await this.stataPair()
     return this.unitOfWork.runInTransaction(() =>
@@ -87,6 +87,7 @@ export class RedeemServiceImpl implements RedeemService {
         ...pair,
         shares: redeemRequest.shares,
         inIndex,
+        userCommitment,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
         call: { finalizedTx },
       }),

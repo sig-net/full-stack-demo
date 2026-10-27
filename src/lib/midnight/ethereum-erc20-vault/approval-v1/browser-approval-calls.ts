@@ -24,6 +24,7 @@ import {
   runCallerCall,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
+import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 
 /** Starts an approval from the page with the kind's start circuit, whose deployer gate refuses any other caller while the call is built. */
 export async function startApprovalInBrowser(args: StartApprovalInBrowserArgs): Promise<Approval> {
@@ -39,7 +40,12 @@ export async function startApprovalInBrowser(args: StartApprovalInBrowserArgs): 
     circuitArgs: ({ inIndex }, caller) => ({ ...caller, inIndex, ...approvalRequest }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
     record: async ({ inIndex }, finalizedTx) =>
-      actions.startApproval(await login.credential(), { approvalRequest, inIndex, finalizedTx }),
+      actions.startApproval(await login.credential(), {
+        approvalRequest,
+        userCommitment: userCommitmentOf(vaultSecret),
+        inIndex,
+        finalizedTx,
+      }),
   })
   return started.approval
 }

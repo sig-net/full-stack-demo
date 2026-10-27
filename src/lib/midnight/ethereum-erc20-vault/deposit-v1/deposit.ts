@@ -21,6 +21,7 @@ import {
   uint64Schema,
   uint128Schema,
   UUID,
+  hex32BytesSchema,
 } from '@/lib/value-schemas'
 
 /** The collection segment of a deposit's resource name. */
@@ -73,6 +74,8 @@ export const depositSchema = z.object({
   state: depositStateSchema,
   /** The circuit's `inIndex`: the request's slot in the vault's buffers, chosen at random. */
   inIndex: uint64Schema,
+  /** The commitment of the vault secret the start call was built with, the one secret the contract lets complete the request. */
+  userCommitment: hex32BytesSchema,
   /** The nonce the MPC signs the sweep with, one above any live deposit's and at least the chain's pending count. */
   evmNonce: uint64Schema,
   /** The circuit's `GasParams` for the sweep. */

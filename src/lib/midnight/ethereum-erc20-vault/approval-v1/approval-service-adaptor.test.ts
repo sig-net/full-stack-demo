@@ -9,6 +9,7 @@ import {
   APPROVAL_NAME,
   approvalFixture,
   ERC20_ADDRESS,
+  USER_COMMITMENT,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-fixtures'
 import type { ApprovalService } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service'
 import {
@@ -92,11 +93,17 @@ describe('ApprovalServiceAdaptor parsing', () => {
       call: (a) =>
         a.startApproval(CALLER_CREDENTIAL, {
           approvalRequest: ROUTER_REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: '42',
           finalizedTx: FINALIZED_TX,
         }),
       expectReceived: [
-        { approvalRequest: ROUTER_REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX },
+        {
+          approvalRequest: ROUTER_REQUEST,
+          userCommitment: USER_COMMITMENT,
+          inIndex: 42n,
+          finalizedTx: PARSED_FINALIZED_TX,
+        },
       ],
     },
     {
@@ -104,11 +111,17 @@ describe('ApprovalServiceAdaptor parsing', () => {
       call: (a) =>
         a.startApproval(CALLER_CREDENTIAL, {
           approvalRequest: STATA_REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
       expectReceived: [
-        { approvalRequest: STATA_REQUEST, inIndex: 42n, finalizedTx: PARSED_FINALIZED_TX },
+        {
+          approvalRequest: STATA_REQUEST,
+          userCommitment: USER_COMMITMENT,
+          inIndex: 42n,
+          finalizedTx: PARSED_FINALIZED_TX,
+        },
       ],
     },
     {
@@ -116,6 +129,7 @@ describe('ApprovalServiceAdaptor parsing', () => {
       call: (a) =>
         a.startApproval(CALLER_CREDENTIAL, {
           approvalRequest: { kind: 'router' },
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
@@ -127,6 +141,7 @@ describe('ApprovalServiceAdaptor parsing', () => {
       call: (a) =>
         a.startApproval(CALLER_CREDENTIAL, {
           approvalRequest: STATA_REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: 'zz',
         }),
@@ -227,6 +242,7 @@ describe('ApprovalServiceAdaptor outcomes', () => {
     })
     const starting = adaptor.startApproval(CALLER_CREDENTIAL, {
       approvalRequest: STATA_REQUEST,
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })

@@ -8,6 +8,7 @@ import {
   runCallerCall,
 } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
+import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 import type {
   Withdraw,
   WithdrawRequest,
@@ -39,7 +40,12 @@ export async function startWithdrawInBrowser(args: StartWithdrawInBrowserArgs): 
     circuitArgs: ({ inIndex }, caller) => ({ ...caller, inIndex, ...withdrawRequest }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
     record: async ({ inIndex }, finalizedTx) =>
-      actions.startWithdraw(await login.credential(), { withdrawRequest, inIndex, finalizedTx }),
+      actions.startWithdraw(await login.credential(), {
+        withdrawRequest,
+        userCommitment: userCommitmentOf(vaultSecret),
+        inIndex,
+        finalizedTx,
+      }),
   })
   return started.withdraw
 }

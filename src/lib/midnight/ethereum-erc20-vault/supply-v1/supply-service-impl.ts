@@ -96,7 +96,7 @@ export class SupplyServiceImpl implements SupplyService {
 
   async startSupply(
     caller: Caller,
-    { supplyRequest, inIndex, finalizedTx }: StartSupplyArgs,
+    { supplyRequest, userCommitment, inIndex, finalizedTx }: StartSupplyArgs,
   ): Promise<Supply> {
     const pair = await this.stataPair()
     return this.unitOfWork.runInTransaction(() =>
@@ -105,6 +105,7 @@ export class SupplyServiceImpl implements SupplyService {
         ...pair,
         amount: supplyRequest.amount,
         inIndex,
+        userCommitment,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
         call: { finalizedTx },
       }),

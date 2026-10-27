@@ -100,13 +100,14 @@ export class SwapServiceImpl implements SwapService {
 
   async startSwap(
     caller: Caller,
-    { swapRequest, inIndex, finalizedTx }: StartSwapArgs,
+    { swapRequest, userCommitment, inIndex, finalizedTx }: StartSwapArgs,
   ): Promise<Swap> {
     return this.unitOfWork.runInTransaction(() =>
       this.swapStateController.startSwap({
         name: swapName(caller.name, randomUUID()),
         ...swapRequest,
         inIndex,
+        userCommitment,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
         call: { finalizedTx },
       }),

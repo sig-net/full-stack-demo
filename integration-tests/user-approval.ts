@@ -14,6 +14,7 @@ import {
   finalizeAsUser,
   type FinalizedCallerCall,
   secretKeyOf,
+  userCommitmentOf,
 } from './user-caller-call'
 import type { UserWallet } from './user-wallet'
 
@@ -74,6 +75,7 @@ export async function startApprovalAsUser(
   const calling = Date.now()
   const result = await adaptor.startApproval(await user.login(), {
     approvalRequest,
+    userCommitment: userCommitmentOf(vaultSecret),
     inIndex: prepared.inputs.inIndex,
     finalizedTx,
   })

@@ -69,13 +69,14 @@ export class WithdrawServiceImpl implements WithdrawService {
 
   async startWithdraw(
     caller: Caller,
-    { withdrawRequest, inIndex, finalizedTx }: StartWithdrawArgs,
+    { withdrawRequest, userCommitment, inIndex, finalizedTx }: StartWithdrawArgs,
   ): Promise<Withdraw> {
     return this.unitOfWork.runInTransaction(() =>
       this.withdrawStateController.startWithdraw({
         name: withdrawName(caller.name, randomUUID()),
         ...withdrawRequest,
         inIndex,
+        userCommitment,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
         call: { finalizedTx },
       }),

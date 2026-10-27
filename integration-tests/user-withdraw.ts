@@ -14,6 +14,7 @@ import {
   finalizeAsUser,
   type FinalizedCallerCall,
   secretKeyOf,
+  userCommitmentOf,
 } from './user-caller-call'
 import type { UserWallet } from './user-wallet'
 
@@ -75,6 +76,7 @@ export async function startWithdrawAsUser(
   const calling = Date.now()
   const result = await adaptor.startWithdraw(await user.login(), {
     withdrawRequest,
+    userCommitment: userCommitmentOf(vaultSecret),
     inIndex: prepared.inputs.inIndex,
     finalizedTx,
   })

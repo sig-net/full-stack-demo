@@ -1286,9 +1286,12 @@ to-do for exactly one actor:
 | `Failed`                      | nothing: `failure` is `StartFailed`, `error` carries the child's message             |                                       |
 
 A deposit holds the caller's request (`erc20Address`, `amount`) and the fields the server assigns
-when the start is prepared and derives or checks again when it is committed: `inIndex` (a random 64-bit slot in the vault's request buffer), `depositAccount` (the
+when the start is prepared and derives or checks again when it is committed: `inIndex` (a random 64-bit slot in the vault's request buffer), `userCommitment` (the
+contract's commitment of the vault secret the start call was built with, which the browser
+sends with the finalised bytes: the contract lets no other secret complete the request, so the
+page completes only the rows whose commitment matches its secret's), `depositAccount` (the
 EVM account the user funds and the MPC sweeps from, derived from the MPC root key, the vault
-address and the contract's commitment of the vault secret), `recipient` (the shielded address of
+address and that commitment), `recipient` (the shielded address of
 the wallet the start call was built for, which the completion mints to and refuses any other
 wallet for), `evmNonce` (the higher of the
 account's pending transaction count on the EVM chain and one above the highest nonce held by the
@@ -1399,8 +1402,9 @@ transfer executed and returned true) or `refunded` (the complete circuit re-mint
 surrendered amount to the caller), or `Failed` with `StartFailed`.
 
 A withdrawal holds the caller's request (`erc20Address`, `amount`, `destEvmAddress`), the slot
-`inIndex` the server assigns when the start is prepared, and `vaultAccount`, which the server
-derives when the start is committed. The caller's two calls take the same path as the deposit's
+`inIndex` the server assigns when the start is prepared, `userCommitment` (the commitment of
+the vault secret the start call was built with, sent with the finalised bytes as the deposit's
+is), and `vaultAccount`, which the server derives when the start is committed. The caller's two calls take the same path as the deposit's
 (see [ERC-20 vault deposit API](#erc-20-vault-deposit-api)): the browser calls
 `prepareStartWithdraw(credential, { withdrawRequest })`, which answers with `{ inIndex }`
 (`WithdrawStartInputs` in `withdraw.ts`) and writes nothing, builds the `startWithdraw` call
@@ -1437,8 +1441,9 @@ page-built `completeSupply` call is paid for and included, then `Completed` with
 `supplied` or `refunded`, or `Failed` with `StartFailed`.
 
 A supply holds the caller's request (`amount`), the pinned pair (`underlyingErc20Address`,
-`stataErc20Address`), the slot `inIndex` the server assigns when the start is prepared, and
-`vaultAccount`, which the server derives when the start is committed. The caller's two calls take
+`stataErc20Address`), the slot `inIndex` the server assigns when the start is prepared,
+`userCommitment` (sent with the finalised bytes as the deposit's is), and `vaultAccount`, which
+the server derives when the start is committed. The caller's two calls take
 the same path as the withdrawal's (see [ERC-20 vault withdraw API](#erc-20-vault-withdraw-api)):
 the browser calls `prepareStartSupply(credential, { supplyRequest })`, which reads the pair
 from the vault ledger and answers with `{ inIndex, underlyingErc20Address }`
@@ -1478,8 +1483,8 @@ page-built `completeRedeem` call is paid for and included, then `Completed` with
 [Swaps and approvals](#swaps-and-approvals) for what each circuit does).
 
 A redeem holds the caller's `shares`, the pinned pair (`stataErc20Address` and
-`underlyingErc20Address`), the slot `inIndex` the server assigns when the start is prepared, and
-`vaultAccount`. The browser calls `prepareStartRedeem(credential, { redeemRequest })`, which
+`underlyingErc20Address`), the slot `inIndex` the server assigns when the start is prepared,
+`userCommitment` (sent with the finalised bytes as the deposit's is), and `vaultAccount`. The browser calls `prepareStartRedeem(credential, { redeemRequest })`, which
 reads the pair from the vault ledger and answers with `{ inIndex, stataErc20Address }`
 (`RedeemStartInputs` in `redeem.ts`) and writes nothing, builds the `startRedeem` call with the
 vault secret as the witness and the connected wallet's keys (`RedeemCallBuilder`, which derives
@@ -1516,8 +1521,9 @@ page-built `completeSwap` call is paid for and included, then `Completed` with `
 [Swaps and approvals](#swaps-and-approvals) for what each circuit does).
 
 A swap holds the caller's request (`erc20AddressIn`, `erc20AddressOut`, `fee`, `amountOut`,
-`amountInMaximum`), the slot `inIndex` the server assigns when the start is prepared, and
-`vaultAccount`, which the server derives when the start is committed. The browser calls
+`amountInMaximum`), the slot `inIndex` the server assigns when the start is prepared,
+`userCommitment` (sent with the finalised bytes as the deposit's is), and `vaultAccount`, which
+the server derives when the start is committed. The browser calls
 `prepareStartSwap(credential, { swapRequest })`, which answers with `{ inIndex }`
 (`SwapStartInputs` in `swap.ts`) and writes nothing, builds the `startSwap` call with the caller
 secret as the witness and the connected wallet's keys (`SwapCallBuilder`, which derives the
@@ -1556,8 +1562,8 @@ for and included, then `Completed` with `outcome` `approved` or `closed`, or `Fa
 `StartFailed` (see [Swaps and approvals](#swaps-and-approvals) for what each circuit does).
 
 An approval holds its `kind` (`router` or `stata`), the ERC20 the allowance is granted on and
-the `spender`, the slot `inIndex` the server assigns when the start is prepared, and
-`vaultAccount`. The deployer's two calls take the same path as the withdrawal's (see
+the `spender`, the slot `inIndex` the server assigns when the start is prepared,
+`userCommitment` (sent with the finalised bytes as the deposit's is), and `vaultAccount`. The deployer's two calls take the same path as the withdrawal's (see
 [ERC-20 vault withdraw API](#erc-20-vault-withdraw-api)): the browser calls
 `prepareStartApproval(credential, { approvalRequest })`, which answers with `{ inIndex }`
 (`ApprovalStartInputs` in `approval.ts`) and writes nothing, builds the kind's start call with
@@ -1740,8 +1746,11 @@ in the sig.network explorer (`signetExplorerOf()` in `src/lib/config/signet-expl
 copy from `compose.yaml` on the local stack, <https://sig-net.github.io/explorer/> elsewhere,
 the network named in the URL). The completion needs no click: the completion circuit proves the caller's
 secret as its witness, and the browser is the one place that holds it, so `ActivitySection`
-completes every activity the view shows in `AwaitingCompletion`, once per row per thirty
-seconds (`activitiesDueForCompletion()` in `src/lib/activity/completions-due.ts`). A deposit
+completes every activity the view shows in `AwaitingCompletion` whose `userCommitment` is the
+page's secret's, once per row per thirty seconds (`activitiesDueForCompletion()` in
+`src/lib/activity/completions-due.ts`). A row another vault secret started stays listed as
+Pending and is never attempted: the contract would refuse the completion as not the
+requester's, and only the secret that started it can finish it. A deposit
 completes through `completeDepositInBrowser()`
 (`src/lib/midnight/ethereum-erc20-vault/deposit-v1/browser-deposit-calls.ts`):
 `prepareCompleteDeposit` answers the attested request's inputs, the page builds and proves the

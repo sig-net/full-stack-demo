@@ -13,6 +13,7 @@ import {
   STATA_ERC20_ADDRESS,
   supplyFixture,
   UNDERLYING_ERC20_ADDRESS,
+  USER_COMMITMENT,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-fixtures'
 import { SupplyServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service-impl'
 import {
@@ -162,6 +163,7 @@ describe('SupplyServiceImpl on an uninitialised vault', () => {
       call: (service) =>
         service.startSupply(caller, {
           supplyRequest: REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
@@ -195,6 +197,7 @@ describe('SupplyServiceImpl.startSupply', () => {
     const { service, recorded } = serviceOver({})
     const supply = await service.startSupply(caller, {
       supplyRequest: REQUEST,
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })
@@ -206,6 +209,7 @@ describe('SupplyServiceImpl.startSupply', () => {
       stataErc20Address: STATA_ERC20_ADDRESS,
       amount: REQUEST.amount,
       state: 'AwaitingStartTransaction',
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       vaultAccount: vaultAccountOf(SIGNET, VAULT),
       outcome: null,
@@ -221,6 +225,7 @@ describe('SupplyServiceImpl.startSupply', () => {
           underlyingErc20Address: UNDERLYING_ERC20_ADDRESS,
           stataErc20Address: STATA_ERC20_ADDRESS,
           amount: REQUEST.amount,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           vaultAccount: vaultAccountOf(SIGNET, VAULT),
           call: { finalizedTx: FINALIZED_TX },

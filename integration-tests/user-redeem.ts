@@ -14,6 +14,7 @@ import {
   finalizeAsUser,
   type FinalizedCallerCall,
   secretKeyOf,
+  userCommitmentOf,
 } from './user-caller-call'
 import type { UserWallet } from './user-wallet'
 
@@ -76,6 +77,7 @@ export async function startRedeemAsUser(
   const calling = Date.now()
   const result = await adaptor.startRedeem(await user.login(), {
     redeemRequest,
+    userCommitment: userCommitmentOf(vaultSecret),
     inIndex: prepared.inputs.inIndex,
     finalizedTx,
   })

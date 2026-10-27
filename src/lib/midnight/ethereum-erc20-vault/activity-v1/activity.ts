@@ -99,6 +99,8 @@ const activityFieldsSchema = z.object({
   state: activityStateSchema,
   erc20Address: evmAddressSchema,
   error: z.string().nullable(),
+  /** The commitment of the vault secret the start call was built with, the one secret the contract lets complete the request. */
+  userCommitment: hex32BytesSchema,
   /** The operation's own state, which says what it waits for. */
   resourceState: callerOperationStateSchema,
   /** The newest vault request's own state, null before the request exists. */

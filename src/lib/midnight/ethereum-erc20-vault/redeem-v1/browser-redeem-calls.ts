@@ -21,6 +21,7 @@ import type {
   RedeemStartInputsResult,
 } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-service-adaptor'
 import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
+import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 
 /** Starts a redeem from the page, the wallet's own coin of the pinned wrapper's shares funding the start call. */
 export async function startRedeemInBrowser(args: StartRedeemInBrowserArgs): Promise<Redeem> {
@@ -40,7 +41,12 @@ export async function startRedeemInBrowser(args: StartRedeemInBrowserArgs): Prom
     }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
     record: async ({ inIndex }, finalizedTx) =>
-      actions.startRedeem(await login.credential(), { redeemRequest, inIndex, finalizedTx }),
+      actions.startRedeem(await login.credential(), {
+        redeemRequest,
+        userCommitment: userCommitmentOf(vaultSecret),
+        inIndex,
+        finalizedTx,
+      }),
   })
   return started.redeem
 }

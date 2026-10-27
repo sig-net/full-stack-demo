@@ -23,6 +23,7 @@ describe('The activity view over Postgres', () => {
   let backend: Backend
   const caller = uniqueCallerName()
   const depositAccount = `0x${'cd'.repeat(20)}`
+  const userCommitment = '1c'.repeat(32)
   const at = (minute: number): Date => new Date(Date.UTC(2026, 0, 1, 0, minute))
 
   const deposit = (overrides: Partial<Deposit> = {}): Deposit => ({
@@ -31,6 +32,7 @@ describe('The activity view over Postgres', () => {
     amount: 5n,
     state: 'AwaitingStartTransaction',
     inIndex: 1n,
+    userCommitment,
     evmNonce: 0n,
     gasLimit: 21_000n,
     maxFeePerGas: 1n,
@@ -52,6 +54,7 @@ describe('The activity view over Postgres', () => {
     destEvmAddress: `0x${'d1'.repeat(20)}`,
     state: 'AwaitingStartTransaction',
     inIndex: 4n,
+    userCommitment,
     vaultAccount: `0x${'cc'.repeat(20)}`,
     outcome: null,
     failure: null,
@@ -68,6 +71,7 @@ describe('The activity view over Postgres', () => {
     amount: 8n,
     state: 'AwaitingStartTransaction',
     inIndex: 5n,
+    userCommitment,
     vaultAccount: `0x${'cc'.repeat(20)}`,
     outcome: null,
     failure: null,
@@ -84,6 +88,7 @@ describe('The activity view over Postgres', () => {
     shares: 3n,
     state: 'AwaitingStartTransaction',
     inIndex: 6n,
+    userCommitment,
     vaultAccount: `0x${'cc'.repeat(20)}`,
     outcome: null,
     failure: null,
@@ -102,6 +107,7 @@ describe('The activity view over Postgres', () => {
     amountInMaximum: 10n,
     state: 'AwaitingStartTransaction',
     inIndex: 2n,
+    userCommitment,
     vaultAccount: `0x${'cc'.repeat(20)}`,
     outcome: null,
     failure: null,
@@ -118,6 +124,7 @@ describe('The activity view over Postgres', () => {
     spender: `0x${'0a'.repeat(20)}`,
     state: 'AwaitingStartTransaction',
     inIndex: 3n,
+    userCommitment,
     vaultAccount: `0x${'cc'.repeat(20)}`,
     outcome: null,
     failure: null,
@@ -276,6 +283,7 @@ describe('The activity view over Postgres', () => {
       destination: null,
       outcome: null,
       error: null,
+      userCommitment,
       resourceState: 'AwaitingCompleteTransaction',
       vaultRequestState: 'AwaitingAttestation',
       vaultRequestId: '22'.repeat(32),

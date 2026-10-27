@@ -12,6 +12,7 @@ import {
   ERC20_ADDRESS_IN,
   ERC20_ADDRESS_OUT,
   swapFixture,
+  USER_COMMITMENT,
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-fixtures'
 import { SwapServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service-impl'
 import {
@@ -188,6 +189,7 @@ describe('SwapServiceImpl.startSwap', () => {
     const { service, recorded } = serviceOver({})
     const swap = await service.startSwap(caller, {
       swapRequest: REQUEST,
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       finalizedTx: FINALIZED_TX,
     })
@@ -195,6 +197,7 @@ describe('SwapServiceImpl.startSwap', () => {
     expect(swap).toMatchObject({
       ...REQUEST,
       state: 'AwaitingStartTransaction',
+      userCommitment: USER_COMMITMENT,
       inIndex: 42n,
       vaultAccount: vaultAccountOf(SIGNET, VAULT),
       outcome: null,
@@ -208,6 +211,7 @@ describe('SwapServiceImpl.startSwap', () => {
         {
           name: swap.name,
           ...REQUEST,
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           vaultAccount: vaultAccountOf(SIGNET, VAULT),
           call: { finalizedTx: FINALIZED_TX },

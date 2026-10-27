@@ -19,6 +19,7 @@ import {
   HEX_32_BYTES,
   uint64Schema,
   UUID,
+  hex32BytesSchema,
 } from '@/lib/value-schemas'
 
 /** The collection segment of a redeem's resource name. */
@@ -77,6 +78,8 @@ export const redeemSchema = z.object({
   state: redeemStateSchema,
   /** The circuit's `inIndex`: the request's slot in the vault's buffers, chosen at random. */
   inIndex: uint64Schema,
+  /** The commitment of the vault secret the start call was built with, the one secret the contract lets complete the request. */
+  userCommitment: hex32BytesSchema,
   /** The EVM account the MPC signs the redeem from: the vault's own, which holds the shares and receives the underlying. */
   vaultAccount: evmAddressSchema,
   /** Set with `Completed`. */

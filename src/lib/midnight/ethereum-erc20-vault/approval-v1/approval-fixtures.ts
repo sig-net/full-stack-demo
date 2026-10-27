@@ -9,6 +9,7 @@ export function approvalFixture(overrides: Partial<Approval> = {}): Approval {
     spender: ROUTER_ADDRESS,
     state: 'AwaitingStartTransaction',
     inIndex: IN_INDEX,
+    userCommitment: USER_COMMITMENT,
     vaultAccount: VAULT_ACCOUNT,
     outcome: null,
     failure: null,
@@ -25,6 +26,7 @@ export const APPROVAL_NAME = `${CALLER_NAME}/ethereum-erc20-vault-approvals/3b4c
 export const ERC20_ADDRESS = `0x${'ef'.repeat(20)}`
 export const ROUTER_ADDRESS = `0x${'0a'.repeat(20)}`
 export const VAULT_ACCOUNT = `0x${'cc'.repeat(20)}`
+export const USER_COMMITMENT = '1c'.repeat(32)
 export const IN_INDEX = 42n
 
 /** The row each state leaves behind, consistent with the state machine's field table. */

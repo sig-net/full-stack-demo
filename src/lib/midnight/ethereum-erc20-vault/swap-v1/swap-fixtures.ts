@@ -11,6 +11,7 @@ export function swapFixture(overrides: Partial<Swap> = {}): Swap {
     amountInMaximum: 1_100_000n,
     state: 'AwaitingStartTransaction',
     inIndex: IN_INDEX,
+    userCommitment: USER_COMMITMENT,
     vaultAccount: VAULT_ACCOUNT,
     outcome: null,
     failure: null,
@@ -27,6 +28,7 @@ export const SWAP_NAME = `${CALLER_NAME}/ethereum-erc20-vault-swaps/2a3b4c5d-6e7
 export const ERC20_ADDRESS_IN = `0x${'ef'.repeat(20)}`
 export const ERC20_ADDRESS_OUT = `0x${'0e'.repeat(20)}`
 export const VAULT_ACCOUNT = `0x${'cc'.repeat(20)}`
+export const USER_COMMITMENT = '1c'.repeat(32)
 export const IN_INDEX = 42n
 
 /** The row each state leaves behind, consistent with the state machine's field table. */

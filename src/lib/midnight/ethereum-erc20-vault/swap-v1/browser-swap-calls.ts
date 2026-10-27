@@ -21,6 +21,7 @@ import type {
   SwapStartInputsResult,
 } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-service-adaptor'
 import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
+import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 
 /** Starts a swap from the page, the wallet's own coin of the sold token funding the start call. */
 export async function startSwapInBrowser(args: StartSwapInBrowserArgs): Promise<Swap> {
@@ -35,7 +36,12 @@ export async function startSwapInBrowser(args: StartSwapInBrowserArgs): Promise<
     circuitArgs: ({ inIndex }, caller) => ({ ...caller, inIndex, ...swapRequest }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
     record: async ({ inIndex }, finalizedTx) =>
-      actions.startSwap(await login.credential(), { swapRequest, inIndex, finalizedTx }),
+      actions.startSwap(await login.credential(), {
+        swapRequest,
+        userCommitment: userCommitmentOf(vaultSecret),
+        inIndex,
+        finalizedTx,
+      }),
   })
   return started.swap
 }

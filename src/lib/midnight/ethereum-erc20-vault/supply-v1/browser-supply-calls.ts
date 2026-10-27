@@ -21,6 +21,7 @@ import type {
   SupplyStartInputsResult,
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-service-adaptor'
 import { completionOutput } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request-attestation'
+import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 
 /** Starts a supply from the page, the wallet's own coin of the pinned underlying funding the start call. */
 export async function startSupplyInBrowser(args: StartSupplyInBrowserArgs): Promise<Supply> {
@@ -40,7 +41,12 @@ export async function startSupplyInBrowser(args: StartSupplyInBrowserArgs): Prom
     }),
     build: (circuitArgs) => builder.buildStart(circuitArgs),
     record: async ({ inIndex }, finalizedTx) =>
-      actions.startSupply(await login.credential(), { supplyRequest, inIndex, finalizedTx }),
+      actions.startSupply(await login.credential(), {
+        supplyRequest,
+        userCommitment: userCommitmentOf(vaultSecret),
+        inIndex,
+        finalizedTx,
+      }),
   })
   return started.supply
 }

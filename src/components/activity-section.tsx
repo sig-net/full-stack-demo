@@ -191,13 +191,13 @@ const PAGE_COMPLETE_BY_TYPE: Record<ActivityType, (args: PageCompletionArgs) => 
 }
 
 /**
- * Starts the completion of every activity that awaits it, once per row per retry window. The
- * page builds, proves and finalises the completion call with the connected wallet, so nothing runs
- * without one, and a refusal (the row already completing elsewhere) is reported and left to the
- * next window.
+ * Starts the completion of every activity that awaits it and that the page's vault secret
+ * started, once per row per retry window. The page builds, proves and finalises the completion
+ * call with the connected wallet, so nothing runs without one, and a refusal (the row already
+ * completing elsewhere) is reported and left to the next window.
  */
 function useAutoCompletion(activities: readonly Activity[] | undefined): void {
-  const { login, vaultSecret } = useCaller()
+  const { login, vaultSecret, userCommitment } = useCaller()
   const { wallet } = useMidnightWallet()
   const config = useConfig()
   const registry = useTokenInfoRegistry()
@@ -228,14 +228,15 @@ function useAutoCompletion(activities: readonly Activity[] | undefined): void {
   // A wallet restores after the first read of the activities, whose data then keeps its identity
   // until a row changes, so the wallet and the secret arriving must run the pass too.
   useEffect(() => {
-    if (activities === undefined || vaultSecret === null || wallet === null) return
+    if (activities === undefined || userCommitment === null || wallet === null) return
     for (const activity of activitiesDueForCompletion(
       activities,
+      userCommitment,
       attemptedAt.current,
       Date.now(),
       COMPLETION_RETRY_MS,
     )) {
       void complete(activity)
     }
-  }, [activities, vaultSecret, wallet])
+  }, [activities, userCommitment, wallet])
 }

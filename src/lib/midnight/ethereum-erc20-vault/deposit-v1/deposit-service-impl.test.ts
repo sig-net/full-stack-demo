@@ -258,6 +258,7 @@ describe('DepositServiceImpl.startDeposit', () => {
           erc20Address: ERC20_ADDRESS,
           amount: 1_000_000n,
           inIndex: 42n,
+          userCommitment: USER_COMMITMENT,
           evmNonce: expectNonce,
           ...GAS,
           depositAccount: CALLER_ACCOUNT,

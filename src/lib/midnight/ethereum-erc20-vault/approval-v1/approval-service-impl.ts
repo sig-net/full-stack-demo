@@ -117,7 +117,7 @@ export class ApprovalServiceImpl implements ApprovalService {
 
   async startApproval(
     caller: Caller,
-    { approvalRequest, inIndex, finalizedTx }: StartApprovalArgs,
+    { approvalRequest, userCommitment, inIndex, finalizedTx }: StartApprovalArgs,
   ): Promise<Approval> {
     const grant = await this.grantOf(approvalRequest)
     return this.unitOfWork.runInTransaction(() =>
@@ -125,6 +125,7 @@ export class ApprovalServiceImpl implements ApprovalService {
         name: approvalName(caller.name, randomUUID()),
         ...grant,
         inIndex,
+        userCommitment,
         vaultAccount: vaultAccountOf(this.signet, this.vault),
         call: { finalizedTx },
       }),

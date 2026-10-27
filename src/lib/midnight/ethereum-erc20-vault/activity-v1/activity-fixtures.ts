@@ -13,6 +13,7 @@ import {
 import {
   DEPOSIT_NAME,
   ERC20_ADDRESS,
+  USER_COMMITMENT,
 } from '@/lib/midnight/ethereum-erc20-vault/deposit-v1/deposit-fixtures'
 import { REDEEM_NAME } from '@/lib/midnight/ethereum-erc20-vault/redeem-v1/redeem-fixtures'
 import {
@@ -43,6 +44,7 @@ export function activityFixture(overrides: Partial<DepositActivity> = {}): Depos
     destination: null,
     outcome: null,
     error: null,
+    userCommitment: USER_COMMITMENT,
     resourceState: 'AwaitingStartTransaction',
     vaultRequestState: null,
     vaultRequestId: null,

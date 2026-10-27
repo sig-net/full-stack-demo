@@ -19,6 +19,7 @@ describe('SQLRepository over Postgres', () => {
     amount: 5n,
     state: 'AwaitingStartTransaction',
     inIndex: 1n,
+    userCommitment: '1c'.repeat(32),
     evmNonce: 0n,
     gasLimit: 21_000n,
     maxFeePerGas: 1n,

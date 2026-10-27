@@ -11,7 +11,10 @@ import type {
   Approval,
   ApprovalRequest,
 } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
-import { approvalFixture } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-fixtures'
+import {
+  approvalFixture,
+  USER_COMMITMENT,
+} from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-fixtures'
 import { ApprovalServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval-service-impl'
 import {
   ApprovalStateConflict,
@@ -159,6 +162,7 @@ describe('ApprovalServiceImpl on an uninitialised vault', () => {
       call: (service) =>
         service.startApproval(caller, {
           approvalRequest: { kind: 'stata' },
+          userCommitment: USER_COMMITMENT,
           inIndex: 42n,
           finalizedTx: FINALIZED_TX,
         }),
@@ -220,6 +224,7 @@ describe('ApprovalServiceImpl.startApproval', () => {
       const { service, recorded } = serviceOver({})
       const approval = await service.startApproval(caller, {
         approvalRequest,
+        userCommitment: USER_COMMITMENT,
         inIndex: 42n,
         finalizedTx: FINALIZED_TX,
       })
@@ -233,6 +238,7 @@ describe('ApprovalServiceImpl.startApproval', () => {
           {
             name: approval.name,
             ...expectGrant,
+            userCommitment: USER_COMMITMENT,
             inIndex: 42n,
             vaultAccount: VAULT_ACCOUNT,
             call: { finalizedTx: FINALIZED_TX },
