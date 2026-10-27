@@ -23,7 +23,7 @@
     "stack:down": "docker compose --env-file .env.local down --volumes",
     "stack:restart": "yarn stack:down && yarn stack:up && yarn db:migrate",
     "zk-assets": "erc20-vault-zk-assets zk-assets/ethereum-erc20-vault --vault-only && erc20-vault-zk-assets zk-assets --signet-only",
-    "zk-assets:public": "rsync -a --delete zk-assets/ethereum-erc20-vault/ public/zk-assets/ethereum-erc20-vault/"
+    "zk-assets:public": "mkdir -p public/zk-assets && rsync -a --delete zk-assets/ethereum-erc20-vault/ public/zk-assets/ethereum-erc20-vault/"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
