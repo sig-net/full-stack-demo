@@ -1,0 +1,466 @@
+# Engineering rules
+
+Apply these requirements to new and changed code. Existing violations are not precedent.
+Keep setup instructions and application reference material in README.md and docs/.
+
+## Precise types
+
+- Preserve precise types through every application boundary. Explicitly type function parameters
+  and returns, shared interfaces, context values and generic SDK specialisations. Local variables
+  and contextually typed callbacks may use inference when it retains the precise type.
+- Do not use `any`, explicitly or through unsafe assignments, arguments, returns, calls or member
+  access. Do not use `unknown` to avoid resolving an SDK, generated contract or application type.
+  Search installed declarations and existing exports. Carry generated circuit, private-state,
+  provider, contract and ledger types through their consumers without widening them.
+- Permit `unknown` only at designated external-input validation and caught-error handling
+  boundaries. Narrow or validate it there before returning domain values. A new boundary exception
+  requires explicit review and a documented reason. Do not spread `unknown` through domain APIs.
+- Type assertions must have a demonstrated invariant the compiler cannot express. Never use
+  double casts, non-null assertions, suppression comments or lint/configuration changes to conceal
+  a mismatch. Fix the contract or validate the value. An annotation receiving `any` is not proof
+  of safety. Preserve strict TypeScript and unchecked-index checking.
+- Define each closed set once using an authoritative enum, literal union or constant object.
+  Reuse dependency-owned sets and handle meaningful variants exhaustively. Model unavailable
+  capabilities explicitly instead of implementing throwing placeholders behind a broad interface.
+
+## Boundaries and ownership
+
+- Before changing shared code, census its actual consumers, including browser, server, tools and
+  tests. Record runtime, environment and required capabilities. Replan for unexpected consumers.
+  Search dependency exports and sibling modules before creating a shared helper, type or constant.
+- Keep generic capabilities independent of application policy. Configuration, wallet lifecycle,
+  contract binding, balance queries, funding and operation orchestration have separate owners.
+  Provider composition must respect those dependencies. Prove an extracted generic boundary can
+  operate without the feature that prompted its extraction.
+- Components render precise props and compose UI. Local presentation state may remain local.
+  Reusable React behaviour belongs in hooks, domain mechanics in non-React modules, and shared
+  operations in owners that survive individual consumer mounts. Add a provider or abstraction
+  only for a demonstrated ownership need. Share code at the second real consumer.
+- Keep public configuration, browser SDK assembly and server secrets separate. Shared modules
+  must work in every consuming runtime. Pass validated immutable configuration into resources.
+  Apply related edits atomically and invalidate only affected sessions. Browser input cannot
+  redefine server funding authority or privileged configuration.
+- Everything under `src/lib` is inert: classes, functions, schemas and types that take their
+  dependencies as constructor or function arguments. Construction happens once, in
+  `createBackend()` in `src/server/backend.ts`, in dependency order; `getBackend()` memoises it
+  per module graph. No module in `src/lib` exports a `getX()` singleton or imports a sibling
+  implementation to build it. A `'use server'` file may export only async functions, so an action
+  is one line that reaches its adaptor through `getBackend()`, and the adaptor (the class that
+  turns a caller secret and untrusted arguments into a service call and a result) lives in
+  `src/lib` beside its service.
+- The backend boundary is fixed now so that it can become its own package by a move, not a
+  redesign. The backend owns `src/lib/db`, `src/lib/event`, `src/lib/kafka`,
+  `src/lib/repository`, `src/lib/testing`, the files `src/lib/coalescing-runner.ts`,
+  `src/lib/delay-unless-aborted.ts`, `src/lib/lazy-singleton.ts`, `src/lib/run-until-aborted.ts`,
+  `src/lib/sweep.ts`, `src/lib/caller/resolve-caller.ts`,
+  `src/lib/midnight/ethereum-erc20-vault/signet-readers.ts` and
+  `src/lib/midnight/ethereum-erc20-vault/flusher.ts`, and every file ending in `-impl.ts`,
+  `-repository.ts`, `-state-controller.ts`, `-state-machine.ts`, `-state-resolver.ts`,
+  `-event-consumer.ts`, `-ledger.ts`, `-circuits.ts`, `relayer-wallet.ts`, `-adaptor.ts` and
+  `-fixtures.ts`. A runtime import of any of them is allowed only from the backend itself,
+  `src/server`, `integration-tests` and unit tests. The app (`src/app`, `src/components`, the
+  isomorphic modules in `src/lib`) reaches the backend only through `src/server/actions`, and
+  `src/server/backend.ts` and `src/server/start.ts` are imported only by `src/server` and
+  `src/instrumentation.ts`. Integration tests import nothing from `src` at runtime but
+  `getBackend()`. Type-only imports may cross. `scripts/check-boundaries.ts` enforces all of
+  this and `yarn check` runs it: a failure is fixed by moving the import to the right side,
+  never by widening the script's lists.
+- Match names to actual responsibilities. Adding a variant reopens sibling and container names.
+  Qualify both members when introducing a qualified twin. Moves, deletions and renames require a
+  whole-repository search for invalidated names and updates to imports, configuration, manifests,
+  tests and documentation in the same change.
+- A private method or local helper earns its name only when it hides a decision, not a line.
+  Before extracting one, ask what a reader gains by jumping to it: if the body is one expression
+  whose parts are already named (`DEPOSIT_EVENT_BY_STATE[state].create(...)`), the jump costs
+  more than the repetition, and the expression stays inline at each call site. Extract when the
+  body holds a fact a caller must not re-derive (a TTL, a signer, an ordering), when two callers
+  would otherwise drift, or when the name says something the code cannot (`lockedIn`). A helper
+  whose name restates its one call (`publishEntered`, `commitChild`) is the signature of the
+  defect: it exists to shorten a line, and it makes the reader open a second place to learn what
+  the first one does.
+
+## Service methods
+
+- Every service method has one shape: `action<Resource>(caller: Caller, args: Action<Resource>Args)`,
+  returning `Promise<Resource>`, `Promise<Resource | undefined>` when the resource may be absent,
+  `Promise<Resource[]>` for several, or `Promise<void>` when there is nothing to return. When a
+  list needs paging, it returns a page type carrying the resources and a continuation token, not a
+  bare array with paging bolted onto the args.
+- Each method owns its `Action<Resource>Args` type and the zod schema it is inferred from, declared
+  in the service module after the interface. Adaptors validate wire input with that schema, so the
+  service is typed against exactly what reaches it. Nothing but the caller is positional, so adding
+  an input never changes a signature.
+- A service method is the use case: it resolves the caller, assigns the inputs the resource
+  needs (a slot, a nonce, an account), does the slow work outside any transaction, then makes
+  one controller call inside one. It never names a state literal. A pre-check before slow work
+  asks the state machine (`nextState(state, action)`) and the controller asks it again under the
+  lock. It reads another resource's fields through that resource's own narrowing helper
+  (`attestedRequestFields()`), never by comparing that resource's state.
+- Write boundaries open the transaction, reads never do. An adaptor method that creates, updates
+  or starts something, a resolver's write of one transition, and an outbox batch each run inside
+  one `UnitOfWork.runInTransaction()` (`src/lib/db/unit-of-work.ts`), which every repository
+  call on the same async chain joins. State controllers never open one, and the event consumer
+  hub wraps nothing. A read boundary (`get`, `list`) runs on the plain database: optimistic,
+  lock-free, re-checked by the write that acts on it. A transaction wraps one boundary call and
+  never a slow external call, and nothing inside one may detach work from the async chain, since
+  detached work silently runs outside it. The outbox relay's Kafka send is the one documented
+  exception.
+- A service method whose write must follow a slow build (a circuit call built from the
+  indexer's view, a chain read) does the build first, outside any transaction, then opens the
+  transaction itself around the controller call, and its adaptor wraps nothing for that method.
+  The adaptor opens the transaction only for a method whose work is the write alone.
+
+## Lifecycle: state machines, controllers, resolvers and events
+
+- A resource with a lifecycle (`src/lib/midnight/transaction-v1` is the model) names each state
+  after what the resource waits for (`AwaitingProof`, `AwaitingWallet`), never after work in
+  progress, so every state is a to-do for exactly one actor and a crash leaves a row that still
+  says what it needs.
+- The legal transitions are a pure table in `<resource>-state-machine.ts`: `nextState(state,
+  action)` over an action union, plus `assertConsistent(resource)` stating which fields each
+  state holds. It has no I/O and is tested over every `(state, action)` pair.
+- The state controller is the only writer of state. Each method is one action from the table:
+  it reads the row with `lock: 'update'`, refuses with a `StateConflict` error when the table
+  refuses, patches, asserts consistency, writes, and publishes the event of the state entered.
+  It opens no transaction. Its interface file also defines its lifecycle events: one
+  `defineEvent()` per state entered, data `{ name }`, keyed by the resource name. Never a
+  generic created or updated event.
+- A resource has one entry state per kind of committed call, a table in its state machine
+  (`INITIAL_STATE` where every call is of one kind, `ENTRY_STATE_BY_CALL` where the bytes
+  committed decide), never a state the caller names. The controller's create method
+  (`commitTransaction`, `queueRequest`, `startDeposit`) takes the fields its caller decides and
+  nothing the controller decides: no `state`, no timestamps, no field a later step fills. Its
+  args type is derived from the resource with `Omit`, so a field added to the resource reaches
+  the args unless it is named as the controller's. A full row is built in exactly one place,
+  that create method, so a row's initial shape has one definition.
+- The state resolver does what the current state needs: the slow external calls (proving,
+  submitting, watching) outside any transaction, then one controller transition inside
+  `UnitOfWork.runInTransaction()`, swallowing the `StateConflict` that means another resolver
+  got there first. It dispatches on the row's state, not on the event, so a lifecycle event is
+  only a nudge and a sweep over waiting rows can call the same `resolve` method to catch lost
+  events and expiry.
+- An event consumer is a dumb adaptor: match the event definitions, `safeParse` the data, call
+  the resolver. No logic lives in a consumer. Slow external systems sit behind one port
+  interface (`MidnightTransactionLedger`) so the resolver is tested with a mocked ledger.
+- A child resource names the resource it serves in `parent`, its lifecycle events carry
+  `{ name, parent }`, and the parent's consumer matches a child's terminal event on the parent's
+  collection without a read. A resource with no parent carries `{ name }` alone.
+- A chain step is read back from the ledger (`requestStage()` over the vault ledger, the
+  singleton's posts through the readers) and never inferred from a child transaction's outcome.
+  A child that failed is replaced while the ledger shows its step undone, and a resolver reads
+  the ledger before it believes a child's failure, for every parent, the deposit included.
+- A ledger port's `submit` resolves with the id when the bytes reached the node, a lost
+  acknowledgement and the node already holding the bytes included, and throws only when the
+  node refused them with a reason or they never left the process. The submit-time refusal and
+  the ledger's verdict are two actions of the state machine: `recordRejection` applies only from
+  `AwaitingSubmission`, and `recordLedgerFailure` (Midnight) or `recordFailure` (Ethereum) only
+  from `AwaitingInclusion`. An outcome nobody observed ends `Expired` at the TTL, never
+  `Rejected`.
+- A vault-level batch (the flush) is a process with no row. `Flusher.flush()` coalesces nudges,
+  runs one flush at a time, and calls `resolveWaitingFlushes()` when a flush lands. A step that
+  touches shared contract state is never a step of one request's lifecycle.
+- A transaction row names its `signer` (`caller` or `relayer`). A caller row is committed
+  finalised by the caller's wallet, which pays its own fee, and enters `AwaitingSubmission`
+  directly. `AwaitingWallet` is the relayer's to-do, which the resolver takes through the
+  `RelayerWallet` port, and the state machine refuses a caller row in `AwaitingProof` or
+  `AwaitingWallet`.
+- The sweep (`src/lib/sweep.ts`, every 30 seconds from `start()`) calls every resolver's
+  `resolvePending()` in dependency order (Midnight transactions, Ethereum transactions, vault
+  requests, deposits) and then fires `flush()` without awaiting it. Every resolver has a
+  `resolvePending()` that re-reads its non-terminal rows oldest first: three legs of a deposit
+  advance only on a sweep, so the sweep is load-bearing, never only a safety net.
+- A change to an event's data shape is a change to the events already on the topic. A consumer
+  that rejects a record stalls every consumer behind it, so a field is added as optional, or the
+  changed shape is published under a new event type.
+
+## Repositories
+
+- A repository is a typed database driver and nothing more. Every repository is the shared
+  `Repository<Resource>` from `src/lib/repository/repository.ts`, declared as a type alias
+  (`type DepositRepository = Repository<Deposit>`) with no extra members, and its SQL
+  implementation extends `SQLRepository` from `src/lib/repository/repository-sql-impl.ts`,
+  passing only the table and the two row mappers. The method set is `create`, `get`, `update` and
+  `search`; a query a resource needs is expressed as `search` criteria, order, limit and lock, and
+  a need no `SearchArgs` can express extends `SearchArgs` for every resource, never one repository.
+- A read model is a Postgres view defined in `src/lib/db/schema.ts` next to the tables it reads,
+  its `CASE` arms built from the resource's own constants so each set has one definition, and its
+  repository is the reading half of the contract: `type ActivityRepository =
+  ReadRepository<Activity>` over `SQLReadRepository`, with no `create` or `update`. The database
+  derives every aggregated field, and nothing above the repository derives one again.
+- The table's column properties are named exactly as the resource's fields, so a criterion's field
+  resolves to a column by name. The row mappers convert values (bytea, numeric, enum text) and
+  never rename, derive or default a field. Application logic, authorisation and naming live in the
+  service and state controller, never in a repository.
+- Nothing above a repository inspects a database error. A concurrency guard is a read under the
+  row lock: a transition's state check, or a starter's search for a live child when the step
+  leaves the state alone. A unique index is an invariant whose violation is a bug, and it
+  surfaces as the error it is, never as a signal a controller catches and maps. Postgres error
+  codes stay inside `src/lib/db` and the repository implementations.
+
+## Validation boundaries
+
+- A type gets a zod schema when a value of that type crosses a trust boundary: wire input into
+  an adaptor, event data into a consumer, or a row out of a repository. The schema is parsed at
+  that boundary and nowhere else. Resources and service args have schemas for that reason; state
+  controller args, repository search args and every other internal type are plain TypeScript
+  types, since their only callers already hold validated values and the compiler carries the
+  proof between boundaries.
+- An adaptor uses `safeParse`, because a bad input is an expected outcome it reports. A consumer
+  and `SQLRepository` use `parse`, because malformed event data or a malformed row is a bug that
+  must surface. A schema with a transform must accept its own output, so a value parsed twice
+  stays the same.
+- A resource file that `src/lib/db/schema.ts` imports (for a state set, a failure set, an action
+  set) stays free of SDK runtime imports: drizzle-kit loads the schema through a CommonJS loader
+  that cannot load the Midnight packages. A closed set an SDK defines that the schema needs is
+  declared as a plain `as const` array in such a file (`vault-action.ts` is the model), named
+  as the SDK names its members.
+
+## Logging
+
+- Server code logs through the `Logger` port (`src/lib/logging/logger.ts`), received as a
+  constructor or function argument: `createBackend()` hands each component
+  `logger.child({ component: '<ClassName>' })`. Nothing under `src` calls `console`, and
+  `no-console` fails lint. The console bridge (`src/server/console-bridge.ts`) exists for code
+  the repository does not own and is installed by the start-up in json format only.
+- Four levels and no others. `error`: work was lost or an invariant broke and a person must look,
+  always with `err`. `warn`: degraded but handled. `info`: the process lifecycle and every
+  resource created and state transition. `debug`: the mechanics.
+- A line is written once, where the decision is made, never at the caller: the state
+  controller's create methods and `transition()` own `resource created` and `transition
+  applied`, `UnitOfWork` the transaction lines (a joined call logs nothing), the outbox
+  publisher `event queued`, the Kafka publisher `event sent`, the hub `event received` and
+  `event dispatched`, `LifecycleEventConsumer` `handling event`, each resolver `resolving` and
+  the swallowed conflict, each ledger and circuits implementation its external calls with
+  `durationMs`, the flusher its runs, the sweep its passes, each adaptor `method called`.
+- The message is a constant lower-case fact (`transition applied`), and every identity goes in
+  a `LogFields` field. A new field is added to `LogFields` with its doc comment and to the
+  README's field table in the same change, never as a nested object.
+- Never log a resource object, service arguments, a `Caller`, the caller secret, a seed, a
+  secret key or a transaction body. `caller` is the derived `callers/{caller}` name.
+- Unit tests hand the subject a `RecordingLogger` (`src/lib/testing/recording-logger.ts`), and a
+  test that covers a logged decision asserts on its line.
+
+## State and asynchronous work
+
+- Use React Query for remote reads, mutations and application data caching. Do not fetch remote
+  state through hand-written fetch-and-set-state effects or add a parallel application cache.
+  Preserve the bounded, verified ZK prover-key cache as a specialist resource cache.
+- Scope queries and resources to their actual configuration and session generation. A stable
+  account or contract ID does not identify a replacement instance. Capture operation inputs,
+  reject superseded results and recheck ownership after awaits before publishing or mutating.
+  Disabled queries must not expose disposed bindings as ready. Keep secrets out of query keys.
+- Give resource construction, synchronisation, subscriptions and transport teardown explicit
+  ownership. Cover cancellation during construction as well as after connection. Dispose owned
+  resources exactly once and reject late writes. Recovery must rebuild dependent bindings while
+  respecting current inputs. Do not depend on memoisation for resource correctness.
+- Acquire shared operation ownership before the first await. Duplicate mounts, repeated clicks
+  and delayed preflight cannot submit duplicate work. Keep submitted hashes and captured account,
+  network, token, destination and amount across dialog closure or session changes. Never
+  automatically resend because confirmation or continuation is slow or fails.
+- Verify the intended transaction and its effect, including replacements and cancellations.
+  Preserve distinct settlement, refund and failure outcomes. A refresh failure after settlement
+  remains a refresh failure and cannot unlock another execution of the completed operation.
+- Separate connection, capability support, binding readiness, balance availability and operation
+  eligibility. Gate each action on its own prerequisites and leave setup/recovery reachable.
+  Failed reads remain unavailable, never zero. Fetch authoritative token decimals, reject excess
+  input precision before conversion and preserve exact amounts throughout display and execution.
+- The browser persists two secrets, each in its own local storage slot
+  (`src/lib/local-storage-slot.ts`): the connected Midnight wallet's seed from connection until
+  disconnect or a failed connection, and the vault identity secret from a successful login until
+  it is cleared, so a reload restores the same wallet and the same caller. Every other secret
+  (transient inputs) stays in page memory. Clear
+  transient secret inputs on close and release owned credential references on disconnect. Keep
+  secrets out of URLs, public configuration, logs and evidence. Inspect checkpoint contents before
+  treating them as safe. Browser-wallet credentials remain under extension ownership.
+- One Midnight wallet is connected at a time, whatever its kind. A connect call refuses while a
+  wallet is active, connecting or stored; the user disconnects first. Wallets never replace each
+  other implicitly.
+
+## Presentation and React
+
+- Use the established shared component library and one semantic theme. Shared definitions own
+  colours, typography, borders, radii, shadows, density and interaction states. Features select
+  bounded variants and compose structural layout. Do not bypass this through appearance classes
+  or feature stylesheets. Record genuine artwork or dynamic-geometry exceptions with their scope
+  and reason. Update every consumer of a changed shared presentation contract.
+- Define hover, visible keyboard focus, selected, expanded, invalid, loading and disabled states
+  centrally. Enabled actions use the pointer cursor, text inputs retain the text cursor, and
+  disabled controls cannot activate. Verify composed controls and portals in the final cascade.
+  Never suppress an outline without visible replacement focus styling.
+- Render external names as text and icons as image sources with fallbacks. Use accessible labels
+  and status text, not colour alone. Surface actionable errors through the shared feedback UI.
+  Global connection controls belong in the shell, with contextual entry points using the same owner.
+- Do not introduce `useMemo`, `useCallback` or `React.memo`. Follow the React Compiler convention
+  while keeping explicit resource ownership. Choose client-component boundaries for actual
+  browser APIs, state or effects. Do not force every page into client rendering or dynamic mode.
+
+## Changes and verification
+
+- Add dependencies with a real consumer and keep manifest/lockfile changes together. Preserve
+  required component-generator foundations. Verify compatible resolved SDK/runtime versions and
+  generated code/assets, not just matching version strings. Copied component upgrades require
+  reviewing source, CSS, runtime dependencies and consumer APIs separately from the CLI version.
+- Keep tooling and installation caches project-local. Preserve unrelated working-tree changes,
+  running services, browser ownership and submitted-operation evidence. Do not commit or push
+  without explicit authorisation. Only run a production build when explicitly requested.
+- Run `yarn lint && yarn typecheck` after the final edit, plus checks appropriate to the affected
+  behaviour. Confirm changed files are actually covered. Do not weaken checks to get a pass.
+  Report failures and warning counts honestly. A dev server or production build is not a
+  substitute for typechecking.
+- Only unit tests live beside the code. A test that reaches Postgres, Kafka, the proof server,
+  the node, the indexer or a running server is an integration test and lives under the top-level
+  `integration-tests/` folder, run with `yarn test:integration` against the local services. A
+  `*.test.ts` under `src` that opens a socket is in the wrong folder.
+- `integration-tests/ethereum-erc20-vault-deposit.test.ts` is the end-to-end deposit. It runs
+  inside `yarn test:integration` (45 to 55 minutes for the suite of 20 files, since each of the six
+  operation round trips takes four to fifteen), needs the whole local stack, and needs no dev server running
+  (`ps aux | grep "[n]ext dev"` finds nothing), since a dev server joins the same Kafka consumer
+  group. Run the suite whenever a change touches a state machine, a state controller, a
+  resolver, a ledger implementation, the flusher, the sweep or the composition root. One file
+  runs with `yarn vitest run --config vitest.integration.config.ts --reporter=verbose <file>`,
+  and the verbose reporter is the only one that shows a test's log lines. Every integration file
+  deletes its rows in `afterAll`, the outbox included (`convert_from(data, 'UTF8') like`, since
+  the column is `bytea`), then stops the backend and ends the pool, in that order.
+- Unit tests are table driven with vitest (`yarn test`, files named `*.test.ts` beside the code):
+  an array of cases, each with a name, the doubles its collaborators are built from, the
+  arguments and a check, run through `test.each`. They cover the layers that hold logic: state
+  controllers, services, adaptors and consumers. A collaborator is replaced with
+  `mock<Interface>(name, methods)` from `src/lib/testing/mock.ts`, which answers with the
+  methods the case supplies and throws on any other call, so an unscripted dependency fails the
+  case; assertions on what a method received go inside that method. `MemoryRepository` is the
+  working in-memory repository for flow tests that would otherwise script every read and write.
+  Repositories are never mocked: they are tested against Postgres.
+- Test observable behaviour and costly boundaries. UI tests use roles and accessible names.
+  Exercise lifecycle races and duplicate consumers when changing ownership. New automated guards
+  require a non-empty input assertion and an observed failure on a planted violation before
+  restoration and a passing rerun. Keep verification proportional to the authorised change.
+- For presentation changes, inspect the real browser, including hover/computed styles, keyboard
+  focus, disabled states, portals and narrow layouts. Static screenshots and successful clicks
+  alone do not establish interaction-state correctness. Distinguish fixtures, real SDK execution,
+  browser observations and funded end-to-end acceptance in the evidence.
+- Inspect the final diff for unintended replacements and formatting churn. Remove unused code and
+  dependencies. Prefix deliberately unused parameters with `_`. Comments state current invariants
+  or non-obvious failure modes at their definition, without narrating mechanics or duplicating
+  callee documentation. Keep human instructions self-contained, update stale references and verify
+  durable factual claims by execution. Run documented commands verbatim before publishing them.
+- Before finishing, read every private method once as a stranger: if its body fits on the call
+  site line and its name adds nothing the body does not say, inline it.
+
+## UI components
+
+- Every UI element is built from shadcn/ui components. Before building anything, check
+  `src/components/ui` for the component it needs. If it is not there, install it with the shadcn
+  CLI (`yarn shadcn add <component>`) rather than writing it by hand.
+- If shadcn has no component for what is asked, stop and say so. Do not invent a substitute,
+  hand-roll a primitive, or pull in another component library.
+- Never put a cursor class on a control. One unlayered rule at the end of `src/app/globals.css`
+  gives every enabled clickable control the pointer cursor, by element and ARIA role, and it
+  outranks the `cursor-default` utility shadcn sets on menu and select items. A per-component
+  `cursor-pointer` hides a gap in that rule from every other component with the same gap. When a
+  control lacks the pointer, add its element or role to that rule's selector list. Disabled
+  controls keep their own cursor: keep the rule's `:not(...)` exclusions intact.
+
+## File layout
+
+- File code by what it is and who owns it, never by feature name. `src/lib` holds every
+  non-React module: domain sets, defaults, parsers, formatters. A domain with several modules
+  gets a folder under it (`src/lib/config/`). `src/components` holds React components,
+  `src/components/ui` only what the shadcn CLI writes, `src/components/contexts` React
+  contexts, and `src/app` App Router files only (layouts, pages, error and not-found files,
+  route handlers). `src/server` holds the code that runs: the composition root
+  (`src/server/backend.ts`), the `'use server'` action files under `src/server/actions`, and
+  the start-up that instrumentation calls. Do not create new top-level folders under `src` for a
+  feature; the folder name is decided by the kind of code, then the domain.
+- Split files by ownership, not by export type. A React context, its provider and its accessor
+  hook are one unit with one owner and always change together, so they live in one file:
+  `src/components/contexts/<Name>Context.tsx` exporting the value type, the provider and the
+  `use<Name>` hook. The same holds for any cluster that only ever changes as a whole. Split a
+  file only when a piece gains a consumer that must not import the rest (a non-React runtime, a
+  test that must avoid JSX). The Fast Refresh lint warning about mixed exports is not a reason
+  to split; it is switched off for `src/components/contexts`.
+- Within a file, the declaration the file exists for comes first, straight after the imports:
+  the type, interface, class or function it is named after. Supporting helpers, constants,
+  schemas and private functions follow it, in the order a reader needs them; hoisting resolves
+  the downward references. The one limit is a module-level value evaluated at load time (a zod
+  schema, a Drizzle table), which cannot read a later `const`. A resource file keeps its own
+  supporting schemas (its name format, its collection constant) above the resource schema for
+  that reason; generic value schemas go to `src/lib/value-schemas.ts` instead of a file of their
+  own.
+
+## NEVER BREAK: Nothing is backwards compatible unless the user asks for it explicitly.
+
+- This codebase has no deployed data, no released API and no consumer on an older version.
+  NEVER write, keep or suggest a backwards-compatibility measure of any kind unless the user has
+  asked for that specific measure in so many words: no accommodation of rows, bytes, events,
+  configuration or callers written by an earlier version of the code, no tolerated legacy shape,
+  no fallback branch, no deprecation period, no migration that preserves data, no comment or
+  document that explains what an older version did.
+- A shape the code can no longer produce is an invariant to refuse (a state machine assertion, a
+  schema that rejects it), never a case a resolver, a parser or a UI tolerates. When a change
+  makes an existing row impossible, the row is gone with the database, not carried.
+- The database starts from scratch on every schema change. `drizzle` holds exactly one migration,
+  `0000_schema`, which `yarn db:generate` regenerates from the whole schema (appending the outbox
+  trigger from `src/lib/db/outbox-notify.sql`, which drizzle cannot derive), and `yarn stack:restart`
+  resets the local database to it. Never add a migration on top of it, never edit it by hand.
+- "The user asked" means an explicit instruction in this conversation naming the thing to keep
+  compatible. A reviewer's suggestion, a subagent's caution, a rule inferred from another
+  codebase or from general practice is not that instruction: raise it as a question instead.
+
+## NEVER BREAK: Skills are written in agent-agnostic prose.
+
+- A skill is a single copy under `.agents/skills/<name>/` that every coding agent reads.
+  Agent-specific entries such as `.claude/skills/<name>` are committed symlinks to that copy,
+  never a second copy. Creating, editing or reviewing a skill triggers this rule.
+- Name no agent in a skill body or its reference files: not Codex, Claude Code or any other.
+  Name no agent-specific tool, command, panel or configuration file, such as a tool-loading
+  helper, a slash-command form, an MCP toggle, a config file path or an argument placeholder.
+  Describe the mechanism instead ("load the browser tool schemas from the current environment",
+  "reconnect the Playwright server through the agent's own MCP controls") so each agent maps the
+  sentence onto its own facilities.
+- Frontmatter uses only the Agent Skills specification fields: `name`, `description`,
+  `license`, `compatibility`, `metadata` and `allowed-tools`. Agent-only fields fail other
+  agents' validators and belong nowhere in a shared skill.
+- Relative links between a skill and its reference files stay relative, so they resolve from
+  every entry path, including through a symlink.
+- Agent-specific invocation syntax belongs in human-facing documentation, listed for each
+  supported agent side by side, or in that agent's own manifest inside the skill folder, such as
+  `agents/openai.yaml`. Such a manifest holds only that agent's display and invocation defaults.
+  It never carries procedure, and no other agent reads it.
+
+## Diagrams
+
+- The style guide in `docs/diagramming.md` is binding for every draw.io diagram in this
+  repository, and through it the drawio-cli style guide it links: the committed `.drawio` +
+  `.drawio.png` pair, the palette, the label rules, the routing rules, the shapes, the icon bank
+  and the curated-layout mandate. Copy styled cells from `docs/diagram-palette.drawio` rather
+  than authoring styles by hand, and run `drawio-cli lint` (which applies the vocabulary in
+  `drawio.config.json`) and `drawio-cli check-pair` before finishing. Providers and entities
+  come from the per-package files `docs/diagram-library/<package path>/diagram-library.drawio`,
+  which `yarn diagram-library` generates and renders from the code and
+  `yarn diagram-library:check` gates, so they are never edited by hand.
+
+## NEVER BREAK: `Wallet` is a subset of the DApp connector API.
+
+- The application waits for the browser wallet extensions to support the chain version it runs
+  on and moves to them the moment they do. The `Wallet` interface
+  (`src/lib/midnight/wallet/wallet.ts`) is therefore a subset of `WalletConnectedAPI` in
+  `@midnight-ntwrk/dapp-connector-api` and NOTHING more: a member an extension cannot serve
+  through the connector would be lost in the move, and the seed wallet's reach into the wallet
+  SDK is never a reason to add one.
+- A method on `Wallet` is a method of `WalletConnectedAPI`, declared in `WalletConnectorMethods`
+  with the connector's signature: the same name, the same arguments, the same return shape, hex
+  strings where the connector has hex strings. Never a renamed, narrowed or widened twin.
+- A field on `Wallet` is a value one connector method answers, read once at connection
+  (`addresses`, `publicKeys`), and is listed in `wallet.test.ts` under `PageOwnedMember` with
+  the connector read it comes from. `disconnect()` is the page's own teardown and the one
+  member with no connector read.
+- `wallet.test.ts` fails `yarn typecheck` on any other member and on any drift from the
+  connector's signatures. Never weaken it: adding a connector method means declaring it in
+  `WalletConnectorMethods` and adding its name to the pinned set there, and a member that cannot
+  be named with a connector source does not belong on `Wallet`.
+- What the connector cannot serve lives on `SeedWallet` alone (`registerNightForDust()`,
+  `getUnregisteredNightBalance()`), reached by narrowing with `isSeedWallet()` from a control
+  that renders for the seed wallet only, never as an optional member of `Wallet`. Nothing
+  releases finalised bytes, reads pending balances, or reaches the midnight-js provider slots
+  from the page: those are impossible through the connector, and `RelayerWallet` is the
+  backend's port, not a model for `Wallet`.

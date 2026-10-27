@@ -1,0 +1,195 @@
+import { bytesToHex } from '@sig-net/midnight'
+import {
+  Action,
+  type AttestationRecord,
+  type VaultGasEnvelope,
+  type VaultGasKind,
+  type VaultLedgerState,
+} from '@sig-net/midnight-examples-erc20-vault-contract'
+
+import type { VaultAction } from '@/lib/midnight/ethereum-erc20-vault/vault-action'
+
+/** The vault contract's public state, read from the indexer. One read is one network round trip. */
+export interface VaultLedger
+  extends RequestLedger, AllowedTokenLedger, VaultGasLedger, SpenderLedger {
+  state(): Promise<VaultLedgerState>
+}
+
+/** The part of the ledger the approval service reads, so a unit test builds that and nothing else. */
+export interface SpenderLedger {
+  state(): Promise<SpenderLedgerState>
+}
+
+/** The pinned spenders and the tokens they may be granted: the router on any allowed token, the wrapper on its underlying. */
+export type SpenderLedgerState = Pick<
+  VaultLedgerState,
+  'initialised' | 'allowedTokens' | 'uniswapRouter' | 'stataUnderlying' | 'stataToken'
+>
+
+/** The part of the ledger a request resolver reads, so a unit test builds that and nothing else. */
+export interface RequestLedger {
+  state(): Promise<RequestLedgerState>
+}
+
+/** The part of the ledger the supported token service reads, so a unit test builds that and nothing else. */
+export interface AllowedTokenLedger {
+  state(): Promise<AllowedTokenLedgerState>
+}
+
+/** The deployer-grown set of ERC20 addresses the vault admits, as 20-byte values. */
+export type AllowedTokenLedgerState = Pick<VaultLedgerState, 'allowedTokens'>
+
+/** The part of the ledger the readiness service reads, so a unit test builds that and nothing else. */
+export interface VaultGasLedger {
+  state(): Promise<VaultGasLedgerState>
+}
+
+/** The gas envelope fields the deployer sets, which every vault-signed start circuit copies. */
+export type VaultGasLedgerState = Pick<
+  VaultLedgerState,
+  'initialised' | 'vaultGasLimits' | 'vaultMaxFeePerGas' | 'vaultMaxPriorityFeePerGas'
+>
+
+/** Every kind the vault account signs, as the SDK's `VaultGasKind` lists them. */
+export const VAULT_GAS_KINDS = [
+  'withdraw',
+  'approve',
+  'swap',
+  'supply',
+  'redeem',
+] as const satisfies readonly VaultGasKind[]
+
+/**
+ * The SDK's `vaultGasEnvelope` over the narrowed view. Delete this copy once the SDK's
+ * signature accepts the narrowed view.
+ */
+export function vaultGasEnvelope(state: VaultGasLedgerState, kind: VaultGasKind): VaultGasEnvelope {
+  return {
+    gasLimit: state.vaultGasLimits[kind],
+    maxFeePerGas: state.vaultMaxFeePerGas,
+    maxPriorityFeePerGas: state.vaultMaxPriorityFeePerGas,
+  }
+}
+
+/** Refuses a ledger whose deployer has not run `initialise`, since every field it pins reads as zero until then. */
+export function assertVaultInitialised(state: Pick<VaultLedgerState, 'initialised'>): void {
+  if (!state.initialised) {
+    throw new Error('The vault is not initialised: its deployer has not run initialise.')
+  }
+}
+
+/** The request maps and the response key the attestation posts are verified against. */
+export type RequestLedgerState = RequestLedgerView & Pick<VaultLedgerState, 'mpcResponseKey'>
+
+/**
+ * Where the ledger holds a request, from queued at start to settled at complete. Every chain
+ * step a resolver takes is read back from here, never inferred from its own transaction.
+ */
+export type RequestStage =
+  | { readonly stage: 'queued' }
+  | { readonly stage: 'flushed'; readonly outIndex: Uint8Array; readonly lastSeen: bigint }
+  | {
+      readonly stage: 'sent'
+      readonly outIndex: Uint8Array
+      readonly lastSeen: bigint
+      readonly requestId: Uint8Array
+    }
+  | {
+      readonly stage: 'attestationQueued'
+      readonly outIndex: Uint8Array
+      readonly lastSeen: bigint
+      readonly requestId: Uint8Array
+    }
+  | {
+      readonly stage: 'attestationFlushed'
+      readonly outIndex: Uint8Array
+      readonly lastSeen: bigint
+      readonly requestId: Uint8Array
+      readonly record: AttestationRecord
+    }
+  | { readonly stage: 'settled' }
+
+/** The maps `requestStage` reads, so a unit test builds those eleven and nothing else. */
+export type RequestLedgerView = Pick<
+  VaultLedgerState,
+  | 'inputRequestBuffer'
+  | 'outputRequestBuffer'
+  | 'inputAttestationBuffer'
+  | 'outputAttestationBuffer'
+  | 'evictionMap'
+  | 'depositArgsMap'
+  | 'withdrawArgsMap'
+  | 'swapArgsMap'
+  | 'supplyArgsMap'
+  | 'redeemArgsMap'
+  | 'approveArgsMap'
+>
+
+/**
+ * The stage of the `action` request queued under `inIndex`. The request id is known to the
+ * ledger only through `evictionMap`, which the send writes, so the caller passes the id it has
+ * recorded and the scan finds it before that.
+ */
+export function requestStage(
+  state: RequestLedgerView,
+  action: VaultAction,
+  inIndex: bigint,
+  known: { readonly requestId: Uint8Array | null },
+): RequestStage {
+  if (state.inputRequestBuffer.member(inIndex)) return { stage: 'queued' }
+  if (!ARGS_MAP_BY_ACTION[action](state).member(inIndex)) return { stage: 'settled' }
+  const outIndex = flushedRequestIndex(state, action, inIndex)
+  const { lastSeen } = state.outputRequestBuffer.lookup(outIndex)
+  const requestId = known.requestId ?? requestIdSentFrom(state, outIndex)
+  if (requestId === undefined) return { stage: 'flushed', outIndex, lastSeen }
+  if (state.outputAttestationBuffer.member(requestId)) {
+    return {
+      stage: 'attestationFlushed',
+      outIndex,
+      lastSeen,
+      requestId,
+      record: state.outputAttestationBuffer.lookup(requestId),
+    }
+  }
+  if (state.inputAttestationBuffer.member(requestId)) {
+    return { stage: 'attestationQueued', outIndex, lastSeen, requestId }
+  }
+  if (!state.evictionMap.member(requestId)) return { stage: 'flushed', outIndex, lastSeen }
+  return { stage: 'sent', outIndex, lastSeen, requestId }
+}
+
+/** The args map the action's start circuit writes and its complete circuit removes. */
+const ARGS_MAP_BY_ACTION: Record<
+  VaultAction,
+  (state: RequestLedgerView) => { member(key: bigint): boolean }
+> = {
+  deposit: (state) => state.depositArgsMap,
+  withdraw: (state) => state.withdrawArgsMap,
+  swap: (state) => state.swapArgsMap,
+  supply: (state) => state.supplyArgsMap,
+  redeem: (state) => state.redeemArgsMap,
+  approve: (state) => state.approveArgsMap,
+}
+
+/**
+ * The SDK's `flushedRequestIndex` over the narrowed view. Delete this copy once the SDK's
+ * signature accepts the narrowed view.
+ */
+function flushedRequestIndex(
+  state: RequestLedgerView,
+  action: VaultAction,
+  inIndex: bigint,
+): Uint8Array {
+  for (const [index, { entry }] of state.outputRequestBuffer) {
+    if (entry.action === Action[action] && entry.inIndex === inIndex) return index
+  }
+  throw new Error(`No open ${action} request carries input index ${inIndex.toString()}`)
+}
+
+function requestIdSentFrom(state: RequestLedgerView, outIndex: Uint8Array): Uint8Array | undefined {
+  const wanted = bytesToHex(outIndex)
+  for (const [requestId, index] of state.evictionMap) {
+    if (bytesToHex(index) === wanted) return requestId
+  }
+  return undefined
+}
