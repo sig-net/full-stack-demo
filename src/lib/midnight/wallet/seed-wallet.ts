@@ -14,6 +14,7 @@ import {
   finalizeUnboundTransaction,
   initialiseWalletFacade,
   SYNC_BATCH_SIZES,
+  totalDust,
   type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
 import type { Wallet, WalletAddresses, WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
@@ -266,11 +267,11 @@ export class SeedWallet implements Wallet {
   getUnshieldedBalances(): Promise<Record<string, bigint>> {
     return this.readState((state) => state.unshielded.balances)
   }
-  /** The cap is what every DUST coin the wallet holds can grow to, in SPECK. */
+  /** The balance counts the coins the caller's own transaction in flight spends, and the cap is what every DUST coin the wallet holds can grow to, both in SPECK. */
   getDustBalance(): Promise<{ cap: bigint; balance: bigint }> {
     return this.readState((state) => ({
       cap: state.dust.totalCoins.reduce((sum, coin) => sum + coin.maxCap, 0n),
-      balance: state.dust.balance(new Date()),
+      balance: totalDust(state.dust, new Date()),
     }))
   }
   /** Available NIGHT not registered for DUST generation, in STAR. */

@@ -10,6 +10,7 @@ import {
   createWalletAndMidnightProvider,
   deriveAccountKeys,
   finalizeUnboundTransaction,
+  totalDust,
   type WalletFacade,
 } from '@/lib/midnight/wallet/seed-wallet-facade'
 import type { WalletPublicKeys } from '@/lib/midnight/wallet/wallet'
@@ -73,8 +74,8 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
             : `The relayer wallet is still synchronising: shielded ${formatSyncPosition(progress.shielded)}, unshielded ${formatSyncPosition(progress.unshielded)}, DUST ${formatSyncPosition(progress.dust)}.`,
       )
     }
-    const state = await this.synced.facade.waitForSyncedState()
-    return state.dust.balance(new Date())
+    // The relayer holds one coin, which every flush, send and attestation spends in turn.
+    return totalDust((await this.synced.facade.waitForSyncedState()).dust, new Date())
   }
 
   async finalize(unboundTx: string): Promise<string> {

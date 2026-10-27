@@ -31,8 +31,8 @@ const VaultReadinessContext = createContext<VaultReadinessContextValue | null>(n
 /**
  * Owns the readiness reads: the caller's DUST from the connected wallet, which only the browser
  * can read, and the backend's checks for the connected wallet's caller and the vault secret's
- * deposit account. Each read runs once its
- * input exists and again only on `recheck`, since every read costs a chain or wallet round trip.
+ * deposit account. Each read runs once its input exists, again every
+ * `READINESS_REFETCH_INTERVAL_MS` while the page is shown, and at once on `recheck`.
  */
 export function VaultReadinessProvider({ children }: { children: ReactNode }): ReactNode {
   const { midnightNetwork } = useConfig()
@@ -50,9 +50,7 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
             if (!result.ok) throw new Error(result.error)
             return result.initialisation
           },
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchInterval: READINESS_REFETCH_INTERVAL_MS,
     retry: false,
   })
   const callerDust = useQuery({
@@ -65,9 +63,7 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
               available: (await wallet.getDustBalance()).balance,
               required: CALLER_DUST_MINIMUM,
             })),
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchInterval: READINESS_REFETCH_INTERVAL_MS,
     retry: false,
   })
   const backend = useQuery({
@@ -85,9 +81,7 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
             if (!result.ok) throw new Error(result.error)
             return result.readiness
           },
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchInterval: READINESS_REFETCH_INTERVAL_MS,
     retry: false,
   })
   const backendReason =
@@ -149,6 +143,9 @@ export function VaultReadinessProvider({ children }: { children: ReactNode }): R
 }
 
 const NOT_CHECKED = 'Not checked yet.'
+
+/** The sweep's cadence: a balance a sweep's transactions changed is read within one more period. */
+const READINESS_REFETCH_INTERVAL_MS = 30_000
 
 /** React Query reports a query that never ran as updated at zero. */
 function latestReadAt(...updatedAt: number[]): number | null {

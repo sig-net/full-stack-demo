@@ -7,11 +7,16 @@ export interface LocalStorageSlot {
   readonly read: () => string | null
   readonly write: (value: string) => void
   readonly clear: () => void
-  /** Notifies the listener when another tab changes the key or clears the store. */
+  /** Notifies the listener when this page writes or clears the key, when another tab changes it, or when another tab clears the store. */
   readonly subscribe: (listener: () => void) => () => void
 }
 
 export function localStorageSlot(key: string): LocalStorageSlot {
+  // The `storage` event fires in every other tab, never the writing one, so this page's own writes notify here.
+  const listeners = new Set<() => void>()
+  const notify = (): void => {
+    for (const listener of listeners) listener()
+  }
   return {
     read: () => {
       try {
@@ -26,6 +31,7 @@ export function localStorageSlot(key: string): LocalStorageSlot {
       } catch {
         // Storage unavailable: the value lives for the page only.
       }
+      notify()
     },
     clear: () => {
       try {
@@ -33,13 +39,16 @@ export function localStorageSlot(key: string): LocalStorageSlot {
       } catch {
         // Nothing was stored where storage is unavailable.
       }
+      notify()
     },
     subscribe: (listener) => {
+      listeners.add(listener)
       const onStorage = (event: StorageEvent): void => {
         if (event.key === null || event.key === key) listener()
       }
       window.addEventListener('storage', onStorage)
       return () => {
+        listeners.delete(listener)
         window.removeEventListener('storage', onStorage)
       }
     },

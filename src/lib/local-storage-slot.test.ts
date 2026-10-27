@@ -117,4 +117,29 @@ describe('localStorageSlot', () => {
     unsubscribe()
     expect(listeners.size).toBe(0)
   })
+
+  test.each([
+    {
+      name: 'its own write',
+      act: (slot: ReturnType<typeof localStorageSlot>) => slot.write('abc'),
+    },
+    { name: 'its own clear', act: (slot: ReturnType<typeof localStorageSlot>) => slot.clear() },
+  ])(
+    'notifies the subscriber of $name in the same page, and not after unsubscribing',
+    ({ act }) => {
+      storage(true, { secret: 'old' })
+      vi.stubGlobal('window', {
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      })
+      const slot = localStorageSlot('secret')
+      const calls: number[] = []
+      const unsubscribe = slot.subscribe(() => calls.push(1))
+      act(slot)
+      expect(calls.length).toBe(1)
+      unsubscribe()
+      act(slot)
+      expect(calls.length).toBe(1)
+    },
+  )
 })

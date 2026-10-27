@@ -6,7 +6,7 @@ import type { Wallet } from '@/lib/midnight/wallet/wallet'
 export interface NativeBalances {
   /** Unshielded NIGHT, in STAR. */
   readonly night: bigint
-  /** Spendable DUST now, in SPECK. */
+  /** DUST now, in SPECK. */
   readonly dust: bigint
 }
 

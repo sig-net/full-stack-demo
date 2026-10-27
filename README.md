@@ -1812,7 +1812,7 @@ wallet components read its types and the connection status label.
   Under the addresses of a connected wallet, past a rule, the panel lists the wallet's NIGHT and
   DUST (`useNativeBalances()` in `src/components/use-native-balances.ts` over
   `readNativeBalances()` in `src/lib/midnight/wallet/native-balances.ts`: the unshielded balance
-  under the ledger's native token type and the spendable DUST now), read every ten seconds. The
+  under the ledger's native token type and the DUST now), read every ten seconds. The
   NIGHT line carries two controls. On the local stack a wand (`LocalNightFaucetButton`,
   `src/components/local-night-faucet-button.tsx`) sends the wallet NIGHT from the
   [local NIGHT faucet](#vault-readiness). For the seed wallet, the one wallet that registers
@@ -2062,17 +2062,22 @@ per-transaction overhead and are the values to recalibrate once a fee log says o
 
 `ReadinessService.getVaultReadiness(caller, {})` (`readiness-service.ts`, implemented in
 `readiness-service-impl.ts`) reads the three checks the backend can see: the relayer's DUST
-through `RelayerWallet.dustBalance()`, and both ETH balances through the `EthereumAccountReader`
+through `RelayerWallet.dustBalance()` and both ETH balances through the `EthereumAccountReader`
 port (`src/lib/ethereum/account-reader.ts`, ethers in `account-reader-ethers-impl.ts`). The
 `getVaultReadiness` action in `src/server/actions/readiness-actions.ts` hands them to the
 browser. The caller's own DUST is read in the browser from the connected wallet, the only place
-it exists.
+it exists. Both DUST reads count the coins a transaction in flight spends (`totalDust()` in
+`src/lib/midnight/wallet/seed-wallet-facade.ts`, behind `RelayerWallet.dustBalance()` and the
+seed wallet's `getDustBalance()`): each wallet holds one coin, and a spend takes it out of the
+spendable set until its change lands, so the spendable balance reads 0 during every flush, send
+and attestation of the relayer and every one of the caller's own two transactions.
 
 `VaultReadinessProvider` (`src/components/contexts/VaultReadinessContext.tsx`) owns both reads
 through React Query and exposes `checks`, `checking` and `recheck()`. Each read runs once its
-input exists (a connected wallet, a set vault secret) and again only on `recheck()`, since
-every read is a chain or wallet round trip, and a check whose read cannot run yet is unavailable
-with the reason. `ReadinessChecklist` and `ReadinessRecheckButton` (`src/components/`) render the
+input exists (a connected wallet, a set vault secret), again every 30 seconds while the page is
+shown (the sweep's cadence, so a balance a sweep's transactions changed is read within one more
+period) and at once on `recheck()`, and a check whose read cannot run yet is unavailable with
+the reason. `ReadinessChecklist` and `ReadinessRecheckButton` (`src/components/`) render the
 lines and the control. The deposit dialog rechecks as it opens, reports "Ready to deposit" or
 "Not ready to deposit" with the failing lines under it, and keeps each fund's deposit control
 disabled while a check fails. The Settings popover shows every check as the vault's health.

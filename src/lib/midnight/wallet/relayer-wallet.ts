@@ -17,9 +17,9 @@ export interface RelayerWallet {
   /** The bech32m address NIGHT is sent to, which generates the wallet's DUST once registered. Known without a start. */
   unshieldedAddress(): string
   /**
-   * Spendable DUST in SPECK, read from the synced state. Refuses at once until the first sync
-   * completes, with the last start's failure when there was one, and starts the wallet when
-   * nothing is starting it.
+   * The wallet's DUST in SPECK, read from the synced state, the coins a transaction in flight
+   * spends included. Refuses at once until the first sync completes, with the last start's
+   * failure when there was one, and starts the wallet when nothing is starting it.
    */
   dustBalance(): Promise<bigint>
   /**
