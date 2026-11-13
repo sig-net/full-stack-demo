@@ -10,6 +10,7 @@ import type {
   UtxoWithMeta,
   WalletFacade,
 } from '@midnightntwrk/wallet-sdk-facade'
+import type { WalletSeeds } from '@midnightntwrk/wallet-sdk-hd'
 import type {
   UnshieldedKeystore,
   UnshieldedWalletState,
@@ -148,6 +149,7 @@ const signDataAsync: UnshieldedKeystore['signDataAsync'] = () =>
   Promise.resolve({ tag: 'schnorr', value: 'signed' })
 
 const keys: AccountKeys = {
+  seeds: mock<WalletSeeds>('WalletSeeds'),
   shieldedSecretKeys: mock<ZswapSecretKeys>('ZswapSecretKeys'),
   dustSecretKey: mock<DustSecretKey>('DustSecretKey'),
   unshieldedKeystore: mock<UnshieldedKeystore>('UnshieldedKeystore', {

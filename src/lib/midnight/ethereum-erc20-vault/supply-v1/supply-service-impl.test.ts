@@ -24,7 +24,7 @@ import {
 } from '@/lib/midnight/ethereum-erc20-vault/supply-v1/supply-state-controller'
 import { vaultAccountOf } from '@/lib/midnight/ethereum-erc20-vault/vault-account'
 import type { SpenderLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
-import { ledgerSet } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
+import { allowedTokenMap } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
 import type { VaultRequest } from '@/lib/midnight/ethereum-erc20-vault/vault-request-v1/vault-request'
 import {
   REQUEST_ID_HEX,
@@ -36,7 +36,8 @@ import { UINT64_MAX, UUID } from '@/lib/value-schemas'
 
 /** A throwaway MPC root key: the derivation needs a point on the curve, not the stack's key. */
 const SIGNET: MidnightSignetConfig = {
-  contractAddress: '11'.repeat(32),
+  signerContractAddress: '11'.repeat(32),
+  responderContractAddress: '55'.repeat(32),
   mpcRootPublicKey: SigningKey.computePublicKey(`0x${'22'.repeat(32)}`, false),
 }
 const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(32) }
@@ -95,7 +96,7 @@ function serviceOver(options: {
         recorded.steps.push('ledger')
         return {
           initialised: options.initialised ?? true,
-          allowedTokens: ledgerSet([]),
+          allowedTokens: allowedTokenMap([]),
           uniswapRouter: new Uint8Array(20),
           stataUnderlying: hexToBytes(UNDERLYING_ERC20_ADDRESS.slice(2)),
           stataToken: hexToBytes(STATA_ERC20_ADDRESS.slice(2)),

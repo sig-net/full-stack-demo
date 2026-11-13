@@ -1,14 +1,16 @@
-import type {
-  MidnightProvider,
-  UnboundTransaction,
-  WalletProvider,
+import {
+  createLedger9MidnightProvider,
+  createLedger9WalletProvider,
+  LedgerTransaction,
+  type MidnightProvider,
+  type WalletProvider,
 } from '@midnight-ntwrk/midnight-js/types'
 import * as ledger from '@midnightntwrk/ledger-v9'
 import type { FacadeState } from '@midnightntwrk/wallet-sdk-facade'
 import { bytesToHex, hexToBytes as sigNetHexToBytes } from '@sig-net/midnight'
 import {
+  type FinalizedTx,
   InMemoryTransactionHistoryStorage,
-  SerializedTransaction,
 } from '@midnightntwrk/wallet-sdk-abstractions'
 import { type DefaultDustConfiguration, DustWallet } from '@midnightntwrk/wallet-sdk-dust-wallet'
 import type { SyncService } from '@midnightntwrk/wallet-sdk-dust-wallet/v1'
@@ -17,10 +19,10 @@ import {
   WalletEntrySchema,
   WalletFacade,
 } from '@midnightntwrk/wallet-sdk-facade'
-import { HDWallet, Roles } from '@midnightntwrk/wallet-sdk-hd'
+import { WalletSeeds } from '@midnightntwrk/wallet-sdk-hd'
 import {
-  makeConfig,
   NodeClient,
+  NodeClientError,
   PolkadotNodeClient,
   type SubmissionEvent,
 } from '@midnightntwrk/wallet-sdk-node-client/effect'
@@ -31,8 +33,7 @@ import {
   type UnshieldedKeystore,
   UnshieldedWallet,
 } from '@midnightntwrk/wallet-sdk-unshielded-wallet'
-import { ApiPromise, WsProvider } from '@polkadot/api'
-import { Cause, Effect, Runtime } from 'effect'
+import { Cause, Duration, Effect, Exit } from 'effect'
 
 import type { MidnightNetworkConfig, MidnightNetworkId } from '@/lib/config/midnight-network-config'
 import {
@@ -44,6 +45,8 @@ export type { WalletFacade } from '@midnightntwrk/wallet-sdk-facade'
 
 /** The live key material for one account, reused for signing and balancing. */
 export interface AccountKeys {
+  /** The per-wallet seeds the facade starts from, as sensitive as the secret keys derived from them. */
+  readonly seeds: WalletSeeds
   readonly shieldedSecretKeys: ledger.ZswapSecretKeys
   readonly dustSecretKey: ledger.DustSecretKey
   readonly unshieldedKeystore: UnshieldedKeystore
@@ -56,13 +59,13 @@ const COST_PARAMETERS = {
   feeBlocksMargin: 5,
 }
 
-const NODE_CONNECT_TIMEOUT_MS = 120_000
+const NODE_CONNECT_TIMEOUT = Duration.minutes(2)
 
 /**
  * Indexer events a shielded or DUST wallet applies per batch, by the runtime that syncs it. A batch
- * runs without yielding, so the browser's size bounds how long the page stalls: a full Stagenet
- * sync in the page took 96 s with stalls up to about 200 ms at 100, against 232 s with stalls up to
- * about 70 ms at the SDK's default of 10.
+ * runs without yielding, so the browser's size bounds how long the page stalls: a full sync of a
+ * public test network in the page measured 96 s with stalls up to about 200 ms at 100, against
+ * 232 s with stalls up to about 70 ms at the SDK's default of 10.
  */
 export const SYNC_BATCH_SIZES = { browser: 100, server: 1000 } as const
 
@@ -75,31 +78,20 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 /**
- * Derives the account-zero keys retained by one wallet session and clears the HD derivation state.
+ * Derives the account-zero seeds and keys retained by one wallet session.
  *
  * @param seed - Hex seed supplied through the transient connection form.
  * @param networkId - Network encoding for the unshielded keystore.
- * @returns Keys for shielded balances, dust and unshielded signing.
+ * @returns Seeds for starting the facade, and keys for shielded balances, dust and unshielded signing.
  * @throws {Error} If seed parsing or role derivation fails.
  */
 export function deriveAccountKeys(seed: string, networkId: MidnightNetworkId): AccountKeys {
-  const hd = HDWallet.fromSeed(hexToBytes(seed))
-  if (hd.type !== 'seedOk') throw new Error('HDWallet.fromSeed failed (seedError).')
-
-  const derived = hd.hdWallet
-    .selectAccount(0)
-    .selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust])
-    .deriveKeysAt(0)
-  if (derived.type !== 'keysDerived') throw new Error('deriveKeysAt failed (keyOutOfBounds).')
-  hd.hdWallet.clear()
-
+  const seeds = WalletSeeds.fromMasterSeed(hexToBytes(seed))
   return {
-    shieldedSecretKeys: ledger.ZswapSecretKeys.fromSeed(derived.keys[Roles.Zswap]),
-    dustSecretKey: ledger.DustSecretKey.fromSeed(derived.keys[Roles.Dust]),
-    unshieldedKeystore: createKeystore(
-      { kind: 'schnorr', secret: derived.keys[Roles.NightExternal] },
-      networkId,
-    ),
+    seeds,
+    shieldedSecretKeys: ledger.ZswapSecretKeys.fromSeed(seeds.shielded),
+    dustSecretKey: ledger.DustSecretKey.fromSeed(seeds.dust),
+    unshieldedKeystore: createKeystore({ kind: 'schnorr', secret: seeds.unshielded }, networkId),
   }
 }
 
@@ -132,77 +124,64 @@ export function initialiseWalletFacade(
         mergeWalletEntries,
       ),
     },
-    // The SDK's node client disconnects after reading metadata and races its first submission, so
-    // each submission owns one connection for its whole lifetime.
+    // Each submission owns one connection, bounded by NODE_CONNECT_TIMEOUT and closed with the
+    // wallet, and rejects with the node client's own error, the node's reason in its cause chain.
     submissionService: (cfg) => {
       let closed = false
       let closing: Promise<void> | undefined
-      const pending = new Map<AbortController, () => Promise<void>>()
+      const pending = new Map<AbortController, Promise<unknown>>()
       function submitTransaction(
-        transaction: ledger.FinalizedTransaction,
+        transaction: FinalizedTx,
         waitForStatus: SubmissionEvent.Cases.Submitted['_tag'],
       ): Promise<SubmissionEvent.Cases.Submitted>
       function submitTransaction(
-        transaction: ledger.FinalizedTransaction,
+        transaction: FinalizedTx,
         waitForStatus: SubmissionEvent.Cases.InBlock['_tag'],
       ): Promise<SubmissionEvent.Cases.InBlock>
       function submitTransaction(
-        transaction: ledger.FinalizedTransaction,
+        transaction: FinalizedTx,
         waitForStatus: SubmissionEvent.Cases.Finalized['_tag'],
       ): Promise<SubmissionEvent.Cases.Finalized>
+      function submitTransaction(transaction: FinalizedTx): Promise<SubmissionEvent.Cases.InBlock>
       function submitTransaction(
-        transaction: ledger.FinalizedTransaction,
-      ): Promise<SubmissionEvent.Cases.InBlock>
-      function submitTransaction(
-        transaction: ledger.FinalizedTransaction,
+        transaction: FinalizedTx,
         waitForStatus?: SubmissionEvent.SubmissionEvent['_tag'],
       ): Promise<SubmissionEvent.SubmissionEvent>
       async function submitTransaction(
-        transaction: ledger.FinalizedTransaction,
+        transaction: FinalizedTx,
         waitForStatus: SubmissionEvent.SubmissionEvent['_tag'] = 'InBlock',
       ): Promise<SubmissionEvent.SubmissionEvent> {
-        if (closed) throw new Error('Wallet disconnected.')
+        if (closed) throw new Error(DISCONNECTED)
         const abort = new AbortController()
-        const provider = new WsProvider(cfg.relayURL.toString(), false)
-        const api = new ApiPromise({ provider, noInitWarn: true, throwOnConnect: true })
-        let disconnecting: Promise<void> | undefined
-        const disconnect = (): Promise<void> => (disconnecting ??= api.disconnect())
-        pending.set(abort, disconnect)
-        const timer = setTimeout(() => {
-          abort.abort()
-        }, NODE_CONNECT_TIMEOUT_MS)
+        const submission = Effect.runPromiseExit(
+          Effect.scoped(
+            Effect.flatMap(
+              PolkadotNodeClient.make({
+                nodeURL: cfg.relayURL,
+                reconnectionTimeout: NODE_CONNECT_TIMEOUT,
+              }),
+              (client) =>
+                Effect.provideService(
+                  NodeClient.sendMidnightTransactionAndWait(transaction.serialize(), waitForStatus),
+                  NodeClient.NodeClient,
+                  client,
+                ),
+            ),
+          ),
+          { signal: abort.signal },
+        )
+        pending.set(abort, submission)
         try {
-          await Effect.runPromise(
-            Effect.tryPromise(async () => {
-              await provider.connect()
-              await api.isReadyOrError
-            }),
-            { signal: abort.signal },
-          )
-          clearTimeout(timer)
-          if (closed) throw new Error('Wallet disconnected.')
-          const client = new PolkadotNodeClient(makeConfig({ nodeURL: cfg.relayURL }), api)
-          const submission = NodeClient.sendMidnightTransactionAndWait(
-            SerializedTransaction.from(transaction),
-            waitForStatus,
-          )
-          return await Effect.runPromise(
-            Effect.provideService(submission, NodeClient.NodeClient, client),
-            { signal: abort.signal },
-          )
-        } catch (error) {
-          if (abort.signal.aborted) {
-            throw new Error(
-              closed
-                ? 'Wallet disconnected.'
-                : 'Midnight node connection timed out. Check the node endpoint and retry.',
-              { cause: error },
-            )
+          const exit = await submission
+          if (Exit.isSuccess(exit)) return exit.value
+          const failure = Cause.squash(exit.cause)
+          if (closed) throw new Error(DISCONNECTED, { cause: failure })
+          if (failure instanceof NodeClientError.ConnectionError) {
+            const message = 'Could not reach the Midnight node. Check the node endpoint and retry.'
+            throw new Error(message, { cause: failure })
           }
-          throw unwrapFiberFailure(error)
+          throw failure
         } finally {
-          clearTimeout(timer)
-          await disconnect()
           pending.delete(abort)
         }
       }
@@ -211,9 +190,9 @@ export function initialiseWalletFacade(
         close: () => {
           closed = true
           closing ??= Promise.all(
-            [...pending].map(async ([abort, disconnect]) => {
+            [...pending].map(([abort, submission]) => {
               abort.abort()
-              await disconnect()
+              return submission
             }),
           ).then(() => undefined)
           return closing
@@ -221,8 +200,8 @@ export function initialiseWalletFacade(
       }
     },
     shielded: (cfg) =>
-      ShieldedWallet({ ...cfg, batchUpdates: { size: syncBatchSize } }).startWithSecretKeys(
-        keys.shieldedSecretKeys,
+      ShieldedWallet({ ...cfg, batchUpdates: { size: syncBatchSize } }).startWithSeed(
+        keys.seeds.shielded,
       ),
     unshielded: (cfg) =>
       UnshieldedWallet(cfg).startWithPublicKey(
@@ -234,13 +213,15 @@ export function initialiseWalletFacade(
         ...cfg,
         batchUpdates: { size: syncBatchSize },
       }
-      return DustWallet(dustConfiguration).startWithSecretKey(
-        keys.dustSecretKey,
+      return DustWallet(dustConfiguration).startWithSeed(
+        keys.seeds.dust,
         ledger.LedgerParameters.initialParameters().dust,
       )
     },
   })
 }
+
+const DISCONNECTED = 'Wallet disconnected.'
 
 /** Starts a facade over the keys and resolves once it has synced with the chain, which can take minutes on a long chain. */
 export async function startSyncedSeedFacade(
@@ -250,7 +231,7 @@ export async function startSyncedSeedFacade(
   onProgress: (progress: WalletSyncProgress) => void = () => undefined,
 ): Promise<WalletFacade> {
   const facade = await initialiseWalletFacade(keys, config, syncBatchSize)
-  await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey)
+  await facade.start(keys.seeds)
   const subscription = facade.state().subscribe((state) => {
     onProgress(walletSyncProgress(state))
   })
@@ -262,41 +243,43 @@ export async function startSyncedSeedFacade(
   return facade
 }
 
-/**
- * The failure an Effect fibre failure wraps, whose own cause chain carries the node's reason
- * for a rejection, or the error itself when it is not a fibre failure.
- */
-function unwrapFiberFailure(error: unknown): unknown {
-  return Runtime.isFiberFailure(error) ? Cause.squash(error[Runtime.FiberFailureCauseId]) : error
-}
-
 // Balancing recipes expire 30 minutes out.
 const BALANCE_TTL_MS = 30 * 60 * 1000
 
 /**
  * Balances with a bounded recipe lifetime and signs with the same account used for submission.
+ * Transactions cross between midnight-js and the facade as bytes, since each seals them in its own
+ * handle type.
  *
  * @param facade - Started wallet facade owned by the calling session.
- * @param keys - Signing and balancing keys paired with that facade.
+ * @param keys - Signing keys paired with that facade.
  * @returns SDK transaction capabilities for provider composition.
  */
 export function createWalletAndMidnightProvider(
   facade: WalletFacade,
   keys: AccountKeys,
 ): WalletProvider & MidnightProvider {
-  return {
+  const walletProvider = createLedger9WalletProvider({
     getCoinPublicKey: () => keys.shieldedSecretKeys.coinPublicKey,
     getEncryptionPublicKey: () => keys.shieldedSecretKeys.encryptionPublicKey,
-    async balanceTx(tx: UnboundTransaction, ttl?: Date): ReturnType<WalletProvider['balanceTx']> {
+    async balanceTx(tx, ttl) {
       const recipe = await facade.balanceUnboundTransaction(
-        tx,
-        { shieldedSecretKeys: keys.shieldedSecretKeys, dustSecretKey: keys.dustSecretKey },
+        facade.adoptTransaction(tx.serialize(), 'Unbound'),
         { ttl: ttl ?? new Date(Date.now() + BALANCE_TTL_MS) },
       )
       const signed = await facade.signRecipe(recipe, keys.unshieldedKeystore.signDataAsync)
       return await facade.finalizeRecipe(signed)
     },
-    submitTx: (tx) => facade.submitTransaction(tx),
+  })
+  const midnightProvider = createLedger9MidnightProvider((tx) =>
+    facade.submitTransaction(facade.adoptTransaction(tx.serialize(), 'Finalized')),
+  )
+  return {
+    supportedEras: walletProvider.supportedEras,
+    getCoinPublicKey: () => walletProvider.getCoinPublicKey(),
+    getEncryptionPublicKey: () => walletProvider.getEncryptionPublicKey(),
+    balanceTx: (tx, ttl) => walletProvider.balanceTx(tx, ttl),
+    submitTx: (tx) => midnightProvider.submitTx(tx),
   }
 }
 
@@ -313,22 +296,24 @@ export async function finalizeUnboundTransaction(
 }
 
 /**
- * The DUST every coin the wallet holds has generated by `now`, in SPECK, the coins a transaction
- * in flight spends included. A spend takes its coin out of the spendable set until the change
- * lands, so a wallet holding one coin reads a spendable balance of 0 for a transaction's whole
- * flight, while this sum holds steady.
+ * The DUST every coin the wallet holds had generated at its latest synced block, in SPECK, the
+ * coins a transaction in flight spends included. A spend takes its coin out of the spendable set
+ * until the change lands, so a wallet holding one coin reads a spendable balance of 0 for a
+ * transaction's whole flight, while this sum holds steady.
  */
-export function totalDust(dust: FacadeState['dust'], now: Date): bigint {
-  return dust.capabilities.coinsAndBalances
-    .getTotalCoins(dust.state, now)
-    .reduce((sum, coin) => sum + coin.generatedNow, 0n)
+export function totalDust(dust: FacadeState['dust']): bigint {
+  return dust.totalCoins.reduce((sum, coin) => sum + coin.generatedNow, 0n)
 }
 
-function unboundTransactionOf(unboundTx: string): UnboundTransaction {
-  return ledger.Transaction.deserialize<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>(
-    'signature',
-    'proof',
-    'pre-binding',
-    sigNetHexToBytes(unboundTx),
+function unboundTransactionOf(unboundTx: string): LedgerTransaction<'Unbound', 'v9'> {
+  return LedgerTransaction.seal(
+    'v9',
+    'Unbound',
+    ledger.Transaction.deserialize<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>(
+      'signature',
+      'proof',
+      'pre-binding',
+      sigNetHexToBytes(unboundTx),
+    ),
   )
 }

@@ -12,7 +12,7 @@ import type { Backend } from '@/server/backend'
 
 import { ensureAaveReserveAcceptsDeposits } from './aave-reserve'
 import { testBackend } from './backend'
-import { deleteOperation, driveOperation, log } from './operation-round-trip'
+import { deleteOperation, driveOperation, log, vaultFeeOf } from './operation-round-trip'
 import { completeApprovalAsUser, startApprovalAsUser } from './user-approval'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
 import { completeSupplyAsUser, startSupplyAsUser } from './user-supply'
@@ -20,7 +20,7 @@ import { completeRedeemAsUser, startRedeemAsUser } from './user-redeem'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 60 * 60_000
-/** Whole underlying deposited and supplied, whose shares are then redeemed. */
+/** Underlying base units supplied, deposited first together with the vault's supply fee, whose shares less the redeem fee are then redeemed. */
 const AMOUNT = 1_500_000n
 
 /**
@@ -41,6 +41,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
   const created: [string, string][] = []
   let pair: Pick<Redeem, 'underlyingErc20Address' | 'stataErc20Address'> | undefined
   let shares: bigint | undefined
+  let redeemFee: bigint | undefined
 
   beforeAll(async () => {
     backend = await testBackend()
@@ -72,6 +73,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
       if (!targeted.ok) throw new Error(targeted.error)
       const { underlyingErc20Address, stataErc20Address } = targeted.target
       await ensureAaveReserveAcceptsDeposits(evm, stataErc20Address)
+      const supplyFee = await vaultFeeOf(backend, user, underlyingErc20Address, 'supply')
       if (targeted.target.allowance === 0n) {
         log('the wrapper holds no allowance on the underlying: approving first')
         const approval = await startApprovalAsUser(backend, vaultSecret, user, { kind: 'stata' })
@@ -90,7 +92,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
 
       const deposit = await startDepositAsUser(backend, vaultSecret, user, {
         erc20Address: underlyingErc20Address,
-        amount: AMOUNT,
+        amount: AMOUNT + supplyFee,
       })
       if (!deposit.ok) throw new Error(deposit.error)
       created.push(['midnight_ethereum_erc20_vault_deposits_v1', deposit.deposit.name])
@@ -100,7 +102,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
       await faucet.fundErc20({
         account: deposit.deposit.depositAccount,
         erc20Address: underlyingErc20Address,
-        amount: AMOUNT,
+        amount: AMOUNT + supplyFee,
       })
       await driveOperation(
         {
@@ -130,8 +132,12 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
       expect(await user.shieldedBalance(sharesCoinType(stataErc20Address))).toBeGreaterThanOrEqual(
         minted,
       )
+      // The shares coin surrendered is the shares plus the redeem fee, so the minted shares fund both.
+      const fee = await vaultFeeOf(backend, user, stataErc20Address, 'redeem')
+      expect(minted).toBeGreaterThan(fee)
       pair = { underlyingErc20Address, stataErc20Address }
-      shares = minted
+      shares = minted - fee
+      redeemFee = fee
     },
     ROUND_TRIP_TIMEOUT_MS,
   )
@@ -139,7 +145,9 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
   test(
     'shares of the Aave wrapper in the vault are redeemed for the underlying',
     async () => {
-      if (pair === undefined || shares === undefined) throw new Error('the supply did not run')
+      if (pair === undefined || shares === undefined || redeemFee === undefined) {
+        throw new Error('the supply did not run')
+      }
       const { underlyingErc20Address, stataErc20Address } = pair
       const { midnight } = backend
       const { redeemV1 } = midnight.ethereumErc20Vault
@@ -179,7 +187,7 @@ describe('ERC20 vault redeem round trip over the local stack', () => {
 
       expect((await redeemV1.repository.get(redeem.redeem.name))?.outcome).toBe('redeemed')
       expect(sharesBefore - (await balanceOf(evm, stataErc20Address, vaultAccount))).toBe(shares)
-      expect(coinsBefore - (await user.shieldedBalance(coinType))).toBe(shares)
+      expect(coinsBefore - (await user.shieldedBalance(coinType))).toBe(shares + redeemFee)
       const assetsPaid =
         (await balanceOf(evm, underlyingErc20Address, vaultAccount)) - underlyingBefore
       expect(assetsPaid).toBeGreaterThan(0n)

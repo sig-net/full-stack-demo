@@ -1,4 +1,4 @@
-import type { ProofProvider } from '@midnight-ntwrk/midnight-js/types'
+import { LedgerTransaction, type ProofProvider } from '@midnight-ntwrk/midnight-js/types'
 import {
   type PreBinding,
   type PreProof,
@@ -18,6 +18,6 @@ export async function proveTransaction(
     'pre-binding',
     hexToBytes(unprovenTx),
   )
-  const unbound = await proofProvider.proveTx(unproven)
+  const unbound = await proofProvider.proveTx(LedgerTransaction.seal('v9', 'Unproven', unproven))
   return bytesToHex(unbound.serialize())
 }

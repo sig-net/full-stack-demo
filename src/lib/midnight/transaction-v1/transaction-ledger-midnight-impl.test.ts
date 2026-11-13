@@ -1,4 +1,4 @@
-import type { ProofProvider, UnboundTransaction } from '@midnight-ntwrk/midnight-js/types'
+import type { ProofProvider, UnboundTx } from '@midnight-ntwrk/midnight-js/types'
 import { type FinalizedTransaction, Transaction } from '@midnightntwrk/ledger-v9'
 import { SerializedTransaction } from '@midnightntwrk/wallet-sdk-abstractions'
 import {
@@ -41,7 +41,7 @@ describe('MidnightTransactionLedgerImpl.prove', () => {
     const ledger = ledgerWith({
       proveTx: async (tx) => {
         received.push(Buffer.from(tx.serialize()).toString('hex'))
-        return mock<UnboundTransaction>('UnboundTransaction', { serialize: () => PROVEN_BYTES })
+        return mock<UnboundTx>('UnboundTx', { serialize: () => PROVEN_BYTES })
       },
     })
     expect(await ledger.prove(hex)).toBe('0102ff')

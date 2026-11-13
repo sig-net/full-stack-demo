@@ -40,15 +40,15 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 RUN set -eu; \
     launcher=compact-v0.5.1; \
-    compiler=0.33.0-rc.2; \
+    compiler=0.36.0; \
     arch="$(uname -m)"; \
     case "$arch" in \
         aarch64) \
             launcher_sha256=bbeb53b34c895aa52e13a6375cbfe90bd670b2e6a72ba23356d383664a9536cf; \
-            compiler_sha256=3aa23812b0b086dbce07da3931a40dcb01bec9676b1ceed7f2d0be370ab2dc46;; \
+            compiler_sha256=87740ca24c7f99fc2200fd398c57ddfaa55eb60f6bdcf971869b0b543a7722ad;; \
         x86_64) \
             launcher_sha256=684c6b3d2eef9484aabba7a0820c166ae5c169f3aecf28cbea2074840263ba66; \
-            compiler_sha256=3055ab92bbc8d5bb0d6282b661b83761d2a0de2ee37e21cf7107e25aaf2a9aad;; \
+            compiler_sha256=7017b6121ebb9d53a562984bca616d143ef84fc7ee18b4da6c3a0a6615cb5e97;; \
         *) echo "No Compact toolchain build for $arch" >&2; exit 1;; \
     esac; \
     triple="${arch}-unknown-linux-musl"; \

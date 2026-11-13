@@ -19,10 +19,6 @@ export async function transferNight(
   amount: bigint,
 ): Promise<string> {
   const receiver = MidnightBech32m.parse(receiverAddress).decode(UnshieldedAddress, networkId)
-  const secretKeys = {
-    shieldedSecretKeys: keys.shieldedSecretKeys,
-    dustSecretKey: keys.dustSecretKey,
-  }
   const ttl = new Date(Date.now() + TRANSFER_TTL_MS)
   let recipe: BalancingRecipe = await facade.transferTransaction(
     [
@@ -31,12 +27,11 @@ export async function transferNight(
         outputs: [{ type: nativeToken().raw, receiverAddress: receiver, amount }],
       },
     ],
-    secretKeys,
     { ttl, payFees: false },
   )
   let finalized: Awaited<ReturnType<WalletFacade['finalizeRecipe']>>
   try {
-    recipe = await facade.balanceUnprovenTransaction(recipe.transaction, secretKeys, {
+    recipe = await facade.balanceUnprovenTransaction(recipe.transaction, {
       ttl,
       tokenKindsToBalance: ['dust'],
     })

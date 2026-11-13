@@ -5,11 +5,13 @@ import {
   vaultTokenInfos,
   vaultTokenType,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
+import { NO_FEES } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
 
 const VAULT_ADDRESS = '0'.repeat(64)
 const SEPOLIA = 11155111
 const LOCAL = 31337
 const MAINNET = 1
+const USDC_FEES = { withdraw: 1_000n, swap: 2_000n, supply: 3_000n, redeem: 4_000n }
 
 /** Pinned from one run of the derivation: a change here is a change to every minted token's identity. */
 const PINNED_TOKEN_TYPES: { erc20Address: string; tokenType: string }[] = [
@@ -64,6 +66,7 @@ describe('vaultTokenInfos', () => {
       decimals: 6,
       icon: { source: 'web3icons', name: 'USDC' },
       supported: false,
+      vaultFees: null,
       pricing: { kind: 'coin', coinId: 'usd-coin' },
     })
   })
@@ -71,8 +74,14 @@ describe('vaultTokenInfos', () => {
   test('the allowlist marks bundled tokens supported and adds the unlisted ones without artwork', () => {
     const unlisted = `0x${'ab'.repeat(20)}`
     const infos = vaultTokenInfos(VAULT_ADDRESS, SEPOLIA, [
-      { erc20Address: CIRCLE_USDC.toLowerCase(), symbol: 'USDC', name: 'USDC', decimals: 6 },
-      { erc20Address: unlisted, symbol: 'NEW', name: 'New Token', decimals: 18 },
+      {
+        erc20Address: CIRCLE_USDC.toLowerCase(),
+        symbol: 'USDC',
+        name: 'USDC',
+        decimals: 6,
+        fees: USDC_FEES,
+      },
+      { erc20Address: unlisted, symbol: 'NEW', name: 'New Token', decimals: 18, fees: NO_FEES },
     ])
     const byAddress = (address: string) =>
       infos.find((info) => info.origin.erc20Address.toLowerCase() === address.toLowerCase())
@@ -80,15 +89,17 @@ describe('vaultTokenInfos', () => {
       symbol: 'USDC',
       name: 'USD Coin',
       supported: true,
+      vaultFees: USDC_FEES,
       pricing: { kind: 'coin', coinId: 'usd-coin' },
     })
-    expect(byAddress(CIRCLE_EURC)).toMatchObject({ supported: false })
+    expect(byAddress(CIRCLE_EURC)).toMatchObject({ supported: false, vaultFees: null })
     expect(byAddress(unlisted)).toMatchObject({
       symbol: 'NEW',
       name: 'New Token',
       decimals: 18,
       icon: { source: 'none' },
       supported: true,
+      vaultFees: NO_FEES,
       pricing: null,
     })
     expect(infos.filter((info) => info.supported)).toHaveLength(2)

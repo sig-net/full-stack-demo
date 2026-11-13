@@ -8,7 +8,7 @@ import type { MidnightNetworkId } from '@/lib/config/midnight-network-config'
 import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
 
-const NETWORK_ID: MidnightNetworkId = MidnightNetwork.Stagenet
+const NETWORK_ID: MidnightNetworkId = MidnightNetwork.Preprod
 const START = new Date('2026-10-23T12:00:00.000Z')
 const SCHNORR_KEY = 'ab'.repeat(32)
 const ECDSA_KEY = `02${'cd'.repeat(32)}`

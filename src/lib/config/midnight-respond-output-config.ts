@@ -24,7 +24,7 @@ export type MidnightRespondOutputConfig =
 export const MPC_OUTPUT_CACHE_URL_DEFAULTS: Readonly<Record<MidnightNetworkId, string>> = {
   /** The local stack's fakenet responder serves its cache on this port and prefix. */
   [MidnightNetwork.Undeployed]: 'http://127.0.0.1:3040/v1/fakenet',
-  [MidnightNetwork.Stagenet]: getMpcOutputCacheUrl(MidnightNetwork.Stagenet),
+  [MidnightNetwork.Preprod]: getMpcOutputCacheUrl(MidnightNetwork.Preprod),
 }
 
 export const midnightRespondOutputEnvSchema = z.object({

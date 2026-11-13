@@ -75,7 +75,7 @@ export class RelayerWalletSeedImpl implements RelayerWallet {
       )
     }
     // The relayer holds one coin, which every flush, send and attestation spends in turn.
-    return totalDust((await this.synced.facade.waitForSyncedState()).dust, new Date())
+    return totalDust((await this.synced.facade.waitForSyncedState()).dust)
   }
 
   async finalize(unboundTx: string): Promise<string> {

@@ -12,14 +12,14 @@ import type { Backend } from '@/server/backend'
 
 import { ensureAaveReserveAcceptsDeposits } from './aave-reserve'
 import { testBackend } from './backend'
-import { deleteOperation, driveOperation, log } from './operation-round-trip'
+import { deleteOperation, driveOperation, log, vaultFeeOf } from './operation-round-trip'
 import { completeApprovalAsUser, startApprovalAsUser } from './user-approval'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
 import { completeSupplyAsUser, startSupplyAsUser } from './user-supply'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 60 * 60_000
-/** Whole underlying deposited and then supplied to the wrapper. */
+/** Underlying base units supplied to the wrapper, deposited first together with the vault's supply fee. */
 const AMOUNT = 1_500_000n
 
 /**
@@ -40,6 +40,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
   const created: [string, string][] = []
   let target: SupplyTarget
   let coinType: string
+  let supplyFee: bigint
   let deposited = false
 
   beforeAll(async () => {
@@ -61,6 +62,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
       pureCircuits.vaultTokenDomainSeparator(evmAddressBytes(target.underlyingErc20Address)),
       backend.config.client.midnightEthereumErc20Vault.contractAddress,
     )
+    supplyFee = await vaultFeeOf(backend, user, target.underlyingErc20Address, 'supply')
   }, ROUND_TRIP_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -94,7 +96,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
 
       const deposit = await startDepositAsUser(backend, vaultSecret, user, {
         erc20Address: underlyingErc20Address,
-        amount: AMOUNT,
+        amount: AMOUNT + supplyFee,
       })
       if (!deposit.ok) throw new Error(deposit.error)
       created.push(['midnight_ethereum_erc20_vault_deposits_v1', deposit.deposit.name])
@@ -104,7 +106,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
       await faucet.fundErc20({
         account: deposit.deposit.depositAccount,
         erc20Address: underlyingErc20Address,
-        amount: AMOUNT,
+        amount: AMOUNT + supplyFee,
       })
       await driveOperation(
         {
@@ -115,7 +117,7 @@ describe('ERC20 vault supply round trip over the local stack', () => {
         ROUND_TRIP_TIMEOUT_MS,
       )
       expect((await depositV1.repository.get(deposit.deposit.name))?.outcome).toBe('minted')
-      expect(await user.shieldedBalance(coinType)).toBeGreaterThanOrEqual(AMOUNT)
+      expect(await user.shieldedBalance(coinType)).toBeGreaterThanOrEqual(AMOUNT + supplyFee)
       deposited = true
     },
     ROUND_TRIP_TIMEOUT_MS,
@@ -169,7 +171,8 @@ describe('ERC20 vault supply round trip over the local stack', () => {
       )
       const sharesMinted = (await balanceOf(evm, stataErc20Address, vaultAccount)) - sharesBefore
       expect(sharesMinted).toBeGreaterThan(0n)
-      expect(coinsBefore - (await user.shieldedBalance(coinType))).toBe(AMOUNT)
+      // The coin surrendered is the amount plus the fee, and only the amount reaches the wrapper.
+      expect(coinsBefore - (await user.shieldedBalance(coinType))).toBe(AMOUNT + supplyFee)
       const [request] = await midnight.ethereumErc20Vault.vaultRequestV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: supply.supply.name }],
       })

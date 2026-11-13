@@ -4,7 +4,7 @@ This document describes how a Midnight transaction travels end to end through th
 application, with the backend carrying as much of the flow as the protocol allows and the
 user's own wallet keeping the keys. It is the design record the backend was built from. The
 split it proposes was derived from the installed SDK (`@midnight-ntwrk/midnight-js`
-5.0.0-beta.6 on `@midnightntwrk/ledger-v9`), the Midnight ledger specification and the DApp
+5.0.0 on `@midnightntwrk/ledger-v9`), the Midnight ledger specification and the DApp
 connector API v4, and the facts it relies on are cited at each step.
 
 ## What was built from it
@@ -50,13 +50,13 @@ inputs. The ledger specification describes four phases and fixes where the walle
 relating to contract calls. For this purpose zero-knowledge proofs are done before the
 handover". The SDK's transaction seams match those phases exactly.
 
-| Phase                  | SDK type                                   | Needs                                                                                                                                                                       | Who can run it                   |
-| ---------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| 1. Build               | `UnprovenTransaction`                      | Compiled contract, the contract's current public state (indexer), the circuit arguments, the private state and witness values, the caller's coin and encryption public keys | UI or backend. No wallet secret. |
-| 2. Prove               | `UnboundTransaction`, proof but no binding | The unproven transaction (which carries the private transcript), the circuit's prover key, verifier key and ZKIR, and a proof server                                        | Backend. No wallet secret.       |
-| 3. Balance and sign    | `FinalizedTransaction`, sealed             | The wallet's unspent coins and DUST, the coin secret keys for shielded spend proofs, the DUST secret key, the unshielded signing key, the wallet's own proof server         | Wallet only.                     |
-| 4. Submit and watch    | transaction identifiers, `FinalizedTxData` | The sealed bytes, a node and an indexer                                                                                                                                     | Backend. No wallet secret.       |
-| 5. Apply private state | `nextPrivateState` from the build step     | The build result and the confirmed on-chain status                                                                                                                          | UI, after confirmation.          |
+| Phase                  | SDK type                                          | Needs                                                                                                                                                                       | Who can run it                   |
+| ---------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| 1. Build               | `UnprovenTransaction`                             | Compiled contract, the contract's current public state (indexer), the circuit arguments, the private state and witness values, the caller's coin and encryption public keys | UI or backend. No wallet secret. |
+| 2. Prove               | `UnboundTx`, proof but no binding                 | The unproven transaction (which carries the private transcript), the circuit's prover key, verifier key and ZKIR, and a proof server                                        | Backend. No wallet secret.       |
+| 3. Balance and sign    | `FinalizedTransaction`, sealed                    | The wallet's unspent coins and DUST, the coin secret keys for shielded spend proofs, the DUST secret key, the unshielded signing key, the wallet's own proof server         | Wallet only.                     |
+| 4. Submit and watch    | transaction identifiers, `Ledger9FinalizedTxData` | The sealed bytes, a node and an indexer                                                                                                                                     | Backend. No wallet secret.       |
+| 5. Apply private state | `nextPrivateState` from the build step            | The build result and the confirmed on-chain status                                                                                                                          | UI, after confirmation.          |
 
 The consequences of that table drive everything below:
 
@@ -142,7 +142,7 @@ flowchart LR
 | Builder            | Runs the circuit with the SDK's `createUnprovenCallTx` against the indexer's view of the contract, with an in-memory private state provider seeded from the request. Produces the unproven transaction, `nextPrivateState` and `newCoins`.                                                                                     |
 | Proof server       | The Midnight proof server container, reachable only from the backend network. Proves contract calls. Never sees a wallet key.                                                                                                                                                                                                  |
 | Submitter, watcher | Submits sealed bytes to the node, resubmits identical bytes while the TTL allows, watches the indexer for inclusion and records the final status.                                                                                                                                                                              |
-| Relayer wallet     | A backend-owned seed wallet with its own DUST. Pays for and submits the permissionless vault circuits (`flushQueue`, `sendDeposit`, `queueAttestation`) and polls the Signet singleton for MPC events. Never touches a user call.                                                                                              |
+| Relayer wallet     | A backend-owned seed wallet with its own DUST. Pays for and submits the permissionless vault circuits (`flushQueue`, `sendDeposit`, `queueAttestation`) and polls the signet responder for MPC events. Never touches a user call.                                                                                              |
 
 ## A transaction job
 

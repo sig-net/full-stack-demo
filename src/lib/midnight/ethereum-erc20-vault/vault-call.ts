@@ -4,25 +4,32 @@
  */
 
 import type { Contract as CompactContract } from '@midnight-ntwrk/compact-js/effect'
+import type { ContractModuleProvider } from '@midnight-ntwrk/compact-runtime'
 import {
   type CallTxOptions,
   createCallTxOptions,
   createUnprovenCallTx,
 } from '@midnight-ntwrk/midnight-js/contracts'
-import type {
-  PublicDataProvider,
-  WalletProvider,
-  ZKConfigProvider,
+import {
+  createLedger9WalletProvider,
+  type MidnightConfig,
+  type PublicDataProvider,
+  type WalletProvider,
+  type ZKConfigProvider,
 } from '@midnight-ntwrk/midnight-js/types'
 import { bytesToHex, hexToBytes } from '@sig-net/midnight'
 import {
   type Contract,
   createVaultPrivateState,
   evmAddressBytes,
+  feeRecipientEncryptionMapping,
+  type TokenFees,
   VAULT_PRIVATE_STATE_ID,
   type VaultCircuitId,
   type VaultCompiledContract,
+  type VaultLedgerState,
   type VaultPrivateState,
+  vaultTokenFees,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import { vaultTokenType } from '@/lib/midnight/ethereum-erc20-vault/vault-token-infos'
@@ -47,18 +54,30 @@ export async function buildVaultCall<Circuit extends VaultCircuitId>(
       zkConfigProvider: providers.zkConfigProvider,
       walletProvider: walletProviderOf(wallet),
       privateStateProvider,
+      config: providers.config,
+      contractModuleProvider: VAULT_CONTRACT_MODULE_PROVIDER,
     },
     { ...options, privateStateId: VAULT_PRIVATE_STATE_ID },
   )
   return bytesToHex(call.private.unprovenTx.serialize())
 }
 
-/** What every call reads beside its private state: the contract's public state through the indexer, the prover material, and the contract it calls. */
+/** What every call reads beside its private state: the contract's public state through the indexer, the prover material, the contract it calls, and the network and lifetime it is built for. */
 export interface VaultCallProviders {
   readonly publicDataProvider: PublicDataProvider
   readonly zkConfigProvider: ZKConfigProvider<VaultCircuitId>
   readonly compiledContract: VaultCompiledContract
   readonly vaultAddress: string
+  readonly config: MidnightConfig
+}
+
+/** The intent lifetime of every vault call, which balancing and proving must finish inside. */
+export const VAULT_CALL_TTL_SECONDS = 60 * 60
+
+/** Every callee resolves to the signet signer module the vault package bundles, and the runtime refuses a callee whose deployed verifier keys differ from it. */
+const VAULT_CONTRACT_MODULE_PROVIDER: ContractModuleProvider = {
+  resolve: () => () =>
+    import('@sig-net/midnight-examples-erc20-vault-contract/managed/SignetSigner/contract/index.js'),
 }
 
 export type VaultContract = Contract<VaultPrivateState>
@@ -66,29 +85,51 @@ export type VaultContract = Contract<VaultPrivateState>
 /** A vault circuit proves in minutes on a loaded host, well past the SDK's five-minute default. */
 export const PROOF_TIMEOUT_MS = 15 * 60 * 1000
 
+/** `encryptionKeys` names the wallets, beyond the caller's own, that receive a coin the call mints. */
 export function vaultCallOptions<Circuit extends VaultCircuitId>(
   providers: VaultCallProviders,
   circuit: Circuit,
   args: CompactContract.Contract.CircuitParameters<VaultContract, Circuit>,
+  encryptionKeys?: FeeRecipientEncryptionKeys,
 ): CallTxOptions<VaultContract, Circuit> {
   return createCallTxOptions(
     providers.compiledContract,
     circuit,
     providers.vaultAddress,
     VAULT_PRIVATE_STATE_ID,
-    undefined,
+    encryptionKeys,
     args,
   )
 }
 
+/** What a fee-charging start takes from the ledger it is built against: the fee on top of the principal, and the keys the fee coin is encrypted to. */
+export interface StartFee {
+  readonly amount: bigint
+  readonly recipientEncryptionKeys: FeeRecipientEncryptionKeys
+}
+
+export type FeeRecipientEncryptionKeys = ReturnType<typeof feeRecipientEncryptionMapping>
+
+/** The fee for `action` on the vault coin of `erc20Address`, which the start circuit reads from the same ledger. */
+export function startFeeOf(
+  state: VaultLedgerState,
+  erc20Address: Uint8Array,
+  action: keyof TokenFees,
+): StartFee {
+  return {
+    amount: vaultTokenFees(state, erc20Address)[action],
+    recipientEncryptionKeys: feeRecipientEncryptionMapping(state),
+  }
+}
+
 /** The call builder reads the wallet's keys, and the wallet itself balances later, elsewhere. */
 function walletProviderOf(wallet: WalletPublicKeys): WalletProvider {
-  return {
+  return createLedger9WalletProvider({
     getCoinPublicKey: () => wallet.coinPublicKey,
     getEncryptionPublicKey: () => wallet.encryptionPublicKey,
     balanceTx: () =>
       Promise.reject(new Error('Balancing belongs to the signer wallet, not the call builder')),
-  }
+  })
 }
 
 /** The private state of a permissionless call: those circuits never read the secret witness, so a random one proves. */
@@ -154,24 +195,30 @@ export interface CompleteDepositCircuitArgs extends CallerCircuitArgs {
   readonly mintNonce: Uint8Array
 }
 
-/** The surrendered coin is a fresh coin of the sent token's vault coin type worth exactly `amount`, which the caller's wallet funds when it balances the call. */
+/** The surrendered coin is a fresh coin of the sent token's vault coin type worth exactly `amount` plus the fee, which the caller's wallet funds when it balances the call. */
 export function startWithdrawCallOptions(
   providers: VaultCallProviders,
   args: StartWithdrawCircuitArgs,
+  fee: StartFee,
 ): CallTxOptions<VaultContract, 'startWithdraw'> {
-  return vaultCallOptions(providers, 'startWithdraw', [
-    args.inIndex,
-    {
-      erc20Address: evmAddressBytes(args.erc20Address),
-      amount: args.amount,
-      destEvmAddress: evmAddressBytes(args.destEvmAddress),
-    },
-    {
-      nonce: crypto.getRandomValues(new Uint8Array(32)),
-      color: hexToBytes(vaultTokenType(args.erc20Address, providers.vaultAddress)),
-      value: args.amount,
-    },
-  ])
+  return vaultCallOptions(
+    providers,
+    'startWithdraw',
+    [
+      args.inIndex,
+      {
+        erc20Address: evmAddressBytes(args.erc20Address),
+        amount: args.amount,
+        destEvmAddress: evmAddressBytes(args.destEvmAddress),
+      },
+      {
+        nonce: crypto.getRandomValues(new Uint8Array(32)),
+        color: hexToBytes(vaultTokenType(args.erc20Address, providers.vaultAddress)),
+        value: args.amount + fee.amount,
+      },
+    ],
+    fee.recipientEncryptionKeys,
+  )
 }
 
 export interface StartWithdrawCircuitArgs extends CallerCircuitArgs {
@@ -201,20 +248,26 @@ export interface CompleteWithdrawCircuitArgs extends CallerCircuitArgs {
   readonly mintNonce: Uint8Array
 }
 
-/** The surrendered coin is a fresh coin of the stata underlying's vault coin type worth exactly `amount`, which the caller's wallet funds when it balances the call. */
+/** The surrendered coin is a fresh coin of the stata underlying's vault coin type worth exactly `amount` plus the fee, which the caller's wallet funds when it balances the call. */
 export function startSupplyCallOptions(
   providers: VaultCallProviders,
   args: StartSupplyCircuitArgs,
+  fee: StartFee,
 ): CallTxOptions<VaultContract, 'startSupply'> {
-  return vaultCallOptions(providers, 'startSupply', [
-    args.inIndex,
-    { amount: args.amount },
-    {
-      nonce: crypto.getRandomValues(new Uint8Array(32)),
-      color: hexToBytes(vaultTokenType(args.underlyingErc20Address, providers.vaultAddress)),
-      value: args.amount,
-    },
-  ])
+  return vaultCallOptions(
+    providers,
+    'startSupply',
+    [
+      args.inIndex,
+      { amount: args.amount },
+      {
+        nonce: crypto.getRandomValues(new Uint8Array(32)),
+        color: hexToBytes(vaultTokenType(args.underlyingErc20Address, providers.vaultAddress)),
+        value: args.amount + fee.amount,
+      },
+    ],
+    fee.recipientEncryptionKeys,
+  )
 }
 
 export interface StartSupplyCircuitArgs extends CallerCircuitArgs {
@@ -243,20 +296,26 @@ export interface CompleteSupplyCircuitArgs extends CallerCircuitArgs {
   readonly mintNonce: Uint8Array
 }
 
-/** The surrendered coin is a fresh coin of the wrapper's vault coin type worth exactly `shares`, which the caller's wallet funds when it balances the call. */
+/** The surrendered coin is a fresh coin of the wrapper's vault coin type worth exactly `shares` plus the fee, which the caller's wallet funds when it balances the call. */
 export function startRedeemCallOptions(
   providers: VaultCallProviders,
   args: StartRedeemCircuitArgs,
+  fee: StartFee,
 ): CallTxOptions<VaultContract, 'startRedeem'> {
-  return vaultCallOptions(providers, 'startRedeem', [
-    args.inIndex,
-    { shares: args.shares },
-    {
-      nonce: crypto.getRandomValues(new Uint8Array(32)),
-      color: hexToBytes(vaultTokenType(args.stataErc20Address, providers.vaultAddress)),
-      value: args.shares,
-    },
-  ])
+  return vaultCallOptions(
+    providers,
+    'startRedeem',
+    [
+      args.inIndex,
+      { shares: args.shares },
+      {
+        nonce: crypto.getRandomValues(new Uint8Array(32)),
+        color: hexToBytes(vaultTokenType(args.stataErc20Address, providers.vaultAddress)),
+        value: args.shares + fee.amount,
+      },
+    ],
+    fee.recipientEncryptionKeys,
+  )
 }
 
 export interface StartRedeemCircuitArgs extends CallerCircuitArgs {
@@ -285,26 +344,32 @@ export interface CompleteRedeemCircuitArgs extends CallerCircuitArgs {
   readonly mintNonce: Uint8Array
 }
 
-/** The surrendered coin is a fresh coin of the sold token's vault coin type worth exactly `amountInMaximum`, which the caller's wallet funds when it balances the call. */
+/** The surrendered coin is a fresh coin of the sold token's vault coin type worth exactly `amountInMaximum` plus the fee, which the caller's wallet funds when it balances the call. */
 export function startSwapCallOptions(
   providers: VaultCallProviders,
   args: StartSwapCircuitArgs,
+  fee: StartFee,
 ): CallTxOptions<VaultContract, 'startSwap'> {
-  return vaultCallOptions(providers, 'startSwap', [
-    args.inIndex,
-    {
-      erc20AddressIn: evmAddressBytes(args.erc20AddressIn),
-      erc20AddressOut: evmAddressBytes(args.erc20AddressOut),
-      fee: args.fee,
-      amountOut: args.amountOut,
-      amountInMaximum: args.amountInMaximum,
-    },
-    {
-      nonce: crypto.getRandomValues(new Uint8Array(32)),
-      color: hexToBytes(vaultTokenType(args.erc20AddressIn, providers.vaultAddress)),
-      value: args.amountInMaximum,
-    },
-  ])
+  return vaultCallOptions(
+    providers,
+    'startSwap',
+    [
+      args.inIndex,
+      {
+        erc20AddressIn: evmAddressBytes(args.erc20AddressIn),
+        erc20AddressOut: evmAddressBytes(args.erc20AddressOut),
+        fee: args.fee,
+        amountOut: args.amountOut,
+        amountInMaximum: args.amountInMaximum,
+      },
+      {
+        nonce: crypto.getRandomValues(new Uint8Array(32)),
+        color: hexToBytes(vaultTokenType(args.erc20AddressIn, providers.vaultAddress)),
+        value: args.amountInMaximum + fee.amount,
+      },
+    ],
+    fee.recipientEncryptionKeys,
+  )
 }
 
 export interface StartSwapCircuitArgs extends CallerCircuitArgs {

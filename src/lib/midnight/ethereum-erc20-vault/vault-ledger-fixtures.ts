@@ -1,9 +1,11 @@
 import { bytesToHex } from '@sig-net/midnight'
 import {
   Action,
+  type AllowedTokenConfig,
   type AttestationRecord,
   type OutputRequestEntry,
   type RequestBufferEntry,
+  type TokenFees,
 } from '@sig-net/midnight-examples-erc20-vault-contract'
 
 import type {
@@ -129,13 +131,9 @@ const DEPOSIT_ARGS = {
   gas: { gasLimit: 1n, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n },
 }
 
-/** A ledger set of byte values, for an allowed token ledger state. */
-export function ledgerSet(elements: Uint8Array[]) {
-  const keys = new Set(elements.map(bytesToHex))
-  return {
-    isEmpty: () => keys.size === 0,
-    size: () => BigInt(keys.size),
-    member: (element: Uint8Array) => keys.has(bytesToHex(element)),
-    [Symbol.iterator]: () => elements[Symbol.iterator](),
-  }
+/** The allowed token map over `tokens`, every one charging `fees`. */
+export function allowedTokenMap(tokens: Uint8Array[], fees: TokenFees = NO_FEES) {
+  return ledgerMap(tokens.map((token): [Uint8Array, AllowedTokenConfig] => [token, { fees }]))
 }
+
+export const NO_FEES: TokenFees = { withdraw: 0n, swap: 0n, supply: 0n, redeem: 0n }

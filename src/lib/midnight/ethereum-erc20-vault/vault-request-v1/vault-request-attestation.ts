@@ -71,7 +71,7 @@ export function completionOutput(
     : new Uint8Array(outputWidth)
 }
 
-/** The attestation as the singleton posted it, rebuilt from a row that holds one: the output's width and hash come from the stored output. */
+/** The attestation as the responder posted it, rebuilt from a row that holds one: the output's width and hash come from the stored output. */
 export function attestationToEvent(request: VaultRequest): RespondBidirectionalEvent {
   const attested = attestedRequestFields(request)
   const serializedOutput = hexToBytes(attested.attestationOutput)

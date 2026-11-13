@@ -1,5 +1,9 @@
-import { CallTxFailedError } from '@midnight-ntwrk/midnight-js/contracts'
-import { FailEntirely, FailFallible, type FinalizedTxData } from '@midnight-ntwrk/midnight-js/types'
+import { TxFailedError } from '@midnight-ntwrk/midnight-js/contracts'
+import {
+  FailEntirely,
+  FailFallible,
+  type Ledger9FinalizedTxData,
+} from '@midnight-ntwrk/midnight-js/types'
 import { describe, expect, test } from 'vitest'
 
 import { FlusherImpl } from '@/lib/midnight/ethereum-erc20-vault/flusher-impl'
@@ -15,8 +19,16 @@ interface Case {
   expectLogged: boolean
 }
 
-function landedAs(status: FinalizedTxData['status']): CallTxFailedError {
-  return new CallTxFailedError(mock<FinalizedTxData>('FinalizedTxData', { status }), 'flushQueue')
+function landedAs(status: Ledger9FinalizedTxData['status']): TxFailedError {
+  return new TxFailedError(
+    'call',
+    mock<Ledger9FinalizedTxData>('Ledger9FinalizedTxData', {
+      era: 'v9',
+      status,
+      segmentStatusMap: undefined,
+    }),
+    { circuitId: 'flushQueue' },
+  )
 }
 
 const cases: Case[] = [

@@ -21,6 +21,7 @@ function info(erc20Address: string, symbol: string, issuer?: string): TokenInfo 
     icon: NO_ICON,
     origin: { kind: 'ethereum-erc20-vault', chainId: 1, erc20Address, issuer },
     supported: true,
+    vaultFees: { withdraw: 0n, swap: 0n, supply: 0n, redeem: 0n },
     pricing: null,
   }
 }

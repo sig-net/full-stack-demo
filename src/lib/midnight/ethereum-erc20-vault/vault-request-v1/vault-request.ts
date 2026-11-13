@@ -53,7 +53,7 @@ export function isTerminalVaultRequestState(state: VaultRequestState): boolean {
 export const VAULT_REQUEST_PENDING_STATES: readonly VaultRequestState[] =
   VAULT_REQUEST_STATES.filter((state) => !isTerminalVaultRequestState(state))
 
-/** The MPC's verdicts, named as the singleton's `OutputKind` enum names them. */
+/** The MPC's verdicts, named as the `OutputKind` enum of `@sig-net/midnight` names them. */
 export const ATTESTATION_OUTPUT_KINDS = [
   'executed',
   'failed',
@@ -75,7 +75,7 @@ const attestationSignatureSchema = hexBytesSchema.pipe(
  * The permissionless processing of one request on the ERC20 vault, from queued at the action's
  * start circuit to attested and flushed, ready for the caller's complete circuit. Every chain
  * step is read back from the vault ledger, so the row only caches where the ledger holds the
- * request and what the singleton's posts gave it. No step can fail for good: a child
+ * request and what the responder's posts gave it. No step can fail for good: a child
  * transaction that fails is replaced until the ledger shows the step done.
  */
 export const vaultRequestSchema = z.object({

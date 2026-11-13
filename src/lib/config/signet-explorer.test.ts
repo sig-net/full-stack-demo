@@ -36,8 +36,8 @@ describe('signetExplorerOf', () => {
     },
     {
       name: 'a public network links to the published explorer on that network',
-      config: configOf(MidnightNetwork.Stagenet, 'https://rpc.example'),
-      expected: `https://sig-net.github.io/explorer/midnight/explorer?networkId=stagenet&requestId=${REQUEST_ID}`,
+      config: configOf(MidnightNetwork.Preprod, 'https://rpc.example'),
+      expected: `https://sig-net.github.io/explorer/midnight/explorer?networkId=preprod&requestId=${REQUEST_ID}`,
     },
   ]
 

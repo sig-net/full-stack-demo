@@ -29,12 +29,15 @@ import { Label } from '@/components/ui/label'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import { abbreviateHex } from '@/lib/abbreviate-hex'
-import { type SupportedBalance, supportedBalancesOf } from '@/lib/balances/supported-balances'
+import { supportedBalancesOf } from '@/lib/balances/supported-balances'
+import {
+  maxSurrenderAmount,
+  surrenderAmountOf,
+  vaultFeeNotice,
+} from '@/lib/balances/surrender-amount'
 import { loginBlockerOf } from '@/lib/caller/wallet-login-query'
 import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
-import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
-import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
 import { prepareStartWithdraw, startWithdraw } from '@/server/actions/withdraw-actions'
 
 const AMOUNT_INPUT = /^\d*\.?\d*$/
@@ -47,8 +50,8 @@ interface SendDialogProps {
 }
 
 /**
- * Sends a vault token the wallet holds to an address on Ethereum: the amount is surrendered
- * whole on Midnight and the vault account pays the destination. The token can be changed to any
+ * Sends a vault token the wallet holds to an address on Ethereum: the amount and the vault's fee
+ * are surrendered on Midnight and the vault account pays the destination the amount. The token can be changed to any
  * other supported balance, and the destination is pasted, never connected. Starting the send is
  * the dialog's one action: the page builds, proves and finalises the start call with the
  * wallet's coin and fee, the server records the withdrawal for the backend to submit, and the
@@ -73,7 +76,8 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
 
   const sources = supportedBalancesOf(balances.data ?? [], registry)
   const source = sources.find(({ token }) => token.origin.erc20Address === erc20Address) ?? null
-  const amount = amountOf(amountText, source)
+  const fee = source?.token.vaultFees?.withdraw ?? null
+  const amount = surrenderAmountOf(amountText, source, fee)
   const destinationValid = isAddress(destination)
   const missing = missingReadiness('withdraw', checks)
   const recheckOnOpen = useEffectEvent(() => {
@@ -176,7 +180,7 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
               : {
                   amount: source.balance.amount,
                   onMax: () => {
-                    setAmountText(source.balance.amount)
+                    setAmountText(maxSurrenderAmount(source, fee))
                   },
                 }
           }
@@ -186,6 +190,11 @@ export function SendDialog({ open, onOpenChange, tokenType }: SendDialogProps): 
               : prices.table.usdValueOf(source.token, amount.value)
           }
         />
+        {source !== null && (
+          <p className="text-sm text-muted-foreground">
+            {vaultFeeNotice(fee, source.token.symbol, source.token.decimals)}
+          </p>
+        )}
         <p className="text-center text-sm/5 font-medium text-muted-foreground">to</p>
         <div className="flex flex-col gap-2.5 rounded-xs border border-swap-panel-field-border bg-swap-panel-field p-5 dark:bg-swap-panel-field">
           <Label
@@ -266,25 +275,4 @@ const START_STAGE_LABELS: Record<CallerCallStage, string> = {
   building: 'Building and proving the start call',
   signing: 'Paying the fee and signing with your wallet',
   recording: 'Recording the send',
-}
-
-/** The typed amount in base units, or why it cannot be sent yet. */
-function amountOf(
-  text: string,
-  source: SupportedBalance | null,
-): { value: bigint | null; error: string | null } {
-  if (source === null || text === '') return { value: null, error: null }
-  try {
-    const value = parseTokenAmount(text, source.token.decimals)
-    if (value <= 0n) return { value: null, error: null }
-    if (value > source.balance.baseUnits) {
-      return {
-        value: null,
-        error: `That is more than your ${formatTokenAmount(source.balance.baseUnits, source.token.decimals)} ${source.token.symbol}.`,
-      }
-    }
-    return { value, error: null }
-  } catch (error: unknown) {
-    return { value: null, error: error instanceof Error ? error.message : String(error) }
-  }
 }

@@ -9,8 +9,8 @@ export interface SignetExplorer {
 }
 
 /**
- * The copy compose.yaml serves on the local stack, configured with the stack's own Signet
- * contract, the published site elsewhere. The network travels in the URL, so the page opens on
+ * The copy compose.yaml serves on the local stack, configured with the stack's own signet signer
+ * and responder, the published site elsewhere. The network travels in the URL, so the page opens on
  * the one the request lives on.
  */
 export function signetExplorerOf(

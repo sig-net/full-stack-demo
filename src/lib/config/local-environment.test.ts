@@ -19,7 +19,7 @@ const cases: { name: string; networkId: MidnightNetworkId; rpcURL: string; expec
   },
   {
     name: 'a deployed network is never local',
-    networkId: MidnightNetwork.Stagenet,
+    networkId: MidnightNetwork.Preprod,
     rpcURL: 'http://127.0.0.1:8545',
     expected: false,
   },

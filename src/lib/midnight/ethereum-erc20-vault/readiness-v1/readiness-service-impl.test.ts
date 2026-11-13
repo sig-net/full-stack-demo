@@ -23,7 +23,8 @@ import { mock } from '@/lib/testing/mock'
 
 /** A throwaway MPC root key: the derivation needs a point on the curve, not the stack's key. */
 const SIGNET: MidnightSignetConfig = {
-  contractAddress: '11'.repeat(32),
+  signerContractAddress: '11'.repeat(32),
+  responderContractAddress: '55'.repeat(32),
   mpcRootPublicKey: SigningKey.computePublicKey(`0x${'22'.repeat(32)}`, false),
 }
 const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(32) }

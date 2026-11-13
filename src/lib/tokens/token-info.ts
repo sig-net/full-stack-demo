@@ -1,4 +1,5 @@
 import type { IconSource } from '@/lib/icon-source'
+import type { VaultTokenFees } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token'
 import type { PriceRequest } from '@/lib/pricing/spot-price'
 import { BUNDLED_NETWORK_ICONS } from '@/lib/tokens/bundled-icons'
 import type { TokenId } from '@/lib/tokens/token-id'
@@ -14,6 +15,8 @@ export interface TokenInfo {
   readonly origin: TokenOrigin
   /** True when the vault's allowlist admits the token's ERC20, so the vault accepts deposits of it. */
   readonly supported: boolean
+  /** The fees the vault takes on top of the principal an action surrenders in this token, null exactly when it is not supported. */
+  readonly vaultFees: VaultTokenFees | null
   /** How the token is valued in USD, null for one no market quotes. */
   readonly pricing: PriceRequest | null
 }

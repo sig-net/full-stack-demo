@@ -27,7 +27,7 @@ describe('the attestation codec', () => {
     })
   })
 
-  test('a row rebuilds the event the singleton posted, byte for byte', () => {
+  test('a row rebuilds the event the responder posted, byte for byte', () => {
     expect(attestationToEvent(VAULT_REQUEST_IN_STATE.AwaitingAttestationQueue)).toEqual(
       ATTESTATION.event,
     )

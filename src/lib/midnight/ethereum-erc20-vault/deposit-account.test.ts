@@ -1,13 +1,15 @@
 import { SigningKey } from 'ethers'
 import { describe, expect, test } from 'vitest'
 
+import type { MidnightSignetConfig } from '@/lib/config/midnight-signet-config'
 import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-account'
 import { userCommitmentOf } from '@/lib/midnight/ethereum-erc20-vault/vault-secret'
 
 const VAULT_SECRET = '11'.repeat(32)
 /** A throwaway MPC root key: the derivation needs a point on the curve, not the stack's key. */
-const SIGNET = {
-  contractAddress: '22'.repeat(32),
+const SIGNET: MidnightSignetConfig = {
+  signerContractAddress: '22'.repeat(32),
+  responderContractAddress: '55'.repeat(32),
   mpcRootPublicKey: SigningKey.computePublicKey(`0x${'33'.repeat(32)}`, false),
 }
 const VAULT = { contractAddress: '44'.repeat(32) }

@@ -85,7 +85,7 @@ export class ApprovalServiceImpl implements ApprovalService {
     assertVaultInitialised(state)
     const vaultAccount = vaultAccountOf(this.signet, this.vault)
     const spenders: Pick<ApprovalTarget, 'kind' | 'erc20Address' | 'spender'>[] = [
-      ...[...state.allowedTokens].map((token) => ({
+      ...Array.from(state.allowedTokens, ([token]) => ({
         kind: 'router' as const,
         erc20Address: evmAddress(token),
         spender: evmAddress(state.uniswapRouter),

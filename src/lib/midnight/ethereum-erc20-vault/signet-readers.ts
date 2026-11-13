@@ -16,13 +16,13 @@ export type SignetReaders = Readonly<Record<VaultAction, SignetRequestResponseRe
 
 export interface SignetReadersConfig {
   readonly vaultAddress: string
-  readonly signetAddress: string
+  readonly responderAddress: string
   readonly publicDataProvider: PublicDataProvider
   readonly indexerURL: string
 }
 
 /**
- * Every read walks the singleton's whole event history from the indexer: a lowest block would
+ * Every read walks the responder's whole event history from the indexer: a lowest block would
  * hide the posts of a request older than it, and a row carries no block to bound by.
  */
 export function signetReaders(config: SignetReadersConfig): SignetReaders {
@@ -31,7 +31,7 @@ export function signetReaders(config: SignetReadersConfig): SignetReaders {
     new SignetRequestResponseReader({
       requesterContractAddress: config.vaultAddress,
       requesterRequestsPath: requestsPath,
-      signetContractAddress: config.signetAddress,
+      responderContractAddress: config.responderAddress,
       publicDataProvider: config.publicDataProvider,
       eventSource,
     })

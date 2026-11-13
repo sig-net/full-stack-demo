@@ -24,14 +24,17 @@ import { useDebouncedValue } from '@/components/use-debounced-value'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import { supportedBalancesOf } from '@/lib/balances/supported-balances'
+import {
+  maxSurrenderAmount,
+  surrenderAmountOf,
+  vaultFeeNotice,
+} from '@/lib/balances/surrender-amount'
 import { loginBlockerOf } from '@/lib/caller/wallet-login-query'
 import { routerAllowanceOf } from '@/lib/midnight/ethereum-erc20-vault/approval-v1/approval'
 import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import { missingReadiness } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
 import { SWAP_MAX_SLIPPAGE_BPS } from '@/lib/midnight/ethereum-erc20-vault/swap-v1/swap-quote'
 import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
-import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
-import type { TokenInfo } from '@/lib/tokens/token-info'
 import { prepareStartSwap, quoteSwap, startSwap } from '@/server/actions/swap-actions'
 
 const AMOUNT_INPUT = /^\d*\.?\d*$/
@@ -58,8 +61,8 @@ interface SwapPanelProps {
 
 /**
  * Sells vault tokens the wallet holds for another token the vault admits, at a live quote. The
- * From amount is what the swap may spend at most and is surrendered whole, the To amount is the
- * least the trade accepts, and whatever the trade does not spend comes back as change. The page
+ * From amount is what the swap may spend at most and is surrendered whole with the vault's fee on
+ * top, the To amount is the least the trade accepts, and whatever the trade does not spend comes back as change. The page
  * builds, proves and finalises a swap's start call with the wallet's coin of the sold token and
  * its fee, and the server records it for the backend to submit.
  */
@@ -104,7 +107,8 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
     .supported()
     .filter((info) => info.origin.erc20Address !== fromToken?.origin.erc20Address)
   const toToken = destinations.find((info) => info.origin.erc20Address === toErc20Address) ?? null
-  const amountIn = amountInOf(fromAmount, fromToken)
+  const vaultFee = fromToken?.vaultFees?.swap ?? null
+  const amountIn = surrenderAmountOf(fromAmount, fromSource, vaultFee)
   const restingAmount = useDebouncedValue(amountIn.value?.toString() ?? null, QUOTE_DEBOUNCE_MS)
 
   const quote = useQuery({
@@ -235,7 +239,7 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
               : {
                   amount: fromSource.balance.amount,
                   onMax: () => {
-                    setFromAmount(fromSource.balance.amount)
+                    setFromAmount(maxSurrenderAmount(fromSource, vaultFee))
                   },
                 }
           }
@@ -246,6 +250,11 @@ export function SwapPanel({ sourceRequest }: SwapPanelProps): ReactNode {
           }
           inputRef={amountInput}
         />
+        {fromToken !== null && (
+          <p className="self-stretch text-sm text-muted-foreground">
+            {vaultFeeNotice(vaultFee, fromToken.symbol, fromToken.decimals)}
+          </p>
+        )}
         <ArrowDown aria-hidden="true" className="size-5 shrink-0 text-swap-panel-icon" />
         <TokenAmountField
           label="To"
@@ -347,20 +356,6 @@ const START_STAGE_LABELS: Record<CallerCallStage, string> = {
   building: 'Building and proving the start call',
   signing: 'Paying the fee and signing with your wallet',
   recording: 'Recording the swap',
-}
-
-/** The typed amount in base units, or why it cannot be priced yet. */
-function amountInOf(
-  text: string,
-  token: TokenInfo | null,
-): { value: bigint | null; error: string | null } {
-  if (token === null || text === '') return { value: null, error: null }
-  try {
-    const value = parseTokenAmount(text, token.decimals)
-    return value > 0n ? { value, error: null } : { value: null, error: null }
-  } catch (error: unknown) {
-    return { value: null, error: error instanceof Error ? error.message : String(error) }
-  }
 }
 
 /** The typed slippage percentage in basis points, or why the swap cannot be priced with it. */

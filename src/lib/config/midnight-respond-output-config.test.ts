@@ -15,12 +15,12 @@ const accepted: {
   expected: MidnightRespondOutputConfig
 }[] = [
   {
-    name: 'stagenet defaults to the cache the SDK publishes',
-    networkId: MidnightNetwork.Stagenet,
+    name: 'preprod defaults to the cache the SDK publishes',
+    networkId: MidnightNetwork.Preprod,
     env: {},
     expected: {
       source: 'mpc-cache',
-      mpcOutputCacheURL: getMpcOutputCacheUrl(MidnightNetwork.Stagenet),
+      mpcOutputCacheURL: getMpcOutputCacheUrl(MidnightNetwork.Preprod),
     },
   },
   {
@@ -31,13 +31,13 @@ const accepted: {
   },
   {
     name: 'MPC_OUTPUT_CACHE_URL overrides the network default',
-    networkId: MidnightNetwork.Stagenet,
-    env: { MPC_OUTPUT_CACHE_URL: 'https://cache.example/v1/stagenet' },
-    expected: { source: 'mpc-cache', mpcOutputCacheURL: 'https://cache.example/v1/stagenet' },
+    networkId: MidnightNetwork.Preprod,
+    env: { MPC_OUTPUT_CACHE_URL: 'https://cache.example/v1/preprod' },
+    expected: { source: 'mpc-cache', mpcOutputCacheURL: 'https://cache.example/v1/preprod' },
   },
   {
     name: 'evm-node can be chosen',
-    networkId: MidnightNetwork.Stagenet,
+    networkId: MidnightNetwork.Preprod,
     env: { RESPOND_OUTPUT_SOURCE: 'evm-node' },
     expected: { source: 'evm-node' },
   },

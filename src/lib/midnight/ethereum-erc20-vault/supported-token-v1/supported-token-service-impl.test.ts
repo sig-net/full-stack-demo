@@ -1,4 +1,5 @@
 import { hexToBytes } from '@sig-net/midnight'
+import type { TokenFees } from '@sig-net/midnight-examples-erc20-vault-contract'
 import { SigningKey } from 'ethers'
 import { describe, expect, test } from 'vitest'
 
@@ -10,12 +11,13 @@ import { depositAccountOf } from '@/lib/midnight/ethereum-erc20-vault/deposit-ac
 import type { Erc20Reader } from '@/lib/midnight/ethereum-erc20-vault/erc20-reader'
 import { SupportedTokenServiceImpl } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service-impl'
 import type { AllowedTokenLedger } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger'
-import { ledgerSet } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
+import { allowedTokenMap, NO_FEES } from '@/lib/midnight/ethereum-erc20-vault/vault-ledger-fixtures'
 import { mock } from '@/lib/testing/mock'
 
 /** A throwaway MPC root key: the derivation needs a point on the curve, not the stack's key. */
 const SIGNET: MidnightSignetConfig = {
-  contractAddress: '11'.repeat(32),
+  signerContractAddress: '11'.repeat(32),
+  responderContractAddress: '55'.repeat(32),
   mpcRootPublicKey: SigningKey.computePublicKey(`0x${'22'.repeat(32)}`, false),
 }
 const VAULT: MidnightEthereumErc20VaultConfig = { contractAddress: '33'.repeat(32) }
@@ -30,15 +32,21 @@ const METADATA = {
   [EURC]: { symbol: 'EURC', name: 'Euro Coin', decimals: 6 },
 }
 
+const FEES: TokenFees = { withdraw: 1_000n, swap: 2_000n, supply: 3_000n, redeem: 4_000n }
+
 function serviceOver(
   allowed: string[],
   balances: Record<string, bigint>,
   reads: string[] = [],
+  fees: TokenFees = NO_FEES,
 ): SupportedTokenServiceImpl {
   const ledger = mock<AllowedTokenLedger>('AllowedTokenLedger', {
     state: () =>
       Promise.resolve({
-        allowedTokens: ledgerSet(allowed.map((address) => hexToBytes(address.slice(2)))),
+        allowedTokens: allowedTokenMap(
+          allowed.map((address) => hexToBytes(address.slice(2))),
+          fees,
+        ),
       }),
   })
   const reader = mock<Erc20Reader>('Erc20Reader', {
@@ -57,17 +65,26 @@ function serviceOver(
 
 describe('SupportedTokenServiceImpl', () => {
   test.each([
-    { name: 'an empty allowlist lists nothing', allowed: [], expected: [] },
+    { name: 'an empty allowlist lists nothing', allowed: [], fees: NO_FEES, expected: [] },
     {
       name: 'each allowed token carries the metadata its contract reports, in allowlist order',
       allowed: [EURC, USDC],
+      fees: NO_FEES,
       expected: [
-        { erc20Address: EURC, ...METADATA[EURC] },
-        { erc20Address: USDC, ...METADATA[USDC] },
+        { erc20Address: EURC, ...METADATA[EURC], fees: NO_FEES },
+        { erc20Address: USDC, ...METADATA[USDC], fees: NO_FEES },
       ],
     },
-  ])('listSupportedTokens: $name', async ({ allowed, expected }) => {
-    await expect(serviceOver(allowed, {}).listSupportedTokens({})).resolves.toEqual(expected)
+    {
+      name: 'each allowed token carries the fees the ledger holds for it',
+      allowed: [USDC],
+      fees: FEES,
+      expected: [{ erc20Address: USDC, ...METADATA[USDC], fees: FEES }],
+    },
+  ])('listSupportedTokens: $name', async ({ allowed, fees, expected }) => {
+    await expect(serviceOver(allowed, {}, [], fees).listSupportedTokens({})).resolves.toEqual(
+      expected,
+    )
   })
 
   test.each([

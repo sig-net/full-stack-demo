@@ -35,11 +35,12 @@ export class SupportedTokenServiceImpl implements SupportedTokenService {
   }
 
   async listSupportedTokens(_args: ListSupportedTokensArgs): Promise<SupportedToken[]> {
-    const addresses = await this.allowedAddresses()
+    const allowed = await this.allowedTokens()
     return Promise.all(
-      addresses.map(async (erc20Address) => ({
+      allowed.map(async ({ erc20Address, fees }) => ({
         erc20Address,
         ...(await this.erc20Reader.metadata(erc20Address)),
+        fees,
       })),
     )
   }
@@ -49,9 +50,9 @@ export class SupportedTokenServiceImpl implements SupportedTokenService {
     { userCommitment }: ListDepositAccountFundsArgs,
   ): Promise<DepositAccountFund[]> {
     const account = depositAccountOf(userCommitment, this.signet, this.vault)
-    const addresses = await this.allowedAddresses()
+    const allowed = await this.allowedTokens()
     const balances = await Promise.all(
-      addresses.map(async (erc20Address) => ({
+      allowed.map(async ({ erc20Address }) => ({
         erc20Address,
         amount: await this.erc20Reader.balanceOf(erc20Address, account),
       })),
@@ -59,11 +60,12 @@ export class SupportedTokenServiceImpl implements SupportedTokenService {
     return balances.filter((fund) => fund.amount > 0n)
   }
 
-  /** The allowlist as lower-case `0x` addresses, the form every address in the application takes. */
-  private async allowedAddresses(): Promise<string[]> {
+  /** The allowlist with lower-case `0x` addresses, the form every address in the application takes. */
+  private async allowedTokens(): Promise<Pick<SupportedToken, 'erc20Address' | 'fees'>[]> {
     const { allowedTokens } = await this.ledger.state()
-    return Array.from(allowedTokens, (bytes) =>
-      `0x${stripHexPrefix(bytesToHex(bytes))}`.toLowerCase(),
-    )
+    return Array.from(allowedTokens, ([bytes, { fees }]) => ({
+      erc20Address: `0x${stripHexPrefix(bytesToHex(bytes))}`.toLowerCase(),
+      fees,
+    }))
   }
 }

@@ -1,17 +1,19 @@
 import { describe, expect, test } from 'vitest'
 
 import { CALLER_CREDENTIAL, FIXTURE_NETWORK_ID } from '@/lib/caller/caller-fixtures'
+import type { SupportedToken } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token'
 import type { SupportedTokenService } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service'
 import { SupportedTokenServiceAdaptor } from '@/lib/midnight/ethereum-erc20-vault/supported-token-v1/supported-token-service-adaptor'
 import { mock } from '@/lib/testing/mock'
 import { RecordingLogger } from '@/lib/testing/recording-logger'
 
 const USER_COMMITMENT = 'ab'.repeat(32)
-const TOKEN = {
+const TOKEN: SupportedToken = {
   erc20Address: `0x${'aa'.repeat(20)}`,
   symbol: 'USDC',
   name: 'USD Coin',
   decimals: 6,
+  fees: { withdraw: 1_000n, swap: 1_000n, supply: 1_000n, redeem: 1_000n },
 }
 const FUND = { erc20Address: TOKEN.erc20Address, amount: 5n }
 

@@ -1,11 +1,9 @@
 import 'server-only'
 
-import { setNetworkId } from '@midnight-ntwrk/midnight-js/network-id'
 import type {
   LoggerProvider,
   ProofProvider,
   PublicDataProvider,
-  ZKConfigProvider,
 } from '@midnight-ntwrk/midnight-js/types'
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider'
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider'
@@ -167,6 +165,8 @@ import type { VaultCircuits } from '@/lib/midnight/ethereum-erc20-vault/vault-ci
 import {
   permissionlessVaultPrivateState,
   PROOF_TIMEOUT_MS,
+  VAULT_CALL_TTL_SECONDS,
+  type VaultCallProviders,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
 import {
   compiledVaultContract,
@@ -425,8 +425,6 @@ export const getBackend: () => Promise<Backend> = lazySingleton(async () =>
 
 /** Builds the packages in dependency order. Nothing here connects until first use. */
 export function createBackend(config: ServerConfig): Backend {
-  // midnight-js reads the network id from process state when it builds a call.
-  setNetworkId(config.client.midnightNetwork.networkId)
   const logging = createLogging(config)
   const { logger } = logging
   const db = createDb(config, logger)
@@ -856,15 +854,18 @@ function createMidnightEthereumErc20Vault(
   )
   const zkConfigProvider = new NodeZkConfigProvider<VaultCircuitId>(assetsPath)
   const compiledContract = compiledVaultContract(assetsPath)
-  const circuits = new VaultCircuitsMidnightJsImpl(
+  const callProviders: VaultCallProviders = {
     publicDataProvider,
     zkConfigProvider,
     compiledContract,
     vaultAddress,
+    config: { networkId: midnightNetwork.networkId, ttlSeconds: VAULT_CALL_TTL_SECONDS },
+  }
+  const circuits = new VaultCircuitsMidnightJsImpl(
+    callProviders,
     relayerWallet.publicKeys(),
     logger.child({ component: 'VaultCircuitsMidnightJsImpl' }),
   )
-  const callProviders = { publicDataProvider, zkConfigProvider, compiledContract, vaultAddress }
   const depositCallBuilder = new DepositCallBuilder(callProviders, proofProvider)
   const withdrawCallBuilder = new WithdrawCallBuilder(callProviders, proofProvider)
   const supplyCallBuilder = new SupplyCallBuilder(callProviders, proofProvider)
@@ -874,7 +875,7 @@ function createMidnightEthereumErc20Vault(
   const ledger = new VaultLedgerIndexerImpl(publicDataProvider, vaultAddress)
   const readers = signetReaders({
     vaultAddress,
-    signetAddress: midnightSignet.contractAddress,
+    responderAddress: midnightSignet.responderContractAddress,
     publicDataProvider,
     indexerURL: midnightNetwork.indexerURL,
   })
@@ -888,9 +889,7 @@ function createMidnightEthereumErc20Vault(
     logger,
   )
   const providers = createVaultProviders(
-    vaultAddress,
-    publicDataProvider,
-    zkConfigProvider,
+    callProviders,
     proofProvider,
     relayerWallet,
     midnightJsLoggerProvider,
@@ -1339,27 +1338,26 @@ function createMidnightEthereumErc20VaultActivityV1(
  * once the relayer wallet has synced, and the proof provider once its key registry has loaded.
  */
 function createVaultProviders(
-  vaultAddress: string,
-  publicDataProvider: PublicDataProvider,
-  zkConfigProvider: ZKConfigProvider<VaultCircuitId>,
+  callProviders: VaultCallProviders,
   proofProvider: () => Promise<ProofProvider>,
   relayerWallet: RelayerWallet,
   loggerProvider: LoggerProvider,
 ): () => Promise<VaultProviders> {
   return lazySingleton(async (): Promise<VaultProviders> => {
     const privateStateProvider = await MemoryPrivateStateProvider.holding(
-      vaultAddress,
+      callProviders.vaultAddress,
       VAULT_PRIVATE_STATE_ID,
       permissionlessVaultPrivateState(),
     )
     const wallet = await relayerWallet.provider()
     return {
       privateStateProvider,
-      publicDataProvider,
-      zkConfigProvider,
+      publicDataProvider: callProviders.publicDataProvider,
+      zkConfigProvider: callProviders.zkConfigProvider,
       proofProvider: await proofProvider(),
       walletProvider: wallet,
       midnightProvider: wallet,
+      config: callProviders.config,
       loggerProvider,
     }
   })
@@ -1387,7 +1385,7 @@ function createRespondOutcomeSources(
           new MpcOutputCacheReader({
             cacheUrl: respondOutput.mpcOutputCacheURL,
             networkId: config.client.midnightNetwork.networkId,
-            signetContractAddress: config.client.midnightSignet.contractAddress,
+            signerContractAddress: config.client.midnightSignet.signerContractAddress,
           }),
         )
       default: {

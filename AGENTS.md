@@ -146,7 +146,7 @@ Keep setup instructions and application reference material in README.md and docs
   `{ name, parent }`, and the parent's consumer matches a child's terminal event on the parent's
   collection without a read. A resource with no parent carries `{ name }` alone.
 - A chain step is read back from the ledger (`requestStage()` over the vault ledger, the
-  singleton's posts through the readers) and never inferred from a child transaction's outcome.
+  responder's posts through the readers) and never inferred from a child transaction's outcome.
   A child that failed is replaced while the ledger shows its step undone, and a resolver reads
   the ledger before it believes a child's failure, for every parent, the deposit included.
 - A ledger port's `submit` resolves with the id when the bytes reached the node, a lost

@@ -11,14 +11,14 @@ import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
 import { CIRCLE_EURC, CIRCLE_USDC } from './sepolia-tokens'
-import { deleteOperation, driveOperation, log } from './operation-round-trip'
+import { deleteOperation, driveOperation, log, vaultFeeOf } from './operation-round-trip'
 import { completeApprovalAsUser, startApprovalAsUser } from './user-approval'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
 import { completeSwapAsUser, startSwapAsUser } from './user-swap'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 
 const ROUND_TRIP_TIMEOUT_MS = 45 * 60_000
-/** Whole USDC the swap may spend; the quote decides how much EURC that buys. */
+/** USDC base units the swap may spend, deposited first together with the vault's swap fee: the quote decides how much EURC that buys. */
 const AMOUNT_IN = 2_000_000n
 
 /**
@@ -36,6 +36,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
   const vaultSecret = userWalletSeed()
   const created: [string, string][] = []
   let coinType: string
+  let swapFee: bigint
   let deposited = false
 
   beforeAll(async () => {
@@ -50,6 +51,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
       pureCircuits.vaultTokenDomainSeparator(evmAddressBytes(CIRCLE_USDC)),
       backend.config.client.midnightEthereumErc20Vault.contractAddress,
     )
+    swapFee = await vaultFeeOf(backend, user, CIRCLE_USDC, 'swap')
   }, ROUND_TRIP_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -92,7 +94,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
 
       const deposit = await startDepositAsUser(backend, vaultSecret, user, {
         erc20Address: CIRCLE_USDC,
-        amount: AMOUNT_IN,
+        amount: AMOUNT_IN + swapFee,
       })
       if (!deposit.ok) throw new Error(deposit.error)
       created.push(['midnight_ethereum_erc20_vault_deposits_v1', deposit.deposit.name])
@@ -102,7 +104,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
       await faucet.fundErc20({
         account: deposit.deposit.depositAccount,
         erc20Address: CIRCLE_USDC.toLowerCase(),
-        amount: AMOUNT_IN,
+        amount: AMOUNT_IN + swapFee,
       })
       await driveOperation(
         {
@@ -113,7 +115,7 @@ describe('ERC20 vault swap round trip over the local stack', () => {
         ROUND_TRIP_TIMEOUT_MS,
       )
       expect((await depositV1.repository.get(deposit.deposit.name))?.outcome).toBe('minted')
-      expect(await user.shieldedBalance(coinType)).toBeGreaterThanOrEqual(AMOUNT_IN)
+      expect(await user.shieldedBalance(coinType)).toBeGreaterThanOrEqual(AMOUNT_IN + swapFee)
       deposited = true
     },
     ROUND_TRIP_TIMEOUT_MS,
@@ -180,8 +182,10 @@ describe('ERC20 vault swap round trip over the local stack', () => {
       expect(eurcAfter - eurcBefore).toBe(quote.amountOutMinimum)
       expect(usdcBefore - usdcAfter).toBeGreaterThan(0n)
       expect(usdcBefore - usdcAfter).toBeLessThanOrEqual(AMOUNT_IN)
-      // The coin surrendered is AMOUNT_IN and the change minted back is what the trade left unspent.
-      expect(coinsBefore - (await user.shieldedBalance(coinType))).toBe(usdcBefore - usdcAfter)
+      // The coin surrendered is AMOUNT_IN plus the fee, and the change minted back is what the trade left unspent.
+      expect(coinsBefore - (await user.shieldedBalance(coinType))).toBe(
+        usdcBefore - usdcAfter + swapFee,
+      )
       const [request] = await midnight.ethereumErc20Vault.vaultRequestV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: swap.swap.name }],
       })

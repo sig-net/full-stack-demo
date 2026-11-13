@@ -33,13 +33,8 @@ describe('midnightExplorerOf', () => {
     },
     {
       name: 'a public network links to the public Polkadot.js Apps over its node',
-      config: configOf(
-        MidnightNetwork.Stagenet,
-        'https://rpc.stagenet.shielded.tools',
-        'https://rpc.example',
-      ),
-      expected:
-        'https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Frpc.stagenet.shielded.tools#/explorer/query/8562',
+      config: configOf(MidnightNetwork.Preprod, 'https://node.example', 'https://rpc.example'),
+      expected: 'https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Fnode.example#/explorer/query/8562',
     },
   ]
 

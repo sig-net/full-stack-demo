@@ -1,14 +1,4 @@
-import {
-  type Binding,
-  DustSecretKey,
-  LedgerParameters,
-  nativeToken,
-  type PreBinding,
-  type Proof,
-  type SignatureEnabled,
-  Transaction,
-  ZswapSecretKeys,
-} from '@midnightntwrk/ledger-v9'
+import { LedgerParameters, nativeToken, ZswapSecretKeys } from '@midnightntwrk/ledger-v9'
 import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk-abstractions'
 import { DustWallet } from '@midnightntwrk/wallet-sdk-dust-wallet'
 import {
@@ -16,7 +6,7 @@ import {
   WalletEntrySchema,
   WalletFacade,
 } from '@midnightntwrk/wallet-sdk-facade'
-import { HDWallet, Roles } from '@midnightntwrk/wallet-sdk-hd'
+import { WalletSeeds } from '@midnightntwrk/wallet-sdk-hd'
 import { ShieldedWallet } from '@midnightntwrk/wallet-sdk-shielded'
 import {
   createKeystore,
@@ -72,29 +62,19 @@ export async function startUserWallet(
         mergeWalletEntries,
       ),
     },
-    shielded: (cfg) => ShieldedWallet(cfg).startWithSecretKeys(keys.shieldedSecretKeys),
+    shielded: (cfg) => ShieldedWallet(cfg).startWithSeed(keys.seeds.shielded),
     unshielded: (cfg) =>
       UnshieldedWallet(cfg).startWithPublicKey(
         UnshieldedPublicKey.fromKeyStore(keys.unshieldedKeystore),
       ),
     dust: (cfg) =>
-      DustWallet(cfg).startWithSecretKey(
-        keys.dustSecretKey,
-        LedgerParameters.initialParameters().dust,
-      ),
+      DustWallet(cfg).startWithSeed(keys.seeds.dust, LedgerParameters.initialParameters().dust),
   })
-  await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey)
+  await facade.start(keys.seeds)
   await facade.waitForSyncedState()
   const finalize = async (unboundTx: string): Promise<string> => {
-    const unbound = Transaction.deserialize<SignatureEnabled, Proof, PreBinding>(
-      'signature',
-      'proof',
-      'pre-binding',
-      Uint8Array.from(Buffer.from(unboundTx, 'hex')),
-    )
     const recipe = await facade.balanceUnboundTransaction(
-      unbound,
-      { shieldedSecretKeys: keys.shieldedSecretKeys, dustSecretKey: keys.dustSecretKey },
+      facade.adoptTransaction(Uint8Array.from(Buffer.from(unboundTx, 'hex')), 'Unbound'),
       { ttl: new Date(Date.now() + BALANCE_TTL_MS) },
     )
     const signed = await facade.signRecipe(recipe, keys.unshieldedKeystore.signDataAsync)
@@ -119,12 +99,7 @@ export async function startUserWallet(
     finalize,
     release: (finalizedTx) =>
       facade.revertTransaction(
-        Transaction.deserialize<SignatureEnabled, Proof, Binding>(
-          'signature',
-          'proof',
-          'binding',
-          Uint8Array.from(Buffer.from(finalizedTx, 'hex')),
-        ),
+        facade.adoptTransaction(Uint8Array.from(Buffer.from(finalizedTx, 'hex')), 'Finalized'),
       ),
     stop: () => facade.stop(),
   }
@@ -132,7 +107,7 @@ export async function startUserWallet(
 
 /** The public keys of the user wallet's account zero, derived as the application's seed wallet derives them. */
 export function userWalletPublicKeys(seedHex: string): WalletPublicKeys {
-  const keys = ZswapSecretKeys.fromSeed(deriveRoleKeys(seedHex)[Roles.Zswap])
+  const keys = ZswapSecretKeys.fromSeed(walletSeedsOf(seedHex).shielded)
   return { coinPublicKey: keys.coinPublicKey, encryptionPublicKey: keys.encryptionPublicKey }
 }
 
@@ -179,37 +154,23 @@ const COST_PARAMETERS = {
 const BALANCE_TTL_MS = 30 * 60 * 1000
 
 interface UserKeys {
+  readonly seeds: WalletSeeds
   readonly shieldedSecretKeys: ZswapSecretKeys
-  readonly dustSecretKey: DustSecretKey
   readonly unshieldedKeystore: UnshieldedKeystore
 }
 
 function deriveKeys(seedHex: string, networkId: MidnightNetworkId): UserKeys {
-  const roleKeys = deriveRoleKeys(seedHex)
+  const seeds = walletSeedsOf(seedHex)
   return {
-    shieldedSecretKeys: ZswapSecretKeys.fromSeed(roleKeys[Roles.Zswap]),
-    dustSecretKey: DustSecretKey.fromSeed(roleKeys[Roles.Dust]),
-    unshieldedKeystore: createKeystore(
-      { kind: 'schnorr', secret: roleKeys[Roles.NightExternal] },
-      networkId,
-    ),
+    seeds,
+    shieldedSecretKeys: ZswapSecretKeys.fromSeed(seeds.shielded),
+    unshieldedKeystore: createKeystore({ kind: 'schnorr', secret: seeds.unshielded }, networkId),
   }
 }
 
-/** The three role keys of account zero, as the application's seed wallet derives them. */
-type RoleKeys = Record<
-  typeof Roles.Zswap | typeof Roles.NightExternal | typeof Roles.Dust,
-  Uint8Array
->
-
-function deriveRoleKeys(seedHex: string): RoleKeys {
-  const hd = HDWallet.fromSeed(Uint8Array.from(Buffer.from(seedHex.replace(/^0x/i, ''), 'hex')))
-  if (hd.type !== 'seedOk') throw new Error('HDWallet.fromSeed failed (seedError).')
-  const derived = hd.hdWallet
-    .selectAccount(0)
-    .selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust])
-    .deriveKeysAt(0)
-  if (derived.type !== 'keysDerived') throw new Error('deriveKeysAt failed (keyOutOfBounds).')
-  hd.hdWallet.clear()
-  return derived.keys
+/** The seeds of account zero, as the application's seed wallet derives them. */
+function walletSeedsOf(seedHex: string): WalletSeeds {
+  return WalletSeeds.fromMasterSeed(
+    Uint8Array.from(Buffer.from(seedHex.replace(/^0x/i, ''), 'hex')),
+  )
 }

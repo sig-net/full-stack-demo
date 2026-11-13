@@ -20,7 +20,7 @@ import {
 } from '@/lib/midnight/signed-message'
 
 /** The network every fixture address and credential is made for. */
-export const FIXTURE_NETWORK_ID: MidnightNetworkId = MidnightNetwork.Stagenet
+export const FIXTURE_NETWORK_ID: MidnightNetworkId = MidnightNetwork.Preprod
 
 /** MIP-0031's published test key `key-a`, which must never hold funds. */
 export const CALLER_SIGNING_KEY: SigningKey = { tag: 'schnorr', value: '07'.repeat(32) }

@@ -6,20 +6,20 @@ and shadcn/ui components on Base UI.
 ## Getting started
 
 Every command below runs from a clean machine to a working application against the local stack,
-and the [Stagenet](#stagenet) variant at the end swaps the local chain for stagenet. The local
+and the [Preprod](#preprod) variant at the end swaps the local chain for preprod. The local
 stack is two halves: the Midnight chain, the Sepolia fork and the Sig Network MPC responder come
 from the [midnight-examples](https://github.com/sig-net/midnight-examples) repository, and this
 repository adds Postgres, Kafka and the explorers.
 
 ### 1. Install the tools
 
-| Tool                               | Check with                          | Where to get it                                                                                                                                                                                              |
-| ---------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Node.js 22.22 or newer             | `node --version`                    | [nodejs.org](https://nodejs.org) or a version manager                                                                                                                                                        |
-| Yarn 4 through Corepack            | `corepack enable && yarn --version` | Ships with Node. Both repositories pin their Yarn in `packageManager`.                                                                                                                                       |
-| Compact compiler 0.33.0-rc.2       | `compact compile --version`         | Install the `compact` launcher per [Midnight's docs](https://docs.midnight.network/), then `compact update 0.33.0-rc.2`. `yarn zk-assets` below runs that exact compiler and fails when it is not installed. |
-| Docker with the Compose plugin     | `docker compose version`            | [Docker Desktop](https://www.docker.com/products/docker-desktop/) or a distribution engine, with at least 16 GB of RAM allocated: the proof server hangs under less.                                         |
-| An archive-capable Sepolia RPC URL |                                     | `https://sepolia.gateway.tenderly.co` works. The local EVM node forks Sepolia from it, and the MPC responder reads state at old blocks, which a pruned RPC refuses.                                          |
+| Tool                               | Check with                          | Where to get it                                                                                                                                                                                         |
+| ---------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js 22.22 or newer             | `node --version`                    | [nodejs.org](https://nodejs.org) or a version manager                                                                                                                                                   |
+| Yarn 4 through Corepack            | `corepack enable && yarn --version` | Ships with Node. Both repositories pin their Yarn in `packageManager`.                                                                                                                                  |
+| Compact compiler 0.36.0            | `compact compile --version`         | Install the `compact` launcher per [Midnight's docs](https://docs.midnight.network/), then `compact update 0.36.0`. `yarn zk-assets` below runs that exact compiler and fails when it is not installed. |
+| Docker with the Compose plugin     | `docker compose version`            | [Docker Desktop](https://www.docker.com/products/docker-desktop/) or a distribution engine, with at least 16 GB of RAM allocated: the proof server hangs under less.                                    |
+| An archive-capable Sepolia RPC URL |                                     | `https://sepolia.gateway.tenderly.co` works. The local EVM node forks Sepolia from it, and the MPC responder reads state at old blocks, which a pruned RPC refuses.                                     |
 
 ### 2. Bring up the Midnight stack and deploy the vault
 
@@ -40,20 +40,20 @@ yarn compile:erc20-vault
 docker compose up -d
 ```
 
-Generate the vault's proving keys, deploy the signet singleton and the vault, start the fakenet
-MPC responder, initialise the vault, allow its tokens (USDC, EURC, WETH, LINK, Aave USDC and
-stataUSDC) and grant the Uniswap router and the stataUSDC wrapper their allowances, seven MPC
-round trips:
+Generate the vault's proving keys, deploy the signet signer, the signet responder and the vault,
+start the fakenet MPC responder, initialise the vault, allow its tokens (USDC, EURC, WETH, LINK,
+Aave USDC and stataUSDC) and grant the Uniswap router and the stataUSDC wrapper their allowances,
+seven MPC round trips:
 
 ```bash
 yarn setup-local:erc20-vault
 ```
 
 The whole pipeline takes 35 to 40 minutes (37.5 measured on a clean run), most of it the seven
-approvals. It appends every value it generated to `.env`. Five of them come across to this
+approvals. It appends every value it generated to `.env`. Six of them come across to this
 repository in the next step. A rerun reuses the deployed contracts and skips what is done, and
 `docker compose down` followed by `docker compose up -d` discards the chain, after which the
-setup deploys again and the five values change.
+setup deploys again and the six values change.
 
 ### 3. Configure this repository
 
@@ -63,15 +63,16 @@ yarn install
 cp .env.local.example .env.local
 ```
 
-Open `.env.local` and copy the five values from the midnight-examples `.env`. The names differ:
+Open `.env.local` and copy the six values from the midnight-examples `.env`. The names differ:
 
-| midnight-examples `.env`           | `.env.local` here                                | What it is                                               |
-| ---------------------------------- | ------------------------------------------------ | -------------------------------------------------------- |
-| `MIDNIGHT_SIGNET_CONTRACT_ADDRESS` | `MIDNIGHT_SIGNET_CONTRACT_ADDRESS`               | The signet singleton the local stack deployed            |
-| `MPC_SECP256K1_PUBKEY`             | `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY`            | The fakenet MPC's root public key                        |
-| `MIDNIGHT_VAULT_CONTRACT_ADDRESS`  | `MIDNIGHT_ETHEREUM_ERC20_VAULT_CONTRACT_ADDRESS` | The vault the local stack deployed                       |
-| `BEARER_SEED`                      | `MIDNIGHT_RELAYER_SEED`                          | A funded wallet the backend pays relayer fees with       |
-| `USER_SEED`                        | `MIDNIGHT_USER_SEED`                             | A funded wallet the integration tests play the user with |
+| midnight-examples `.env`              | `.env.local` here                                | What it is                                               |
+| ------------------------------------- | ------------------------------------------------ | -------------------------------------------------------- |
+| `MIDNIGHT_SIGNER_CONTRACT_ADDRESS`    | `MIDNIGHT_SIGNER_CONTRACT_ADDRESS`               | The signet signer the local stack deployed               |
+| `MIDNIGHT_RESPONDER_CONTRACT_ADDRESS` | `MIDNIGHT_RESPONDER_CONTRACT_ADDRESS`            | The signet responder the local stack deployed            |
+| `MPC_SECP256K1_PUBKEY`                | `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY`            | The fakenet MPC's root public key                        |
+| `MIDNIGHT_VAULT_CONTRACT_ADDRESS`     | `MIDNIGHT_ETHEREUM_ERC20_VAULT_CONTRACT_ADDRESS` | The vault the local stack deployed                       |
+| `BEARER_SEED`                         | `MIDNIGHT_RELAYER_SEED`                          | A funded wallet the backend pays relayer fees with       |
+| `USER_SEED`                           | `MIDNIGHT_USER_SEED`                             | A funded wallet the integration tests play the user with |
 
 Everything else in `.env.local.example` already points at the local stack:
 `MIDNIGHT_NETWORK_ID=undeployed` selects the local node, indexer, proof server and MPC output
@@ -81,7 +82,7 @@ services the next step starts. [Configuration](#configuration) describes every v
 ### 4. Build the proving keys
 
 The contract packages ship verifier keys only. Build the prover keys and ZKIR of the vault and
-the signet contract under `zk-assets/` (under a minute), then copy the vault's bundle under
+the signet signer under `zk-assets/` (under a minute), then copy the vault's bundle under
 `public/` for the browser:
 
 ```bash
@@ -129,24 +130,38 @@ the local explorers:
 [Local services](#local-services) describes the three and the commands that stop, reset and
 restart the services.
 
-### Stagenet
+### Preprod
 
-Stagenet publishes the signet singleton, the MPC root key and the vault through the SDK packages,
-so no midnight-examples setup is needed. The proof server still runs locally, since it sees
-private witness data, and the midnight-examples compose file provides one:
+Preprod publishes the signet signer, the signet responder, the MPC root key and the vault through
+the SDK packages, so no midnight-examples setup is needed. The proof server still runs locally,
+since it sees private witness data, and the midnight-examples compose file provides one:
 
 ```bash
 cd midnight-examples
 docker compose up -d proof-server
 ```
 
-Then, in this repository, start from the stagenet template instead of the local one and set
-`MIDNIGHT_RELAYER_SEED` to a wallet holding NIGHT registered for DUST on stagenet, funded through
-the stagenet faucet:
+Blockfrost serves preprod's node and indexer and answers only requests carrying a project token.
+Create a "Midnight Preprod" project at [blockfrost.io](https://blockfrost.io) and keep its project
+id. Then, in this repository, start from the preprod template instead of the local one:
 
 ```bash
-cp .env.stagenet.example .env.local
+cp .env.preprod.example .env.local
 ```
+
+Put the project id in place of `<token>` in the three endpoint URLs the template sets:
+
+```bash
+MIDNIGHT_INDEXER_URL=https://midnight-preprod.blockfrost.io/api/v0?project_id=<token>
+MIDNIGHT_INDEXER_WS_URL=wss://midnight-preprod.blockfrost.io/api/v0/ws?project_id=<token>
+MIDNIGHT_NODE_URL=https://rpc.midnight-preprod.blockfrost.io?project_id=<token>
+```
+
+The token is not a server secret here: the three URLs are part of the client configuration, so
+the token reaches the browser, appears in the configuration summary and is carried in the
+Polkadot.js Apps links the Activity table opens. Set `MIDNIGHT_RELAYER_SEED` to a wallet holding
+NIGHT registered for DUST on preprod, funded through the preprod faucet at
+https://midnight-tmnight-preprod.nethermind.dev.
 
 Steps 4 and 5 are the same. Step 6 connects a wallet funded through the faucet, and the
 Activity table's links open on the public explorers.
@@ -228,16 +243,17 @@ only when it needs state, effects or browser APIs, as `src/components/mode-toggl
 
 Configuration is read from environment variables on the server at request time. Nothing is baked
 in at build time, so one build serves every environment. `.env.local.example` (the local stack) and
-`.env.stagenet.example` (stagenet) list the variables:
+`.env.preprod.example` (preprod) list the variables:
 
 | Variable                                         | Secret | Purpose                                                                                                                                                                     |
 | ------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MIDNIGHT_NETWORK_ID`                            | No     | `undeployed` or `stagenet`. Selects the default Midnight endpoints and the published contract values.                                                                       |
-| `MIDNIGHT_INDEXER_URL`                           | No     | Optional override of the indexer GraphQL endpoint.                                                                                                                          |
-| `MIDNIGHT_INDEXER_WS_URL`                        | No     | Optional override of the indexer subscription endpoint.                                                                                                                     |
-| `MIDNIGHT_NODE_URL`                              | No     | Optional override of the node RPC endpoint.                                                                                                                                 |
+| `MIDNIGHT_NETWORK_ID`                            | No     | `undeployed` or `preprod`. Selects the default Midnight endpoints and the published contract values.                                                                        |
+| `MIDNIGHT_INDEXER_URL`                           | No     | The indexer GraphQL endpoint. Required for `preprod` (the Blockfrost URL carrying `?project_id=<token>`), an optional override for `undeployed`.                            |
+| `MIDNIGHT_INDEXER_WS_URL`                        | No     | The indexer subscription endpoint. Required for `preprod` (the Blockfrost URL carrying `?project_id=<token>`), an optional override for `undeployed`.                       |
+| `MIDNIGHT_NODE_URL`                              | No     | The node RPC endpoint. Required for `preprod` (the Blockfrost URL carrying `?project_id=<token>`), an optional override for `undeployed`.                                   |
 | `MIDNIGHT_PROOF_SERVER_URL`                      | No     | Optional override of the proof server, `http://127.0.0.1:6300` by default. The page proves the deposit's calls through it, so it must be reachable from the browser's host. |
-| `MIDNIGHT_SIGNET_CONTRACT_ADDRESS`               | No     | 32-byte hex. Overrides the SDK's published signet singleton address, required for `undeployed`.                                                                             |
+| `MIDNIGHT_SIGNER_CONTRACT_ADDRESS`               | No     | 32-byte hex. Overrides the SDK's published signet signer address, required for `undeployed`.                                                                                |
+| `MIDNIGHT_RESPONDER_CONTRACT_ADDRESS`            | No     | 32-byte hex. Overrides the SDK's published signet responder address, required for `undeployed`.                                                                             |
 | `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY`            | No     | secp256k1 key in SEC1 hex or `secp256k1:base58`. Overrides the published MPC root key, required for `undeployed`.                                                           |
 | `MIDNIGHT_ETHEREUM_ERC20_VAULT_CONTRACT_ADDRESS` | No     | 32-byte hex. Overrides the published ERC20 vault address, required for `undeployed`.                                                                                        |
 | `EVM_CHAIN_ID`                                   | No     | Ethereum chain ID. `1`, `11155111` and `31337` have a default RPC.                                                                                                          |
@@ -248,7 +264,7 @@ in at build time, so one build serves every environment. `.env.local.example` (t
 | `MIDNIGHT_ZK_ASSETS_ROOT`                        | No     | The root the backend's proof provider searches for every contract's prover keys and ZKIR, `zk-assets/` by default (see [Proving keys](#proving-keys)). Server-only.         |
 | `MIDNIGHT_RELAYER_SEED`                          | Yes    | 32-byte hex seed of the backend's own Midnight wallet, which finalises and pays for relayer transactions (see [The relayer wallet](#the-relayer-wallet)). Server-only.      |
 | `RESPOND_OUTPUT_SOURCE`                          | No     | Where the backend obtains the bytes an MPC attestation is verified over: `mpc-cache` (default) or `evm-node` (traces the mined transaction on `EVM_RPC_URL`). Server-only.  |
-| `MPC_OUTPUT_CACHE_URL`                           | No     | Optional override of the network's MPC output cache, which `@sig-net/midnight` publishes for Stagenet and the local fakenet serves on port 3040. Server-only.               |
+| `MPC_OUTPUT_CACHE_URL`                           | No     | Optional override of the network's MPC output cache, which `@sig-net/midnight` publishes for Preprod and the local fakenet serves on port 3040. Server-only.                |
 | `MIDNIGHT_USER_SEED`                             | Yes    | Tests only: the funded Midnight wallet the integration tests play the user with. The application never reads it.                                                            |
 | `LOG_LEVEL`                                      | No     | The least severe server log level written: `debug`, `info` (default), `warn` or `error` (see [Logging](#logging)). Server-only.                                             |
 | `LOG_FORMAT`                                     | No     | `json` (default when `NODE_ENV` is `production`), one Cloud Logging shaped object per line, or `pretty` (default otherwise), coloured text. Server-only.                    |
@@ -337,9 +353,11 @@ application uses, and the block explorer of the local EVM node:
 - The sig.network explorer (`ghcr.io/sig-net/explorer`) on `127.0.0.1:5400`, whose page the
   browser runs against the local indexer, node and EVM fork. It is where the Activity dialog's
   Sig Network request links open on the local stack, on the request's lifecycle. The local
-  stack generates its own Signet contract and MPC root key, so the service reads
-  `MIDNIGHT_SIGNET_CONTRACT_ADDRESS` and `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY` from `.env.local`,
-  which is why the services start with `--env-file .env.local`.
+  stack deploys its own signet signer and responder and generates its own MPC root key, so the
+  service reads `MIDNIGHT_SIGNER_CONTRACT_ADDRESS`, `MIDNIGHT_RESPONDER_CONTRACT_ADDRESS` and
+  `MIDNIGHT_SIGNET_MPC_ROOT_PUBLIC_KEY` from `.env.local`, which is why the services start with
+  `--env-file .env.local`. The service needs an explorer image built from a release that reads
+  the signer and responder variables, and the `latest` image reads neither.
 
 `DB_CONNECTION_STRING` and `KAFKA_BROKERS` in both `.env.*.example` files point at the first two. Their data
 lives in the `full-stack-demo_postgres-data` and `full-stack-demo_kafka-data` Docker volumes and
@@ -732,7 +750,7 @@ in the table hold the definitions.
    the vault's own pipeline. The flusher moves the queued entry into the output buffer
    (`AwaitingFlush` to `AwaitingSend`, a vault-level batch over the relayer wallet). The resolver
    commits the relayer's `sendDeposit` call (`AwaitingSignature`), which records the request on
-   the ledger and notifies the signet singleton. The MPC signs the sweep, an EVM transaction from
+   the ledger and notifies the signet signer. The MPC signs the sweep, an EVM transaction from
    the deposit account at the assigned nonce, and the resolver reads that post on a sweep
    (`AwaitingBroadcast`). The resolver commits the signed bytes as an Ethereum transaction, whose
    resolver broadcasts them and watches the chain, and once that child has ended either way the
@@ -744,7 +762,7 @@ in the table hold the definitions.
    attestation, and the request is `Attested`. The output itself is presented to the complete
    circuit, which checks it against the recorded width and hash.
 5. **The ledger is the acknowledgement.** Every step of the request is recorded only when the
-   vault ledger, read through `requestStage()`, or the singleton's posts show it done. A step is
+   vault ledger, read through `requestStage()`, or the responder's posts show it done. A step is
    never inferred from a child transaction's outcome: a child that failed is replaced while the
    ledger shows its step undone, and a child that succeeded still waits for the ledger. The
    deposit's two caller calls get the same treatment, since a node can apply bytes whose
@@ -824,7 +842,7 @@ caller calls take this path (see
 [ERC-20 vault swap API](#erc-20-vault-swap-api) and
 [ERC-20 vault approval API](#erc-20-vault-approval-api)).
 
-`MidnightTransactionLedgerImpl` is the ledger behind the local or stagenet services: `prove`
+`MidnightTransactionLedgerImpl` is the ledger behind the local or preprod services: `prove`
 deserialises the unproven bytes and proves them through the proof server with the prover keys
 under `MIDNIGHT_ZK_ASSETS_ROOT`, `submit` sends the wallet's finalised bytes to the node
 over one WebSocket connection and returns one of the transaction's ledger identifiers, and
@@ -1029,7 +1047,7 @@ send call, the signed EVM transaction, the relayer's queue call), publishing the
 request's `name` and `parent`.
 
 The ledger is the acknowledgement for every step. `VaultRequestStateResolver` reads the vault
-ledger through `requestStage()` and the singleton's posts through the readers, records a step the
+ledger through `requestStage()` and the responder's posts through the readers, records a step the
 ledger shows done, and otherwise commits the one child that does the step when no live child does:
 it never infers a step from a child's outcome. A send child that failed is replaced while the
 ledger shows no send. A broadcast child that the node refused is replaced, while one that mined,
@@ -1044,7 +1062,7 @@ Two readers serve the resolver. `signet-readers.ts` builds one SDK `SignetReques
 per action over that action's request map, through which the resolver polls the MPC's signature
 (`getSignedEvmTransaction`, judged against the row's `signerAccount`: the deposit account for a
 deposit, the vault account for a swap or an approval) and the attestation posts.
-Every read walks the singleton's whole event history from the indexer, since a row carries no
+Every read walks the responder's whole event history from the indexer, since a row carries no
 block to bound the walk by. `respond-outcome-source.ts` is the port that obtains the bytes an
 attestation is verified over, which travel off chain: `RESPOND_OUTPUT_SOURCE` selects
 `RespondOutcomeSourceEvmNodeImpl`, which traces the mined transaction on `EVM_RPC_URL` with
@@ -1077,7 +1095,7 @@ synced waits for it, and an in-memory private state under a random secret, since
 never reads the witness.
 
 Two flushes built against the same ledger conflict and the chain decides. The loser lands as a
-`CallTxFailedError` with status `FailFallible` and its fee paid, or fails to build on one of
+`TxFailedError` with status `FailFallible` and its fee paid, or fails to build on one of
 `flushQueue`'s own asserts (`Request not queued`, `Attestation not queued`, `Identical request
 open`, each thrown as a plain error whose message the compact runtime prefixes with
 `failed assert: `). Either is a lost race, and the run goes again at once from a fresh ledger read.
@@ -1209,7 +1227,7 @@ stdout:
   "severity": "INFO",
   "timestamp": "2026-10-15T08:12:12.516Z",
   "component": "Backend",
-  "networkId": "stagenet",
+  "networkId": "preprod",
   "chainId": 11155111,
   "logLevel": "debug",
   "logFormat": "json",

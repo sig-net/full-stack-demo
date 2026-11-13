@@ -74,7 +74,7 @@ describe('resolveCaller', () => {
   test.each<{ name: string; credential: unknown; error: string }>([
     {
       name: 'a value that is not an object',
-      credential: 'mn_addr_stagenet1caller',
+      credential: 'mn_addr_preprod1caller',
       error: 'wallet login signature',
     },
     {

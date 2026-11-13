@@ -16,6 +16,7 @@ function info(id: TokenId, symbol: string): TokenInfo {
     icon: NO_ICON,
     origin: { kind: 'ethereum-erc20-vault', chainId: 1, erc20Address: '0x', issuer: 'Test' },
     supported: false,
+    vaultFees: null,
     pricing: null,
   }
 }
@@ -50,6 +51,7 @@ describe('TokenInfoRegistry by ERC20 and by support', () => {
     ...info({ ledger: 'shielded', tokenType: `cd${'0'.repeat(62)}` }, 'USDC'),
     origin: { kind: 'ethereum-erc20-vault', chainId: 1, erc20Address: '0xAbCd', issuer: 'Circle' },
     supported: true,
+    vaultFees: { withdraw: 0n, swap: 0n, supply: 0n, redeem: 0n },
     pricing: null,
   }
   const registry = new TokenInfoRegistry([SHIELDED, supportedUsdc])
@@ -63,7 +65,10 @@ describe('TokenInfoRegistry by ERC20 and by support', () => {
   })
 
   test('the fingerprint changes when support changes', () => {
-    const unsupported = new TokenInfoRegistry([SHIELDED, { ...supportedUsdc, supported: false }])
+    const unsupported = new TokenInfoRegistry([
+      SHIELDED,
+      { ...supportedUsdc, supported: false, vaultFees: null },
+    ])
     expect(unsupported.fingerprint).not.toBe(registry.fingerprint)
   })
 })

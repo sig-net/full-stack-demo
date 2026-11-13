@@ -29,6 +29,7 @@ const USDC: TokenInfo = {
     issuer: 'Circle',
   },
   supported: true,
+  vaultFees: { withdraw: 0n, swap: 0n, supply: 0n, redeem: 0n },
   pricing: null,
 }
 

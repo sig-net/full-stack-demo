@@ -20,6 +20,7 @@ import {
 import type { ClientConfig } from '@/lib/config/client-config'
 import {
   PROOF_TIMEOUT_MS,
+  VAULT_CALL_TTL_SECONDS,
   type VaultCallProviders,
   type VaultContract,
 } from '@/lib/midnight/ethereum-erc20-vault/vault-call'
@@ -42,6 +43,7 @@ export function browserVaultCallProviders(
       zkConfigProvider,
       compiledContract: browserVaultContract(),
       vaultAddress: vault.contractAddress,
+      config: { networkId: midnightNetwork.networkId, ttlSeconds: VAULT_CALL_TTL_SECONDS },
     },
     proofProvider: httpClientProofProvider({
       url: midnightNetwork.proofServerURL,

@@ -16,13 +16,13 @@ import type { Backend } from '@/server/backend'
 
 import { testBackend } from './backend'
 import { CIRCLE_USDC } from './sepolia-tokens'
-import { deleteOperation, driveOperation, log } from './operation-round-trip'
+import { deleteOperation, driveOperation, log, vaultFeeOf } from './operation-round-trip'
 import { completeDepositAsUser, startDepositAsUser } from './user-deposit'
 import { startUserWallet, type UserWallet, userWalletSeed } from './user-wallet'
 import { completeWithdrawAsUser, startWithdrawAsUser } from './user-withdraw'
 
 const ROUND_TRIP_TIMEOUT_MS = 45 * 60_000
-/** Whole USDC deposited and then sent back out. */
+/** USDC base units sent out, deposited first together with the vault's withdraw fee. */
 const AMOUNT = 1_500_000n
 
 /**
@@ -41,6 +41,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
   const created: [string, string][] = []
   let deposit: Deposit | undefined
   let coinType: string
+  let withdrawFee: bigint
 
   beforeAll(async () => {
     backend = await testBackend()
@@ -54,6 +55,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
       pureCircuits.vaultTokenDomainSeparator(evmAddressBytes(CIRCLE_USDC)),
       backend.config.client.midnightEthereumErc20Vault.contractAddress,
     )
+    withdrawFee = await vaultFeeOf(backend, user, CIRCLE_USDC, 'withdraw')
   }, ROUND_TRIP_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -69,7 +71,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
       const { depositV1 } = backend.midnight.ethereumErc20Vault
       const started = await startDepositAsUser(backend, vaultSecret, user, {
         erc20Address: CIRCLE_USDC,
-        amount: AMOUNT,
+        amount: AMOUNT + withdrawFee,
       })
       if (!started.ok) throw new Error(started.error)
       deposit = started.deposit
@@ -80,7 +82,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
       await faucet.fundErc20({
         account: deposit.depositAccount,
         erc20Address: CIRCLE_USDC.toLowerCase(),
-        amount: AMOUNT,
+        amount: AMOUNT + withdrawFee,
       })
       const name = deposit.name
       await driveOperation(
@@ -92,7 +94,7 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
         ROUND_TRIP_TIMEOUT_MS,
       )
       expect((await depositV1.repository.get(name))?.outcome).toBe('minted')
-      expect(await user.shieldedBalance(coinType)).toBeGreaterThanOrEqual(AMOUNT)
+      expect(await user.shieldedBalance(coinType)).toBeGreaterThanOrEqual(AMOUNT + withdrawFee)
     },
     ROUND_TRIP_TIMEOUT_MS,
   )
@@ -149,7 +151,8 @@ describe('ERC20 vault withdraw round trip over the local stack', () => {
       expect((await withdrawV1.repository.get(withdraw.name))?.outcome).toBe('sent')
       expect(await balanceOf(evm, CIRCLE_USDC, destination)).toBe(AMOUNT)
       expect(vaultBefore - (await balanceOf(evm, CIRCLE_USDC, vaultAccount))).toBe(AMOUNT)
-      expect(coinsBefore - (await user.shieldedBalance(coinType))).toBe(AMOUNT)
+      // The coin surrendered is the amount plus the fee, and only the amount leaves the vault account.
+      expect(coinsBefore - (await user.shieldedBalance(coinType))).toBe(AMOUNT + withdrawFee)
       const [request] = await midnight.ethereumErc20Vault.vaultRequestV1.repository.search({
         criteria: [{ type: 'exact-text', field: 'parent', text: withdraw.name }],
       })

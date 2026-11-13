@@ -1,5 +1,4 @@
-import type { DustWalletCapabilities } from '@midnightntwrk/wallet-sdk-dust-wallet'
-import type { CoreWallet, DustFullInfo } from '@midnightntwrk/wallet-sdk-dust-wallet/v1'
+import type { DustWalletTypes } from '@midnightntwrk/wallet-sdk-dust-wallet'
 import type { FacadeState, WalletFacade } from '@midnightntwrk/wallet-sdk-facade'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
@@ -15,34 +14,22 @@ import { RecordingLogger } from '@/lib/testing/recording-logger'
 const SEED = `${'00'.repeat(31)}01`
 /** One spendable coin and one a transaction in flight spends, both counted. */
 const DUST = 7n
-const coin = (generatedNow: bigint): DustFullInfo =>
-  mock<DustFullInfo>('DustFullInfo', { generatedNow })
+const coin = (generatedNow: bigint): DustWalletTypes.DustFullInfo =>
+  mock<DustWalletTypes.DustFullInfo>('DustFullInfo', { generatedNow })
 
-const syncedFacade = (): Promise<WalletFacade> => {
-  const state = mock<CoreWallet>('CoreWallet')
-  const coinsAndBalances = mock<DustWalletCapabilities['coinsAndBalances']>('CoinsAndBalances', {
-    getTotalCoins: (read, time) => {
-      expect(read).toBe(state)
-      expect(time).toBeInstanceOf(Date)
-      return [coin(3n), coin(4n)]
-    },
-  })
-  return Promise.resolve(
+const syncedFacade = (): Promise<WalletFacade> =>
+  Promise.resolve(
     mock<WalletFacade>('WalletFacade', {
       waitForSyncedState: () =>
         Promise.resolve(
           mock<FacadeState>('FacadeState', {
             dust: mock<FacadeState['dust']>('DustWalletState', {
-              state,
-              capabilities: mock<DustWalletCapabilities>('DustWalletCapabilities', {
-                coinsAndBalances,
-              }),
+              totalCoins: [coin(3n), coin(4n)],
             }),
           }),
         ),
     }),
   )
-}
 const syncing = (): Promise<WalletFacade> => new Promise(() => undefined)
 const PROGRESS: WalletSyncProgress = {
   shielded: { applied: 160295n, head: 160295n, synced: true },

@@ -1,5 +1,14 @@
+import { bytesToHex } from '@sig-net/midnight'
+import {
+  evmAddressBytes,
+  type TokenFees,
+  vaultTokenFees,
+} from '@sig-net/midnight-examples-erc20-vault-contract'
+
 import type { CallerOperationState } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/caller-operation'
 import type { Backend } from '@/server/backend'
+
+import type { UserWallet } from './user-wallet'
 
 const POLL_EVERY_MS = 5_000
 
@@ -71,4 +80,25 @@ export function shortName(name: string): string {
 
 export function log(message: string): void {
   console.log(`${new Date().toISOString()} ${message}`)
+}
+
+/**
+ * The fee the vault's ledger holds for `action` on the vault coin of `erc20Address`, which a
+ * start surrenders on top of the principal and which leaves the user's balance with it. It
+ * refuses a user whose own wallet receives the fee coin, since that balance drops by the
+ * principal alone.
+ */
+export async function vaultFeeOf(
+  backend: Backend,
+  user: UserWallet,
+  erc20Address: string,
+  action: keyof TokenFees,
+): Promise<bigint> {
+  const state = await backend.midnight.ethereumErc20Vault.ledger.state()
+  if (bytesToHex(state.feeRecipientCoinPublicKey.bytes) === user.publicKeys.coinPublicKey) {
+    throw new Error('the user wallet is the vault fee recipient: use another MIDNIGHT_USER_SEED')
+  }
+  const fee = vaultTokenFees(state, evmAddressBytes(erc20Address))[action]
+  log(`vault ${action} fee on ${erc20Address}: ${fee.toString()} base units`)
+  return fee
 }

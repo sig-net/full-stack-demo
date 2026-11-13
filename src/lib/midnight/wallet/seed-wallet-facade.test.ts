@@ -1,5 +1,4 @@
-import type { DustWalletCapabilities } from '@midnightntwrk/wallet-sdk-dust-wallet'
-import type { CoreWallet, DustFullInfo } from '@midnightntwrk/wallet-sdk-dust-wallet/v1'
+import type { DustWalletTypes } from '@midnightntwrk/wallet-sdk-dust-wallet'
 import type { FacadeState } from '@midnightntwrk/wallet-sdk-facade'
 import { describe, expect, test } from 'vitest'
 
@@ -16,22 +15,11 @@ describe('totalDust', () => {
       expected: 7n,
     },
   ])('$name', ({ generatedNow, expected }) => {
-    const now = new Date()
-    const state = mock<CoreWallet>('CoreWallet')
     const dust = mock<FacadeState['dust']>('DustWalletState', {
-      state,
-      capabilities: mock<DustWalletCapabilities>('DustWalletCapabilities', {
-        coinsAndBalances: mock<DustWalletCapabilities['coinsAndBalances']>('CoinsAndBalances', {
-          getTotalCoins: (read, time) => {
-            expect(read).toBe(state)
-            expect(time).toBe(now)
-            return generatedNow.map((value) =>
-              mock<DustFullInfo>('DustFullInfo', { generatedNow: value }),
-            )
-          },
-        }),
-      }),
+      totalCoins: generatedNow.map((value) =>
+        mock<DustWalletTypes.DustFullInfo>('DustFullInfo', { generatedNow: value }),
+      ),
     })
-    expect(totalDust(dust, now)).toBe(expected)
+    expect(totalDust(dust)).toBe(expected)
   })
 })

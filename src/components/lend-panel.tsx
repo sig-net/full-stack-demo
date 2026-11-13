@@ -17,14 +17,17 @@ import { Button } from '@/components/ui/button'
 import { useMidnightBalances } from '@/components/use-midnight-balances'
 import { useSpotPrices } from '@/components/use-spot-prices'
 import type { SupportedBalance } from '@/lib/balances/supported-balances'
+import {
+  maxSurrenderAmount,
+  surrenderAmountOf,
+  vaultFeeNotice,
+} from '@/lib/balances/surrender-amount'
 import { loginBlockerOf } from '@/lib/caller/wallet-login-query'
 import type { CallerCallStage } from '@/lib/midnight/ethereum-erc20-vault/caller-operation/run-caller-call'
 import {
   missingReadiness,
   type ReadinessCheckId,
 } from '@/lib/midnight/ethereum-erc20-vault/readiness-v1/vault-readiness'
-import { formatTokenAmount } from '@/lib/tokens/format-token-amount'
-import { parseTokenAmount } from '@/lib/tokens/parse-token-amount'
 import type { TokenInfo } from '@/lib/tokens/token-info'
 import { prepareStartRedeem, startRedeem } from '@/server/actions/redeem-actions'
 import { getSupplyTarget, prepareStartSupply, startSupply } from '@/server/actions/supply-actions'
@@ -75,15 +78,18 @@ export function LendPanel(): ReactNode {
       : registry.byErc20Address(target.data.underlyingErc20Address)
   const stata =
     target.data === undefined ? undefined : registry.byErc20Address(target.data.stataErc20Address)
-  // The wrapper's token is outside the vault's allowlist, so the balance is matched by token type, not by the supported set.
+  // The pinned pair is read from the supply target, so its balances are matched by token type, not through the supported set.
   const sourceOf = (token: TokenInfo | undefined): SupportedBalance | null => {
     const balance = balances.data?.find((candidate) => candidate.tokenType === token?.id.tokenType)
     return token === undefined || balance === undefined ? null : { token, balance }
   }
   const supplySource = sourceOf(underlying)
   const redeemSource = sourceOf(stata)
-  const supplyAmount = amountOf(supplyText, supplySource)
-  const redeemAmount = amountOf(redeemText, redeemSource)
+  // The contract charges the supply fee on the underlying and the redeem fee on the wrapper's shares.
+  const supplyFee = underlying?.vaultFees?.supply ?? null
+  const redeemFee = stata?.vaultFees?.redeem ?? null
+  const supplyAmount = surrenderAmountOf(supplyText, supplySource, supplyFee)
+  const redeemAmount = surrenderAmountOf(redeemText, redeemSource, redeemFee)
 
   const supplying = useMutation({
     mutationFn: async () => {
@@ -195,6 +201,7 @@ export function LendPanel(): ReactNode {
           Icon={Upload}
           token={underlying ?? null}
           source={supplySource}
+          fee={supplyFee}
           amountText={supplyText}
           onAmountChange={setSupplyText}
           usdEstimate={
@@ -218,6 +225,7 @@ export function LendPanel(): ReactNode {
           Icon={Download}
           token={stata ?? null}
           source={redeemSource}
+          fee={redeemFee}
           amountText={redeemText}
           onAmountChange={setRedeemText}
           usdEstimate={
@@ -246,8 +254,10 @@ interface LendActionProps {
   Icon: typeof Upload
   /** The one token the action moves, fixed by the vault's pinned pair. */
   token: TokenInfo | null
-  /** The wallet's balance of that token, the amount's ceiling. */
+  /** The wallet's balance of that token, which covers the amount and the fee. */
   source: SupportedBalance | null
+  /** The vault's fee on the action in that token, null while unread. */
+  fee: bigint | null
   amountText: string
   onAmountChange: (text: string) => void
   /** The typed amount at spot, for the field's value line. */
@@ -270,6 +280,7 @@ function LendAction({
   Icon,
   token,
   source,
+  fee,
   amountText,
   onAmountChange,
   usdEstimate,
@@ -301,12 +312,17 @@ function LendAction({
             : {
                 amount: source.balance.amount,
                 onMax: () => {
-                  onAmountChange(source.balance.amount)
+                  onAmountChange(maxSurrenderAmount(source, fee))
                 },
               }
         }
         usdEstimate={usdEstimate}
       />
+      {token !== null && (
+        <p className="text-sm text-muted-foreground">
+          {vaultFeeNotice(fee, token.symbol, token.decimals)}
+        </p>
+      )}
       <div role="status" className="text-sm text-muted-foreground">
         {blocker ?? summary}
       </div>
@@ -346,25 +362,4 @@ const REDEEM_STAGE_LABELS: Record<CallerCallStage, string> = {
   building: 'Building and proving the start call',
   signing: 'Paying the fee and signing with your wallet',
   recording: 'Recording the redeem',
-}
-
-/** The typed amount in base units, or why it cannot be moved yet. */
-function amountOf(
-  text: string,
-  source: SupportedBalance | null,
-): { value: bigint | null; error: string | null } {
-  if (source === null || text === '') return { value: null, error: null }
-  try {
-    const value = parseTokenAmount(text, source.token.decimals)
-    if (value <= 0n) return { value: null, error: null }
-    if (value > source.balance.baseUnits) {
-      return {
-        value: null,
-        error: `That is more than your ${formatTokenAmount(source.balance.baseUnits, source.token.decimals)} ${source.token.symbol}.`,
-      }
-    }
-    return { value, error: null }
-  } catch (error: unknown) {
-    return { value: null, error: error instanceof Error ? error.message : String(error) }
-  }
 }

@@ -1,14 +1,11 @@
-import {
-  type DustSecretKey,
-  nativeToken,
-  type UnprovenTransaction,
-  type ZswapSecretKeys,
-} from '@midnightntwrk/ledger-v9'
+import { type DustSecretKey, nativeToken, type ZswapSecretKeys } from '@midnightntwrk/ledger-v9'
+import type { UnprovenTx } from '@midnightntwrk/wallet-sdk-abstractions'
 import type {
   BalancingRecipe,
   UnprovenTransactionRecipe,
   WalletFacade,
 } from '@midnightntwrk/wallet-sdk-facade'
+import type { WalletSeeds } from '@midnightntwrk/wallet-sdk-hd'
 import { createKeystore } from '@midnightntwrk/wallet-sdk-unshielded-wallet'
 import { MidnightNetwork } from '@sig-net/midnight'
 import { describe, expect, test } from 'vitest'
@@ -23,6 +20,7 @@ const receiver = createKeystore({ kind: 'schnorr', secret: new Uint8Array(32).fi
 const RECEIVER_ADDRESS = receiver.getBech32Address().toString()
 
 const keys: AccountKeys = {
+  seeds: mock<WalletSeeds>('WalletSeeds'),
   shieldedSecretKeys: mock<ZswapSecretKeys>('ZswapSecretKeys'),
   dustSecretKey: mock<DustSecretKey>('DustSecretKey'),
   unshieldedKeystore: keystore,
@@ -41,7 +39,9 @@ interface Scripted {
 
 function scripted(): Scripted {
   return {
-    transfer: { type: 'UNPROVEN_TRANSACTION', transaction: mock<UnprovenTransaction>('Transfer') },
+    transfer: mock<UnprovenTransactionRecipe>('Transfer', {
+      transaction: mock<UnprovenTx>('TransferTransaction'),
+    }),
     balanced: mock<UnprovenTransactionRecipe>('Balanced'),
     signed: mock<BalancingRecipe>('Signed'),
     finalized: mock<Finalized>('Finalized'),
@@ -57,7 +57,7 @@ function facadeOver(script: Scripted, failAt?: 'balance' | 'finalize' | 'submit'
     return failAt === name ? Promise.reject(new Error(`${name} failed`)) : Promise.resolve(result)
   }
   return mock<WalletFacade>('WalletFacade', {
-    transferTransaction: (outputs, _secretKeys, options) => {
+    transferTransaction: (outputs, options) => {
       expect(outputs).toEqual([
         {
           type: 'unshielded',
@@ -73,7 +73,7 @@ function facadeOver(script: Scripted, failAt?: 'balance' | 'finalize' | 'submit'
       expect(options.payFees).toBe(false)
       return step('transfer', script.transfer)
     },
-    balanceUnprovenTransaction: (transaction, _secretKeys, options) => {
+    balanceUnprovenTransaction: (transaction, options) => {
       expect(transaction).toBe(script.transfer.transaction)
       expect(options.tokenKindsToBalance).toEqual(['dust'])
       return step('balance', script.balanced)

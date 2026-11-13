@@ -10,7 +10,7 @@ import { userCommitmentSchema } from '@/lib/midnight/ethereum-erc20-vault/vault-
  * public state, so its read takes no caller; the funds read is the caller's own deposit account.
  */
 export interface SupportedTokenService {
-  /** The vault's allowlist in ledger order, each token with the metadata its contract reports. */
+  /** The vault's allowlist in ledger order, each token with the metadata its contract reports and its fees. */
   listSupportedTokens(args: ListSupportedTokensArgs): Promise<SupportedToken[]>
   /** The supported tokens the caller's deposit account holds above zero, in allowlist order. */
   listDepositAccountFunds(

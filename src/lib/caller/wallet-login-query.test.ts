@@ -13,7 +13,7 @@ import type { MidnightNetworkId } from '@/lib/config/midnight-network-config'
 import type { Wallet } from '@/lib/midnight/wallet/wallet'
 import { mock } from '@/lib/testing/mock'
 
-const NETWORK_ID: MidnightNetworkId = MidnightNetwork.Stagenet
+const NETWORK_ID: MidnightNetworkId = MidnightNetwork.Preprod
 const VERIFYING_KEY = 'ab'.repeat(32)
 
 /** A wallet that refuses the first `refusals` signatures and then signs, counting every request. */

@@ -1,5 +1,4 @@
 import type { Signature, SignDataOptions } from '@midnight-ntwrk/dapp-connector-api'
-import { setNetworkId } from '@midnight-ntwrk/midnight-js/network-id'
 import { DustAddress, MidnightBech32m } from '@midnightntwrk/wallet-sdk-address-format'
 import { bytesToHex } from '@sig-net/midnight'
 
@@ -100,7 +99,6 @@ export class SeedWallet implements Wallet {
     onAddresses: (addresses: WalletAddresses) => void,
   ): Promise<void> {
     try {
-      setNetworkId(this.configuration.networkId)
       const keys = deriveAccountKeys(this.seed, this.configuration.networkId)
       this.keys = keys
       this.walletAddresses = Object.freeze({
@@ -121,7 +119,7 @@ export class SeedWallet implements Wallet {
       )
       this.facade = facade
       this.assertActive()
-      await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey)
+      await facade.start(keys.seeds)
       this.assertActive()
       this.provider = createWalletAndMidnightProvider(facade, keys)
       await new Promise<void>((resolve, reject) => {
@@ -259,9 +257,16 @@ export class SeedWallet implements Wallet {
     return registerNightForDust(facade, keys, this.state())
   }
 
+  /** Every shielded coin the wallet holds, the change a transaction in flight returns included. */
   getShieldedBalances(): Promise<Record<string, bigint>> {
     return this.readState((state) =>
-      state.shielded.capabilities.coinsAndBalances.getTotalBalances(state.shielded.state),
+      state.shielded.totalCoins.reduce<Record<string, bigint>>(
+        (balances, { coin }) => ({
+          ...balances,
+          [coin.type]: (balances[coin.type] ?? 0n) + coin.value,
+        }),
+        {},
+      ),
     )
   }
   getUnshieldedBalances(): Promise<Record<string, bigint>> {
@@ -271,7 +276,7 @@ export class SeedWallet implements Wallet {
   getDustBalance(): Promise<{ cap: bigint; balance: bigint }> {
     return this.readState((state) => ({
       cap: state.dust.totalCoins.reduce((sum, coin) => sum + coin.maxCap, 0n),
-      balance: totalDust(state.dust, new Date()),
+      balance: totalDust(state.dust),
     }))
   }
   /** Available NIGHT not registered for DUST generation, in STAR. */

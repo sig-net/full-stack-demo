@@ -10,13 +10,11 @@ import {
 } from '@midnightntwrk/ledger-v9'
 import { SerializedTransaction } from '@midnightntwrk/wallet-sdk-abstractions'
 import {
-  makeConfig,
   NodeClient,
   NodeClientError,
   PolkadotNodeClient,
 } from '@midnightntwrk/wallet-sdk-node-client/effect'
-import { ApiPromise, WsProvider } from '@polkadot/api'
-import { Cause, Effect, Exit, Option } from 'effect'
+import { Cause, Duration, Effect, Exit, Option, Scope } from 'effect'
 import { hexToBytes } from '@sig-net/midnight'
 import { z } from 'zod'
 
@@ -173,7 +171,7 @@ const transactionStatusResponseSchema = z.object({
     .optional(),
 })
 
-const NODE_CONNECT_TIMEOUT_MS = 30_000
+const NODE_CONNECT_TIMEOUT = Duration.seconds(30)
 
 /**
  * Sends the bytes over one node connection that lives for this submission alone. The node
@@ -184,35 +182,25 @@ async function submitToNode(
   transaction: FinalizedTransaction,
   logger: Logger,
 ): Promise<void> {
-  const relayURL = new URL(nodeURL.replace(/^http/, 'ws'))
-  const provider = new WsProvider(relayURL.toString(), false)
-  const api = new ApiPromise({ provider, noInitWarn: true, throwOnConnect: true })
-  const abort = new AbortController()
-  const timer = setTimeout(() => {
-    abort.abort()
-  }, NODE_CONNECT_TIMEOUT_MS)
+  const scope = Effect.runSync(Scope.make())
   try {
-    await Effect.runPromise(
-      Effect.tryPromise(async () => {
-        await provider.connect()
-        await api.isReadyOrError
-      }),
-      { signal: abort.signal },
+    const connected = await Effect.runPromiseExit(
+      Scope.extend(
+        PolkadotNodeClient.make({
+          nodeURL: new URL(nodeURL.replace(/^http/, 'ws')),
+          reconnectionTimeout: NODE_CONNECT_TIMEOUT,
+        }),
+        scope,
+      ),
     )
-    clearTimeout(timer)
-    await submitThrough(
-      new PolkadotNodeClient(makeConfig({ nodeURL: relayURL }), api),
-      transaction,
-      logger,
-    )
-  } catch (error: unknown) {
-    if (abort.signal.aborted) {
-      throw new Error(`Connecting to the Midnight node at ${nodeURL} timed out`, { cause: error })
+    if (Exit.isFailure(connected)) {
+      throw new Error(`Connecting to the Midnight node at ${nodeURL} failed`, {
+        cause: Cause.squash(connected.cause),
+      })
     }
-    throw error
+    await submitThrough(connected.value, transaction, logger)
   } finally {
-    clearTimeout(timer)
-    await api.disconnect()
+    await Effect.runPromise(Scope.close(scope, Exit.void))
   }
 }
 

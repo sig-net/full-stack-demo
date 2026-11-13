@@ -20,6 +20,7 @@ const USDC: TokenInfo = {
   icon: { source: 'web3icons', name: 'USDC' },
   origin: { kind: 'ethereum-erc20-vault', chainId: 31337, erc20Address: ERC20_ADDRESS },
   supported: true,
+  vaultFees: { withdraw: 0n, swap: 0n, supply: 0n, redeem: 0n },
   pricing: null,
 }
 

@@ -5,7 +5,7 @@ import {
 } from '@sig-net/midnight'
 
 /**
- * Where the bytes an MPC attestation is verified over come from. The singleton's attestation
+ * Where the bytes an MPC attestation is verified over come from. The responder's attestation
  * posts carry the output's width and hash under the MPC's signature but not the output, and
  * anyone may post, so a post counts only once bytes obtained here match its width and hash and
  * its signature verifies against the vault's pinned response key. Every call reads external systems and is made outside any database transaction.
@@ -22,7 +22,7 @@ export interface AttestedOutcomeArgs {
 }
 
 export interface RespondOutcome {
-  /** The post as the singleton emitted it, big-endian, whose `outputKind` is the MPC's verified verdict. */
+  /** The post as the responder emitted it, big-endian, whose `outputKind` is the MPC's verified verdict. */
   readonly event: RespondBidirectionalEvent
   /** The bytes the signature covers: the execution output as the MPC serialised it, empty for a failed or unviable execution. */
   readonly serializedOutput: Uint8Array

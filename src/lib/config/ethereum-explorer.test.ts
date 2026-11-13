@@ -37,12 +37,12 @@ describe('ethereumExplorerOf', () => {
     },
     {
       name: 'Sepolia links to its Etherscan',
-      config: configOf(MidnightNetwork.Stagenet, 11155111, 'https://rpc.example'),
+      config: configOf(MidnightNetwork.Preprod, 11155111, 'https://rpc.example'),
       expected: { name: 'Etherscan', url: `https://sepolia.etherscan.io/tx/${HASH}` },
     },
     {
       name: 'mainnet links to Etherscan',
-      config: configOf(MidnightNetwork.Stagenet, 1, 'https://rpc.example'),
+      config: configOf(MidnightNetwork.Preprod, 1, 'https://rpc.example'),
       expected: { name: 'Etherscan', url: `https://etherscan.io/tx/${HASH}` },
     },
     {
@@ -52,7 +52,7 @@ describe('ethereumExplorerOf', () => {
     },
     {
       name: 'a chain without a known explorer has none',
-      config: configOf(MidnightNetwork.Stagenet, 4242, 'https://rpc.example'),
+      config: configOf(MidnightNetwork.Preprod, 4242, 'https://rpc.example'),
       expected: null,
     },
   ]
@@ -72,7 +72,7 @@ describe('ethereumExplorerOf', () => {
       )?.addressURL(account),
     ).toBe(`http://localhost:5100/address/${account}`)
     expect(
-      ethereumExplorerOf(configOf(MidnightNetwork.Stagenet, 1, 'https://rpc.example'))?.addressURL(
+      ethereumExplorerOf(configOf(MidnightNetwork.Preprod, 1, 'https://rpc.example'))?.addressURL(
         account,
       ),
     ).toBe(`https://etherscan.io/address/${account}`)

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { CallTxFailedError } from '@midnight-ntwrk/midnight-js/contracts'
+import { TxFailedError } from '@midnight-ntwrk/midnight-js/contracts'
 import { FailFallible } from '@midnight-ntwrk/midnight-js/types'
 
 import { CoalescingRunner } from '@/lib/coalescing-runner'
@@ -55,7 +55,7 @@ export class FlusherImpl implements Flusher {
  * means the guaranteed section failed, which a rerun would repeat.
  */
 function isLostRace(error: unknown): boolean {
-  if (error instanceof CallTxFailedError) return error.finalizedTxData.status === FailFallible
+  if (error instanceof TxFailedError) return error.record.status === FailFallible
   const refusal = circuitAssertMessage(error)
   return refusal !== undefined && FLUSH_RACE_ASSERTS.includes(refusal)
 }

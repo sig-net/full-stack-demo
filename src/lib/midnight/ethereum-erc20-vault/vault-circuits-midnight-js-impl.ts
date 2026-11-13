@@ -2,7 +2,6 @@ import 'server-only'
 
 import { CompiledContract } from '@midnight-ntwrk/compact-js/effect'
 import type { CallTxOptions } from '@midnight-ntwrk/midnight-js/contracts'
-import type { PublicDataProvider, ZKConfigProvider } from '@midnight-ntwrk/midnight-js/types'
 import { respondBidirectionalEventToCircuitInput } from '@sig-net/midnight'
 import {
   Contract,
@@ -33,15 +32,8 @@ export class VaultCircuitsMidnightJsImpl implements VaultCircuits {
   private readonly logger: Logger
 
   /** The relayer's keys go into every permissionless call, since its wallet balances them. */
-  constructor(
-    publicDataProvider: PublicDataProvider,
-    zkConfigProvider: ZKConfigProvider<VaultCircuitId>,
-    compiledContract: VaultCompiledContract,
-    vaultAddress: string,
-    relayerWallet: WalletPublicKeys,
-    logger: Logger,
-  ) {
-    this.providers = { publicDataProvider, zkConfigProvider, compiledContract, vaultAddress }
+  constructor(providers: VaultCallProviders, relayerWallet: WalletPublicKeys, logger: Logger) {
+    this.providers = providers
     this.relayerWallet = relayerWallet
     this.logger = logger
   }

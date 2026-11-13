@@ -103,7 +103,7 @@ describe('Vault requests over Postgres, the indexer and the vault ledger', () =>
     expect((await repository.get(row.name))?.state).toBe('AwaitingSend')
   })
 
-  test('the deposit reader finds no posts for a request the singleton never saw', async () => {
+  test('the deposit reader finds no posts for a request the signer never saw', async () => {
     const { signetReaders } = backend.midnight.ethereumErc20Vault
     const posts = await signetReaders.deposit.getRespondBidirectionalEvents(
       requestIdHex(crypto.getRandomValues(new Uint8Array(32))),

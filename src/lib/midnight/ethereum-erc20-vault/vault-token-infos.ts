@@ -44,7 +44,7 @@ export function vaultTokenInfos(
   const info = (
     token: Omit<VaultErc20Token, 'issuer' | 'pricing'> &
       Partial<Pick<VaultErc20Token, 'issuer' | 'pricing'>>,
-    supported: boolean,
+    supported: SupportedToken | undefined,
   ): TokenInfo => ({
     id: { ledger: 'shielded', tokenType: vaultTokenType(token.erc20Address, vaultContractAddress) },
     symbol: token.symbol,
@@ -57,7 +57,8 @@ export function vaultTokenInfos(
       erc20Address: token.erc20Address,
       issuer: token.issuer,
     },
-    supported,
+    supported: supported !== undefined,
+    vaultFees: supported?.fees ?? null,
     pricing: token.pricing ?? null,
   })
   return [
@@ -65,12 +66,12 @@ export function vaultTokenInfos(
       const supported = supportedByAddress.get(token.erc20Address.toLowerCase())
       return info(
         supported === undefined ? token : { ...token, decimals: supported.decimals },
-        supported !== undefined,
+        supported,
       )
     }),
     ...supportedTokens
       .filter((token) => !bundledAddresses.has(token.erc20Address.toLowerCase()))
-      .map((token) => info({ ...token, icon: NO_ICON }, true)),
+      .map((token) => info({ ...token, icon: NO_ICON }, token)),
   ]
 }
 

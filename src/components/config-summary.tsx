@@ -31,7 +31,8 @@ export function ConfigSummary(): ReactNode {
       </dl>
       <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2">
         <dt className="col-span-2 font-medium">Signet</dt>
-        <Entry label="Contract" value={midnightSignet.contractAddress} />
+        <Entry label="Signer" value={midnightSignet.signerContractAddress} />
+        <Entry label="Responder" value={midnightSignet.responderContractAddress} />
         <Entry label="MPC root key" value={midnightSignet.mpcRootPublicKey} />
       </dl>
       <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2">
