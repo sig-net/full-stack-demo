@@ -1,0 +1,37 @@
+# Build context for the production image. Mirrors .gitignore, then drops what the image builds itself.
+.git
+node_modules
+.next
+out
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+logs
+*.log
+*scratch*
+*.fig
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment files carry the deployment's configuration and server credentials, which the image
+# takes from its runtime environment.
+.env*
+!.env.*.example
+
+# The zk-assets stage regenerates the prover keys inside the image, the browser's copy included.
+zk-assets
+public/zk-assets
+
+# Not part of the application build.
+.agents
+.claude
+.github
+.vscode
+docs
+integration-tests
+Dockerfile
+.dockerignore

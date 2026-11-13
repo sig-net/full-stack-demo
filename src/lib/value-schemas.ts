@@ -1,0 +1,66 @@
+import { z } from 'zod'
+
+/** Regular expression source for 32 bytes in lower-case hex. */
+export const HEX_32_BYTES = '[0-9a-f]{64}'
+
+/** Regular expression source for a lower-case UUID. */
+export const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+/** A 20-byte EVM address, stored as `0x` plus 40 lower-case hex characters. */
+export const evmAddressSchema = z
+  .string()
+  .regex(/^0x[0-9a-fA-F]{40}$/, 'expected an EVM address')
+  .transform((value) => value.toLowerCase())
+
+/** Bytes in hex, any length, stored without a `0x` prefix in lower case. */
+export const hexBytesSchema = z
+  .string()
+  .regex(/^(?:0x)?(?:[0-9a-fA-F]{2})*$/, 'expected bytes in hex')
+  .transform((value) => value.replace(/^0x/i, '').toLowerCase())
+
+/** Exactly 32 bytes in lower-case hex without a `0x` prefix: a request id, a digest, a buffer index. */
+export const hex32BytesSchema = z
+  .string()
+  .regex(new RegExp(`^${HEX_32_BYTES}$`), 'expected 32 bytes in lower-case hex')
+
+/** Bytes as ethers serialises them: `0x` followed by lower-case hex, at least one byte. */
+export const evmBytesSchema = z
+  .string()
+  .regex(/^0x(?:[0-9a-f]{2})+$/, 'expected 0x-prefixed lower-case hex')
+
+/** A bech32m Midnight shielded address: the prefix names the network, the data alphabet has no `1`, `b`, `i` or `o`. */
+export const shieldedAddressSchema = z
+  .string()
+  .regex(/^mn_shield-addr(_[a-z0-9]+)?1[02-9ac-hj-np-z]+$/, 'expected a shielded address')
+
+/** A bech32m Midnight unshielded (NIGHT) address, the network named in the prefix as in the shielded form. */
+export const unshieldedAddressSchema = z
+  .string()
+  .regex(/^mn_addr(_[a-z0-9]+)?1[02-9ac-hj-np-z]+$/, 'expected an unshielded address')
+
+export const UINT64_MAX = 2n ** 64n - 1n
+export const UINT128_MAX = 2n ** 128n - 1n
+
+/** A contract `Uint<64>`. JSON carries it as a decimal string, so both spellings parse. */
+export const uint64Schema = unsignedIntegerSchema(UINT64_MAX)
+
+/** A contract `Uint<128>`. JSON carries it as a decimal string, so both spellings parse. */
+export const uint128Schema = unsignedIntegerSchema(UINT128_MAX)
+
+/**
+ * A positive amount in base units. The vault completes a deposit through a `Uint<64>` mint, so
+ * the circuit refuses anything above that even though the request field is a `Uint<128>`.
+ */
+export const amountSchema = unsignedIntegerSchema(UINT64_MAX).pipe(z.bigint().positive())
+
+function unsignedIntegerSchema(max: bigint) {
+  return z
+    .union([
+      z.bigint(),
+      z
+        .string()
+        .regex(/^[0-9]+$/, 'expected a decimal integer')
+        .transform(BigInt),
+    ])
+    .pipe(z.bigint().nonnegative().max(max))
+}
