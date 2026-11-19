@@ -40,7 +40,7 @@ export function SidePanel({ sourceRequest }: SidePanelProps): ReactNode {
           <TabsTrigger
             key={option}
             value={option}
-            className="h-15 rounded-none border-0 border-border text-xl/6 font-semibold text-swap-panel-foreground transition-colors hover:bg-pink/40 hover:text-swap-panel-foreground data-active:bg-pink data-active:text-swap-panel-foreground data-active:shadow-none dark:data-active:border-0 dark:data-active:bg-pink [&+&]:border-l-[0.5px]"
+            className="h-15 rounded-none border-0 border-border text-xl/6 font-semibold text-swap-panel-foreground transition-colors hover:bg-pink/40 hover:text-swap-panel-foreground data-active:bg-pink data-active:text-swap-panel-foreground data-active:shadow-none dark:data-active:border-0 dark:data-active:bg-pink dark:data-active:text-pink-foreground [&+&]:border-l-[0.5px]"
           >
             {SIDE_PANEL_LABELS[option]}
           </TabsTrigger>
